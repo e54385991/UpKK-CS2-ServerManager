@@ -1,0 +1,1929 @@
+{% extends "base.html" %}
+
+{% block title %}Server {{ server.name }} - CS2 Server Manager{% endblock %}
+
+{% block content %}
+<div x-data="serverDetail({{ server.id }})" x-init="init()">
+    <!-- Back Button -->
+    <div class="mb-3">
+        <a href="/servers-ui" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> <span data-i18n="serverDetail.backToServers">Back to Servers</span>
+        </a>
+    </div>
+
+        <!-- Server Header with Status -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-0"><i class="bi bi-hdd-rack"></i> {{ server.name }}</h4>
+                    <small class="text-muted">{{ server.host }}:{{ server.game_port }}</small>
+                </div>
+                <div>
+                    <span class="status-badge" :class="'status-' + server.status.toLowerCase()">
+                        <span class="status-dot"></span>
+                        <span x-text="server.status" class="text-capitalize"></span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Tabbed Interface -->
+    <div class="card">
+        <div class="card-header p-0">
+            <ul class="nav nav-tabs nav-fill card-header-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" 
+                            data-bs-target="#overview" type="button" role="tab">
+                        <i class="bi bi-info-circle"></i> <span data-i18n="serverDetail.overview">Overview</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="configuration-tab" data-bs-toggle="tab" 
+                            data-bs-target="#configuration" type="button" role="tab">
+                        <i class="bi bi-sliders"></i> <span data-i18n="serverDetail.configuration">Configuration</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="actions-tab" data-bs-toggle="tab" 
+                            data-bs-target="#actions" type="button" role="tab">
+                        <i class="bi bi-gear"></i> <span data-i18n="serverDetail.actions">Actions</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="monitoring-tab" data-bs-toggle="tab" 
+                            data-bs-target="#monitoring" type="button" role="tab">
+                        <i class="bi bi-activity"></i> <span data-i18n="serverDetail.monitoring">Monitoring</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="console-tab" data-bs-toggle="tab" 
+                            data-bs-target="#console" type="button" role="tab">
+                        <i class="bi bi-terminal"></i> <span data-i18n="serverDetail.consoleAndLogs">Console & Logs</span>
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content">
+                <!-- Overview Tab -->
+                <div class="tab-pane fade show active" id="overview" role="tabpanel">
+<!-- Server Info Card -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0"><i class="bi bi-hdd-rack"></i> {{ server.name }}</h4>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="status-badge" :class="'status-' + server.status.toLowerCase()">
+                    <span class="status-dot"></span>
+                    <span x-text="server.status" class="text-capitalize"></span>
+                </span>
+                <button @click="showServerEdit = !showServerEdit" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil"></i> <span x-text="showServerEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- View Mode -->
+            <div x-show="!showServerEdit" x-cloak>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-muted" data-i18n="serverDetail.serverInfo">Server Information</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-diagram-3"></i> <strong data-i18n="serverDetail.host">Host:</strong> {{ server.host }}</li>
+                            <li><i class="bi bi-plugin"></i> <strong data-i18n="serverDetail.gamePort">Game Port:</strong> {{ server.game_port }}</li>
+                            <li><i class="bi bi-door-open"></i> <strong data-i18n="serverDetail.sshPort">SSH Port:</strong> {{ server.ssh_port }}</li>
+                            <li><i class="bi bi-person"></i> <strong data-i18n="serverDetail.sshUser">SSH User:</strong> {{ server.ssh_user }}</li>
+                            <li><i class="bi bi-folder"></i> <strong data-i18n="serverDetail.directory">Directory:</strong> {{ server.game_directory }}</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted" data-i18n="serverDetail.details">Details</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-shield-check"></i> <strong data-i18n="serverDetail.authType">Auth Type:</strong> {{ server.auth_type }}</li>
+                            <li><i class="bi bi-calendar"></i> <strong data-i18n="serverDetail.created">Created:</strong> {{ server.created_at.strftime('%Y-%m-%d %H:%M') if server.created_at else 'N/A' }}</li>
+                            <li><i class="bi bi-clock-history"></i> <strong data-i18n="serverDetail.lastDeployed">Last Deployed:</strong> {{ server.last_deployed.strftime('%Y-%m-%d %H:%M') if server.last_deployed else 'Never' }}</li>
+                            <li><i class="bi bi-info-circle"></i> <strong data-i18n="serverDetail.description">Description:</strong> {{ server.description or 'No description' }}</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Edit Mode -->
+            <div x-show="showServerEdit" x-cloak>
+                <form @submit.prevent="saveServerInfo()">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" data-i18n="serverDetail.serverName">Server Name</label>
+                            <input type="text" class="form-control" x-model="serverEditForm.name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" data-i18n="serverDetail.hostIP">Host IP</label>
+                            <input type="text" class="form-control" x-model="serverEditForm.host" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" data-i18n="serverDetail.sshPort">SSH Port</label>
+                            <input type="number" class="form-control" x-model="serverEditForm.ssh_port" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" data-i18n="serverDetail.sshUser">SSH User</label>
+                            <input type="text" class="form-control" x-model="serverEditForm.ssh_user" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" data-i18n="serverDetail.gamePort">Game Port</label>
+                            <input type="number" class="form-control" x-model="serverEditForm.game_port" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" data-i18n="serverDetail.authType">Auth Type</label>
+                            <select class="form-select" x-model="serverEditForm.auth_type">
+                                <option value="password" data-i18n="common.password">Password</option>
+                                <option value="key_file" data-i18n="servers.authKeyOption">SSH Key File</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" x-show="serverEditForm.auth_type === 'password'">
+                            <label class="form-label" data-i18n="serverDetail.sshPassword">SSH Password</label>
+                            <input type="password" class="form-control" x-model="serverEditForm.ssh_password" data-i18n-placeholder="serverDetail.leaveEmptyToKeep" placeholder="Leave empty to keep current">
+                        </div>
+                        <div class="col-md-6" x-show="serverEditForm.auth_type === 'key_file'">
+                            <label class="form-label" data-i18n="serverDetail.sshKeyPath">SSH Key Path</label>
+                            <input type="text" class="form-control" x-model="serverEditForm.ssh_key_path" data-i18n-placeholder="serverDetail.keyPathPlaceholder" placeholder="/path/to/key.pem">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" data-i18n="serverDetail.directory">Game Directory</label>
+                            <input type="text" class="form-control" x-model="serverEditForm.game_directory" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" data-i18n="serverDetail.description">Description</label>
+                            <textarea class="form-control" x-model="serverEditForm.description" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-primary" :disabled="savingServerInfo">
+                            <span x-show="!savingServerInfo"><i class="bi bi-save"></i> Save Changes</span>
+                            <span x-show="savingServerInfo"><span class="spinner-border spinner-border-sm"></span> Saving...</span>
+                        </button>
+                        <button type="button" @click="showServerEdit = false" class="btn btn-secondary">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+                    </div>
+
+                <!-- Configuration Tab -->
+                <div class="tab-pane fade" id="configuration" role="tabpanel">
+<!-- Server Configuration Card (LGSM Settings) -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-sliders"></i> <span data-i18n="serverDetail.serverConfiguration">Server Configuration (LGSM-Style)</span></h5>
+            <button @click="showConfigEdit = !showConfigEdit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-pencil"></i> <span x-text="showConfigEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+            </button>
+        </div>
+        <div class="card-body">
+            <!-- View Mode -->
+            <div x-show="!showConfigEdit" x-cloak>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-muted" data-i18n="serverDetail.basicSettings">Basic Settings</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-server"></i> <strong data-i18n="serverDetail.serverName">Server Name:</strong> <span x-text="server.server_name || 'CS2 Server'"></span></li>
+                            <li><i class="bi bi-map"></i> <strong data-i18n="serverDetail.defaultMap">Default Map:</strong> <span x-text="server.default_map || 'de_dust2'"></span></li>
+                            <li><i class="bi bi-people"></i> <strong data-i18n="serverDetail.maxPlayers">Max Players:</strong> <span x-text="server.max_players || 32"></span></li>
+                            <li><i class="bi bi-speedometer"></i> <strong data-i18n="serverDetail.tickrate">Tickrate:</strong> <span x-text="server.tickrate || 128"></span></li>
+                            <li><i class="bi bi-joystick"></i> <strong data-i18n="serverDetail.gameMode">Game Mode:</strong> <span x-text="server.game_mode || 'competitive'" class="text-capitalize"></span></li>
+                            <li><i class="bi bi-controller"></i> <strong data-i18n="serverDetail.gameType">Game Type:</strong> <span x-text="server.game_type || '0'"></span></li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted" data-i18n="serverDetail.advancedSettings">Advanced Settings</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-lock"></i> <strong data-i18n="serverDetail.serverPassword">Server Password:</strong> <span x-text="server.server_password ? '••••••' : (window.i18n?.t('serverDetail.none') || 'None')"></span></li>
+                            <li><i class="bi bi-shield-lock"></i> <strong data-i18n="serverDetail.rconPassword">RCON Password:</strong> <span x-text="server.rcon_password ? '••••••' : (window.i18n?.t('serverDetail.none') || 'None')"></span></li>
+                            <li><i class="bi bi-camera-video"></i> <strong data-i18n="serverDetail.sourceTV">SourceTV:</strong> <span x-text="server.tv_enable ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') + ' (Port: ' + server.tv_port + ')' : (window.i18n?.t('serverDetail.disabled') || 'Disabled')"></span></li>
+                            <li><i class="bi bi-gear"></i> <strong data-i18n="serverDetail.additionalParameters">Additional Parameters:</strong> <span x-text="server.additional_parameters || (window.i18n?.t('serverDetail.none') || 'None')"></span></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Mode -->
+            <div x-show="showConfigEdit" x-cloak>
+                <form @submit.prevent="saveConfiguration()">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Server Name</label>
+                            <input type="text" class="form-control" x-model="configForm.server_name" placeholder="My CS2 Server">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Default Map</label>
+                            <select class="form-select" x-model="configForm.default_map">
+                                <option value="de_dust2">de_dust2</option>
+                                <option value="de_mirage">de_mirage</option>
+                                <option value="de_inferno">de_inferno</option>
+                                <option value="de_nuke">de_nuke</option>
+                                <option value="de_ancient">de_ancient</option>
+                                <option value="de_anubis">de_anubis</option>
+                                <option value="de_vertigo">de_vertigo</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Max Players</label>
+                            <input type="number" class="form-control" x-model="configForm.max_players" min="1" max="64">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Tickrate</label>
+                            <select class="form-select" x-model="configForm.tickrate">
+                                <option value="64">64</option>
+                                <option value="128">128</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Game Mode</label>
+                            <select class="form-select" x-model="configForm.game_mode" @change="updateGameTypeFromMode()">
+                                <optgroup label="Classic">
+                                    <option value="competitive">Competitive</option>
+                                    <option value="casual">Casual</option>
+                                    <option value="deathmatch">Deathmatch</option>
+                                </optgroup>
+                                <optgroup label="Arms Race & Demolition">
+                                    <option value="armsrace">Arms Race</option>
+                                    <option value="demolition">Demolition</option>
+                                </optgroup>
+                                <optgroup label="Training & Custom">
+                                    <option value="training">Training</option>
+                                    <option value="custom">Custom</option>
+                                </optgroup>
+                                <optgroup label="Cooperative">
+                                    <option value="cooperative">Cooperative Strike</option>
+                                    <option value="coopmission">Cooperative Mission</option>
+                                </optgroup>
+                                <optgroup label="Skirmish">
+                                    <option value="scrimcomp2v2">Flying Scoutsman</option>
+                                    <option value="skirmish">Trigger Discipline</option>
+                                </optgroup>
+                                <optgroup label="Danger Zone">
+                                    <option value="survival">Danger Zone</option>
+                                </optgroup>
+                            </select>
+                            <small class="text-muted">Game mode determines gameplay rules and objectives</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Game Type (auto-set)</label>
+                            <input type="text" class="form-control" x-model="configForm.game_type" readonly>
+                            <small class="text-muted">Game type is automatically set based on game mode</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Server Password (optional)</label>
+                            <input type="password" class="form-control" x-model="configForm.server_password" placeholder="Leave empty for public server">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">RCON Password</label>
+                            <input type="password" class="form-control" x-model="configForm.rcon_password" placeholder="Admin password">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Enable SourceTV</label>
+                            <select class="form-select" x-model="configForm.tv_enable">
+                                <option :value="false">Disabled</option>
+                                <option :value="true">Enabled</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4" x-show="configForm.tv_enable">
+                            <label class="form-label">SourceTV Port</label>
+                            <input type="number" class="form-control" x-model="configForm.tv_port" placeholder="27020">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Additional Parameters (Advanced)</label>
+                            <input type="text" class="form-control" x-model="configForm.additional_parameters" 
+                                   placeholder="+sv_hibernate_when_empty 1 +mp_autoteambalance 1">
+                            <small class="text-muted">Custom command-line parameters (e.g., +sv_cheats 0 +mp_limitteams 1)</small>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-primary" :disabled="savingConfig">
+                            <span x-show="!savingConfig"><i class="bi bi-save"></i> <span data-i18n="serverDetail.saveConfiguration">Save Configuration</span></span>
+                            <span x-show="savingConfig"><span class="spinner-border spinner-border-sm"></span> <span data-i18n="serverDetail.saving">Saving...</span></span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" @click="showConfigEdit = false" data-i18n="serverDetail.cancel">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monitoring & Auto-Restart Configuration Card -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-activity"></i> <span data-i18n="serverDetail.panelMonitoring">Panel Monitoring & Auto-Restart</span></h5>
+            <button @click="showMonitoringEdit = !showMonitoringEdit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-pencil"></i> <span x-text="showMonitoringEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+            </button>
+        </div>
+        <div class="card-body">
+            <!-- View Mode -->
+            <div x-show="!showMonitoringEdit" x-cloak>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-muted" data-i18n="serverDetail.monitoringSettings">Monitoring Settings</h6>
+                        <ul class="list-unstyled">
+                            <li>
+                                <i :class="server.enable_panel_monitoring ? 'bi bi-check-circle text-success' : 'bi bi-x-circle text-secondary'"></i> 
+                                <strong data-i18n="serverDetail.panelMonitoringLabel">Panel Monitoring:</strong> 
+                                <span x-text="server.enable_panel_monitoring ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') : (window.i18n?.t('serverDetail.disabled') || 'Disabled')" :class="server.enable_panel_monitoring ? 'text-success fw-bold' : 'text-secondary'"></span>
+                            </li>
+                            <li><i class="bi bi-clock-history"></i> <strong data-i18n="serverDetail.checkInterval">Check Interval:</strong> <span x-text="server.monitor_interval_seconds || 60"></span> <span data-i18n="serverDetail.seconds">seconds</span></li>
+                            <li>
+                                <i class="bi bi-arrow-repeat"></i> 
+                                <strong data-i18n="serverDetail.autoRestartOnCrash">Auto-Restart on Crash:</strong> 
+                                <span x-text="server.auto_restart_on_crash ? (window.i18n?.t('serverDetail.yes') || 'Yes') : (window.i18n?.t('serverDetail.no') || 'No')"></span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted" data-i18n="serverDetail.crashHistorySettings">Crash History Settings</h6>
+                        <ul class="list-unstyled">
+                            <li>
+                                <i class="bi bi-trash"></i> 
+                                <strong>Auto-Clear After:</strong> 
+                                <span x-text="server.auto_clear_crash_hours ? server.auto_clear_crash_hours + ' hours offline' : 'Always clear on restart'"></span>
+                            </li>
+                            <li>
+                                <i class="bi bi-calendar-check"></i> 
+                                <strong>Last Status Check:</strong> 
+                                <span x-text="server.last_status_check ? new Date(server.last_status_check).toLocaleString() : 'Never'"></span>
+                            </li>
+                        </ul>
+                        <div class="alert alert-info mt-2" role="alert">
+                            <i class="bi bi-info-circle"></i> <strong>Panel Monitoring:</strong> Web backend monitors via SSH and auto-restarts if process not found. Independent of local autorestart script.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Mode -->
+            <div x-show="showMonitoringEdit" x-cloak>
+                <form @submit.prevent="saveMonitoring()">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enablePanelMonitoring" x-model="monitoringForm.enable_panel_monitoring">
+                                <label class="form-check-label" for="enablePanelMonitoring">
+                                    <strong>Enable Panel Monitoring</strong>
+                                    <small class="d-block text-muted">Backend will monitor server status via SSH and auto-restart if down</small>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6" x-show="monitoringForm.enable_panel_monitoring">
+                            <label class="form-label">
+                                Monitor Interval 
+                                <span class="badge bg-secondary" x-text="monitoringForm.monitor_interval_seconds + 's'"></span>
+                            </label>
+                            <input type="range" class="form-range" 
+                                   x-model.number="monitoringForm.monitor_interval_seconds" 
+                                   min="10" max="600" step="10">
+                            <small class="text-muted">How often to check server status (10-600 seconds)</small>
+                        </div>
+                        
+                        <div class="col-md-6" x-show="monitoringForm.enable_panel_monitoring">
+                            <label class="form-label">Auto-Restart on Crash</label>
+                            <select class="form-select" x-model="monitoringForm.auto_restart_on_crash">
+                                <option :value="true">Yes - Auto-restart if process not found</option>
+                                <option :value="false">No - Only monitor, don't restart</option>
+                            </select>
+                            <small class="text-muted">Respects 5 restarts per 10 minutes limit</small>
+                        </div>
+
+                        <div class="col-12">
+                            <hr>
+                            <h6 class="text-muted">Crash History Auto-Clear</h6>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Auto-Clear After Offline Duration</label>
+                            <input type="number" class="form-control" 
+                                   x-model.number="monitoringForm.auto_clear_crash_hours" 
+                                   min="0" max="168" placeholder="0 = always clear">
+                            <small class="text-muted">Hours offline before clearing crash_history.log (0 = always clear on restart)</small>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="alert alert-warning mb-0" role="alert">
+                                <i class="bi bi-exclamation-triangle"></i> <strong>Recommended:</strong> 2 hours
+                                <small class="d-block">Short downtimes retain history for debugging, long downtimes get fresh start</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-primary" :disabled="savingMonitoring">
+                            <span x-show="!savingMonitoring"><i class="bi bi-save"></i> Save Monitoring Settings</span>
+                            <span x-show="savingMonitoring"><span class="spinner-border spinner-border-sm"></span> Saving...</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" @click="showMonitoringEdit = false">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Monitoring Logs Section -->
+            <div x-show="!showMonitoringEdit && server.enable_panel_monitoring" x-cloak class="mt-4">
+                <hr>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">
+                            <i class="bi bi-clipboard-check"></i> <span data-i18n="serverDetail.recentStatusChecks">Recent Status Checks (Last 50)</span>
+                            <button @click="loadMonitoringLogs('status_check')" class="btn btn-sm btn-outline-secondary ms-2">
+                                <i class="bi bi-arrow-clockwise"></i> <span data-i18n="serverDetail.refresh">Refresh</span>
+                            </button>
+                        </h6>
+                        <div class="monitoring-logs-container">
+                            <template x-if="loadingStatusLogs">
+                                <div class="text-center p-3">
+                                    <span class="spinner-border spinner-border-sm"></span> <span data-i18n="serverDetail.loading">Loading...</span>
+                                </div>
+                            </template>
+                            <template x-if="!loadingStatusLogs && statusCheckLogs.length === 0">
+                                <div class="text-muted p-3 text-center" data-i18n="serverDetail.noStatusChecks">
+                                    No status checks recorded yet
+                                </div>
+                            </template>
+                            <template x-if="!loadingStatusLogs && statusCheckLogs.length > 0">
+                                <div class="log-list">
+                                    <template x-for="log in statusCheckLogs" :key="log.id">
+                                        <div class="log-entry" :class="'log-' + log.status">
+                                            <div class="log-icon">
+                                                <i :class="{
+                                                    'bi bi-check-circle text-success': log.status === 'success',
+                                                    'bi bi-exclamation-circle text-warning': log.status === 'warning',
+                                                    'bi bi-x-circle text-danger': log.status === 'failed',
+                                                    'bi bi-info-circle text-info': log.status === 'info'
+                                                }"></i>
+                                            </div>
+                                            <div class="log-content">
+                                                <div class="log-message" x-text="log.message"></div>
+                                                <div class="log-time text-muted" x-text="new Date(log.created_at).toLocaleString()"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">
+                            <i class="bi bi-arrow-repeat"></i> <span data-i18n="serverDetail.recentAutoRestartOps">Recent Auto-Restart Operations (Last 50)</span>
+                            <button @click="loadMonitoringLogs('auto_restart')" class="btn btn-sm btn-outline-secondary ms-2">
+                                <i class="bi bi-arrow-clockwise"></i> <span data-i18n="serverDetail.refresh">Refresh</span>
+                            </button>
+                        </h6>
+                        <div class="monitoring-logs-container">
+                            <template x-if="loadingRestartLogs">
+                                <div class="text-center p-3">
+                                    <span class="spinner-border spinner-border-sm"></span> <span data-i18n="serverDetail.loading">Loading...</span>
+                                </div>
+                            </template>
+                            <template x-if="!loadingRestartLogs && autoRestartLogs.length === 0">
+                                <div class="text-muted p-3 text-center" data-i18n="serverDetail.noAutoRestartOps">
+                                    No auto-restart operations recorded yet
+                                </div>
+                            </template>
+                            <template x-if="!loadingRestartLogs && autoRestartLogs.length > 0">
+                                <div class="log-list">
+                                    <template x-for="log in autoRestartLogs" :key="log.id">
+                                        <div class="log-entry" :class="'log-' + log.status">
+                                            <div class="log-icon">
+                                                <i :class="{
+                                                    'bi bi-check-circle text-success': log.status === 'success',
+                                                    'bi bi-exclamation-circle text-warning': log.status === 'warning',
+                                                    'bi bi-x-circle text-danger': log.status === 'failed',
+                                                    'bi bi-info-circle text-info': log.status === 'info'
+                                                }"></i>
+                                            </div>
+                                            <div class="log-content">
+                                                <div class="log-message" x-text="log.message"></div>
+                                                <div class="log-time text-muted" x-text="new Date(log.created_at).toLocaleString()"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+                    </div>
+
+                <!-- Actions Tab -->
+                <div class="tab-pane fade" id="actions" role="tabpanel">
+<!-- Actions Card -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-gear"></i> <span data-i18n="serverDetail.serverActions">Server Actions</span></h5>
+        </div>
+        <div class="card-body">
+            <div class="action-buttons">
+                <button @click="executeAction('deploy')" 
+                        :disabled="isActionRunning"
+                        class="btn btn-primary">
+                    <i class="bi bi-cloud-download"></i> <span data-i18n="serverDetail.deployServer">Deploy Server</span>
+                </button>
+                <button @click="executeAction('start')" 
+                        :disabled="isActionRunning"
+                        class="btn btn-success">
+                    <i class="bi bi-play-circle"></i> <span data-i18n="serverDetail.start">Start</span>
+                </button>
+                <button @click="executeAction('stop')" 
+                        :disabled="isActionRunning"
+                        class="btn btn-danger">
+                    <i class="bi bi-stop-circle"></i> <span data-i18n="serverDetail.stop">Stop</span>
+                </button>
+                <button @click="executeAction('restart')" 
+                        :disabled="isActionRunning"
+                        class="btn btn-warning">
+                    <i class="bi bi-arrow-clockwise"></i> <span data-i18n="serverDetail.restart">Restart</span>
+                </button>
+                <button @click="executeAction('update')" 
+                        :disabled="isActionRunning"
+                        class="btn btn-secondary">
+                    <i class="bi bi-arrow-up-circle"></i> <span data-i18n="serverDetail.update">Update</span>
+                </button>
+                <button @click="executeAction('validate')" 
+                        :disabled="isActionRunning"
+                        class="btn btn-outline-secondary">
+                    <i class="bi bi-shield-check"></i> <span data-i18n="serverDetail.updateValidate">Update + Validate</span>
+                </button>
+                <button @click="executeAction('status')" 
+                        :disabled="isActionRunning"
+                        class="btn btn-info">
+                    <i class="bi bi-question-circle"></i> <span data-i18n="serverDetail.checkStatus">Check Status</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Plugin Management Card -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-plugin"></i> <span data-i18n="serverDetail.pluginFrameworkManagement">Plugin Framework Management</span></h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-3">
+                <i class="bi bi-info-circle"></i> Install plugin frameworks to enable server modifications and custom plugins.
+            </p>
+            
+            <!-- Multi-select Installation -->
+            <div class="card bg-light mb-3">
+                <div class="card-body">
+                    <h6 class="card-title mb-3"><i class="bi bi-ui-checks"></i> <span data-i18n="serverDetail.batchInstallation">Batch Installation</span></h6>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" x-model="pluginSelection.metamod" id="selectMetamod">
+                                <label class="form-check-label" for="selectMetamod">
+                                    <strong>Metamod:Source</strong>
+                                    <small class="d-block text-muted">Plugin loader for Source 2 engine</small>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" x-model="pluginSelection.counterstrikesharp" id="selectCSS">
+                                <label class="form-check-label" for="selectCSS">
+                                    <strong>CounterStrikeSharp</strong>
+                                    <small class="d-block text-muted">Write CS2 plugins in C#</small>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-grid">
+                        <button @click="installSelectedPlugins()" 
+                                :disabled="isActionRunning || (!pluginSelection.metamod && !pluginSelection.counterstrikesharp)"
+                                class="btn btn-success">
+                            <i class="bi bi-cloud-download"></i> <span data-i18n="serverDetail.installSelectedFrameworks">Install Selected Frameworks</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Individual Plugin Cards -->
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card h-100 border">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="bi bi-box-seam"></i> Metamod:Source</h6>
+                            <p class="card-text small text-muted">
+                                Plugin loader for Source 2 engine. Required for most CS2 plugins.
+                            </p>
+                            <div class="d-grid gap-2">
+                                <button @click="executeAction('install_metamod')" 
+                                        :disabled="isActionRunning"
+                                        class="btn btn-primary btn-sm">
+                                    <i class="bi bi-download"></i> <span data-i18n="serverDetail.install">Install</span>
+                                </button>
+                                <button @click="executeAction('update_metamod')" 
+                                        :disabled="isActionRunning"
+                                        class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-arrow-repeat"></i> <span data-i18n="serverDetail.update">Update</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100 border">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="bi bi-box-seam"></i> CounterStrikeSharp</h6>
+                            <p class="card-text small text-muted">
+                                Write CS2 server plugins in C#. Requires Metamod:Source.
+                            </p>
+                            <div class="d-grid gap-2">
+                                <button @click="executeAction('install_counterstrikesharp')" 
+                                        :disabled="isActionRunning"
+                                        class="btn btn-primary btn-sm">
+                                    <i class="bi bi-download"></i> <span data-i18n="serverDetail.install">Install</span>
+                                </button>
+                                <button @click="executeAction('update_counterstrikesharp')" 
+                                        :disabled="isActionRunning"
+                                        class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-arrow-repeat"></i> <span data-i18n="serverDetail.update">Update</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3">
+                <small class="text-muted">
+                    <i class="bi bi-lightbulb"></i> <strong>Tip:</strong> After installing plugins, restart your server for changes to take effect. 
+                    Use console commands <code>meta list</code> and <code>css_plugins list</code> to verify installation.
+                </small>
+            </div>
+        </div>
+    </div>
+
+                    </div>
+
+                <!-- Monitoring Tab -->
+                <div class="tab-pane fade" id="monitoring" role="tabpanel">
+<!-- A2S Query & Monitoring Card -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-search"></i> <span data-i18n="serverDetail.a2sServerQuery">A2S Server Query</span></h5>
+            <div class="btn-group" role="group">
+                <button @click="refreshA2SInfo()" class="btn btn-sm btn-outline-primary" :disabled="loadingA2SInfo">
+                    <i class="bi bi-arrow-clockwise"></i> <span x-show="!loadingA2SInfo" data-i18n="serverDetail.queryNow">Query Now</span>
+                    <span x-show="loadingA2SInfo"><span class="spinner-border spinner-border-sm"></span> <span data-i18n="serverDetail.querying">Querying...</span></span>
+                </button>
+                <button @click="showA2SEdit = !showA2SEdit" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil"></i> <span x-text="showA2SEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.configure') || 'Configure')"></span>
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Configuration Edit Mode -->
+            <div x-show="showA2SEdit" x-cloak>
+                <form @submit.prevent="saveA2SConfig()">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="alert alert-info" role="alert">
+                                <i class="bi bi-info-circle"></i> A2S (Address to Server) queries provide real-time server information. Configure custom query address/port if different from server host/game port.
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">A2S Query Host</label>
+                            <input type="text" class="form-control" x-model="a2sConfigForm.a2s_query_host" placeholder="Leave empty to use server host">
+                            <small class="text-muted">Leave empty to use server host (<span x-text="server.host"></span>)</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">A2S Query Port</label>
+                            <input type="number" class="form-control" x-model.number="a2sConfigForm.a2s_query_port" min="1" max="65535" placeholder="Leave empty to use game port">
+                            <small class="text-muted">Leave empty to use game port (<span x-text="server.game_port"></span>)</small>
+                        </div>
+                        
+                        <div class="col-12"><hr></div>
+                        
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enableA2SMonitoring" x-model="a2sConfigForm.enable_a2s_monitoring">
+                                <label class="form-check-label" for="enableA2SMonitoring">
+                                    <strong>Enable A2S Monitoring for Auto-Restart</strong>
+                                    <small class="d-block text-muted">Use A2S queries instead of SSH process checks for server monitoring</small>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6" x-show="a2sConfigForm.enable_a2s_monitoring">
+                            <label class="form-label">
+                                A2S Check Interval
+                                <span class="badge bg-secondary" x-text="a2sConfigForm.a2s_check_interval_seconds + 's'"></span>
+                            </label>
+                            <input type="range" class="form-range" 
+                                   x-model.number="a2sConfigForm.a2s_check_interval_seconds" 
+                                   min="15" max="600" step="5">
+                            <small class="text-muted">How often to perform A2S queries (15-600 seconds)</small>
+                        </div>
+                        
+                        <div class="col-md-6" x-show="a2sConfigForm.enable_a2s_monitoring">
+                            <label class="form-label">
+                                A2S Failure Threshold
+                                <span class="badge bg-secondary" x-text="a2sConfigForm.a2s_failure_threshold"></span>
+                            </label>
+                            <input type="range" class="form-range" 
+                                   x-model.number="a2sConfigForm.a2s_failure_threshold" 
+                                   min="1" max="10" step="1">
+                            <small class="text-muted">Consecutive A2S query failures before triggering restart (1-10)</small>
+                        </div>
+                        
+                        <div class="col-md-6" x-show="a2sConfigForm.enable_a2s_monitoring">
+                            <div class="alert alert-warning mb-0" role="alert">
+                                <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong>
+                                <small class="d-block">A2S monitoring requires Panel Monitoring to be enabled. It provides more accurate server health status than SSH process checks.</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-primary" :disabled="savingA2SConfig">
+                            <span x-show="!savingA2SConfig"><i class="bi bi-save"></i> Save A2S Configuration</span>
+                            <span x-show="savingA2SConfig"><span class="spinner-border spinner-border-sm"></span> Saving...</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" @click="showA2SEdit = false">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- A2S Query Results -->
+            <div x-show="!showA2SEdit" x-cloak>
+                <template x-if="loadingA2SInfo">
+                    <div class="text-center p-4">
+                        <span class="spinner-border"></span>
+                        <p class="mt-2 text-muted">Querying server via A2S protocol...</p>
+                    </div>
+                </template>
+                
+                <template x-if="!loadingA2SInfo && a2sInfo">
+                    <div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <h6 class="text-muted" data-i18n="serverDetail.querySettings">Query Settings</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-diagram-3"></i> <strong data-i18n="serverDetail.queryHost">Query Host:</strong> <span x-text="a2sInfo.query_host"></span></li>
+                                    <li><i class="bi bi-plugin"></i> <strong data-i18n="serverDetail.queryPort">Query Port:</strong> <span x-text="a2sInfo.query_port"></span></li>
+                                    <li>
+                                        <i :class="server.enable_a2s_monitoring ? 'bi bi-check-circle text-success' : 'bi bi-x-circle text-secondary'"></i>
+                                        <strong data-i18n="serverDetail.a2sMonitoring">A2S Monitoring:</strong> 
+                                        <span x-text="server.enable_a2s_monitoring ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') : (window.i18n?.t('serverDetail.disabled') || 'Disabled')" :class="server.enable_a2s_monitoring ? 'text-success fw-bold' : 'text-secondary'"></span>
+                                    </li>
+                                    <li x-show="server.enable_a2s_monitoring">
+                                        <i class="bi bi-clock"></i> <strong data-i18n="serverDetail.checkInterval">Check Interval:</strong> <span x-text="server.a2s_check_interval_seconds || 60"></span> <span data-i18n="serverDetail.seconds">seconds</span>
+                                    </li>
+                                    <li x-show="server.enable_a2s_monitoring">
+                                        <i class="bi bi-exclamation-triangle"></i> <strong>Failure Threshold:</strong> <span x-text="server.a2s_failure_threshold || 3"></span> consecutive failures
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted" data-i18n="serverDetail.queryStatus">Query Status</h6>
+                                <ul class="list-unstyled">
+                                    <li>
+                                        <i :class="a2sInfo.success ? 'bi bi-check-circle text-success' : 'bi bi-x-circle text-danger'"></i>
+                                        <strong data-i18n="serverDetail.status">Status:</strong> 
+                                        <span x-text="a2sInfo.success ? (window.i18n?.t('serverDetail.success') || 'Success') : (window.i18n?.t('serverDetail.failed') || 'Failed')" :class="a2sInfo.success ? 'text-success fw-bold' : 'text-danger fw-bold'"></span>
+                                    </li>
+                                    <li><i class="bi bi-clock"></i> <strong data-i18n="serverDetail.lastQuery">Last Query:</strong> <span x-text="a2sInfo.timestamp ? new Date(a2sInfo.timestamp).toLocaleString() : (window.i18n?.t('serverDetail.never') || 'Never')"></span></li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <template x-if="a2sInfo.success && a2sInfo.server_info">
+                            <div>
+                                <hr>
+                                <h6 class="text-muted" data-i18n="serverDetail.serverInformation">Server Information</h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-server"></i> <strong data-i18n="serverDetail.serverName">Server Name:</strong> <span x-text="a2sInfo.server_info.server_name"></span></li>
+                                            <li><i class="bi bi-map"></i> <strong data-i18n="serverDetail.currentMap">Current Map:</strong> <span x-text="a2sInfo.server_info.map_name"></span></li>
+                                            <li><i class="bi bi-folder"></i> <strong data-i18n="serverDetail.game">Game:</strong> <span x-text="a2sInfo.server_info.game"></span></li>
+                                            <li><i class="bi bi-people"></i> <strong data-i18n="serverDetail.players">Players:</strong> <span x-text="a2sInfo.server_info.player_count + ' / ' + a2sInfo.server_info.max_players + ' (Bots: ' + a2sInfo.server_info.bot_count + ')'"></span></li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-lock"></i> <strong data-i18n="serverDetail.passwordProtected">Password:</strong> <span x-text="a2sInfo.server_info.password_protected ? (window.i18n?.t('serverDetail.yes') || 'Yes') : (window.i18n?.t('serverDetail.no') || 'No')"></span></li>
+                                            <li><i class="bi bi-shield-check"></i> <strong data-i18n="serverDetail.vac">VAC:</strong> <span x-text="a2sInfo.server_info.vac_enabled ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') : (window.i18n?.t('serverDetail.disabled') || 'Disabled')"></span></li>
+                                            <li><i class="bi bi-code-square"></i> <strong data-i18n="serverDetail.version">Version:</strong> <span x-text="a2sInfo.server_info.version"></span></li>
+                                            <li><i class="bi bi-pc-display"></i> <strong data-i18n="serverDetail.platform">Platform:</strong> <span x-text="a2sInfo.server_info.platform"></span></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <!-- Player List -->
+                                <template x-if="a2sInfo.players && a2sInfo.players.length > 0">
+                                    <div class="mt-3">
+                                        <hr>
+                                        <h6 class="text-muted">
+                                            <i class="bi bi-people-fill"></i> <span data-i18n="serverDetail.playersOnline">Players Online</span> (<span x-text="a2sInfo.players.length"></span>)
+                                        </h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-striped">
+                                                <thead>
+                                                    <tr>
+                                                        <th data-i18n="serverDetail.name">Name</th>
+                                                        <th data-i18n="serverDetail.score">Score</th>
+                                                        <th data-i18n="serverDetail.duration">Duration</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="player in a2sInfo.players" :key="player.name">
+                                                        <tr>
+                                                            <td x-text="player.name"></td>
+                                                            <td x-text="player.score"></td>
+                                                            <td x-text="formatDuration(player.duration)"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        
+                        <template x-if="!a2sInfo.success">
+                            <div class="alert alert-warning" role="alert">
+                                <i class="bi bi-exclamation-triangle"></i> <strong>A2S Query Failed</strong>
+                                <p class="mb-0">Unable to query server. This could mean the server is offline, A2S queries are blocked, or the host/port is incorrect.</p>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                
+                <template x-if="!loadingA2SInfo && !a2sInfo">
+                    <div class="text-center p-4 text-muted">
+                        <i class="bi bi-search display-4"></i>
+                        <p class="mt-2">Click "Query Now" to fetch server information via A2S protocol</p>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+    
+    <!-- A2S Check Logs (show when A2S monitoring is enabled) -->
+    <div class="card mb-4" x-show="server.enable_a2s_monitoring" x-cloak>
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-search"></i> <span data-i18n="serverDetail.a2sCheckLogs">A2S Check Logs (Last 50)</span>
+                <button @click="loadA2SCheckLogs()" class="btn btn-sm btn-outline-secondary ms-2">
+                    <i class="bi bi-arrow-clockwise"></i> <span data-i18n="serverDetail.refresh">Refresh</span>
+                </button>
+            </h5>
+        </div>
+        <div class="card-body">
+            <template x-if="loadingA2SCheckLogs">
+                <div class="text-center p-3">
+                    <span class="spinner-border spinner-border-sm"></span> Loading...
+                </div>
+            </template>
+            <template x-if="!loadingA2SCheckLogs && a2sCheckLogs.length === 0">
+                <div class="text-muted p-3 text-center">
+                    No A2S check logs recorded yet
+                </div>
+            </template>
+            <template x-if="!loadingA2SCheckLogs && a2sCheckLogs.length > 0">
+                <div class="monitoring-logs-container">
+                    <div class="log-list">
+                        <template x-for="log in a2sCheckLogs" :key="log.id">
+                            <div class="log-entry" :class="'log-' + log.status">
+                                <div class="log-icon">
+                                    <i :class="{
+                                        'bi bi-check-circle text-success': log.status === 'success',
+                                        'bi bi-exclamation-circle text-warning': log.status === 'warning',
+                                        'bi bi-x-circle text-danger': log.status === 'failed',
+                                        'bi bi-info-circle text-info': log.status === 'info'
+                                    }"></i>
+                                </div>
+                                <div class="log-content">
+                                    <div class="log-message" x-text="log.message"></div>
+                                    <div class="log-time text-muted" x-text="new Date(log.created_at).toLocaleString()"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+                    </div>
+
+                <!-- Console & Logs Tab -->
+                <div class="tab-pane fade" id="console" role="tabpanel">
+<!-- Live Logs -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-terminal"></i> <span data-i18n="serverDetail.liveDeploymentLogs">Live Deployment Logs</span></h5>
+            <button @click="clearLogs()" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-trash"></i> <span data-i18n="serverDetail.clear">Clear</span>
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="log-terminal" id="logContainer">
+                <template x-for="log in logs" :key="log.id">
+                    <div class="log-entry">
+                        <span class="log-timestamp" x-text="'[' + log.timestamp + ']'"></span>
+                        <span :class="'log-' + log.type" x-text="log.message"></span>
+                    </div>
+                </template>
+                <div x-show="logs.length === 0" class="log-entry">
+                    <span class="log-status">[<span data-i18n="serverDetail.ready">Ready</span>] <span data-i18n="serverDetail.waitingForOperations">Waiting for operations...</span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interactive Consoles -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="ssh-console-tab" data-bs-toggle="tab" 
+                            data-bs-target="#ssh-console" type="button" role="tab">
+                        <i class="bi bi-terminal-fill"></i> <span data-i18n="serverDetail.sshConsole">SSH Console</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="game-console-tab" data-bs-toggle="tab" 
+                            data-bs-target="#game-console" type="button" role="tab">
+                        <i class="bi bi-controller"></i> <span data-i18n="serverDetail.gameConsole">Game Console</span>
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body p-0">
+            <div class="tab-content">
+                <!-- SSH Console Tab -->
+                <div class="tab-pane fade show active" id="ssh-console" role="tabpanel">
+                    <div class="console-header p-2 bg-dark text-white d-flex justify-content-between align-items-center">
+                        <div>
+                            <span x-show="!sshConsoleConnected" class="badge bg-danger" data-i18n="serverDetail.disconnected">Disconnected</span>
+                            <span x-show="sshConsoleConnected" class="badge bg-success" data-i18n="serverDetail.connected">Connected</span>
+                        </div>
+                        <div>
+                            <button @click="connectSSHConsole()" 
+                                    :disabled="sshConsoleConnected"
+                                    class="btn btn-sm btn-success">
+                                <i class="bi bi-power"></i> <span data-i18n="serverDetail.connect">Connect</span>
+                            </button>
+                            <button @click="disconnectSSHConsole()" 
+                                    :disabled="!sshConsoleConnected"
+                                    class="btn btn-sm btn-danger">
+                                <i class="bi bi-x-circle"></i> <span data-i18n="serverDetail.disconnect">Disconnect</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="console-terminal" id="sshTerminal">
+                        <template x-for="line in sshConsoleOutput" :key="line.id">
+                            <pre class="console-line" x-text="line.text"></pre>
+                        </template>
+                    </div>
+                    <div class="console-input p-2 border-top">
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="text" class="form-control" 
+                                   x-model="sshCommand"
+                                   @keyup.enter="sendSSHCommand()"
+                                   :disabled="!sshConsoleConnected"
+                                   data-i18n-placeholder="serverDetail.enterCommand"
+                                   placeholder="Enter command...">
+                            <button class="btn btn-primary" 
+                                    @click="sendSSHCommand()"
+                                    :disabled="!sshConsoleConnected">
+                                <i class="bi bi-send"></i> <span data-i18n="serverDetail.send">Send</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Game Console Tab -->
+                <div class="tab-pane fade" id="game-console" role="tabpanel">
+                    <div class="console-header p-2 bg-dark text-white d-flex justify-content-between align-items-center">
+                        <div>
+                            <span x-show="!gameConsoleConnected" class="badge bg-danger" data-i18n="serverDetail.disconnected">Disconnected</span>
+                            <span x-show="gameConsoleConnected" class="badge bg-success" data-i18n="serverDetail.connected">Connected</span>
+                            <small class="ms-2 text-muted">Shows real-time server output</small>
+                        </div>
+                        <div>
+                            <button @click="connectGameConsole()" 
+                                    :disabled="gameConsoleConnected"
+                                    class="btn btn-sm btn-success">
+                                <i class="bi bi-power"></i> <span data-i18n="serverDetail.connect">Connect</span>
+                            </button>
+                            <button @click="disconnectGameConsole()" 
+                                    :disabled="!gameConsoleConnected"
+                                    class="btn btn-sm btn-danger">
+                                <i class="bi bi-x-circle"></i> <span data-i18n="serverDetail.disconnect">Disconnect</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="console-terminal" id="gameTerminal">
+                        <template x-for="line in gameConsoleOutput" :key="line.id">
+                            <pre class="console-line" x-text="line.text"></pre>
+                        </template>
+                    </div>
+                    <div class="console-input p-2 border-top">
+                        <div class="input-group">
+                            <span class="input-group-text">></span>
+                            <input type="text" class="form-control" 
+                                   x-model="gameCommand"
+                                   @keyup.enter="sendGameCommand()"
+                                   :disabled="!gameConsoleConnected"
+                                   placeholder="Enter game command (e.g., status, changelevel de_mirage)...">
+                            <button class="btn btn-primary" 
+                                    @click="sendGameCommand()"
+                                    :disabled="!gameConsoleConnected">
+                                <i class="bi bi-send"></i> Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deployment History -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-clock-history"></i> <span data-i18n="serverDetail.deploymentHistory">Deployment History</span></h5>
+        </div>
+        <div class="card-body">
+            <div x-show="loadingHistory" class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden" data-i18n="serverDetail.loading">Loading...</span>
+                </div>
+            </div>
+            
+            <div x-show="!loadingHistory && history.length === 0" x-cloak class="text-center text-muted py-3" data-i18n="serverDetail.noDeploymentHistory">
+                No deployment history available
+            </div>
+            
+            <div x-show="!loadingHistory && history.length > 0" x-cloak class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th data-i18n="serverDetail.time">Time</th>
+                            <th data-i18n="serverDetail.action">Action</th>
+                            <th data-i18n="serverDetail.status">Status</th>
+                            <th data-i18n="serverDetail.output">Output</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="item in history" :key="item.id">
+                            <tr>
+                                <td x-text="formatDateTime(item.created_at)"></td>
+                                <td>
+                                    <span class="badge bg-primary" x-text="item.action"></span>
+                                </td>
+                                <td>
+                                    <span class="badge" 
+                                          :class="item.status === 'success' ? 'bg-success' : (item.status === 'failed' ? 'bg-danger' : 'bg-warning')"
+                                          x-text="item.status"></span>
+                                </td>
+                                <td>
+                                    <small x-text="item.output || item.error_message || 'N/A'" class="text-muted"></small>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- WebSocket Status -->
+    <div class="ws-indicator" :class="wsConnected ? 'ws-connected' : 'ws-disconnected'">
+        <i :class="wsConnected ? 'bi bi-wifi' : 'bi bi-wifi-off'"></i>
+        <span x-text="wsConnected ? 'Connected' : 'Disconnected'"></span>
+    </div>
+
+    <style>
+.monitoring-logs-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    background-color: #f8f9fa;
+}
+
+.log-list {
+    padding: 0.5rem;
+}
+
+.log-entry {
+    display: flex;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    background-color: white;
+    border-radius: 0.25rem;
+    border-left: 3px solid #6c757d;
+}
+
+.log-entry.log-success {
+    border-left-color: #28a745;
+}
+
+.log-entry.log-warning {
+    border-left-color: #ffc107;
+}
+
+.log-entry.log-failed {
+    border-left-color: #dc3545;
+}
+
+.log-entry.log-info {
+    border-left-color: #17a2b8;
+}
+
+.log-icon {
+    margin-right: 0.75rem;
+    font-size: 1.25rem;
+}
+
+.log-content {
+    flex: 1;
+}
+
+.log-message {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.log-time {
+    font-size: 0.75rem;
+}
+</style>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function serverDetail(serverId) {
+    return {
+        serverId: serverId,
+        server: {{ server_json|safe }},
+        logs: [],
+        history: [],
+        loadingHistory: true,
+        isActionRunning: false,
+        ws: null,
+        wsConnected: false,
+        showConfigEdit: false,
+        savingConfig: false,
+        showServerEdit: false,
+        savingServerInfo: false,
+        showMonitoringEdit: false,
+        savingMonitoring: false,
+        statusCheckLogs: [],
+        autoRestartLogs: [],
+        a2sCheckLogs: [],
+        loadingStatusLogs: false,
+        loadingRestartLogs: false,
+        loadingA2SCheckLogs: false,
+        pluginSelection: {
+            metamod: false,
+            counterstrikesharp: false
+        },
+        serverEditForm: {
+            name: '',
+            host: '',
+            ssh_port: 22,
+            ssh_user: '',
+            auth_type: 'password',
+            ssh_password: '',
+            ssh_key_path: '',
+            game_port: 27015,
+            game_directory: '',
+            description: ''
+        },
+        configForm: {
+            server_name: '',
+            default_map: 'de_dust2',
+            max_players: 32,
+            tickrate: 128,
+            game_mode: 'competitive',
+            game_type: '0',
+            server_password: '',
+            rcon_password: '',
+            tv_enable: false,
+            tv_port: 27020,
+            additional_parameters: ''
+        },
+        monitoringForm: {
+            enable_panel_monitoring: false,
+            monitor_interval_seconds: 60,
+            auto_restart_on_crash: true,
+            auto_clear_crash_hours: null
+        },
+        // A2S Query
+        showA2SEdit: false,
+        savingA2SConfig: false,
+        loadingA2SInfo: false,
+        a2sInfo: null,
+        a2sConfigForm: {
+            a2s_query_host: '',
+            a2s_query_port: null,
+            enable_a2s_monitoring: false,
+            a2s_failure_threshold: 3,
+            a2s_check_interval_seconds: 60
+        },
+        // SSH Console
+        sshConsoleWs: null,
+        sshConsoleConnected: false,
+        sshConsoleOutput: [],
+        sshCommand: '',
+        // Game Console
+        gameConsoleWs: null,
+        gameConsoleConnected: false,
+        gameConsoleOutput: [],
+        gameCommand: '',
+        gameConsoleHeartbeat: null,
+        
+        async init() {
+            this.loadConfigForm();
+            this.loadServerEditForm();
+            this.loadMonitoringForm();
+            this.loadA2SConfigForm();
+            this.connectWebSocket();
+            await this.loadHistory();
+            
+            // Load monitoring logs if monitoring is enabled
+            if (this.server.enable_panel_monitoring) {
+                await this.loadMonitoringLogs('status_check');
+                await this.loadMonitoringLogs('auto_restart');
+            }
+            
+            // Auto-scroll logs
+            this.$watch('logs', () => {
+                this.$nextTick(() => {
+                    const container = document.getElementById('logContainer');
+                    if (container) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                });
+            });
+        },
+        
+        loadServerEditForm() {
+            // Load current server info into edit form
+            this.serverEditForm = {
+                name: this.server.name || '',
+                host: this.server.host || '',
+                ssh_port: this.server.ssh_port || 22,
+                ssh_user: this.server.ssh_user || '',
+                auth_type: this.server.auth_type || 'password',
+                ssh_password: '',  // Don't load password for security
+                ssh_key_path: this.server.ssh_key_path || '',
+                game_port: this.server.game_port || 27015,
+                game_directory: this.server.game_directory || '',
+                description: this.server.description || ''
+            };
+        },
+        
+        async saveServerInfo() {
+            this.savingServerInfo = true;
+            try {
+                // Only send non-empty fields
+                const updateData = {};
+                Object.keys(this.serverEditForm).forEach(key => {
+                    const value = this.serverEditForm[key];
+                    // Skip ssh_password if empty (keep current password)
+                    if (key === 'ssh_password' && !value) {
+                        return;
+                    }
+                    // Skip ssh_key_path if auth_type is password
+                    if (key === 'ssh_key_path' && this.serverEditForm.auth_type === 'password') {
+                        return;
+                    }
+                    updateData[key] = value;
+                });
+                
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateData)
+                });
+                
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showServerEdit = false;
+                    this.addLog('complete', 'Server information saved successfully');
+                    // Reload page to reflect changes
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingServerInfo = false;
+            }
+        },
+        
+        loadConfigForm() {
+            // Load current configuration into form
+            this.configForm = {
+                server_name: this.server.server_name || 'CS2 Server',
+                default_map: this.server.default_map || 'de_dust2',
+                max_players: this.server.max_players || 32,
+                tickrate: this.server.tickrate || 128,
+                game_mode: this.server.game_mode || 'competitive',
+                game_type: this.server.game_type || '0',
+                server_password: this.server.server_password || '',
+                rcon_password: this.server.rcon_password || '',
+                tv_enable: this.server.tv_enable || false,
+                tv_port: this.server.tv_port || 27020,
+                additional_parameters: this.server.additional_parameters || ''
+            };
+            this.updateGameTypeFromMode();
+        },
+        
+        updateGameTypeFromMode() {
+            // Map game modes to game types based on Valve's documentation
+            const gameModeMap = {
+                'casual': '0',
+                'competitive': '0',
+                'deathmatch': '1',
+                'armsrace': '1',
+                'demolition': '1',
+                'training': '2',
+                'custom': '3',
+                'cooperative': '4',
+                'coopmission': '4',
+                'scrimcomp2v2': '5',
+                'skirmish': '5',
+                'survival': '6'
+            };
+            
+            this.configForm.game_type = gameModeMap[this.configForm.game_mode] || '0';
+        },
+        
+        async saveConfiguration() {
+            this.savingConfig = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.configForm)
+                });
+                
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showConfigEdit = false;
+                    this.addLog('complete', 'Configuration saved successfully');
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingConfig = false;
+            }
+        },
+        
+        loadMonitoringForm() {
+            // Load current monitoring settings into edit form
+            this.monitoringForm = {
+                enable_panel_monitoring: this.server.enable_panel_monitoring || false,
+                monitor_interval_seconds: this.server.monitor_interval_seconds || 60,
+                auto_restart_on_crash: this.server.auto_restart_on_crash !== undefined ? this.server.auto_restart_on_crash : true,
+                auto_clear_crash_hours: this.server.auto_clear_crash_hours || null
+            };
+        },
+        
+        async saveMonitoring() {
+            this.savingMonitoring = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.monitoringForm)
+                });
+                
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showMonitoringEdit = false;
+                    
+                    if (updated.enable_panel_monitoring) {
+                        this.addLog('complete', 'Panel monitoring enabled and configured successfully');
+                        // Load monitoring logs when enabled
+                        await this.loadMonitoringLogs('status_check');
+                        await this.loadMonitoringLogs('auto_restart');
+                    } else {
+                        this.addLog('complete', 'Panel monitoring disabled successfully');
+                    }
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save monitoring settings: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingMonitoring = false;
+            }
+        },
+        
+        async loadMonitoringLogs(eventType) {
+            if (eventType === 'status_check') {
+                this.loadingStatusLogs = true;
+            } else if (eventType === 'auto_restart') {
+                this.loadingRestartLogs = true;
+            }
+            
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/monitoring-logs?event_type=${eventType}&limit=50`);
+                
+                if (response.ok) {
+                    const logs = await response.json();
+                    if (eventType === 'status_check') {
+                        this.statusCheckLogs = logs;
+                    } else if (eventType === 'auto_restart') {
+                        this.autoRestartLogs = logs;
+                    }
+                } else {
+                    console.error('Failed to load monitoring logs:', await response.text());
+                }
+            } catch (err) {
+                console.error(`Error loading monitoring logs: ${err.message}`);
+            } finally {
+                if (eventType === 'status_check') {
+                    this.loadingStatusLogs = false;
+                } else if (eventType === 'auto_restart') {
+                    this.loadingRestartLogs = false;
+                }
+            }
+        },
+        
+        async loadA2SCheckLogs() {
+            this.loadingA2SCheckLogs = true;
+            
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/monitoring-logs?event_type=a2s_check&limit=50`);
+                
+                if (response.ok) {
+                    this.a2sCheckLogs = await response.json();
+                }
+            } catch (err) {
+                console.error('Error loading A2S check logs:', err);
+            } finally {
+                this.loadingA2SCheckLogs = false;
+            }
+        },
+        
+        connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/servers/${this.serverId}/deployment-status`;
+            
+            this.addLog('status', 'Connecting to deployment monitor...');
+            this.ws = new WebSocket(wsUrl);
+            
+            this.ws.onopen = () => {
+                this.wsConnected = true;
+                this.addLog('complete', 'Connected to real-time monitoring');
+            };
+            
+            this.ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type !== 'ack') {
+                    this.addLog(data.type, data.message);
+                }
+            };
+            
+            this.ws.onerror = () => {
+                this.addLog('error', 'WebSocket connection error');
+            };
+            
+            this.ws.onclose = () => {
+                this.wsConnected = false;
+                this.addLog('status', 'Disconnected from monitoring');
+                
+                // Try to reconnect after 5 seconds
+                setTimeout(() => {
+                    if (!this.wsConnected) {
+                        this.connectWebSocket();
+                    }
+                }, 5000);
+            };
+        },
+        
+        addLog(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            this.logs.push({
+                id: Date.now() + Math.random(),
+                timestamp: timestamp,
+                type: type,
+                message: message
+            });
+            
+            // Keep only last 100 logs
+            if (this.logs.length > 100) {
+                this.logs = this.logs.slice(-100);
+            }
+        },
+        
+        clearLogs() {
+            this.logs = [];
+        },
+        
+        // A2S Query Functions
+        loadA2SConfigForm() {
+            // Load current A2S configuration into edit form
+            this.a2sConfigForm = {
+                a2s_query_host: this.server.a2s_query_host || '',
+                a2s_query_port: this.server.a2s_query_port || null,
+                enable_a2s_monitoring: this.server.enable_a2s_monitoring || false,
+                a2s_failure_threshold: this.server.a2s_failure_threshold || 3,
+                a2s_check_interval_seconds: this.server.a2s_check_interval_seconds || 60
+            };
+        },
+        
+        async saveA2SConfig() {
+            this.savingA2SConfig = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.a2sConfigForm)
+                });
+                
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showA2SEdit = false;
+                    this.addLog('complete', 'A2S configuration saved successfully');
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save A2S configuration: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingA2SConfig = false;
+            }
+        },
+        
+        async refreshA2SInfo() {
+            this.loadingA2SInfo = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/a2s-info`);
+                
+                if (response.ok) {
+                    this.a2sInfo = await response.json();
+                    if (this.a2sInfo.success) {
+                        this.addLog('complete', 'A2S query successful');
+                    } else {
+                        this.addLog('warning', 'A2S query failed - server may be offline or unreachable');
+                    }
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to query A2S: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.loadingA2SInfo = false;
+            }
+        },
+        
+        formatDuration(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes}m ${secs}s`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${secs}s`;
+            } else {
+                return `${secs}s`;
+            }
+        },
+        
+        async executeAction(action) {
+            if (this.isActionRunning) return;
+            
+            this.isActionRunning = true;
+            this.addLog('status', `Executing action: ${action}...`);
+            
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/actions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: action })
+                });
+                
+                // Get response text first
+                const responseText = await response.text();
+                
+                // Try to parse as JSON
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (parseErr) {
+                    this.addLog('error', `Action failed: Invalid JSON response - ${responseText.substring(0, 200)}`);
+                    return;
+                }
+                
+                if (response.ok) {
+                    if (result.data && result.data.status) {
+                        this.server.status = result.data.status.toUpperCase();
+                    }
+                    await this.loadHistory();
+                } else {
+                    // Handle error response - extract meaningful message
+                    let errorMsg = 'Unknown error occurred';
+                    
+                    // Try various ways to get error message
+                    if (typeof result === 'string') {
+                        errorMsg = result;
+                    } else if (result && typeof result === 'object') {
+                        if (typeof result.detail === 'string') {
+                            errorMsg = result.detail;
+                        } else if (typeof result.message === 'string') {
+                            errorMsg = result.message;
+                        } else if (result.detail) {
+                            try {
+                                errorMsg = JSON.stringify(result.detail, null, 2);
+                            } catch {
+                                errorMsg = 'Error detail: ' + String(result.detail);
+                            }
+                        } else {
+                            try {
+                                errorMsg = JSON.stringify(result, null, 2);
+                            } catch {
+                                errorMsg = 'Error: Unable to parse error details';
+                            }
+                        }
+                    }
+                    
+                    this.addLog('error', `Action failed: ${errorMsg}`);
+                }
+            } catch (err) {
+                // Handle network or other errors
+                const errorMsg = err && err.message ? err.message : String(err);
+                this.addLog('error', `Error: ${errorMsg}`);
+                console.error('executeAction error:', err);
+            } finally {
+                this.isActionRunning = false;
+            }
+        },
+        
+        async installSelectedPlugins() {
+            const plugins = [];
+            if (this.pluginSelection.metamod) {
+                plugins.push('metamod');
+            }
+            if (this.pluginSelection.counterstrikesharp) {
+                plugins.push('counterstrikesharp');
+            }
+            
+            if (plugins.length === 0) {
+                this.addLog('error', 'Please select at least one plugin framework to install');
+                return;
+            }
+            
+            this.addLog('status', `Installing ${plugins.join(' and ')}...`);
+            
+            // Install plugins sequentially
+            for (const plugin of plugins) {
+                const action = plugin === 'metamod' ? 'install_metamod' : 'install_counterstrikesharp';
+                await this.executeAction(action);
+                
+                // Wait a bit between installations
+                if (plugins.length > 1 && plugin !== plugins[plugins.length - 1]) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
+            
+            // Reset selection after installation
+            this.pluginSelection.metamod = false;
+            this.pluginSelection.counterstrikesharp = false;
+        },
+        
+        async loadHistory() {
+            this.loadingHistory = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/logs?limit=10`);
+                if (response.ok) {
+                    this.history = await response.json();
+                }
+            } catch (err) {
+                console.error('Failed to load history:', err);
+            } finally {
+                this.loadingHistory = false;
+            }
+        },
+        
+        formatDateTime(dateString) {
+            if (!dateString) return 'N/A';
+            return new Date(dateString).toLocaleString();
+        },
+        
+        // SSH Console Methods
+        connectSSHConsole() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/servers/${this.serverId}/ssh-console`;
+            
+            this.sshConsoleWs = new WebSocket(wsUrl);
+            
+            this.sshConsoleWs.onopen = () => {
+                this.addConsoleOutput(this.sshConsoleOutput, 'SSH Console connected');
+            };
+            
+            this.sshConsoleWs.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'connected') {
+                    this.sshConsoleConnected = true;
+                    this.addConsoleOutput(this.sshConsoleOutput, data.message);
+                } else if (data.type === 'output') {
+                    this.addConsoleOutput(this.sshConsoleOutput, data.data);
+                } else if (data.type === 'error') {
+                    this.addConsoleOutput(this.sshConsoleOutput, `ERROR: ${data.message}`);
+                    this.sshConsoleConnected = false;
+                }
+            };
+            
+            this.sshConsoleWs.onerror = () => {
+                this.addConsoleOutput(this.sshConsoleOutput, 'WebSocket error');
+                this.sshConsoleConnected = false;
+            };
+            
+            this.sshConsoleWs.onclose = () => {
+                this.sshConsoleConnected = false;
+                this.addConsoleOutput(this.sshConsoleOutput, 'SSH Console disconnected');
+            };
+        },
+        
+        disconnectSSHConsole() {
+            if (this.sshConsoleWs) {
+                this.sshConsoleWs.send(JSON.stringify({ type: 'disconnect' }));
+                this.sshConsoleWs.close();
+                this.sshConsoleWs = null;
+                this.sshConsoleConnected = false;
+            }
+        },
+        
+        sendSSHCommand() {
+            if (this.sshConsoleWs && this.sshCommand.trim()) {
+                this.addConsoleOutput(this.sshConsoleOutput, `$ ${this.sshCommand}`);
+                this.sshConsoleWs.send(JSON.stringify({ 
+                    type: 'input', 
+                    data: this.sshCommand + '\n' 
+                }));
+                this.sshCommand = '';
+            }
+        },
+        
+        // Game Console Methods
+        connectGameConsole() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/servers/${this.serverId}/game-console`;
+            
+            this.gameConsoleWs = new WebSocket(wsUrl);
+            
+            // Clear any existing heartbeat
+            if (this.gameConsoleHeartbeat) {
+                clearInterval(this.gameConsoleHeartbeat);
+                this.gameConsoleHeartbeat = null;
+            }
+            
+            this.gameConsoleWs.onopen = () => {
+                this.addConsoleOutput(this.gameConsoleOutput, 'Game Console connecting...');
+                
+                // Start heartbeat to keep connection alive
+                this.gameConsoleHeartbeat = setInterval(() => {
+                    if (this.gameConsoleWs && this.gameConsoleWs.readyState === WebSocket.OPEN) {
+                        try {
+                            this.gameConsoleWs.send(JSON.stringify({ type: 'ping' }));
+                        } catch (e) {
+                            console.error('Failed to send heartbeat:', e);
+                        }
+                    }
+                }, 30000); // Send ping every 30 seconds
+            };
+            
+            this.gameConsoleWs.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'connected') {
+                    this.gameConsoleConnected = true;
+                    this.addConsoleOutput(this.gameConsoleOutput, data.message);
+                } else if (data.type === 'output') {
+                    this.addConsoleOutput(this.gameConsoleOutput, data.data);
+                } else if (data.type === 'error') {
+                    this.addConsoleOutput(this.gameConsoleOutput, `ERROR: ${data.message}`);
+                    this.gameConsoleConnected = false;
+                } else if (data.type === 'warning') {
+                    this.addConsoleOutput(this.gameConsoleOutput, `WARNING: ${data.data || data.message}`);
+                } else if (data.type === 'pong') {
+                    // Heartbeat response received, connection is alive
+                    console.debug('Game console heartbeat OK');
+                }
+            };
+            
+            this.gameConsoleWs.onerror = (error) => {
+                console.error('Game console WebSocket error:', error);
+                this.addConsoleOutput(this.gameConsoleOutput, 'WebSocket error occurred');
+                this.gameConsoleConnected = false;
+            };
+            
+            this.gameConsoleWs.onclose = () => {
+                this.gameConsoleConnected = false;
+                this.addConsoleOutput(this.gameConsoleOutput, 'Game Console disconnected');
+                
+                // Clear heartbeat on close
+                if (this.gameConsoleHeartbeat) {
+                    clearInterval(this.gameConsoleHeartbeat);
+                    this.gameConsoleHeartbeat = null;
+                }
+            };
+        },
+        
+        disconnectGameConsole() {
+            if (this.gameConsoleWs) {
+                // Clear heartbeat
+                if (this.gameConsoleHeartbeat) {
+                    clearInterval(this.gameConsoleHeartbeat);
+                    this.gameConsoleHeartbeat = null;
+                }
+                
+                this.gameConsoleWs.send(JSON.stringify({ type: 'disconnect' }));
+                this.gameConsoleWs.close();
+                this.gameConsoleWs = null;
+                this.gameConsoleConnected = false;
+            }
+        },
+        
+        sendGameCommand() {
+            if (this.gameConsoleWs && this.gameCommand.trim()) {
+                this.addConsoleOutput(this.gameConsoleOutput, `> ${this.gameCommand}`);
+                this.gameConsoleWs.send(JSON.stringify({ 
+                    type: 'input', 
+                    data: this.gameCommand + '\n' 
+                }));
+                this.gameCommand = '';
+            }
+        },
+        
+        addConsoleOutput(outputArray, text) {
+            outputArray.push({
+                id: Date.now() + Math.random(),
+                text: text
+            });
+            
+            // Keep only last 500 lines
+            if (outputArray.length > 500) {
+                outputArray.splice(0, outputArray.length - 500);
+            }
+            
+            // Auto-scroll console
+            this.$nextTick(() => {
+                const terminals = document.querySelectorAll('.console-terminal');
+                terminals.forEach(terminal => {
+                    terminal.scrollTop = terminal.scrollHeight;
+                });
+            });
+        }
+    };
+}
+</script>
+{% endblock %}

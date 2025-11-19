@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Login - CS2 Server Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">
+                    <i class="bi bi-box-arrow-in-right"></i> <span data-i18n="login.title">Login</span>
+                </h2>
+                
+                <div id="error-message" class="alert alert-danger d-none" role="alert"></div>
+                
+                <form id="login-form">
+                    <div class="mb-3">
+                        <label for="username" class="form-label" data-i18n="login.username">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label" data-i18n="login.password">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="captcha" class="form-label" data-i18n="login.captcha">Verification Code</label>
+                        <div class="d-flex gap-2 align-items-center">
+                            <img id="captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" title="Click to refresh">
+                            <input type="text" class="form-control" id="captcha" name="captcha" maxlength="4" required placeholder="Enter code" style="max-width: 120px;">
+                            <button type="button" class="btn btn-outline-secondary" id="refresh-captcha" title="Refresh CAPTCHA">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <input type="hidden" id="captcha-token" name="captcha-token">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100" id="submit-btn">
+                        <i class="bi bi-box-arrow-in-right"></i> <span data-i18n="login.loginButton">Login</span>
+                    </button>
+                </form>
+                
+                <hr class="my-4">
+                
+                <div class="text-center">
+                    <p class="mb-0"><span data-i18n="login.noAccount">Don't have an account?</span> <a href="/register" data-i18n="login.registerHere">Register here</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load CAPTCHA on page load
+async function loadCaptcha() {
+    try {
+        const response = await fetch('/api/captcha/image/new');
+        const token = response.headers.get('X-Captcha-Token');
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        
+        document.getElementById('captcha-image').src = imageUrl;
+        document.getElementById('captcha-token').value = token;
+    } catch (error) {
+        console.error('Failed to load CAPTCHA:', error);
+    }
+}
+
+// Refresh CAPTCHA
+document.getElementById('refresh-captcha').addEventListener('click', loadCaptcha);
+document.getElementById('captcha-image').addEventListener('click', loadCaptcha);
+
+// Load CAPTCHA when page loads
+loadCaptcha();
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submit-btn');
+    const errorDiv = document.getElementById('error-message');
+    
+    submitBtn.disabled = true;
+    const loggingInText = window.i18n ? window.i18n.t('login.loggingIn') : 'Logging in...';
+    submitBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> ${loggingInText}`;
+    errorDiv.classList.add('d-none');
+    
+    try {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value,
+                captcha_token: document.getElementById('captcha-token').value,
+                captcha_code: document.getElementById('captcha').value
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.detail || (window.i18n ? window.i18n.t('login.loginFailed') : 'Login failed'));
+        }
+        
+        // Store token in localStorage
+        localStorage.setItem('access_token', data.access_token);
+        
+        // Redirect to servers page
+        window.location.href = '/servers-ui';
+        
+    } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.remove('d-none');
+        submitBtn.disabled = false;
+        const loginText = window.i18n ? window.i18n.t('login.loginButton') : 'Login';
+        submitBtn.innerHTML = `<i class="bi bi-box-arrow-in-right"></i> ${loginText}`;
+        // Refresh CAPTCHA on error
+        loadCaptcha();
+    }
+});
+</script>
+{% endblock %}

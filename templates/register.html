@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Register - CS2 Server Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">
+                    <i class="bi bi-person-plus"></i> <span data-i18n="register.title">Register</span>
+                </h2>
+                
+                <div id="error-message" class="alert alert-danger d-none" role="alert"></div>
+                <div id="success-message" class="alert alert-success d-none" role="alert"></div>
+                
+                <form id="register-form">
+                    <div class="mb-3">
+                        <label for="username" class="form-label" data-i18n="register.username">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" 
+                               minlength="3" maxlength="100" required>
+                        <div class="form-text" data-i18n="register.usernameHint">At least 3 characters</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label" data-i18n="register.email">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label" data-i18n="register.password">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" 
+                               minlength="6" maxlength="100" required>
+                        <div class="form-text" data-i18n="register.passwordHint">At least 6 characters</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="confirm-password" class="form-label" data-i18n="register.confirmPassword">Confirm Password</label>
+                        <input type="password" class="form-control" id="confirm-password" 
+                               name="confirm-password" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="captcha" class="form-label" data-i18n="register.captcha">Verification Code</label>
+                        <div class="d-flex gap-2 align-items-center">
+                            <img id="captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" title="Click to refresh">
+                            <input type="text" class="form-control" id="captcha" name="captcha" maxlength="4" required placeholder="Enter code" style="max-width: 120px;">
+                            <button type="button" class="btn btn-outline-secondary" id="refresh-captcha" title="Refresh CAPTCHA">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <input type="hidden" id="captcha-token" name="captcha-token">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100" id="submit-btn">
+                        <i class="bi bi-person-plus"></i> <span data-i18n="register.registerButton">Register</span>
+                    </button>
+                </form>
+                
+                <hr class="my-4">
+                
+                <div class="text-center">
+                    <p class="mb-0"><span data-i18n="register.haveAccount">Already have an account?</span> <a href="/login" data-i18n="register.loginHere">Login here</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load CAPTCHA on page load
+async function loadCaptcha() {
+    try {
+        const response = await fetch('/api/captcha/image/new');
+        const token = response.headers.get('X-Captcha-Token');
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        
+        document.getElementById('captcha-image').src = imageUrl;
+        document.getElementById('captcha-token').value = token;
+    } catch (error) {
+        console.error('Failed to load CAPTCHA:', error);
+    }
+}
+
+// Refresh CAPTCHA
+document.getElementById('refresh-captcha').addEventListener('click', loadCaptcha);
+document.getElementById('captcha-image').addEventListener('click', loadCaptcha);
+
+// Load CAPTCHA when page loads
+loadCaptcha();
+
+document.getElementById('register-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submit-btn');
+    const errorDiv = document.getElementById('error-message');
+    const successDiv = document.getElementById('success-message');
+    
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+    
+    // Validate passwords match
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    
+    if (password !== confirmPassword) {
+        const mismatchText = window.i18n ? window.i18n.t('register.passwordsMismatch') : 'Passwords do not match';
+        errorDiv.textContent = mismatchText;
+        errorDiv.classList.remove('d-none');
+        return;
+    }
+    
+    submitBtn.disabled = true;
+    const registeringText = window.i18n ? window.i18n.t('register.registering') : 'Registering...';
+    submitBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> ${registeringText}`;
+    
+    try {
+        const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                username: document.getElementById('username').value,
+                email: document.getElementById('email').value,
+                password: password,
+                captcha_token: document.getElementById('captcha-token').value,
+                captcha_code: document.getElementById('captcha').value
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.detail || (window.i18n ? window.i18n.t('register.registrationFailed') : 'Registration failed'));
+        }
+        
+        // Show success message
+        const successText = window.i18n ? window.i18n.t('register.registrationSuccess') : 'Registration successful! Redirecting to login...';
+        successDiv.textContent = successText;
+        successDiv.classList.remove('d-none');
+        
+        // Redirect to login after 2 seconds
+        setTimeout(() => {
+            window.location.href = '/login';
+        }, 2000);
+        
+    } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.remove('d-none');
+        submitBtn.disabled = false;
+        const registerText = window.i18n ? window.i18n.t('register.registerButton') : 'Register';
+        submitBtn.innerHTML = `<i class="bi bi-person-plus"></i> ${registerText}`;
+        // Refresh CAPTCHA on error
+        loadCaptcha();
+    }
+});
+</script>
+{% endblock %}

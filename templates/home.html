@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Home - CS2 Server Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-lg mb-4">
+            <div class="card-body text-center p-5">
+                <h1 class="display-4 mb-3">
+                    <i class="bi bi-controller"></i> <span data-i18n="home.title">CS2 Server Manager</span>
+                </h1>
+                <p class="lead text-muted mb-4" data-i18n="home.subtitle">
+                    Manage multiple Counter-Strike 2 servers with ease through an intuitive web interface
+                </p>
+                <div class="d-flex gap-3 justify-content-center flex-wrap">
+                    <a href="/servers-ui" class="btn btn-primary btn-lg">
+                        <i class="bi bi-hdd-rack"></i> <span data-i18n="home.manageServers">Manage Servers</span>
+                    </a>
+                    <a href="/docs" class="btn btn-outline-primary btn-lg" target="_blank">
+                        <i class="bi bi-book"></i> <span data-i18n="home.apiDocumentation">API Documentation</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Features -->
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="display-6 mb-3 text-primary">
+                    <i class="bi bi-lightning-charge"></i>
+                </div>
+                <h5 class="card-title" data-i18n="home.features.fastAsync.title">Fast & Async</h5>
+                <p class="card-text text-muted" data-i18n="home.features.fastAsync.description">
+                    Built on FastAPI with full async/await support for high performance operations
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="display-6 mb-3 text-primary">
+                    <i class="bi bi-hdd-rack-fill"></i>
+                </div>
+                <h5 class="card-title" data-i18n="home.features.multiServer.title">Multi-Server Management</h5>
+                <p class="card-text text-muted" data-i18n="home.features.multiServer.description">
+                    Manage multiple CS2 servers from a single interface with SSH connectivity
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="display-6 mb-3 text-primary">
+                    <i class="bi bi-broadcast"></i>
+                </div>
+                <h5 class="card-title" data-i18n="home.features.realTime.title">Real-Time Updates</h5>
+                <p class="card-text text-muted" data-i18n="home.features.realTime.description">
+                    WebSocket support for live deployment status and server monitoring
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="display-6 mb-3 text-primary">
+                    <i class="bi bi-shield-check"></i>
+                </div>
+                <h5 class="card-title" data-i18n="home.features.secureSSH.title">Secure SSH Access</h5>
+                <p class="card-text text-muted" data-i18n="home.features.secureSSH.description">
+                    Support for both password and key-based SSH authentication
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="display-6 mb-3 text-primary">
+                    <i class="bi bi-database"></i>
+                </div>
+                <h5 class="card-title" data-i18n="home.features.persistentStorage.title">Persistent Storage</h5>
+                <p class="card-text text-muted" data-i18n="home.features.persistentStorage.description">
+                    MySQL database for server configurations and Redis for caching
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="display-6 mb-3 text-primary">
+                    <i class="bi bi-journal-text"></i>
+                </div>
+                <h5 class="card-title" data-i18n="home.features.deploymentLogs.title">Deployment Logs</h5>
+                <p class="card-text text-muted" data-i18n="home.features.deploymentLogs.description">
+                    Complete history of all server operations and deployment activities
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> <span data-i18n="home.quickStart.title">Quick Start</span></h5>
+            </div>
+            <div class="card-body">
+                <ol class="mb-0">
+                    <li class="mb-2" data-i18n="home.quickStart.step1">Navigate to Servers to add your first CS2 server</li>
+                    <li class="mb-2" data-i18n="home.quickStart.step2">Configure SSH credentials (password or key-based authentication)</li>
+                    <li class="mb-2" data-i18n="home.quickStart.step3">Deploy CS2 server software with a single click</li>
+                    <li class="mb-2" data-i18n="home.quickStart.step4">Monitor deployment progress in real-time via WebSocket</li>
+                    <li data-i18n="home.quickStart.step5">Manage server lifecycle (start, stop, restart, check status)</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

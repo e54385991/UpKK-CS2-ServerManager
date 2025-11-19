@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block title %}Personal Center - CS2 Server Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 offset-lg-2">
+        <h2 class="mb-4">
+            <i class="bi bi-person-circle"></i> <span data-i18n="profile.title">Personal Center</span>
+        </h2>
+        
+        <!-- User Info Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> <span data-i18n="profile.userInfo">User Information</span></h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-sm-4 fw-bold" data-i18n="profile.username">Username:</div>
+                    <div class="col-sm-8" id="user-username">-</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-sm-4 fw-bold" data-i18n="profile.email">Email:</div>
+                    <div class="col-sm-8" id="user-email">-</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-sm-4 fw-bold" data-i18n="profile.role">Role:</div>
+                    <div class="col-sm-8">
+                        <span id="user-role-badge" class="badge bg-secondary">-</span>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-sm-4 fw-bold" data-i18n="profile.joinedAt">Joined At:</div>
+                    <div class="col-sm-8" id="user-created">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Update Profile Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pencil-square"></i> <span data-i18n="profile.updateProfile">Update Profile</span></h5>
+            </div>
+            <div class="card-body">
+                <div id="profile-error-message" class="alert alert-danger d-none" role="alert"></div>
+                <div id="profile-success-message" class="alert alert-success d-none" role="alert"></div>
+                
+                <form id="profile-form">
+                    <div class="mb-3">
+                        <label for="profile-email" class="form-label" data-i18n="profile.newEmail">New Email</label>
+                        <input type="email" class="form-control" id="profile-email" name="email">
+                        <div class="form-text" data-i18n="profile.emailHint">Leave blank to keep current email</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="profile-captcha" class="form-label" data-i18n="profile.captcha">Verification Code</label>
+                        <div class="d-flex gap-2 align-items-center">
+                            <img id="profile-captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" title="Click to refresh">
+                            <input type="text" class="form-control" id="profile-captcha" name="captcha" maxlength="4" required placeholder="Enter code" style="max-width: 120px;">
+                            <button type="button" class="btn btn-outline-secondary" id="profile-refresh-captcha" title="Refresh CAPTCHA">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <input type="hidden" id="profile-captcha-token" name="captcha-token">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="profile-submit-btn">
+                        <i class="bi bi-check-circle"></i> <span data-i18n="profile.updateButton">Update Profile</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Reset Password Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-shield-lock"></i> <span data-i18n="profile.resetPassword">Reset Password</span></h5>
+            </div>
+            <div class="card-body">
+                <div id="password-error-message" class="alert alert-danger d-none" role="alert"></div>
+                <div id="password-success-message" class="alert alert-success d-none" role="alert"></div>
+                
+                <form id="password-form">
+                    <div class="mb-3">
+                        <label for="current-password" class="form-label" data-i18n="profile.currentPassword">Current Password</label>
+                        <input type="password" class="form-control" id="current-password" name="current_password" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="new-password" class="form-label" data-i18n="profile.newPassword">New Password</label>
+                        <input type="password" class="form-control" id="new-password" name="new_password" required minlength="6">
+                        <div class="form-text" data-i18n="profile.passwordHint">At least 6 characters</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="confirm-password" class="form-label" data-i18n="profile.confirmPassword">Confirm Password</label>
+                        <input type="password" class="form-control" id="confirm-password" name="confirm_password" required minlength="6">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password-captcha" class="form-label" data-i18n="profile.captcha">Verification Code</label>
+                        <div class="d-flex gap-2 align-items-center">
+                            <img id="password-captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" title="Click to refresh">
+                            <input type="text" class="form-control" id="password-captcha" name="captcha" maxlength="4" required placeholder="Enter code" style="max-width: 120px;">
+                            <button type="button" class="btn btn-outline-secondary" id="password-refresh-captcha" title="Refresh CAPTCHA">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <input type="hidden" id="password-captcha-token" name="captcha-token">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="password-submit-btn">
+                        <i class="bi bi-shield-check"></i> <span data-i18n="profile.resetPasswordButton">Reset Password</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load user information
+async function loadUserInfo() {
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/auth/me', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            const user = await response.json();
+            document.getElementById('user-username').textContent = user.username;
+            document.getElementById('user-email').textContent = user.email;
+            
+            const roleBadge = document.getElementById('user-role-badge');
+            if (user.is_admin) {
+                roleBadge.textContent = window.i18n ? window.i18n.t('profile.admin') : 'Admin';
+                roleBadge.className = 'badge bg-danger';
+            } else {
+                roleBadge.textContent = window.i18n ? window.i18n.t('profile.user') : 'User';
+                roleBadge.className = 'badge bg-primary';
+            }
+            
+            const createdDate = new Date(user.created_at);
+            document.getElementById('user-created').textContent = createdDate.toLocaleString();
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Failed to load user info:', error);
+    }
+}
+
+// Load CAPTCHA for profile form
+async function loadProfileCaptcha() {
+    try {
+        const response = await fetch('/api/captcha/image/new');
+        const token = response.headers.get('X-Captcha-Token');
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        
+        document.getElementById('profile-captcha-image').src = imageUrl;
+        document.getElementById('profile-captcha-token').value = token;
+    } catch (error) {
+        console.error('Failed to load CAPTCHA:', error);
+    }
+}
+
+// Load CAPTCHA for password form
+async function loadPasswordCaptcha() {
+    try {
+        const response = await fetch('/api/captcha/image/new');
+        const token = response.headers.get('X-Captcha-Token');
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        
+        document.getElementById('password-captcha-image').src = imageUrl;
+        document.getElementById('password-captcha-token').value = token;
+    } catch (error) {
+        console.error('Failed to load CAPTCHA:', error);
+    }
+}
+
+// Refresh CAPTCHAs
+document.getElementById('profile-refresh-captcha').addEventListener('click', loadProfileCaptcha);
+document.getElementById('profile-captcha-image').addEventListener('click', loadProfileCaptcha);
+document.getElementById('password-refresh-captcha').addEventListener('click', loadPasswordCaptcha);
+document.getElementById('password-captcha-image').addEventListener('click', loadPasswordCaptcha);
+
+// Handle profile update
+document.getElementById('profile-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('profile-submit-btn');
+    const errorDiv = document.getElementById('profile-error-message');
+    const successDiv = document.getElementById('profile-success-message');
+    
+    submitBtn.disabled = true;
+    const updatingText = window.i18n ? window.i18n.t('profile.updating') : 'Updating...';
+    submitBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> ${updatingText}`;
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        const email = document.getElementById('profile-email').value.trim();
+        
+        const requestBody = {
+            captcha_token: document.getElementById('profile-captcha-token').value,
+            captcha_code: document.getElementById('profile-captcha').value
+        };
+        
+        if (email) {
+            requestBody.email = email;
+        }
+        
+        const response = await fetch('/api/auth/profile', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            const successMsg = window.i18n ? window.i18n.t('profile.updateSuccess') : 'Profile updated successfully';
+            successDiv.textContent = successMsg;
+            successDiv.classList.remove('d-none');
+            document.getElementById('profile-email').value = '';
+            loadUserInfo();
+        } else {
+            errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.updateFailed') : 'Failed to update profile');
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (error) {
+        const errorMsg = window.i18n ? window.i18n.t('profile.updateFailed') : 'Failed to update profile';
+        errorDiv.textContent = `${errorMsg}: ${error.message}`;
+        errorDiv.classList.remove('d-none');
+    } finally {
+        submitBtn.disabled = false;
+        const updateText = window.i18n ? window.i18n.t('profile.updateButton') : 'Update Profile';
+        submitBtn.innerHTML = `<i class="bi bi-check-circle"></i> ${updateText}`;
+        loadProfileCaptcha();
+    }
+});
+
+// Handle password reset
+document.getElementById('password-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('password-submit-btn');
+    const errorDiv = document.getElementById('password-error-message');
+    const successDiv = document.getElementById('password-success-message');
+    
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    
+    // Check if passwords match
+    if (newPassword !== confirmPassword) {
+        errorDiv.textContent = window.i18n ? window.i18n.t('profile.passwordsMismatch') : 'Passwords do not match';
+        errorDiv.classList.remove('d-none');
+        return;
+    }
+    
+    submitBtn.disabled = true;
+    const resettingText = window.i18n ? window.i18n.t('profile.resetting') : 'Resetting...';
+    submitBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> ${resettingText}`;
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/auth/reset-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                current_password: document.getElementById('current-password').value,
+                new_password: newPassword,
+                confirm_password: confirmPassword,
+                captcha_token: document.getElementById('password-captcha-token').value,
+                captcha_code: document.getElementById('password-captcha').value
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            const successMsg = window.i18n ? window.i18n.t('profile.passwordResetSuccess') : 'Password reset successfully';
+            successDiv.textContent = successMsg;
+            successDiv.classList.remove('d-none');
+            document.getElementById('password-form').reset();
+        } else {
+            errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.passwordResetFailed') : 'Failed to reset password');
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (error) {
+        const errorMsg = window.i18n ? window.i18n.t('profile.passwordResetFailed') : 'Failed to reset password';
+        errorDiv.textContent = `${errorMsg}: ${error.message}`;
+        errorDiv.classList.remove('d-none');
+    } finally {
+        submitBtn.disabled = false;
+        const resetText = window.i18n ? window.i18n.t('profile.resetPasswordButton') : 'Reset Password';
+        submitBtn.innerHTML = `<i class="bi bi-shield-check"></i> ${resetText}`;
+        loadPasswordCaptcha();
+    }
+});
+
+// Load user info and CAPTCHAs on page load
+loadUserInfo();
+loadProfileCaptcha();
+loadPasswordCaptcha();
+</script>
+{% endblock %}

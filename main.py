@@ -1,0 +1,196 @@
+"""
+FastAPI application for CS2 Server Manager
+Main entry point with organized structure
+"""
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+import os
+
+from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse
+from services import redis_manager
+from api.routes import servers, actions, setup, auth, server_status, public, captcha
+
+# Create FastAPI app
+app = FastAPI(
+    title="CS2 Server Manager",
+    description="Manage multiple CS2 servers via FastAPI + Redis + MySQL with WebSocket support",
+    version="1.0.0"
+)
+
+# Mount static files
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Setup Jinja2 templates
+templates = Jinja2Templates(directory="templates")
+
+# Include routers
+# PUBLIC ROUTER FIRST - no authentication, no prefix
+app.include_router(public.router)
+# CAPTCHA ROUTER - no authentication required for generation
+app.include_router(captcha.router)
+# Then authenticated routers
+app.include_router(auth.router)
+app.include_router(servers.router)
+app.include_router(actions.router)
+app.include_router(setup.router)
+app.include_router(server_status.router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database and start monitoring on startup"""
+    await init_db()
+    await migrate_db()
+    
+    # Clear old A2S cache to prevent double-encoding issues
+    from services.redis_manager import redis_manager
+    print("Clearing old A2S cache...")
+    try:
+        # Get all a2s cache keys
+        keys = await redis_manager.client.keys("a2s:server:*")
+        if keys:
+            await redis_manager.client.delete(*keys)
+            print(f"Cleared {len(keys)} old A2S cache entries")
+        else:
+            print("No old A2S cache entries to clear")
+    except Exception as e:
+        print(f"Error clearing A2S cache: {e}")
+    
+    # Start A2S cache service
+    from services.a2s_cache_service import a2s_cache_service
+    await a2s_cache_service.start()
+    print("A2S cache service started")
+    
+    # Start auto-update service
+    from services.auto_update_service import auto_update_service
+    await auto_update_service.start()
+    print("Auto-update service started")
+    
+    # Start monitoring for servers with panel monitoring enabled
+    from modules.database import async_session_maker
+    from services.server_monitor import server_monitor
+    from services.ssh_manager import SSHManager
+    
+    async with async_session_maker() as db:
+        result = await db.execute(select(Server).filter(Server.enable_panel_monitoring == True))
+        monitored_servers = result.scalars().all()
+        
+        if monitored_servers:
+            print(f"Starting panel monitoring for {len(monitored_servers)} server(s)...")
+            for server in monitored_servers:
+                ssh_manager = SSHManager()
+                server_monitor.start_monitoring(server.id, ssh_manager)
+                print(f"  - Started monitoring for server {server.id} ({server.name})")
+        else:
+            print("No servers configured for panel monitoring")
+    
+    print("CS2 Server Manager started successfully!")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    # Stop A2S cache service
+    from services.a2s_cache_service import a2s_cache_service
+    a2s_cache_service.stop()
+    
+    # Stop auto-update service
+    from services.auto_update_service import auto_update_service
+    auto_update_service.stop()
+    
+    # Stop all monitoring tasks
+    from services.server_monitor import server_monitor
+    
+    if server_monitor.monitoring_tasks:
+        print(f"Stopping {len(server_monitor.monitoring_tasks)} monitoring task(s)...")
+        for server_id in list(server_monitor.monitoring_tasks.keys()):
+            server_monitor.stop_monitoring(server_id)
+    
+    await redis_manager.close()
+    print("CS2 Server Manager shutdown complete!")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    """Root endpoint - serve home page"""
+    return templates.TemplateResponse("home.html", {"request": request})
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Login page"""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request):
+    """Registration page"""
+    return templates.TemplateResponse("register.html", {"request": request})
+
+
+@app.get("/servers-ui", response_class=HTMLResponse)
+async def servers_ui(request: Request):
+    """Servers management UI"""
+    return templates.TemplateResponse("servers.html", {"request": request})
+
+
+@app.get("/servers-ui/{server_id}", response_class=HTMLResponse)
+async def server_detail_ui(request: Request, server_id: int):
+    """Server detail UI with real-time monitoring"""
+    from modules.database import async_session_maker
+    
+    async with async_session_maker() as db:
+        result = await db.execute(select(Server).filter(Server.id == server_id))
+        server = result.scalar_one_or_none()
+        
+        if not server:
+            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
+        
+        # Convert to Pydantic model for JSON serialization
+        server_data = ServerResponse.model_validate(server)
+        # Create a JSON string for the JavaScript code
+        server_json = server_data.model_dump_json()
+        
+        return templates.TemplateResponse("server_detail.html", {
+            "request": request,
+            "server": server,  # Pass original SQLAlchemy object for template attribute access
+            "server_json": server_json  # Pass JSON string for JavaScript
+        })
+
+
+@app.get("/setup-wizard", response_class=HTMLResponse)
+async def setup_wizard(request: Request):
+    """Server setup wizard UI"""
+    return templates.TemplateResponse("server_setup_wizard.html", {"request": request})
+
+
+@app.get("/profile", response_class=HTMLResponse)
+async def profile_page(request: Request):
+    """User profile page"""
+    return templates.TemplateResponse("profile.html", {"request": request})
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    redis_status = await redis_manager.ping()
+    return {
+        "status": "healthy",
+        "redis": "connected" if redis_status else "disconnected",
+        "version": "1.0.0"
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host=settings.API_HOST,
+        port=settings.API_PORT,
+        reload=settings.DEBUG
+    )

@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+
+{% block title %}新服务器初始化 - CS2 Server Manager{% endblock %}
+
+{% block content %}
+<div x-data="setupWizard()" x-init="init()">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-gear-fill"></i> <span data-i18n="setupWizard.title">新服务器初始化</span></h2>
+        <a href="/servers-ui" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> <span data-i18n="serverDetail.backToServers">返回服务器列表</span>
+        </a>
+    </div>
+
+    <!-- Initialization Information Banner -->
+    <div class="alert alert-primary mb-4">
+        <h5 class="alert-heading">
+            <i class="bi bi-info-circle-fill"></i> <span data-i18n="setupWizard.initializationInfo">新服务器初始化页面</span>
+        </h5>
+        <p class="mb-2" data-i18n="setupWizard.initializationDescription">
+            系统将完成创建用户、环境安装、设置目录权限等基础操作。（同一个服务器只需操作一次）
+        </p>
+        <hr>
+        <p class="mb-1">
+            <i class="bi bi-exclamation-triangle"></i> <span data-i18n="setupWizard.manualSetupNote">如果无法自动设置成功请手动设置</span>
+        </p>
+        <p class="mb-0">
+            <i class="bi bi-check-circle"></i> <span data-i18n="setupWizard.testedEnvironment">测试成功环境：Ubuntu 24.04 LTS 且国际网络能够正常访问</span>
+        </p>
+    </div>
+
+    <!-- Mode Selection -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-list-check"></i> <span data-i18n="setupWizard.selectSetupMethod">选择设置方式</span></h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card h-100" :class="{'border-primary': setupMode === 'auto'}" 
+                         @click="setupMode = 'auto'" style="cursor: pointer;">
+                        <div class="card-body text-center">
+                            <i class="bi bi-magic display-4 text-primary"></i>
+                            <h5 class="mt-3" data-i18n="setupWizard.autoSetupRecommended">自动设置（推荐）</h5>
+                            <p class="text-muted">
+                                <span data-i18n="setupWizard.autoSetupDescription">只需提供 SSH 凭据，系统自动处理一切。</span>
+                                <br><strong data-i18n="setupWizard.autoSetupSupportNote">支持 root 或普通用户（自动 sudo）</strong>
+                            </p>
+                            <span x-show="setupMode === 'auto'" class="badge bg-primary" data-i18n="setupWizard.selected">已选择</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100" :class="{'border-primary': setupMode === 'manual'}" 
+                         @click="setupMode = 'manual'" style="cursor: pointer;">
+                        <div class="card-body text-center">
+                            <i class="bi bi-terminal display-4 text-secondary"></i>
+                            <h5 class="mt-3" data-i18n="setupWizard.manualSetup">手动设置</h5>
+                            <p class="text-muted">
+                                <span data-i18n="setupWizard.manualSetupDescription">获取设置脚本，手动在服务器上执行。</span>
+                                <br><span data-i18n="setupWizard.manualSetupSuitableFor">适合无法提供 root 密码的情况。</span>
+                            </p>
+                            <span x-show="setupMode === 'manual'" class="badge bg-primary" data-i18n="setupWizard.selected">已选择</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto Setup Form -->
+    <div x-show="setupMode === 'auto'" x-cloak>
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-magic"></i> <span data-i18n="setupWizard.autoSetupServer">自动设置服务器</span></h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-success">
+                    <i class="bi bi-info-circle"></i>
+                    <strong data-i18n="setupWizard.fullyAutomated">完全自动化！</strong><span data-i18n="setupWizard.autoSetupInfo">无论您使用 root 还是普通用户，系统都会自动处理 sudo 操作。</span>
+                </div>
+                
+                <form @submit.prevent="autoSetup()">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label"><span data-i18n="setupWizard.serverAddress">服务器地址</span> *</label>
+                            <input type="text" class="form-control" x-model="autoSetupForm.host" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" data-i18n="setupWizard.sshPortLabel">SSH 端口</label>
+                            <input type="number" class="form-control" x-model="autoSetupForm.ssh_port">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label"><span data-i18n="setupWizard.sshUsernameLabel">SSH 用户名</span> *</label>
+                            <input type="text" class="form-control" x-model="autoSetupForm.ssh_user" required 
+                                   data-i18n-placeholder="setupWizard.sshUsernamePlaceholder">
+                            <small class="text-muted" data-i18n="setupWizard.sshUsernameHint">可以是 root、ubuntu、admin 等任何有 sudo 权限的用户</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label"><span data-i18n="setupWizard.authTypeLabel">认证方式</span> *</label>
+                            <select class="form-select" x-model="autoSetupForm.auth_type">
+                                <option value="password" data-i18n="setupWizard.passwordOption">密码</option>
+                                <option value="key" data-i18n="setupWizard.sshKeyOption">SSH 密钥</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" x-show="autoSetupForm.auth_type === 'password'">
+                            <label class="form-label"><span data-i18n="setupWizard.sshPasswordLabel">SSH 密码</span> *</label>
+                            <input type="password" class="form-control" x-model="autoSetupForm.ssh_password">
+                        </div>
+                        <div class="col-md-6" x-show="autoSetupForm.auth_type === 'key'">
+                            <label class="form-label"><span data-i18n="setupWizard.sshKeyPathLabel">SSH 密钥文件路径</span> *</label>
+                            <input type="text" class="form-control" x-model="autoSetupForm.ssh_key_path">
+                        </div>
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <i class="bi bi-lightbulb"></i>
+                                <strong data-i18n="setupWizard.smartSudoDetection">智能 sudo 检测：</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li data-i18n="setupWizard.sudoDetectionInfo1">如果您使用 root 用户，无需 sudo</li>
+                                    <li data-i18n="setupWizard.sudoDetectionInfo2">如果您使用普通用户，系统会自动使用 sudo</li>
+                                    <li data-i18n="setupWizard.sudoDetectionInfo3">系统会自动尝试使用 SSH 密码作为 sudo 密码</li>
+                                    <li data-i18n-html="setupWizard.sudoDetectionInfo4">如果 sudo 无需密码（<code>sudo -i</code>），自动检测并使用</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" 
+                                       x-model="autoSetupForm.different_sudo_password" id="diffSudo">
+                                <label class="form-check-label" for="diffSudo" data-i18n="setupWizard.differentSudoPassword">
+                                    sudo 密码与 SSH 密码不同（可选）
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6" x-show="autoSetupForm.different_sudo_password">
+                            <label class="form-label" data-i18n="setupWizard.sudoPasswordLabel">sudo 密码</label>
+                            <input type="password" class="form-control" x-model="autoSetupForm.sudo_password"
+                                   data-i18n-placeholder="setupWizard.sudoPasswordPlaceholder">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" data-i18n="setupWizard.cs2UsernameLabel">CS2 服务器用户名</label>
+                            <input type="text" class="form-control" x-model="autoSetupForm.cs2_username">
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3 mt-2">
+                        <div class="col-12">
+                            <label class="form-label"><span data-i18n="setupWizard.captchaLabel">验证码</span> *</label>
+                            <div class="d-flex gap-2 align-items-center">
+                                <img id="setup-captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" data-i18n-title="setupWizard.clickToRefresh">
+                                <input type="text" class="form-control" x-model="autoSetupForm.captcha_code" maxlength="4" required data-i18n-placeholder="setupWizard.captchaPlaceholder" style="max-width: 120px;">
+                                <button type="button" class="btn btn-outline-secondary" @click="loadSetupCaptcha()" data-i18n-title="setupWizard.refreshCaptcha">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg" :disabled="isProcessing">
+                            <span x-show="!isProcessing">
+                                <i class="bi bi-play-fill"></i> <span data-i18n="setupWizard.startAutoSetup">开始自动设置</span>
+                            </span>
+                            <span x-show="isProcessing">
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span data-i18n="setupWizard.settingUp">正在设置...</span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Setup Progress -->
+        <div x-show="setupLogs.length > 0" x-cloak class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-ul"></i> <span data-i18n="setupWizard.setupProgress">设置进度</span></h5>
+            </div>
+            <div class="card-body">
+                <div class="log-terminal" style="height: 300px;">
+                    <template x-for="log in setupLogs" :key="log.id">
+                        <div class="log-entry">
+                            <span class="log-output" x-text="log.message"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Result -->
+        <div x-show="setupResult" x-cloak class="card mb-4 border-success">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-check-circle"></i> <span data-i18n="setupWizard.setupComplete">设置完成！</span></h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle-fill"></i>
+                    <strong data-i18n="setupWizard.setupSuccessMessage">服务器环境设置成功！请使用以下凭据添加服务器到 CS2 Manager。</strong>
+                </div>
+                
+                <table class="table table-bordered">
+                    <tbody>
+                        <tr>
+                            <th width="30%" data-i18n="setupWizard.sshUsernameField">SSH 用户名</th>
+                            <td>
+                                <code x-text="setupResult?.cs2_username"></code>
+                                <button class="btn btn-sm btn-outline-primary ms-2" 
+                                        @click="copyToClipboard(setupResult?.cs2_username)">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th data-i18n="setupWizard.sshPasswordField">SSH 密码</th>
+                            <td>
+                                <code x-text="setupResult?.cs2_password"></code>
+                                <button class="btn btn-sm btn-outline-primary ms-2" 
+                                        @click="copyToClipboard(setupResult?.cs2_password)">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th data-i18n="setupWizard.gameDirectory">游戏目录</th>
+                            <td>
+                                <code x-text="setupResult?.game_directory"></code>
+                                <button class="btn btn-sm btn-outline-primary ms-2" 
+                                        @click="copyToClipboard(setupResult?.game_directory)">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong data-i18n="setupWizard.importantNote">重要：</strong><span data-i18n="setupWizard.savePasswordWarning">请妥善保存上述密码！建议保存到密码管理器。</span>
+                </div>
+
+                <a href="/servers-ui" class="btn btn-primary btn-lg">
+                    <i class="bi bi-plus-circle"></i> <span data-i18n="setupWizard.addServerNow">现在添加服务器</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Setup -->
+    <div x-show="setupMode === 'manual'" x-cloak>
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-terminal"></i> <span data-i18n="setupWizard.manualSetupSteps">手动设置步骤</span></h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <span data-i18n="setupWizard.manualSetupInfo">请按照以下步骤在目标服务器上执行命令。</span>
+                </div>
+
+                <!-- Step 1: Generate Password -->
+                <div class="mb-4">
+                    <h5 data-i18n="setupWizard.manualStep1">步骤 1: 生成安全密码</h5>
+                    <div class="input-group">
+                        <input type="text" class="form-control font-monospace" x-model="password" readonly>
+                        <button class="btn btn-outline-secondary" @click="copyToClipboard(password)">
+                            <i class="bi bi-clipboard"></i> <span data-i18n="setupWizard.copyButton">复制</span>
+                        </button>
+                        <button class="btn btn-outline-primary" @click="generatePassword()">
+                            <i class="bi bi-arrow-clockwise"></i> <span data-i18n="setupWizard.regenerateButton">重新生成</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Setup Script -->
+                <div class="mb-4">
+                    <h5 data-i18n="setupWizard.manualStep2">步骤 2: 运行设置脚本</h5>
+                    <div class="card bg-dark text-light">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span class="font-monospace">setup_cs2.sh</span>
+                            <button class="btn btn-sm btn-outline-light" @click="copyToClipboard(setupScript)">
+                                <i class="bi bi-clipboard"></i> <span data-i18n="setupWizard.copyButton">复制</span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <pre class="mb-0" style="max-height: 400px; overflow-y: auto;"><code x-text="setupScript"></code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Add Server -->
+                <div class="mb-4">
+                    <h5 data-i18n="setupWizard.manualStep3">步骤 3: 添加服务器</h5>
+                    <p data-i18n="setupWizard.manualUseInfo">使用以下信息：</p>
+                    <ul>
+                        <li><span data-i18n="setupWizard.manualUsername">用户名:</span> <code>cs2server</code></li>
+                        <li><span data-i18n="setupWizard.manualPassword">密码:</span> <code x-text="password"></code></li>
+                        <li><span data-i18n="setupWizard.manualGameDir">游戏目录:</span> <code>/home/cs2server/cs2</code></li>
+                    </ul>
+                    <a href="/servers-ui" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> <span data-i18n="setupWizard.addServerButton">添加服务器</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div class="toast" :class="{'show': showToast}" role="alert">
+            <div class="toast-header">
+                <i class="bi bi-check-circle text-success me-2"></i>
+                <strong class="me-auto" data-i18n="setupWizard.toastSuccess">成功</strong>
+                <button type="button" class="btn-close" @click="showToast = false"></button>
+            </div>
+            <div class="toast-body" data-i18n="setupWizard.copiedToClipboard">
+                已复制到剪贴板
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function setupWizard() {
+    return {
+        setupMode: 'auto',
+        password: '',
+        setupScript: '',
+        showToast: false,
+        isProcessing: false,
+        setupLogs: [],
+        setupResult: null,
+        autoSetupForm: {
+            host: '',
+            ssh_port: 22,
+            ssh_user: '',
+            auth_type: 'password',
+            ssh_password: '',
+            ssh_key_path: '',
+            sudo_password: '',
+            different_sudo_password: false,
+            cs2_username: 'cs2server',
+            captcha_token: '',
+            captcha_code: ''
+        },
+        
+        init() {
+            this.generatePassword();
+            this.generateSetupScript();
+            this.loadSetupCaptcha();
+        },
+        
+        async loadSetupCaptcha() {
+            try {
+                const response = await fetch('/api/captcha/image/new');
+                const token = response.headers.get('X-Captcha-Token');
+                const blob = await response.blob();
+                const imageUrl = URL.createObjectURL(blob);
+                
+                document.getElementById('setup-captcha-image').src = imageUrl;
+                this.autoSetupForm.captcha_token = token;
+            } catch (error) {
+                console.error('Failed to load setup CAPTCHA:', error);
+            }
+        },
+        
+        generatePassword() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
+            let password = '';
+            const array = new Uint8Array(16);
+            crypto.getRandomValues(array);
+            for (let i = 0; i < 16; i++) {
+                password += chars[array[i] % chars.length];
+            }
+            this.password = password;
+            this.generateSetupScript();
+        },
+        
+        generateSetupScript() {
+            this.setupScript = `#!/bin/bash
+set -e
+
+echo "开始设置 CS2 服务器环境..."
+
+# 更新包列表
+sudo apt-get update
+
+# 安装依赖
+sudo apt-get install -y lib32gcc-s1 lib32stdc++6 screen curl wget
+
+# 创建用户
+sudo useradd -m -s /bin/bash cs2server || echo "用户已存在"
+
+# 设置密码
+echo "cs2server:${this.password}" | sudo chpasswd
+
+# 创建目录
+sudo mkdir -p /home/cs2server/cs2
+sudo chown -R cs2server:cs2server /home/cs2server
+
+echo "设置完成！"
+echo "用户名: cs2server"
+echo "密码: ${this.password}"`;
+        },
+        
+        async autoSetup() {
+            this.isProcessing = true;
+            this.setupLogs = [];
+            this.setupResult = null;
+            
+            try {
+                const payload = {
+                    host: this.autoSetupForm.host,
+                    ssh_port: this.autoSetupForm.ssh_port,
+                    ssh_user: this.autoSetupForm.ssh_user,
+                    cs2_username: this.autoSetupForm.cs2_username,
+                    captcha_token: this.autoSetupForm.captcha_token,
+                    captcha_code: this.autoSetupForm.captcha_code
+                };
+                
+                if (this.autoSetupForm.auth_type === 'password') {
+                    payload.ssh_password = this.autoSetupForm.ssh_password;
+                } else {
+                    payload.ssh_key_path = this.autoSetupForm.ssh_key_path;
+                }
+                
+                // Only provide sudo_password if explicitly different
+                if (this.autoSetupForm.different_sudo_password && this.autoSetupForm.sudo_password) {
+                    payload.sudo_password = this.autoSetupForm.sudo_password;
+                }
+                
+                const response = await fetch('/api/setup/auto-setup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    this.setupLogs = result.logs.map((msg, i) => ({ id: i, message: msg }));
+                    this.setupResult = result;
+                } else {
+                    this.setupLogs = result.logs ? result.logs.map((msg, i) => ({ id: i, message: msg })) : [];
+                    this.setupLogs.push({ id: this.setupLogs.length, message: `✗ 错误: ${result.detail}` });
+                    alert(`设置失败: ${result.detail}`);
+                    // Refresh CAPTCHA on error
+                    this.loadSetupCaptcha();
+                }
+            } catch (error) {
+                this.setupLogs.push({ id: this.setupLogs.length, message: `✗ 请求失败: ${error.message}` });
+                alert(`请求失败: ${error.message}`);
+                // Refresh CAPTCHA on error
+                this.loadSetupCaptcha();
+            } finally {
+                this.isProcessing = false;
+            }
+        },
+        
+        async copyToClipboard(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                this.showToast = true;
+                setTimeout(() => this.showToast = false, 3000);
+            } catch (err) {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                this.showToast = true;
+                setTimeout(() => this.showToast = false, 3000);
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,798 @@
+{% extends "base.html" %}
+
+{% block title %}Servers - CS2 Server Manager{% endblock %}
+
+{% block content %}
+<div x-data="serverManager()" x-init="init()">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-hdd-rack"></i> <span data-i18n="servers.title">Server Management</span></h2>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addServerModal">
+            <i class="bi bi-plus-circle"></i> <span data-i18n="servers.addNewServer">Add CS2 Server (Ensure New Server Initialization Complete)</span>
+        </button>
+    </div>
+
+    <!-- Steam Latest Version Banner -->
+    <div x-show="steamLatestVersion" x-cloak class="alert alert-info mb-3">
+        <div class="d-flex align-items-center justify-content-between">
+            <div>
+                <i class="bi bi-cloud-download"></i>
+                <strong><span data-i18n="servers.steamLatestVersion">Steam Latest Version:</span></strong>
+                <span x-text="steamLatestVersion?.version || 'Loading...'"></span>
+                <span class="text-muted ms-2" style="font-size: 0.9em;">
+                    (<span data-i18n="servers.updated">Updated:</span> <span x-text="formatTimestamp(steamLatestVersion?.timestamp)"></span>)
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Actions Bar -->
+    <div x-show="selectedServers.length > 0" x-cloak class="card mb-3 border-primary">
+        <div class="card-body py-2">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <strong><span x-text="selectedServers.length"></span> <span data-i18n="servers.serversSelected">server(s) selected</span></strong>
+                    <button @click="clearSelection()" class="btn btn-sm btn-link" data-i18n="servers.clear">Clear</button>
+                </div>
+                <div class="btn-group" role="group">
+                    <button @click="bulkAction('restart')" 
+                            :disabled="bulkActionRunning"
+                            class="btn btn-sm btn-warning">
+                        <i class="bi bi-arrow-clockwise"></i> <span data-i18n="servers.bulkActions.restart">Restart</span>
+                    </button>
+                    <button @click="bulkAction('stop')" 
+                            :disabled="bulkActionRunning"
+                            class="btn btn-sm btn-danger">
+                        <i class="bi bi-stop-circle"></i> <span data-i18n="servers.bulkActions.stop">Stop</span>
+                    </button>
+                    <button @click="bulkAction('update')" 
+                            :disabled="bulkActionRunning"
+                            class="btn btn-sm btn-secondary">
+                        <i class="bi bi-arrow-up-circle"></i> <span data-i18n="servers.bulkActions.update">Update</span>
+                    </button>
+                    <button @click="bulkInstallPlugins()" 
+                            :disabled="bulkActionRunning"
+                            class="btn btn-sm btn-primary">
+                        <i class="bi bi-plugin"></i> <span data-i18n="servers.bulkActions.installPlugins">Install Plugins</span>
+                    </button>
+                </div>
+            </div>
+            <div x-show="bulkActionRunning" class="mt-2">
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" 
+                         :style="'width: ' + bulkProgress + '%'"
+                         x-text="bulkProgress + '%'"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div x-show="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden" data-i18n="common.loading">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted" data-i18n="servers.loading">Loading servers...</p>
+    </div>
+
+    <!-- Error State -->
+    <div x-show="error" x-cloak class="alert alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> <span x-text="error"></span>
+    </div>
+
+    <!-- Empty State -->
+    <div x-show="!loading && servers.length === 0" x-cloak class="card text-center py-5">
+        <div class="card-body">
+            <i class="bi bi-inbox display-1 text-muted"></i>
+            <h4 class="mt-3" data-i18n="servers.noServers">No Servers Found</h4>
+            <p class="text-muted" data-i18n="servers.noServersDescription">Get started by adding your first CS2 server</p>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addServerModal">
+                <i class="bi bi-plus-circle"></i> <span data-i18n="servers.addFirstServer">Add Your First Server</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Server List -->
+    <div x-show="!loading && servers.length > 0" x-cloak>
+        <!-- Select All Checkbox -->
+        <div class="mb-3">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" 
+                       :checked="selectedServers.length === servers.length && servers.length > 0"
+                       @change="toggleSelectAll()"
+                       id="selectAll">
+                <label class="form-check-label" for="selectAll" data-i18n="servers.selectAllServers">
+                    Select All Servers
+                </label>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            <template x-for="server in servers" :key="server.id">
+                <div class="col-md-6 col-lg-4">
+                    <div class="card server-card h-100" 
+                         :class="{'border-primary': isSelected(server.id)}">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-2">
+                                <input class="form-check-input" type="checkbox" 
+                                       :checked="isSelected(server.id)"
+                                       @change="toggleServer(server.id)"
+                                       :id="'server-' + server.id">
+                                <label :for="'server-' + server.id" class="mb-0" x-text="server.name"></label>
+                            </div>
+                            <span class="status-badge" :class="'status-' + server.status.toLowerCase()">
+                                <span class="status-dot"></span>
+                                <span x-text="server.status" class="text-capitalize"></span>
+                            </span>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text text-muted small mb-3" x-text="server.description || window.i18n?.t('servers.noDescription') || 'No description'"></p>
+                        <ul class="list-unstyled small">
+                            <li><i class="bi bi-diagram-3"></i> <span data-i18n="servers.host">Host</span>: <strong x-text="server.host"></strong></li>
+                            <li><i class="bi bi-plugin"></i> <span data-i18n="servers.port">Port</span>: <strong x-text="server.game_port"></strong></li>
+                            <li><i class="bi bi-person"></i> <span data-i18n="servers.sshUser">SSH User</span>: <strong x-text="server.ssh_user"></strong></li>
+                        </ul>
+                        
+                        <!-- A2S Server Info -->
+                        <template x-if="getA2SInfo(server.id)">
+                            <div class="mt-3 p-2 bg-light rounded">
+                                <template x-if="getA2SInfo(server.id).success">
+                                    <div>
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="bi bi-hdd-network text-success me-2"></i>
+                                            <strong class="text-success small" data-i18n="servers.serverOnline">Server Online</strong>
+                                        </div>
+                                        <ul class="list-unstyled small mb-0">
+                                            <li><i class="bi bi-server"></i> <span x-text="getA2SInfo(server.id).server_info?.server_name || 'N/A'"></span></li>
+                                            <li><i class="bi bi-map"></i> <span data-i18n="servers.map">Map</span>: <strong x-text="getA2SInfo(server.id).server_info?.map_name || 'N/A'"></strong></li>
+                                            <li>
+                                                <i class="bi bi-people"></i> <span data-i18n="servers.players">Players</span>: 
+                                                <strong>
+                                                    <span x-text="getA2SInfo(server.id).server_info?.player_count || 0"></span>/<span x-text="getA2SInfo(server.id).server_info?.max_players || 0"></span>
+                                                </strong>
+                                            </li>
+                                            <li>
+                                                <i class="bi bi-stopwatch"></i> <span data-i18n="servers.ping">Ping</span>: 
+                                                <strong x-text="getA2SInfo(server.id).response_time_ms + 'ms'"></strong>
+                                            </li>
+                                            <li>
+                                                <i class="bi bi-code-square"></i> <span data-i18n="servers.version">Version</span>: 
+                                                <strong x-text="getA2SInfo(server.id).server_info?.version || 'N/A'"></strong>
+                                                <template x-if="isVersionOutdated(getA2SInfo(server.id).server_info?.version)">
+                                                    <span class="badge bg-warning ms-1" :title="window.i18n?.t('servers.updateAvailable') || 'Update available'">
+                                                        <i class="bi bi-exclamation-triangle"></i>
+                                                    </span>
+                                                </template>
+                                                <template x-if="isVersionUpToDate(getA2SInfo(server.id).server_info?.version)">
+                                                    <span class="badge bg-success ms-1" :title="window.i18n?.t('servers.upToDate') || 'Up to date'">
+                                                        <i class="bi bi-check-circle"></i>
+                                                    </span>
+                                                </template>
+                                            </li>
+                                            <li class="text-muted" style="font-size: 0.85em;">
+                                                <i class="bi bi-clock-history"></i> <span data-i18n="servers.updated">Updated</span>: 
+                                                <span x-text="formatTimestamp(getA2SInfo(server.id).last_updated)"></span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </template>
+                                <template x-if="!getA2SInfo(server.id).success">
+                                    <div class="text-muted small">
+                                        <i class="bi bi-x-circle text-danger"></i> <span data-i18n="servers.serverOffline">Server offline or query failed</span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="!getA2SInfo(server.id) && !a2sLoading">
+                            <div class="mt-3 p-2 bg-light rounded text-center">
+                                <small class="text-muted">
+                                    <i class="bi bi-hourglass-split"></i> <span data-i18n="servers.waitingForInfo">Waiting for server info...</span>
+                                </small>
+                            </div>
+                        </template>
+                        <template x-if="a2sLoading && !getA2SInfo(server.id)">
+                            <div class="mt-3 p-2 bg-light rounded text-center">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span class="visually-hidden" data-i18n="common.loading">Loading...</span>
+                                </div>
+                                <small class="ms-2 text-muted" data-i18n="servers.querying">Querying...</small>
+                            </div>
+                        </template>
+                        
+                        <div class="mt-3">
+                            <a :href="'/servers-ui/' + server.id" class="btn btn-sm btn-primary w-100">
+                                <i class="bi bi-gear"></i> <span data-i18n="servers.manageServer">Manage Server</span>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="card-footer text-muted small">
+                        <div class="d-flex justify-content-between">
+                            <span>
+                                <i class="bi bi-clock"></i> 
+                                <span x-text="formatDate(server.created_at)"></span>
+                            </span>
+                            <button @click="deleteServer(server.id, server.name)" 
+                                    class="btn btn-sm btn-link text-danger p-0">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+        </div>
+    </div>
+</div>
+
+<!-- Add Server Modal -->
+<div class="modal fade" id="addServerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> <span data-i18n="servers.addNewServer">Add New Server</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Initialization Reminder -->
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong data-i18n="servers.initializationRequired">Server Initialization Required</strong>
+                    <p class="mb-2 mt-2" data-i18n="servers.initializationMessage">
+                        This server has not been initialized yet. Please complete the initialization process first.
+                    </p>
+                    <a href="/setup-wizard" class="btn btn-sm btn-primary">
+                        <i class="bi bi-magic"></i> <span data-i18n="servers.goToSetupWizard">Go to Setup Wizard</span>
+                    </a>
+                </div>
+                
+                <form id="addServerForm">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="serverName" class="form-label" data-i18n="servers.serverNameLabel">Server Name *</label>
+                            <input type="text" class="form-control" id="serverName" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="serverHost" class="form-label" data-i18n="servers.hostIP">Host IP *</label>
+                            <input type="text" class="form-control" id="serverHost" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="sshPort" class="form-label" data-i18n="servers.sshPortLabel">SSH Port</label>
+                            <input type="number" class="form-control" id="sshPort" value="22">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="sshUser" class="form-label" data-i18n="servers.sshUserLabel">SSH User *</label>
+                            <input type="text" class="form-control" id="sshUser" value="cs2server" readonly required>
+                            <div class="form-text">
+                                <i class="bi bi-info-circle"></i> <span data-i18n="servers.sshUserHint">Must use cs2server user (from /setup-wizard)</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="gamePort" class="form-label" data-i18n="servers.gamePortLabel">Game Port</label>
+                            <input type="number" class="form-control" id="gamePort" value="27015">
+                        </div>
+                        <div class="col-md-6" style="display: none;">
+                            <label for="authType" class="form-label" data-i18n="servers.authTypeLabel">Auth Type *</label>
+                            <select class="form-select" id="authType" onchange="toggleAuthFields()">
+                                <option value="password" selected data-i18n="servers.authPasswordOption">Password</option>
+                                <option value="key_file" data-i18n="servers.authKeyOption">SSH Key File</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" id="passwordField">
+                            <label for="sshPassword" class="form-label" data-i18n="servers.sshPasswordLabel">SSH Password *</label>
+                            <input type="password" class="form-control" id="sshPassword">
+                        </div>
+                        <div class="col-md-6" id="keyFileField" style="display: none;">
+                            <label for="sshKeyPath" class="form-label" data-i18n="servers.sshKeyPathLabel">SSH Key Path *</label>
+                            <input type="text" class="form-control" id="sshKeyPath" placeholder="/path/to/key.pem">
+                        </div>
+                        <div class="col-12">
+                            <label for="gameDirectory" class="form-label" data-i18n="servers.gameDirectoryLabel">Game Directory *</label>
+                            <input type="text" class="form-control" id="gameDirectory" 
+                                   value="/home/cs2server/cs2" required>
+                        </div>
+                        <div class="col-12">
+                            <label for="serverDescription" class="form-label" data-i18n="servers.descriptionLabel">Description</label>
+                            <textarea class="form-control" id="serverDescription" rows="2"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label for="serverCaptcha" class="form-label" data-i18n="servers.captcha">Verification Code *</label>
+                            <div class="d-flex gap-2 align-items-center">
+                                <img id="server-captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" title="Click to refresh">
+                                <input type="text" class="form-control" id="serverCaptcha" name="serverCaptcha" maxlength="4" required placeholder="Enter code" style="max-width: 120px;">
+                                <button type="button" class="btn btn-outline-secondary" id="refresh-server-captcha" title="Refresh CAPTCHA">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </div>
+                            <input type="hidden" id="server-captcha-token" name="server-captcha-token">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="common.cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitAddServer()">
+                    <i class="bi bi-plus-circle"></i> <span data-i18n="servers.addServerBtn">Add Server</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function serverManager() {
+    return {
+        servers: [],
+        loading: true,
+        error: null,
+        selectedServers: [],
+        bulkActionRunning: false,
+        bulkProgress: 0,
+        a2sData: {},  // Store A2S data keyed by server ID
+        a2sLoading: false,  // Track if A2S data is being loaded
+        steamLatestVersion: null,  // Store Steam latest version info
+        refreshInterval: null,
+        pollAttempts: 0,  // Track polling attempts
+        maxAggressivePolls: 20,  // Max aggressive polls (20 * 3s = 60s max)
+        
+        async init() {
+            await this.loadServers();
+            // Initial A2S data load
+            await this.refreshA2SData();
+            // Start with aggressive polling (every 3 seconds) until we have data
+            this.startPolling();
+        },
+        
+        startPolling() {
+            // Clear any existing interval
+            if (this.refreshInterval) {
+                clearInterval(this.refreshInterval);
+            }
+            
+            // Determine polling interval based on whether we have data or max attempts reached
+            const hasData = Object.keys(this.a2sData).length > 0;
+            const maxAttemptsReached = this.pollAttempts >= this.maxAggressivePolls;
+            const interval = (hasData || maxAttemptsReached) ? 30000 : 3000;  // 30s if we have data or max attempts, 3s if not
+            
+            this.refreshInterval = setInterval(() => this.refreshA2SData(), interval);
+            console.log(`Polling interval set to ${interval/1000} seconds (hasData: ${hasData}, attempts: ${this.pollAttempts}/${this.maxAggressivePolls})`);
+        },
+        
+        async loadServers() {
+            this.loading = true;
+            this.error = null;
+            try {
+                const response = await authFetch('/servers');
+                if (!response.ok) throw new Error('Failed to load servers');
+                this.servers = await response.json();
+            } catch (err) {
+                this.error = err.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        async refreshA2SData() {
+            // Fetch cached A2S data for all servers from backend
+            this.a2sLoading = true;
+            this.pollAttempts++;
+            
+            try {
+                const response = await authFetch('/a2s-cache');
+                if (response.ok) {
+                    const data = await response.json();
+                    const oldDataCount = Object.keys(this.a2sData).length;
+                    const newDataCount = Object.keys(data.servers || {}).length;
+                    
+                    // Update a2sData with cached info
+                    this.a2sData = data.servers || {};
+                    
+                    // Update Steam latest version
+                    if (data.steam_latest_version) {
+                        this.steamLatestVersion = data.steam_latest_version;
+                        console.log('Steam latest version:', this.steamLatestVersion.version);
+                    }
+                    
+                    console.log(`A2S data refreshed (attempt ${this.pollAttempts}): ${newDataCount} servers`);
+                    console.log('A2S data structure:', this.a2sData);
+                    console.log('Server IDs from servers list:', this.servers.map(s => s.id));
+                    
+                    // If we just got data for the first time, or hit max attempts, switch to normal polling
+                    if ((oldDataCount === 0 && newDataCount > 0) || this.pollAttempts >= this.maxAggressivePolls) {
+                        if (newDataCount > 0) {
+                            console.log('First data received, switching to normal 30s polling interval');
+                        } else {
+                            console.log('Max aggressive polling attempts reached, switching to normal 30s polling interval');
+                        }
+                        this.startPolling();  // This will switch to 30s interval
+                    }
+                } else {
+                    console.error('A2S cache fetch failed with status:', response.status);
+                }
+            } catch (err) {
+                console.error('Failed to fetch A2S cache:', err);
+            } finally {
+                this.a2sLoading = false;
+            }
+        },
+        
+        getA2SInfo(serverId) {
+            // Convert serverId to string to match API response keys
+            const key = String(serverId);
+            const info = this.a2sData[key] || null;
+            if (!info) {
+                console.log(`No A2S info found for server ${serverId} (key: ${key})`);
+                console.log('Available keys:', Object.keys(this.a2sData));
+            }
+            return info;
+        },
+        
+        formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            return new Date(dateString).toLocaleDateString();
+        },
+        
+        formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            try {
+                const date = new Date(timestamp);
+                const now = new Date();
+                const diffMs = now - date;
+                const diffSec = Math.floor(diffMs / 1000);
+                
+                // Show relative time if recent
+                if (diffSec < 60) {
+                    return `${diffSec}s ago`;
+                } else if (diffSec < 3600) {
+                    const mins = Math.floor(diffSec / 60);
+                    return `${mins}m ago`;
+                } else if (diffSec < 86400) {
+                    const hours = Math.floor(diffSec / 3600);
+                    return `${hours}h ago`;
+                } else {
+                    // Show full date/time if older than a day
+                    return date.toLocaleString();
+                }
+            } catch (e) {
+                return 'N/A';
+            }
+        },
+        
+        parseVersion(versionStr) {
+            if (!versionStr) return null;
+            // Extract version like "1.41.2.5" from "1.41.2.5/14125"
+            const match = versionStr.match(/(\d+\.\d+\.\d+\.\d+)/);
+            return match ? match[1] : versionStr;
+        },
+        
+        isVersionOutdated(serverVersion) {
+            if (!serverVersion || !this.steamLatestVersion) return false;
+            const parsedServerVersion = this.parseVersion(serverVersion);
+            const steamVersion = this.steamLatestVersion.version;
+            return parsedServerVersion && steamVersion && parsedServerVersion !== steamVersion;
+        },
+        
+        isVersionUpToDate(serverVersion) {
+            if (!serverVersion || !this.steamLatestVersion) return false;
+            const parsedServerVersion = this.parseVersion(serverVersion);
+            const steamVersion = this.steamLatestVersion.version;
+            return parsedServerVersion && steamVersion && parsedServerVersion === steamVersion;
+        },
+        
+        isSelected(serverId) {
+            return this.selectedServers.includes(serverId);
+        },
+        
+        toggleServer(serverId) {
+            const index = this.selectedServers.indexOf(serverId);
+            if (index === -1) {
+                this.selectedServers.push(serverId);
+            } else {
+                this.selectedServers.splice(index, 1);
+            }
+        },
+        
+        toggleSelectAll() {
+            if (this.selectedServers.length === this.servers.length) {
+                this.selectedServers = [];
+            } else {
+                this.selectedServers = this.servers.map(s => s.id);
+            }
+        },
+        
+        clearSelection() {
+            this.selectedServers = [];
+        },
+        
+        async bulkAction(action) {
+            if (this.selectedServers.length === 0) {
+                alert('Please select at least one server');
+                return;
+            }
+            
+            const actionName = action.charAt(0).toUpperCase() + action.slice(1);
+            if (!confirm(`Are you sure you want to ${action} ${this.selectedServers.length} server(s)?`)) {
+                return;
+            }
+            
+            this.bulkActionRunning = true;
+            this.bulkProgress = 0;
+            
+            const total = this.selectedServers.length;
+            let completed = 0;
+            let succeeded = 0;
+            let failed = 0;
+            
+            for (const serverId of this.selectedServers) {
+                try {
+                    const response = await authFetch(`/servers/${serverId}/actions`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ action: action })
+                    });
+                    
+                    if (response.ok) {
+                        succeeded++;
+                    } else {
+                        failed++;
+                    }
+                } catch (err) {
+                    failed++;
+                }
+                
+                completed++;
+                this.bulkProgress = Math.round((completed / total) * 100);
+            }
+            
+            this.bulkActionRunning = false;
+            this.bulkProgress = 0;
+            
+            alert(`Bulk ${actionName} completed:\n✓ ${succeeded} succeeded\n✗ ${failed} failed`);
+            
+            // Reload servers to get updated status
+            await this.loadServers();
+            this.clearSelection();
+        },
+        
+        async bulkInstallPlugins() {
+            if (this.selectedServers.length === 0) {
+                alert('Please select at least one server');
+                return;
+            }
+            
+            // Show plugin selection dialog
+            const pluginSelection = await this.showPluginSelectionDialog();
+            if (!pluginSelection || pluginSelection.length === 0) {
+                return;
+            }
+            
+            if (!confirm(`Install ${pluginSelection.join(', ')} on ${this.selectedServers.length} server(s)?`)) {
+                return;
+            }
+            
+            this.bulkActionRunning = true;
+            this.bulkProgress = 0;
+            
+            // Show progress modal or notification
+            const totalSteps = this.selectedServers.length * pluginSelection.length;
+            let completedSteps = 0;
+            let progressLog = `Starting installation of ${pluginSelection.join(', ')} on ${this.selectedServers.length} server(s)...\n\n`;
+            
+            try {
+                const response = await authFetch('/servers/batch-install-plugins', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        server_ids: this.selectedServers,
+                        plugins: pluginSelection
+                    })
+                });
+                
+                const result = await response.json();
+                
+                // Build detailed progress log
+                progressLog += 'Installation completed!\n\n';
+                progressLog += '='.repeat(60) + '\n';
+                progressLog += 'RESULTS:\n';
+                progressLog += '='.repeat(60) + '\n\n';
+                
+                let totalSuccess = 0;
+                let totalFailed = 0;
+                
+                for (const [serverId, serverResult] of Object.entries(result.servers)) {
+                    const server = this.servers.find(s => s.id == serverId);
+                    const serverName = server ? server.name : `Server ${serverId}`;
+                    
+                    progressLog += `📦 ${serverName}\n`;
+                    progressLog += '-'.repeat(60) + '\n';
+                    
+                    if (serverResult.results) {
+                        serverResult.results.forEach(r => {
+                            const status = r.success ? '✓ SUCCESS' : '✗ FAILED';
+                            const icon = r.success ? '✓' : '✗';
+                            progressLog += `  ${icon} ${r.plugin}: ${status}\n`;
+                            if (r.message) {
+                                progressLog += `     ${r.message}\n`;
+                            }
+                            if (r.success) {
+                                totalSuccess++;
+                            } else {
+                                totalFailed++;
+                            }
+                        });
+                    } else {
+                        const status = serverResult.success ? '✓ SUCCESS' : '✗ FAILED';
+                        progressLog += `  ${status}: ${serverResult.message || 'No details'}\n`;
+                    }
+                    progressLog += '\n';
+                }
+                
+                progressLog += '='.repeat(60) + '\n';
+                progressLog += `SUMMARY: ${totalSuccess} succeeded, ${totalFailed} failed\n`;
+                progressLog += '='.repeat(60) + '\n';
+                
+                // Show results in alert (could be improved with a modal)
+                alert(progressLog);
+                
+            } catch (err) {
+                let errorMsg = 'Unknown error';
+                if (err.message) {
+                    errorMsg = err.message;
+                } else if (err.toString && typeof err.toString === 'function') {
+                    errorMsg = err.toString();
+                } else {
+                    errorMsg = String(err);
+                }
+                alert('Error installing plugins: ' + errorMsg);
+            } finally {
+                this.bulkActionRunning = false;
+                this.bulkProgress = 0;
+                await this.loadServers();
+                this.clearSelection();
+            }
+        },
+        
+        async showPluginSelectionDialog() {
+            return new Promise((resolve) => {
+                const plugins = [];
+                const metamodSelected = confirm('Install Metamod:Source?\n\n(Required for most CS2 plugins)');
+                if (metamodSelected) {
+                    plugins.push('metamod');
+                }
+                
+                const cssSelected = confirm('Install CounterStrikeSharp?\n\n(Write server plugins in C#. Requires Metamod)');
+                if (cssSelected) {
+                    plugins.push('counterstrikesharp');
+                }
+                
+                resolve(plugins);
+            });
+        },
+        
+        async deleteServer(id, name) {
+            if (!confirm(`Are you sure you want to delete server "${name}"?`)) return;
+            
+            try {
+                const response = await authFetch(`/servers/${id}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) throw new Error('Failed to delete server');
+                await this.loadServers();
+            } catch (err) {
+                alert('Error deleting server: ' + err.message);
+            }
+        },
+        
+        destroy() {
+            // Clean up refresh interval
+            if (this.refreshInterval) {
+                clearInterval(this.refreshInterval);
+                this.refreshInterval = null;
+            }
+        }
+    };
+}
+
+function toggleAuthFields() {
+    const authType = document.getElementById('authType').value;
+    const passwordField = document.getElementById('passwordField');
+    const keyFileField = document.getElementById('keyFileField');
+    
+    if (authType === 'password') {
+        passwordField.style.display = 'block';
+        keyFileField.style.display = 'none';
+        document.getElementById('sshPassword').required = true;
+        document.getElementById('sshKeyPath').required = false;
+    } else {
+        passwordField.style.display = 'none';
+        keyFileField.style.display = 'block';
+        document.getElementById('sshPassword').required = false;
+        document.getElementById('sshKeyPath').required = true;
+    }
+}
+
+// Load CAPTCHA for server form
+async function loadServerCaptcha() {
+    try {
+        const response = await fetch('/api/captcha/image/new');
+        const token = response.headers.get('X-Captcha-Token');
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        
+        document.getElementById('server-captcha-image').src = imageUrl;
+        document.getElementById('server-captcha-token').value = token;
+    } catch (error) {
+        console.error('Failed to load server CAPTCHA:', error);
+    }
+}
+
+// Refresh CAPTCHA for server form
+document.getElementById('refresh-server-captcha')?.addEventListener('click', loadServerCaptcha);
+document.getElementById('server-captcha-image')?.addEventListener('click', loadServerCaptcha);
+
+// Load CAPTCHA when modal is shown
+document.getElementById('addServerModal')?.addEventListener('shown.bs.modal', loadServerCaptcha);
+
+async function submitAddServer() {
+    const form = document.getElementById('addServerForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const authType = document.getElementById('authType').value;
+    const data = {
+        name: document.getElementById('serverName').value,
+        host: document.getElementById('serverHost').value,
+        ssh_port: parseInt(document.getElementById('sshPort').value),
+        ssh_user: document.getElementById('sshUser').value,
+        game_port: parseInt(document.getElementById('gamePort').value),
+        auth_type: authType,
+        game_directory: document.getElementById('gameDirectory').value,
+        description: document.getElementById('serverDescription').value,
+        captcha_token: document.getElementById('server-captcha-token').value,
+        captcha_code: document.getElementById('serverCaptcha').value
+    };
+    
+    if (authType === 'password') {
+        data.ssh_password = document.getElementById('sshPassword').value;
+    } else {
+        data.ssh_key_path = document.getElementById('sshKeyPath').value;
+    }
+    
+    try {
+        const response = await authFetch('/servers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create server');
+        }
+        
+        // Close modal and reload
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addServerModal'));
+        modal.hide();
+        form.reset();
+        
+        // Reload servers
+        const app = Alpine.$data(document.querySelector('[x-data]'));
+        await app.loadServers();
+    } catch (err) {
+        alert('Error creating server: ' + err.message);
+        // Refresh CAPTCHA on error
+        loadServerCaptcha();
+    }
+}
+</script>
+{% endblock %}

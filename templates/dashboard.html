@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS2 Server Manager - Deployment Monitor</title>
+    
+    <!-- i18n Script -->
+    <script src="/static/js/i18n.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+        }
+        
+        .monitor-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .server-selector {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .status-connected {
+            background: #10b981;
+            color: white;
+        }
+        
+        .status-disconnected {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .log-container {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 5px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+        }
+        
+        .log-timestamp {
+            color: #858585;
+        }
+        
+        .log-status {
+            color: #4fc3f7;
+        }
+        
+        .log-output {
+            color: #81c784;
+        }
+        
+        .log-error {
+            color: #e57373;
+        }
+        
+        .log-complete {
+            color: #aed581;
+            font-weight: bold;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .links {
+            margin-top: 20px;
+        }
+        
+        .links a {
+            color: #667eea;
+            text-decoration: none;
+            margin-right: 15px;
+        }
+        
+        .links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 <span data-i18n="dashboard.title">CS2 Server Manager</span></h1>
+            <p class="subtitle" data-i18n="dashboard.deploymentMonitor">Real-time Deployment Monitor with WebSocket</p>
+        </header>
+        
+        <div class="monitor-section">
+            <h2 data-i18n="dashboard.serverSelection">Server Selection</h2>
+            <div class="server-selector">
+                <label for="serverId" data-i18n="dashboard.serverId">Server ID:</label>
+                <input type="number" id="serverId" placeholder="Enter server ID (e.g., 1)" value="1" min="1">
+            </div>
+            
+            <div class="server-selector">
+                <p>WebSocket Status: <span id="wsStatus" class="status-badge status-disconnected" data-i18n="dashboard.status.disconnected">Disconnected</span></p>
+            </div>
+            
+            <div class="actions">
+                <button onclick="connectWebSocket()" data-i18n="dashboard.connect">Connect to Deployment Monitor</button>
+                <button onclick="disconnectWebSocket()" data-i18n="dashboard.disconnect">Disconnect</button>
+                <button onclick="clearLogs()" data-i18n="dashboard.clearLogs">Clear Logs</button>
+            </div>
+        </div>
+        
+        <div class="monitor-section">
+            <h2 data-i18n="dashboard.deploymentActions">Deployment Actions</h2>
+            <div class="actions">
+                <button onclick="executeAction('deploy')" data-i18n="dashboard.deployServer">Deploy Server</button>
+                <button onclick="executeAction('start')" data-i18n="dashboard.startServer">Start Server</button>
+                <button onclick="executeAction('stop')" data-i18n="dashboard.stopServer">Stop Server</button>
+                <button onclick="executeAction('restart')" data-i18n="dashboard.restartServer">Restart Server</button>
+                <button onclick="executeAction('status')" data-i18n="dashboard.checkStatus">Check Status</button>
+            </div>
+        </div>
+        
+        <div class="monitor-section">
+            <h2 data-i18n="dashboard.deploymentLogs">Deployment Logs</h2>
+            <div class="log-container" id="logContainer">
+                <div class="log-entry">
+                    <span class="log-timestamp">[Ready]</span>
+                    <span class="log-output" data-i18n="dashboard.initialMessage">Enter a server ID and connect to start monitoring...</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="links">
+            <h3 data-i18n="dashboard.quickLinks">Quick Links</h3>
+            <a href="/docs" target="_blank">📚 API Documentation (Swagger)</a>
+            <a href="/redoc" target="_blank">📖 API Documentation (ReDoc)</a>
+            <a href="/health" target="_blank">❤️ Health Check</a>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let serverId = null;
+        
+        function getServerId() {
+            return document.getElementById('serverId').value;
+        }
+        
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('wsStatus');
+            if (connected) {
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'status-badge status-connected';
+            } else {
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'status-badge status-disconnected';
+            }
+        }
+        
+        function addLog(message, type = 'output') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const timestampSpan = document.createElement('span');
+            timestampSpan.className = 'log-timestamp';
+            timestampSpan.textContent = `[${timestamp}] `;
+            
+            const messageSpan = document.createElement('span');
+            messageSpan.className = `log-${type}`;
+            messageSpan.textContent = message;
+            
+            entry.appendChild(timestampSpan);
+            entry.appendChild(messageSpan);
+            logContainer.appendChild(entry);
+            
+            // Auto-scroll to bottom
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        function connectWebSocket() {
+            serverId = getServerId();
+            if (!serverId) {
+                alert('Please enter a server ID');
+                return;
+            }
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addLog('Already connected', 'status');
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/servers/${serverId}/deployment-status`;
+            
+            addLog(`Connecting to server ${serverId}...`, 'status');
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                updateStatus(true);
+                addLog(`Connected to deployment monitor for server ${serverId}`, 'complete');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                addLog(data.message, data.type);
+            };
+            
+            ws.onerror = function(error) {
+                addLog('WebSocket error occurred', 'error');
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = function() {
+                updateStatus(false);
+                addLog('Disconnected from deployment monitor', 'status');
+                ws = null;
+            };
+        }
+        
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+                updateStatus(false);
+            }
+        }
+        
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = '';
+        }
+        
+        async function executeAction(action) {
+            const sid = getServerId();
+            if (!sid) {
+                alert('Please enter a server ID');
+                return;
+            }
+            
+            addLog(`Executing action: ${action}...`, 'status');
+            
+            try {
+                const response = await fetch(`/servers/${sid}/actions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ action: action })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    addLog(`Action '${action}' initiated: ${result.message}`, 'complete');
+                } else {
+                    addLog(`Action '${action}' failed: ${result.detail}`, 'error');
+                }
+            } catch (error) {
+                addLog(`Failed to execute action: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-connect on page load if server ID is set
+        window.addEventListener('load', function() {
+            const sid = getServerId();
+            if (sid) {
+                setTimeout(connectWebSocket, 500);
+            }
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            disconnectWebSocket();
+        });
+    </script>
+</body>
+</html>

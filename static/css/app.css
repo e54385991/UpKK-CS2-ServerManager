@@ -1,0 +1,316 @@
+/* CS2 Server Manager - Custom Styles */
+
+:root {
+    --primary-color: #667eea;
+    --secondary-color: #764ba2;
+    --success-color: #10b981;
+    --danger-color: #ef4444;
+    --warning-color: #f59e0b;
+    --info-color: #3b82f6;
+    --dark-bg: #1e1e1e;
+    --light-bg: #f8f9fa;
+}
+
+body {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    min-height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.navbar {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    font-weight: bold;
+    color: var(--primary-color) !important;
+}
+
+.card {
+    border: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border: none;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+}
+
+.badge {
+    padding: 0.5em 0.75em;
+    font-size: 0.85em;
+}
+
+/* Server Status Badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-running .status-dot {
+    background-color: var(--success-color);
+    box-shadow: 0 0 8px var(--success-color);
+}
+
+.status-stopped .status-dot {
+    background-color: #6b7280;
+}
+
+.status-deploying .status-dot {
+    background-color: var(--info-color);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-error .status-dot {
+    background-color: var(--danger-color);
+}
+
+.status-pending .status-dot {
+    background-color: var(--warning-color);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Log Terminal */
+.log-terminal {
+    background-color: var(--dark-bg);
+    color: #d4d4d4;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    height: 400px;
+    overflow-y: auto;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.log-entry {
+    margin-bottom: 0.5rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.log-timestamp {
+    color: #858585;
+}
+
+.log-status {
+    color: #4fc3f7;
+}
+
+.log-output {
+    color: #81c784;
+}
+
+.log-error {
+    color: #e57373;
+    font-weight: bold;
+}
+
+.log-complete {
+    color: #aed581;
+    font-weight: bold;
+}
+
+/* WebSocket Status Indicator */
+.ws-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    border-radius: 25px;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 1000;
+}
+
+.ws-connected {
+    border-left: 4px solid var(--success-color);
+}
+
+.ws-disconnected {
+    border-left: 4px solid var(--danger-color);
+}
+
+.ws-connecting {
+    border-left: 4px solid var(--warning-color);
+}
+
+/* Server Card */
+.server-card {
+    transition: all 0.3s ease;
+}
+
+.server-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+}
+
+.server-card .card-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    font-weight: bold;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.action-buttons .btn {
+    flex: 1;
+    min-width: 100px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .action-buttons .btn {
+        flex: 1 1 45%;
+    }
+    
+    .log-terminal {
+        height: 300px;
+        font-size: 12px;
+    }
+}
+
+/* Loading Spinner */
+.spinner-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+/* Server List Table */
+.server-table {
+    background: white;
+    border-radius: 0.5rem;
+}
+
+.server-table thead {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+}
+
+.server-table tbody tr {
+    transition: background-color 0.2s;
+}
+
+.server-table tbody tr:hover {
+    background-color: rgba(102, 126, 234, 0.05);
+}
+
+/* Console Terminals */
+.console-terminal {
+    background-color: #000000;
+    color: #c0c0c0;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.4;
+    padding: 1rem;
+    height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.console-terminal .console-line {
+    margin: 0;
+    padding: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.console-terminal::-webkit-scrollbar {
+    width: 8px;
+}
+
+.console-terminal::-webkit-scrollbar-track {
+    background: #000000;
+}
+
+.console-terminal::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+.console-terminal::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}
+
+.console-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.console-input .input-group-text {
+    background-color: #000000;
+    color: #c0c0c0;
+    border: 1px solid #555;
+}
+
+.console-input .form-control {
+    background-color: #000000;
+    color: #c0c0c0;
+    border: 1px solid #555;
+}
+
+.console-input .form-control:focus {
+    background-color: #0a0a0a;
+    color: #c0c0c0;
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.console-input .form-control:disabled {
+    background-color: #000000;
+    opacity: 0.5;
+}
+
+/* Footer */
+.footer {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    margin-top: 3rem;
+    padding: 2rem 0;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+}

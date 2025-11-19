@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %} Upkk CS2 Server Manager & Pythonv3.14 & FastAPI {% endblock %}</title>
+    
+    <!-- Local Bootstrap CSS -->
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <!-- Local Bootstrap Icons -->
+    <link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/app.css">
+    
+    <!-- i18n Script - Load Early -->
+    <script src="/static/js/i18n.js"></script>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-light sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-controller"></i> <span data-i18n="app.subtitle">Upkk CS2 Server Manager & Python v3.14 & FastAPI</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.url.path == '/' %}active{% endif %}" href="/">
+                            <i class="bi bi-house-door"></i> <span data-i18n="nav.home">Home</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if '/servers' in request.url.path %}active{% endif %}" href="/servers-ui">
+                            <i class="bi bi-hdd-rack"></i> <span data-i18n="nav.servers">Servers</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if '/setup' in request.url.path %}active{% endif %}" href="/setup-wizard">
+                            <i class="bi bi-magic"></i> <span data-i18n="nav.setupWizard">Setup Wizard</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/docs" target="_blank">
+                            <i class="bi bi-book"></i> <span data-i18n="nav.apiDocs">API Docs</span>
+                        </a>
+                    </li>
+                    <!-- Language Switcher -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="languageDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-translate"></i> <span id="current-language-text">Language</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="languageDropdown">
+                            <li><a class="dropdown-item" href="#" onclick="switchLanguage('en-US'); return false;">English</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="switchLanguage('zh-CN'); return false;">中文</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item" id="login-nav" style="display: none;">
+                        <a class="nav-link" href="/login">
+                            <i class="bi bi-box-arrow-in-right"></i> <span data-i18n="nav.login">Login</span>
+                        </a>
+                    </li>
+                    <li class="nav-item" id="register-nav" style="display: none;">
+                        <a class="nav-link" href="/register">
+                            <i class="bi bi-person-plus"></i> <span data-i18n="nav.register">Register</span>
+                        </a>
+                    </li>
+                    <li class="nav-item" id="profile-nav" style="display: none;">
+                        <a class="nav-link {% if '/profile' in request.url.path %}active{% endif %}" href="/profile">
+                            <i class="bi bi-person-circle"></i> <span data-i18n="nav.profile">Profile</span>
+                        </a>
+                    </li>
+                    <li class="nav-item" id="logout-nav" style="display: none;">
+                        <a class="nav-link" href="#" onclick="logout(); return false;">
+                            <i class="bi bi-box-arrow-right"></i> <span data-i18n="nav.logout">Logout</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container my-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto">
+        <div class="container text-center">
+            <p class="text-muted mb-0">
+                <i class="bi bi-code-slash"></i> <span data-i18n="app.title">CS2 Server Manager</span> <span data-i18n="app.version">v1.0.0</span>
+                | <span data-i18n="app.builtWith">Built with FastAPI, Bootstrap & Alpine.js</span>
+                | <a href="https://github.com/e54385991/CS2-ServerManager" target="_blank" class="text-decoration-none">
+                    <i class="bi bi-github"></i> GitHub
+                </a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Local Bootstrap JS -->
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <!-- Local Alpine.js -->
+    <script src="/static/js/alpine.min.js" defer></script>
+    
+    <!-- Authentication Status Check -->
+    <script>
+        // Language switcher function
+        function switchLanguage(locale) {
+            if (window.i18n) {
+                window.i18n.setLocale(locale).then(() => {
+                    window.i18n.applyTranslations();
+                    updateLanguageDisplay();
+                });
+            }
+        }
+        
+        // Update language display in navbar
+        function updateLanguageDisplay() {
+            const currentLocale = window.i18n ? window.i18n.getLocale() : 'en-US';
+            const languageText = document.getElementById('current-language-text');
+            if (languageText) {
+                languageText.textContent = window.i18n ? window.i18n.getLocaleDisplayName(currentLocale) : 'Language';
+            }
+        }
+        
+        // Update language display when locale changes
+        window.addEventListener('localeChanged', updateLanguageDisplay);
+        
+        // Initialize language display
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', updateLanguageDisplay);
+        } else {
+            updateLanguageDisplay();
+        }
+        
+        // Helper function to get auth headers
+        function getAuthHeaders() {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                return {};
+            }
+            return {
+                'Authorization': `Bearer ${token}`
+            };
+        }
+        
+        // Helper function for authenticated fetch
+        async function authFetch(url, options = {}) {
+            const token = localStorage.getItem('access_token');
+            if (!token && !url.includes('/api/auth/')) {
+                window.location.href = '/login';
+                throw new Error('Not authenticated');
+            }
+            
+            const headers = {
+                ...options.headers,
+                ...getAuthHeaders()
+            };
+            
+            const response = await fetch(url, { ...options, headers });
+            
+            // Redirect to login if unauthorized
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/login';
+                throw new Error('Authentication required');
+            }
+            
+            return response;
+        }
+        
+        async function checkAuthStatus() {
+            const token = localStorage.getItem('access_token');
+            const loginNav = document.getElementById('login-nav');
+            const registerNav = document.getElementById('register-nav');
+            const profileNav = document.getElementById('profile-nav');
+            const logoutNav = document.getElementById('logout-nav');
+            
+            if (token) {
+                try {
+                    const response = await fetch('/api/auth/me', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const user = await response.json();
+                        profileNav.style.display = 'block';
+                        logoutNav.style.display = 'block';
+                        loginNav.style.display = 'none';
+                        registerNav.style.display = 'none';
+                        return true;
+                    } else {
+                        // Token is invalid
+                        localStorage.removeItem('access_token');
+                    }
+                } catch (error) {
+                    console.error('Auth check failed:', error);
+                    localStorage.removeItem('access_token');
+                }
+            }
+            
+            // Not authenticated
+            loginNav.style.display = 'block';
+            registerNav.style.display = 'block';
+            profileNav.style.display = 'none';
+            logoutNav.style.display = 'none';
+            return false;
+        }
+        
+        function logout() {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+        }
+        
+        // Check auth status on page load
+        checkAuthStatus();
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
