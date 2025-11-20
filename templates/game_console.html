@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Console - Server {{ server_id }}</title>
+    
+    <!-- Xterm.js CSS -->
+    <link rel="stylesheet" href="/static/xterm/xterm.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0e1419;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        
+        #terminal-container {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            background-color: #0e1419;
+        }
+        
+        #terminal {
+            width: 100%;
+            height: 100%;
+            padding: 10px;
+        }
+        
+        /* Status bar */
+        #status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: linear-gradient(to bottom, #1a1f25 0%, #0e1419 100%);
+            border-bottom: 1px solid #2d3748;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            z-index: 1000;
+            color: #a8b8cc;
+            font-size: 12px;
+        }
+        
+        #status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background-color: #4a5568;
+            transition: background-color 0.3s;
+        }
+        
+        #status-indicator.connected {
+            background-color: #48bb78;
+            box-shadow: 0 0 5px #48bb78;
+        }
+        
+        #status-indicator.connecting {
+            background-color: #ed8936;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        #status-indicator.disconnected {
+            background-color: #f56565;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        #status-text {
+            flex: 1;
+        }
+        
+        #server-info {
+            font-size: 11px;
+            color: #718096;
+        }
+        
+        #terminal-wrapper {
+            position: absolute;
+            top: 30px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #0e1419;
+        }
+        
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(14, 20, 25, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            color: #a8b8cc;
+        }
+        
+        #loading-overlay.hidden {
+            display: none;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #2d3748;
+            border-top-color: #48bb78;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Xterm.js overrides for game console theme */
+        .xterm {
+            padding: 10px;
+            height: 100%;
+        }
+        
+        .xterm-viewport {
+            background-color: #0e1419 !important;
+        }
+        
+        .xterm-screen {
+            background-color: #0e1419 !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Status bar -->
+    <div id="status-bar">
+        <div id="status-indicator" class="connecting"></div>
+        <div id="status-text">Connecting to game server...</div>
+        <div id="server-info">Server #{{ server_id }}</div>
+    </div>
+    
+    <!-- Loading overlay -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div>Initializing game console...</div>
+    </div>
+    
+    <!-- Terminal wrapper -->
+    <div id="terminal-wrapper">
+        <div id="terminal-container">
+            <div id="terminal"></div>
+        </div>
+    </div>
+    
+    <!-- Xterm.js and addons -->
+    <script src="/static/xterm/xterm.js"></script>
+    <script src="/static/xterm/xterm-addon-fit.js"></script>
+    <script src="/static/xterm/xterm-addon-web-links.js"></script>
+    
+    <script>
+        // Configuration
+        const SERVER_ID = {{ server_id }};
+        
+        // State
+        let term = null;
+        let ws = null;
+        let fitAddon = null;
+        let webLinksAddon = null;
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+        let reconnectTimer = null;
+        
+        // Initialize terminal
+        function initTerminal() {
+            // Create xterm instance with game console theme
+            term = new Terminal({
+                cursorBlink: true,
+                cursorStyle: 'block',
+                fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
+                fontSize: 13,
+                lineHeight: 1.2,
+                theme: {
+                    background: '#0e1419',
+                    foreground: '#d5d8df',
+                    cursor: '#f5f5f5',
+                    cursorAccent: '#0e1419',
+                    selection: 'rgba(72, 187, 120, 0.3)',
+                    black: '#000000',
+                    red: '#f56565',
+                    green: '#48bb78',
+                    yellow: '#ed8936',
+                    blue: '#4299e1',
+                    magenta: '#9f7aea',
+                    cyan: '#38b2ac',
+                    white: '#e2e8f0',
+                    brightBlack: '#4a5568',
+                    brightRed: '#fc8181',
+                    brightGreen: '#68d391',
+                    brightYellow: '#f6ad55',
+                    brightBlue: '#63b3ed',
+                    brightMagenta: '#b794f4',
+                    brightCyan: '#4fd1c5',
+                    brightWhite: '#f7fafc'
+                },
+                allowProposedApi: true,
+                scrollback: 20000,
+                convertEol: true
+            });
+            
+            // Initialize addons
+            fitAddon = new FitAddon.FitAddon();
+            webLinksAddon = new WebLinksAddon.WebLinksAddon();
+            
+            term.loadAddon(fitAddon);
+            term.loadAddon(webLinksAddon);
+            
+            // Open terminal
+            term.open(document.getElementById('terminal'));
+            
+            // Fit terminal to container
+            fitAddon.fit();
+            
+            // Welcome message
+            term.writeln('\x1b[1;32m╔═══════════════════════════════════════════════════════════════╗\x1b[0m');
+            term.writeln('\x1b[1;32m║         CS2 Game Server Console - Read-Only View             ║\x1b[0m');
+            term.writeln('\x1b[1;32m╚═══════════════════════════════════════════════════════════════╝\x1b[0m');
+            term.writeln('');
+            term.writeln('\x1b[90mNote: This is a read-only console attached to the game server.\x1b[0m');
+            term.writeln('\x1b[90mUse RCON or file manager for server administration.\x1b[0m');
+            term.writeln('');
+            
+            // Handle terminal input (for game console, input is typically read-only or limited)
+            term.onData(data => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'input',
+                        data: data
+                    }));
+                }
+            });
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                fitAddon.fit();
+                sendTerminalSize();
+            });
+            
+            // Send terminal size on terminal resize
+            term.onResize(({ cols, rows }) => {
+                sendTerminalSize();
+            });
+            
+            // Focus terminal
+            term.focus();
+            
+            // Hide loading overlay
+            document.getElementById('loading-overlay').classList.add('hidden');
+            
+            // Connect to WebSocket
+            connectWebSocket();
+        }
+        
+        // Send terminal size to server
+        function sendTerminalSize() {
+            if (ws && ws.readyState === WebSocket.OPEN && term) {
+                ws.send(JSON.stringify({
+                    type: 'resize',
+                    cols: term.cols,
+                    rows: term.rows
+                }));
+            }
+        }
+        
+        // Update status
+        function updateStatus(status, message) {
+            const indicator = document.getElementById('status-indicator');
+            const text = document.getElementById('status-text');
+            
+            indicator.className = status;
+            text.textContent = message;
+        }
+        
+        // Connect to WebSocket
+        function connectWebSocket() {
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/servers/${SERVER_ID}/game-console`;
+                
+                updateStatus('connecting', `Connecting to game server...`);
+                
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    reconnectAttempts = 0;
+                    updateStatus('connected', `Connected to game server console`);
+                };
+                
+                ws.onmessage = (event) => {
+                    handleMessage(event.data);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    term.writeln('\r\n\x1b[31m✗ WebSocket connection error\x1b[0m');
+                    updateStatus('disconnected', 'Connection error');
+                };
+                
+                ws.onclose = () => {
+                    updateStatus('disconnected', 'Disconnected from game server');
+                    term.writeln('\r\n\x1b[33m✗ Console connection closed\x1b[0m\r\n');
+                    
+                    // Auto-reconnect
+                    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        reconnectAttempts++;
+                        const delay = Math.min(2000 * reconnectAttempts, 10000);
+                        
+                        updateStatus('connecting', `Reconnecting in ${delay/1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+                        term.writeln(`\x1b[33mReconnecting in ${delay/1000} seconds...\x1b[0m`);
+                        
+                        reconnectTimer = setTimeout(connectWebSocket, delay);
+                    } else {
+                        updateStatus('disconnected', 'Connection failed - please refresh');
+                        term.writeln('\x1b[31mReconnection failed. Please refresh the page.\x1b[0m');
+                    }
+                };
+                
+            } catch (error) {
+                console.error('Failed to create WebSocket:', error);
+                term.writeln('\x1b[31mFailed to establish connection\x1b[0m');
+                updateStatus('disconnected', 'Failed to connect');
+            }
+        }
+        
+        // Handle WebSocket messages
+        function handleMessage(data) {
+            try {
+                const msg = JSON.parse(data);
+                
+                switch (msg.type) {
+                    case 'connected':
+                        term.writeln(`\x1b[1;32m✓ ${msg.message}\x1b[0m\r\n`);
+                        updateStatus('connected', msg.message);
+                        break;
+                        
+                    case 'output':
+                        // Game console output - ensure proper line endings
+                        let output = msg.data;
+                        if (output && !output.endsWith('\r\n') && !output.endsWith('\n')) {
+                            // Don't add extra newlines for every output
+                            term.write(output);
+                        } else {
+                            term.write(output);
+                        }
+                        break;
+                        
+                    case 'error':
+                        term.writeln(`\r\n\x1b[1;31m✗ ${msg.message}\x1b[0m\r\n`);
+                        updateStatus('disconnected', `Error: ${msg.message}`);
+                        break;
+                        
+                    case 'warning':
+                        term.writeln(`\r\n\x1b[1;33m⚠ ${msg.data || msg.message}\x1b[0m\r\n`);
+                        break;
+                        
+                    default:
+                        console.log('Unknown message type:', msg.type);
+                }
+            } catch (e) {
+                // Not JSON, write as raw text
+                term.write(data);
+            }
+        }
+        
+        // Cleanup on close
+        window.addEventListener('beforeunload', () => {
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+            }
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({ type: 'disconnect' }));
+                    ws.close();
+                } catch (e) {
+                    // Ignore errors during cleanup
+                }
+            }
+            
+            if (term) {
+                term.dispose();
+            }
+        });
+        
+        // Initialize when page loads
+        window.addEventListener('load', initTerminal);
+    </script>
+</body>
+</html>

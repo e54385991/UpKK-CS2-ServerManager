@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ console_type }} Console - Server {{ server_id }}</title>
+    <title>SSH Console - Server {{ server_id }}</title>
     
     <!-- Xterm.js CSS -->
     <link rel="stylesheet" href="/static/xterm/xterm.css">
@@ -27,31 +27,111 @@
             width: 100%;
             height: 100%;
             padding: 0;
+            background-color: #1e1e1e;
         }
         
         #terminal {
             width: 100%;
             height: 100%;
-        }
-        
-        /* Scrollbar styling */
-        #terminal::-webkit-scrollbar {
-            width: 10px;
-        }
-        
-        #terminal::-webkit-scrollbar-track {
-            background: #1e1e1e;
-        }
-        
-        #terminal::-webkit-scrollbar-thumb {
-            background: #555;
-            border-radius: 5px;
-        }
-        
-        /* Xterm.js styling */
-        .xterm {
-            height: 100%;
             padding: 10px;
+        }
+        
+        /* Status bar */
+        #status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: linear-gradient(to bottom, #2d2d30 0%, #252526 100%);
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            z-index: 1000;
+            color: #cccccc;
+            font-size: 12px;
+        }
+        
+        #status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background-color: #888;
+            transition: background-color 0.3s;
+        }
+        
+        #status-indicator.connected {
+            background-color: #4ec9b0;
+            box-shadow: 0 0 5px #4ec9b0;
+        }
+        
+        #status-indicator.connecting {
+            background-color: #f4bf75;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        #status-indicator.disconnected {
+            background-color: #f48771;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        #status-text {
+            flex: 1;
+        }
+        
+        #terminal-wrapper {
+            position: absolute;
+            top: 30px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #1e1e1e;
+        }
+        
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(30, 30, 30, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            color: #cccccc;
+        }
+        
+        #loading-overlay.hidden {
+            display: none;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #3e3e42;
+            border-top-color: #4ec9b0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Xterm.js overrides for better appearance */
+        .xterm {
+            padding: 10px;
+            height: 100%;
         }
         
         .xterm-viewport {
@@ -64,8 +144,23 @@
     </style>
 </head>
 <body>
-    <div id="terminal-container">
-        <div id="terminal"></div>
+    <!-- Status bar -->
+    <div id="status-bar">
+        <div id="status-indicator" class="connecting"></div>
+        <div id="status-text">Connecting to SSH server...</div>
+    </div>
+    
+    <!-- Loading overlay -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div>Initializing terminal...</div>
+    </div>
+    
+    <!-- Terminal wrapper -->
+    <div id="terminal-wrapper">
+        <div id="terminal-container">
+            <div id="terminal"></div>
+        </div>
     </div>
     
     <!-- Xterm.js and addons -->
@@ -75,7 +170,6 @@
     
     <script>
         // Configuration
-        const CONSOLE_TYPE = '{{ console_type }}'.toLowerCase();
         const SERVER_ID = {{ server_id }};
         
         // State
@@ -86,68 +180,41 @@
         let reconnectAttempts = 0;
         const MAX_RECONNECT_ATTEMPTS = 3;
         let reconnectTimer = null;
-        let heartbeatTimer = null;  // Add heartbeat timer
         
         // Initialize terminal
         function initTerminal() {
-            // Determine theme based on console type
-            const isSSH = CONSOLE_TYPE === 'ssh';
-            const theme = isSSH ? {
-                background: '#1e1e1e',
-                foreground: '#d4d4d4',
-                cursor: '#aeafad',
-                cursorAccent: '#1e1e1e',
-                selection: 'rgba(99, 150, 201, 0.3)',
-                black: '#000000',
-                red: '#cd3131',
-                green: '#0dbc79',
-                yellow: '#e5e510',
-                blue: '#2472c8',
-                magenta: '#bc3fbc',
-                cyan: '#11a8cd',
-                white: '#e5e5e5',
-                brightBlack: '#666666',
-                brightRed: '#f14c4c',
-                brightGreen: '#23d18b',
-                brightYellow: '#f5f543',
-                brightBlue: '#3b8eea',
-                brightMagenta: '#d670d6',
-                brightCyan: '#29b8db',
-                brightWhite: '#ffffff'
-            } : {
-                background: '#0e1419',
-                foreground: '#d5d8df',
-                cursor: '#f5f5f5',
-                cursorAccent: '#0e1419',
-                selection: 'rgba(72, 187, 120, 0.3)',
-                black: '#000000',
-                red: '#f56565',
-                green: '#48bb78',
-                yellow: '#ed8936',
-                blue: '#4299e1',
-                magenta: '#9f7aea',
-                cyan: '#38b2ac',
-                white: '#e2e8f0',
-                brightBlack: '#4a5568',
-                brightRed: '#fc8181',
-                brightGreen: '#68d391',
-                brightYellow: '#f6ad55',
-                brightBlue: '#63b3ed',
-                brightMagenta: '#b794f4',
-                brightCyan: '#4fd1c5',
-                brightWhite: '#f7fafc'
-            };
-            
-            // Create xterm instance
+            // Create xterm instance with VS Code-like theme
             term = new Terminal({
                 cursorBlink: true,
                 cursorStyle: 'block',
-                fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
-                fontSize: isSSH ? 14 : 13,
+                fontFamily: "'Cascadia Code', 'Courier New', monospace",
+                fontSize: 14,
                 lineHeight: 1.2,
-                theme: theme,
+                theme: {
+                    background: '#1e1e1e',
+                    foreground: '#d4d4d4',
+                    cursor: '#aeafad',
+                    cursorAccent: '#1e1e1e',
+                    selection: 'rgba(99, 150, 201, 0.3)',
+                    black: '#000000',
+                    red: '#cd3131',
+                    green: '#0dbc79',
+                    yellow: '#e5e510',
+                    blue: '#2472c8',
+                    magenta: '#bc3fbc',
+                    cyan: '#11a8cd',
+                    white: '#e5e5e5',
+                    brightBlack: '#666666',
+                    brightRed: '#f14c4c',
+                    brightGreen: '#23d18b',
+                    brightYellow: '#f5f543',
+                    brightBlue: '#3b8eea',
+                    brightMagenta: '#d670d6',
+                    brightCyan: '#29b8db',
+                    brightWhite: '#ffffff'
+                },
                 allowProposedApi: true,
-                scrollback: isSSH ? 10000 : 20000,
+                scrollback: 10000,
                 convertEol: true
             });
             
@@ -163,20 +230,6 @@
             
             // Fit terminal to container
             fitAddon.fit();
-            
-            // Show welcome message
-            if (isSSH) {
-                term.writeln('\x1b[1;36m╔════════════════════════════════════════════════╗\x1b[0m');
-                term.writeln('\x1b[1;36m║         Interactive SSH Terminal              ║\x1b[0m');
-                term.writeln('\x1b[1;36m╚════════════════════════════════════════════════╝\x1b[0m');
-            } else {
-                term.writeln('\x1b[1;32m╔════════════════════════════════════════════════╗\x1b[0m');
-                term.writeln('\x1b[1;32m║         Game Server Console                    ║\x1b[0m');
-                term.writeln('\x1b[1;32m╚════════════════════════════════════════════════╝\x1b[0m');
-            }
-            term.writeln('');
-            term.writeln('Connecting...');
-            term.writeln('');
             
             // Handle terminal input
             term.onData(data => {
@@ -202,8 +255,11 @@
             // Focus terminal
             term.focus();
             
-            // Auto-connect after terminal is ready
-            setTimeout(connectWebSocket, 100);
+            // Hide loading overlay
+            document.getElementById('loading-overlay').classList.add('hidden');
+            
+            // Connect to WebSocket
+            connectWebSocket();
         }
         
         // Send terminal size to server
@@ -217,40 +273,33 @@
             }
         }
         
+        // Update status
+        function updateStatus(status, message) {
+            const indicator = document.getElementById('status-indicator');
+            const text = document.getElementById('status-text');
+            
+            indicator.className = status;
+            text.textContent = message;
+        }
+        
         // Connect to WebSocket
         function connectWebSocket() {
             try {
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const endpoint = CONSOLE_TYPE === 'ssh' ? 'ssh-console' : 'game-console';
-                const wsUrl = `${protocol}//${window.location.host}/servers/${SERVER_ID}/${endpoint}`;
+                const wsUrl = `${protocol}//${window.location.host}/servers/${SERVER_ID}/ssh-console`;
+                
+                updateStatus('connecting', `Connecting to ${window.location.host}...`);
                 
                 ws = new WebSocket(wsUrl);
                 
                 ws.onopen = () => {
                     reconnectAttempts = 0;
-                    term.writeln('\x1b[32m✓ Connected\x1b[0m');
-                    term.writeln('');
+                    updateStatus('connected', `Connected to SSH server`);
                     
                     // Send initial terminal size
                     setTimeout(() => {
                         sendTerminalSize();
                     }, 100);
-                    
-                    // Start heartbeat for game console to keep connection alive
-                    if (CONSOLE_TYPE === 'game') {
-                        if (heartbeatTimer) {
-                            clearInterval(heartbeatTimer);
-                        }
-                        heartbeatTimer = setInterval(() => {
-                            if (ws && ws.readyState === WebSocket.OPEN) {
-                                try {
-                                    ws.send(JSON.stringify({ type: 'ping' }));
-                                } catch (e) {
-                                    console.error('Failed to send heartbeat:', e);
-                                }
-                            }
-                        }, 30000); // Send ping every 30 seconds
-                    }
                 };
                 
                 ws.onmessage = (event) => {
@@ -259,31 +308,33 @@
                 
                 ws.onerror = (error) => {
                     console.error('WebSocket error:', error);
-                    term.writeln('\x1b[31m✗ Connection error\x1b[0m');
+                    term.writeln('\r\n\x1b[31m✗ WebSocket connection error\x1b[0m');
+                    updateStatus('disconnected', 'Connection error');
                 };
                 
                 ws.onclose = () => {
-                    term.writeln('\r\n\x1b[33m✗ Disconnected\x1b[0m\r\n');
-                    
-                    // Clear heartbeat
-                    if (heartbeatTimer) {
-                        clearInterval(heartbeatTimer);
-                        heartbeatTimer = null;
-                    }
+                    updateStatus('disconnected', 'Disconnected from server');
+                    term.writeln('\r\n\x1b[33m✗ Connection closed\x1b[0m\r\n');
                     
                     // Auto-reconnect
                     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                         reconnectAttempts++;
-                        term.writeln(`Reconnecting (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
-                        reconnectTimer = setTimeout(connectWebSocket, 2000);
+                        const delay = Math.min(2000 * reconnectAttempts, 10000);
+                        
+                        updateStatus('connecting', `Reconnecting in ${delay/1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+                        term.writeln(`\x1b[33mReconnecting in ${delay/1000} seconds...\x1b[0m`);
+                        
+                        reconnectTimer = setTimeout(connectWebSocket, delay);
                     } else {
-                        term.writeln('Reconnection failed. Please refresh the page.');
+                        updateStatus('disconnected', 'Connection failed - please refresh');
+                        term.writeln('\x1b[31mReconnection failed. Please refresh the page.\x1b[0m');
                     }
                 };
                 
             } catch (error) {
                 console.error('Failed to create WebSocket:', error);
                 term.writeln('\x1b[31mFailed to establish connection\x1b[0m');
+                updateStatus('disconnected', 'Failed to connect');
             }
         }
         
@@ -294,8 +345,8 @@
                 
                 switch (msg.type) {
                     case 'connected':
-                        term.writeln(`\x1b[32m${msg.message}\x1b[0m`);
-                        term.writeln('');
+                        term.writeln(`\r\n\x1b[1;32m${msg.message}\x1b[0m\r\n`);
+                        updateStatus('connected', msg.message);
                         break;
                         
                     case 'output':
@@ -303,16 +354,12 @@
                         break;
                         
                     case 'error':
-                        term.writeln(`\r\n\x1b[31m✗ ${msg.message}\x1b[0m\r\n`);
+                        term.writeln(`\r\n\x1b[1;31m✗ ${msg.message}\x1b[0m\r\n`);
+                        updateStatus('disconnected', `Error: ${msg.message}`);
                         break;
                         
                     case 'warning':
-                        term.writeln(`\r\n\x1b[33m⚠ ${msg.data || msg.message}\x1b[0m\r\n`);
-                        break;
-                        
-                    case 'pong':
-                        // Heartbeat response - connection is alive
-                        console.debug('Heartbeat OK');
+                        term.writeln(`\r\n\x1b[1;33m⚠ ${msg.data || msg.message}\x1b[0m\r\n`);
                         break;
                         
                     default:
@@ -328,10 +375,6 @@
         window.addEventListener('beforeunload', () => {
             if (reconnectTimer) {
                 clearTimeout(reconnectTimer);
-            }
-            
-            if (heartbeatTimer) {
-                clearInterval(heartbeatTimer);
             }
             
             if (ws && ws.readyState === WebSocket.OPEN) {

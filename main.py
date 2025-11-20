@@ -183,6 +183,42 @@ async def console_popup(request: Request, server_id: int, console_type: str):
     })
 
 
+@app.get("/servers/{server_id}/ssh-console", response_class=HTMLResponse)
+async def ssh_console(request: Request, server_id: int):
+    """Independent SSH console page"""
+    from modules.database import async_session_maker
+    
+    async with async_session_maker() as db:
+        result = await db.execute(select(Server).filter(Server.id == server_id))
+        server = result.scalar_one_or_none()
+        
+        if not server:
+            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
+    
+    return templates.TemplateResponse("ssh_console.html", {
+        "request": request,
+        "server_id": server_id
+    })
+
+
+@app.get("/servers/{server_id}/game-console", response_class=HTMLResponse)
+async def game_console(request: Request, server_id: int):
+    """Independent game console page"""
+    from modules.database import async_session_maker
+    
+    async with async_session_maker() as db:
+        result = await db.execute(select(Server).filter(Server.id == server_id))
+        server = result.scalar_one_or_none()
+        
+        if not server:
+            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
+    
+    return templates.TemplateResponse("game_console.html", {
+        "request": request,
+        "server_id": server_id
+    })
+
+
 @app.get("/servers/{server_id}/file-editor-popup", response_class=HTMLResponse)
 async def file_editor_popup(request: Request, server_id: int, file_path: str, file_name: str):
     """File editor popup window"""

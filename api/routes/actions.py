@@ -595,8 +595,13 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
         
         # Handle interactive shell
         try:
-            # Create interactive process
-            process = await ssh_manager.conn.create_process()
+            # Create interactive process with PTY for interactive shell
+            # Request a PTY to enable interactive terminal features
+            process = await ssh_manager.conn.create_process(
+                term_type='xterm-256color',
+                encoding='utf-8',
+                errors='replace'
+            )
             
             async def read_output():
                 """Read output from SSH and send to WebSocket"""
@@ -628,9 +633,9 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
                     await process.stdin.drain()
                 elif message.get("type") == "resize":
                     # Handle terminal resize
-                    width = message.get("width", 80)
-                    height = message.get("height", 24)
-                    process.change_terminal_size(width, height)
+                    cols = message.get("cols", 80)
+                    rows = message.get("rows", 24)
+                    process.change_terminal_size(cols, rows)
                 elif message.get("type") == "disconnect":
                     break
         
@@ -651,16 +656,9 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
     """
     WebSocket endpoint for game console access
     Uses interactive PTY attachment to screen session for real-time console access (like screen -x)
-    
-    This implementation creates a true interactive session with the screen process,
-    providing real-time bidirectional streaming without polling delays.
+    Same logic as SSH console but attaches to the game server screen session
     """
     await websocket.accept()
-    
-    ssh_conn = None
-    process = None
-    reader_task = None
-    session_log = None
     
     try:
         # Get server details from database
@@ -677,65 +675,32 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                 await websocket.close()
                 return
         
-        # Import asyncssh for direct connection
-        import asyncssh
+        # Create SSH connection using SSHManager (same as SSH console)
+        ssh_manager = SSHManager()
+        success, msg = await ssh_manager.connect(server)
         
-        # Create SSH connection directly with asyncssh
-        # Add keepalive settings to prevent connection timeouts
-        try:
-            from modules.models import AuthType
-            
-            # Common connection options with keepalive
-            connect_options = {
-                'known_hosts': None,
-                'keepalive_interval': 30,  # Send keepalive every 30 seconds
-                'keepalive_count_max': 3,  # Allow 3 missed keepalives before disconnect
-                'login_timeout': 60,  # Increase login timeout
-                'connect_timeout': 30,  # Connection timeout
-            }
-            
-            if server.auth_type == AuthType.PASSWORD:
-                ssh_conn = await asyncssh.connect(
-                    host=server.host,
-                    port=server.ssh_port,
-                    username=server.ssh_user,
-                    password=server.ssh_password,
-                    **connect_options
-                )
-            elif server.auth_type == AuthType.KEY_FILE:
-                ssh_conn = await asyncssh.connect(
-                    host=server.host,
-                    port=server.ssh_port,
-                    username=server.ssh_user,
-                    client_keys=[server.ssh_key_path],
-                    **connect_options
-                )
-            else:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": f"Unsupported auth type: {server.auth_type}"
-                })
-                await websocket.close()
-                return
-                
-        except Exception as e:
+        if not success:
             await websocket.send_json({
                 "type": "error",
-                "message": f"SSH connection failed: {str(e)}"
+                "message": f"SSH connection failed: {msg}"
             })
             await websocket.close()
             return
         
-        # Check if server is running
+        # Check if game server is running
         screen_name = f"cs2server_{server_id}"
         try:
-            result = await ssh_conn.run(f"screen -list | grep {screen_name} || true", check=False)
-            if not result.stdout or not result.stdout.strip() or screen_name not in result.stdout:
+            success, stdout, stderr = await ssh_manager.execute_command(
+                f"screen -list | grep {screen_name} || true",
+                timeout=10
+            )
+            if not stdout or not stdout.strip() or screen_name not in stdout:
                 await websocket.send_json({
                     "type": "error",
                     "message": "Game server is not running. Please start the server first."
                 })
                 await websocket.close()
+                await ssh_manager.disconnect()
                 return
         except Exception as e:
             await websocket.send_json({
@@ -743,6 +708,7 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                 "message": f"Failed to check server status: {str(e)}"
             })
             await websocket.close()
+            await ssh_manager.disconnect()
             return
         
         await websocket.send_json({
@@ -750,156 +716,50 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
             "message": f"Connected to CS2 server console on {server.host}"
         })
         
-        # Get initial console history using hardcopy
+        # Attach to screen session with PTY (same logic as SSH console)
         try:
-            hardcopy_file = f"/tmp/cs2_console_init_{server_id}.txt"
-            await ssh_conn.run(f"screen -S {screen_name} -X hardcopy -h {hardcopy_file}", check=False)
-            await asyncio.sleep(0.1)
-            
-            result = await ssh_conn.run(f"test -f {hardcopy_file} && tail -n 100 {hardcopy_file} 2>/dev/null || echo ''", check=False)
-            if result.stdout and result.stdout.strip():
-                await websocket.send_json({
-                    "type": "output",
-                    "data": "--- Console History (last 100 lines) ---\n" + result.stdout + "\n"
-                })
-            
-            await ssh_conn.run(f"rm -f {hardcopy_file}", check=False)
-        except Exception:
-            pass
-        
-        await websocket.send_json({
-            "type": "output",
-            "data": "--- Console Connected ---\n"
-        })
-        
-        # Use screen's logging feature to capture output in real-time
-        # This is more reliable than trying to tail console.log which may not exist
-        # We'll use screen -X hardcopy to periodically get screen buffer
-        # and use script command to capture real-time output
-        
-        # Method: Use script command with screen to capture all output
-        # The script command records terminal sessions
-        try:
-            # Create a unique log file for this session
-            session_log = f"/tmp/cs2_console_session_{server_id}_{int(asyncio.get_event_loop().time())}.log"
-            
-            # Use script to capture screen session output in real-time
-            # -f forces flush of output, -c runs the command
-            # Use -x flag to attach to screen even if already attached (multi-display mode)
-            # -q for quiet mode to suppress screen messages
-            process = await ssh_conn.create_process(
-                f"script -f -q -c 'screen -x {screen_name} -q' {session_log}",
+            # Create interactive process with PTY to attach to screen session
+            # screen -x allows multiple users to attach to the same session
+            process = await ssh_manager.conn.create_process(
+                f"screen -x {screen_name}",
                 term_type='xterm-256color',
                 encoding='utf-8',
                 errors='replace'
             )
-            
-            # Give the process a moment to start
-            await asyncio.sleep(0.3)
-            
-            # Check if process started successfully
-            if process.exit_status is not None:
-                # Process already exited
-                await websocket.send_json({
-                    "type": "error",
-                    "message": f"Console monitoring process exited with status {process.exit_status}"
-                })
-                await websocket.close()
-                return
-                
-        except Exception as e:
-            await websocket.send_json({
-                "type": "error",
-                "message": f"Failed to attach to console: {str(e)}"
-            })
-            await websocket.close()
-            return
         
-        # Task to read output from the console and send to WebSocket
-        async def read_console_output():
-            try:
-                # Read from stdout in real-time
-                async for line in process.stdout:
-                    try:
-                        # Send each line as it comes in real-time
-                        await websocket.send_json({
-                            "type": "output",
-                            "data": line
-                        })
-                    except Exception as e:
-                        # WebSocket closed or error sending
-                        break
-                        
-                # If we get here, the stream ended
+            async def read_output():
+                """Read output from screen session and send to WebSocket"""
                 try:
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": "Console stream ended unexpectedly"
-                    })
-                except Exception:
+                    while True:
+                        output = await process.stdout.read(1024)
+                        if output:
+                            await websocket.send_json({
+                                "type": "output",
+                                "data": output
+                            })
+                        else:
+                            break
+                except Exception as e:
                     pass
-                    
-            except asyncio.CancelledError:
-                # Task was cancelled, normal shutdown
-                pass
-            except Exception as e:
-                # Connection error or other issue
-                try:
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": f"Console read error: {str(e)}"
-                    })
-                except Exception:
-                    pass
-        
-        # Start reading output in the background
-        reader_task = asyncio.create_task(read_console_output())
-        
-        # Handle input from WebSocket
-        try:
+            
+            # Start reading output
+            output_task = asyncio.create_task(read_output())
+            
+            # Handle input from WebSocket
             while True:
-                # Receive data from WebSocket
                 data = await websocket.receive_text()
                 message = json.loads(data)
                 
                 if message.get("type") == "input":
-                    # Send command to screen session using screen -X stuff
-                    command = message.get("data", "")
-                    if not command:
-                        continue
-                    
-                    # Add newline if not present
-                    if not command.endswith('\n'):
-                        command += '\n'
-                    
-                    # Escape command for shell (handle quotes and backslashes)
-                    escaped_cmd = command.replace("\\", "\\\\").replace("'", "'\\''")
-                    send_cmd = f"screen -S {screen_name} -X stuff '{escaped_cmd}'"
-                    
-                    try:
-                        # Execute command to send input to screen
-                        result = await asyncio.wait_for(
-                            ssh_conn.run(send_cmd, check=False),
-                            timeout=5.0
-                        )
-                        
-                        # Check if command failed
-                        if result.exit_status != 0 and result.stderr:
-                            await websocket.send_json({
-                                "type": "error",
-                                "message": f"Failed to send command: {result.stderr}"
-                            })
-                    except asyncio.TimeoutError:
-                        await websocket.send_json({
-                            "type": "error",
-                            "message": "Command send timeout"
-                        })
-                    except Exception as e:
-                        await websocket.send_json({
-                            "type": "error",
-                            "message": f"Failed to send command: {str(e)}"
-                        })
-                
+                    # Send input directly to screen session via stdin
+                    input_data = message.get("data", "")
+                    process.stdin.write(input_data)
+                    await process.stdin.drain()
+                elif message.get("type") == "resize":
+                    # Handle terminal resize
+                    cols = message.get("cols", 80)
+                    rows = message.get("rows", 24)
+                    process.change_terminal_size(cols, rows)
                 elif message.get("type") == "ping":
                     # Respond to ping to keep connection alive
                     try:
@@ -908,63 +768,17 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                         })
                     except Exception:
                         break
-                
                 elif message.get("type") == "disconnect":
                     break
         
-        except WebSocketDisconnect:
-            # Client disconnected
-            pass
         except Exception as e:
-            try:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": f"Console error: {str(e)}"
-                })
-            except Exception:
-                pass
-    
-    except WebSocketDisconnect:
-        # Client disconnected during setup
-        pass
-    except Exception as e:
-        try:
             await websocket.send_json({
                 "type": "error",
-                "message": f"Unexpected error: {str(e)}"
+                "message": f"Console error: {str(e)}"
             })
-        except Exception:
-            pass
-    finally:
-        # Clean up resources
-        if reader_task and not reader_task.done():
-            reader_task.cancel()
-            try:
-                await reader_task
-            except asyncio.CancelledError:
-                pass
-        
-        if process:
-            try:
-                process.terminate()
-                await asyncio.wait_for(process.wait(), timeout=2.0)
-            except Exception:
-                try:
-                    process.kill()
-                except Exception:
-                    pass
-        
-        if ssh_conn:
-            # Clean up session log file if it exists
-            if session_log:
-                try:
-                    await ssh_conn.run(f"rm -f {session_log}", check=False)
-                except Exception:
-                    pass
-            
-            ssh_conn.close()
-            try:
-                await ssh_conn.wait_closed()
-            except Exception:
-                pass
+        finally:
+            await ssh_manager.disconnect()
+    
+    except WebSocketDisconnect:
+        pass
 

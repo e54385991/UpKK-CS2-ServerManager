@@ -2572,126 +2572,22 @@
             // Console runs in separate window
         },
 
-        // Game Console Methods
+        // Game Console Methods - Opens in popup window
         connectGameConsole() {
-            if (!this.gameTerminal) {
-                this.initTerminals();
-            }
+            const width = 1000;
+            const height = 700;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
             
-            // Clear terminal
-            this.gameTerminal.clear();
-            
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/servers/${this.serverId}/game-console`;
-
-            this.gameConsoleWs = new WebSocket(wsUrl);
-
-            // Clear any existing heartbeat
-            if (this.gameConsoleHeartbeat) {
-                clearInterval(this.gameConsoleHeartbeat);
-                this.gameConsoleHeartbeat = null;
-            }
-
-            this.gameConsoleWs.onopen = () => {
-                this.gameTerminal.writeln('\x1b[1;32m╔════════════════════════════════════════╗\x1b[0m');
-                this.gameTerminal.writeln('\x1b[1;32m║   Game Console - Interactive Mode     ║\x1b[0m');
-                this.gameTerminal.writeln('\x1b[1;32m╚════════════════════════════════════════╝\x1b[0m');
-                this.gameTerminal.writeln('');
-                this.gameTerminal.writeln('\x1b[1;32m✓ Connecting to game server...\x1b[0m');
-
-                // Start heartbeat to keep connection alive
-                this.gameConsoleHeartbeat = setInterval(() => {
-                    if (this.gameConsoleWs && this.gameConsoleWs.readyState === WebSocket.OPEN) {
-                        try {
-                            this.gameConsoleWs.send(JSON.stringify({ type: 'ping' }));
-                        } catch (e) {
-                            console.error('Failed to send heartbeat:', e);
-                        }
-                    }
-                }, 30000); // Send ping every 30 seconds
-            };
-
-            this.gameConsoleWs.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'connected') {
-                        this.gameConsoleConnected = true;
-                        this.gameTerminal.writeln(`\x1b[1;32m✓ ${data.message}\x1b[0m`);
-                        this.gameTerminal.writeln('\x1b[1;33mType commands and press Enter to execute\x1b[0m');
-                        this.gameTerminal.writeln('');
-                        // Focus terminal for immediate input
-                        this.gameTerminal.focus();
-                    } else if (data.type === 'output') {
-                        // Handle output - ensure newlines are preserved
-                        let output = data.data;
-                        // Replace \n with \r\n for proper terminal display
-                        output = output.replace(/\n/g, '\r\n');
-                        this.gameTerminal.write(output);
-                    } else if (data.type === 'error') {
-                        this.gameTerminal.writeln(`\r\n\x1b[1;31m✗ ERROR: ${data.message}\x1b[0m\r\n`);
-                        this.gameConsoleConnected = false;
-                    } else if (data.type === 'warning') {
-                        this.gameTerminal.writeln(`\r\n\x1b[1;33m⚠ WARNING: ${data.data || data.message}\x1b[0m\r\n`);
-                    } else if (data.type === 'pong') {
-                        // Heartbeat response received, connection is alive
-                        console.debug('Game console heartbeat OK');
-                    }
-                } catch (e) {
-                    console.error('Error parsing game console message:', e);
-                }
-            };
-
-            this.gameConsoleWs.onerror = (error) => {
-                console.error('Game console WebSocket error:', error);
-                this.gameTerminal.writeln('\r\n\x1b[1;31m✗ WebSocket error occurred\x1b[0m\r\n');
-                this.gameConsoleConnected = false;
-            };
-
-            this.gameConsoleWs.onclose = () => {
-                this.gameConsoleConnected = false;
-                this.gameTerminal.writeln('\r\n\x1b[1;33m✗ Game Console disconnected\x1b[0m\r\n');
-
-                // Clear heartbeat on close
-                if (this.gameConsoleHeartbeat) {
-                    clearInterval(this.gameConsoleHeartbeat);
-                    this.gameConsoleHeartbeat = null;
-                }
-            };
-            
-            // Enable full keyboard interaction for game console
-            this.gameTerminal.onData((data) => {
-                if (this.gameConsoleWs && this.gameConsoleWs.readyState === WebSocket.OPEN) {
-                    try {
-                        this.gameConsoleWs.send(JSON.stringify({
-                            type: 'input',
-                            data: data
-                        }));
-                    } catch (e) {
-                        console.error('Error sending data to game console:', e);
-                    }
-                }
-            });
+            window.open(
+                `/servers/${this.serverId}/console-popup/game`,
+                'Game_Console',
+                `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no`
+            );
         },
 
         disconnectGameConsole() {
-            if (this.gameConsoleWs) {
-                // Clear heartbeat
-                if (this.gameConsoleHeartbeat) {
-                    clearInterval(this.gameConsoleHeartbeat);
-                    this.gameConsoleHeartbeat = null;
-                }
-
-                if (this.gameConsoleWs.readyState === WebSocket.OPEN) {
-                    try {
-                        this.gameConsoleWs.send(JSON.stringify({ type: 'disconnect' }));
-                    } catch (e) {
-                        console.error('Error sending disconnect:', e);
-                    }
-                }
-                this.gameConsoleWs.close();
-                this.gameConsoleWs = null;
-                this.gameConsoleConnected = false;
-            }
+            // Console runs in separate window
         }
     };
 }

@@ -354,9 +354,22 @@ class SSHManager:
             await send_progress("=" * 60)
             
             install_cs2 = (
-                f"{steamcmd_dir}/steamcmd.sh +force_install_dir {server.game_directory}/cs2 "
-                f"+login anonymous +app_update 730 validate +quit"
+                f"cd {steamcmd_dir} && "
+                f"./steamcmd.sh "
+                f"+force_install_dir {server.game_directory}/cs2 "
+                f"+login anonymous "
+                f"+app_update 730 validate "
+                f"+quit"
             )
+            
+            # Display command preview before execution
+            await send_progress("")
+            await send_progress("即将执行的命令 / Commands to be executed:")
+            await send_progress("=" * 60)
+            await send_progress(f"📝 SteamCMD Install Command:")
+            await send_progress(f"   {install_cs2}")
+            await send_progress("=" * 60)
+            await send_progress("")
             
             success, stdout, stderr = await self.execute_command_streaming(
                 install_cs2,
@@ -1133,6 +1146,57 @@ class SSHManager:
         finally:
             await self.disconnect()
     
+    async def _kill_steamcmd_processes(self, server: Server, progress_callback=None) -> None:
+        """
+        Kill any existing steamcmd processes for this server to prevent concurrent updates
+        
+        Args:
+            server: Server instance
+            progress_callback: Optional callback for progress messages
+        """
+        async def send_progress(message: str):
+            """Helper to send progress updates"""
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(message)
+                else:
+                    progress_callback(message)
+        
+        try:
+            # Find steamcmd processes related to this server's directory
+            # We look for processes that contain both "steamcmd" and the server's game directory path
+            game_dir = server.game_directory
+            
+            # First, check if there are any steamcmd processes running for this server
+            check_cmd = f"pgrep -f 'steamcmd.*{game_dir}' || true"
+            success, stdout, stderr = await self.execute_command(check_cmd, timeout=10)
+            
+            if stdout.strip():
+                pids = stdout.strip().split('\n')
+                await send_progress(f"⚠ Found {len(pids)} existing steamcmd process(es), terminating...")
+                
+                # Kill the processes
+                for pid in pids:
+                    if pid:
+                        kill_cmd = f"kill -9 {pid} 2>/dev/null || true"
+                        await self.execute_command(kill_cmd, timeout=5)
+                
+                # Give a moment for processes to terminate
+                await asyncio.sleep(0.5)
+                
+                # Verify they're gone
+                verify_cmd = f"pgrep -f 'steamcmd.*{game_dir}' || true"
+                success, verify_output, _ = await self.execute_command(verify_cmd, timeout=10)
+                
+                if verify_output.strip():
+                    await send_progress("⚠ Some steamcmd processes may still be running")
+                else:
+                    await send_progress("✓ All existing steamcmd processes terminated")
+            
+        except Exception as e:
+            # Non-critical error, log but continue
+            await send_progress(f"Note: Error checking for existing steamcmd processes: {str(e)}")
+    
     async def update_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """Update CS2 server using SteamCMD (without validation)"""
         success, msg = await self.connect(server)
@@ -1149,6 +1213,9 @@ class SSHManager:
         
         try:
             await send_progress("Starting server update...")
+            
+            # Kill any existing steamcmd processes for this server
+            await self._kill_steamcmd_processes(server, progress_callback)
             
             # Check if server is running and stop it first
             screen_name = f"cs2server_{server.id}"
@@ -1185,8 +1252,6 @@ class SSHManager:
             game_dir = server.game_directory
             steamcmd_dir = f"{game_dir}/steamcmd"
             
-            await send_progress("Updating CS2 server files via SteamCMD...")
-            
             # Run SteamCMD update command (without validate)
             update_cmd = (
                 f"cd {steamcmd_dir} && "
@@ -1196,6 +1261,15 @@ class SSHManager:
                 f"+app_update 730 "
                 f"+quit"
             )
+            
+            # Display command preview before execution
+            await send_progress("=" * 60)
+            await send_progress("即将执行的命令 / Commands to be executed:")
+            await send_progress("=" * 60)
+            await send_progress(f"📝 SteamCMD Update Command:")
+            await send_progress(f"   {update_cmd}")
+            await send_progress("=" * 60)
+            await send_progress("Updating CS2 server files via SteamCMD...")
             
             success, stdout, stderr = await self.execute_command_streaming(
                 update_cmd,
@@ -1239,6 +1313,9 @@ class SSHManager:
         try:
             await send_progress("Starting server update and validation...")
             
+            # Kill any existing steamcmd processes for this server
+            await self._kill_steamcmd_processes(server, progress_callback)
+            
             # Check if server is running and stop it first
             screen_name = f"cs2server_{server.id}"
             check_cmd = f"screen -list | grep {screen_name} || true"
@@ -1274,9 +1351,6 @@ class SSHManager:
             game_dir = server.game_directory
             steamcmd_dir = f"{game_dir}/steamcmd"
             
-            await send_progress("Updating and validating CS2 server files via SteamCMD...")
-            await send_progress("This may take a while as all files will be validated...")
-            
             # Run SteamCMD update command with validation
             update_cmd = (
                 f"cd {steamcmd_dir} && "
@@ -1286,6 +1360,16 @@ class SSHManager:
                 f"+app_update 730 validate "
                 f"+quit"
             )
+            
+            # Display command preview before execution
+            await send_progress("=" * 60)
+            await send_progress("即将执行的命令 / Commands to be executed:")
+            await send_progress("=" * 60)
+            await send_progress(f"📝 SteamCMD Update + Validate Command:")
+            await send_progress(f"   {update_cmd}")
+            await send_progress("=" * 60)
+            await send_progress("Updating and validating CS2 server files via SteamCMD...")
+            await send_progress("This may take a while as all files will be validated...")
             
             success, stdout, stderr = await self.execute_command_streaming(
                 update_cmd,
