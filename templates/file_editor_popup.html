@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit File - {{ file_name }}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #1e1e1e;
+        }
+        
+        #editor-container {
+            width: 100vw;
+            height: calc(100vh - 60px);
+        }
+        
+        .editor-header {
+            height: 60px;
+            background-color: #2d2d30;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            border-bottom: 1px solid #3e3e42;
+        }
+        
+        .editor-title {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        .editor-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .saving .spinner {
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-header">
+        <div class="editor-title">
+            <i class="bi bi-file-text"></i>
+            <span id="fileName">{{ file_name }}</span>
+        </div>
+        <div class="editor-actions">
+            <div class="spinner" id="spinner"></div>
+            <button class="btn btn-sm btn-secondary" id="cancelBtn" onclick="closeWindow()">Cancel</button>
+            <button class="btn btn-sm btn-primary" id="saveBtn" onclick="saveFile()">Save</button>
+        </div>
+    </div>
+    
+    <div id="editor-container"></div>
+    
+    <!-- Monaco Editor -->
+    <script src="/static/vs/loader.js"></script>
+    <script>
+        const serverId = {{ server_id }};
+        const filePath = '{{ file_path }}';
+        const accessToken = localStorage.getItem('access_token');
+        let editor = null;
+        
+        // Configure Monaco Editor loader
+        require.config({ 
+            paths: { 
+                vs: '/static/vs' 
+            }
+        });
+        
+        // Initialize Monaco Editor
+        require(['vs/editor/editor.main'], () => {
+            const container = document.getElementById('editor-container');
+            
+            // Determine language from file extension
+            const ext = '{{ file_name }}'.substring('{{ file_name }}'.lastIndexOf('.')).toLowerCase();
+            const languageMap = {
+                '.txt': 'plaintext',
+                '.log': 'plaintext',
+                '.ini': 'ini',
+                '.cfg': 'ini',
+                '.conf': 'ini',
+                '.json': 'json',
+                '.js': 'javascript',
+                '.py': 'python',
+                '.sh': 'shell',
+                '.bash': 'shell',
+                '.yml': 'yaml',
+                '.yaml': 'yaml',
+                '.xml': 'xml',
+                '.html': 'html',
+                '.css': 'css',
+                '.md': 'markdown'
+            };
+            const language = languageMap[ext] || 'plaintext';
+            
+            editor = monaco.editor.create(container, {
+                value: `{{ file_content | safe }}`,
+                language: language,
+                theme: 'vs-dark',
+                automaticLayout: true,
+                fontSize: 14,
+                fontFamily: "'Consolas', 'Courier New', monospace",
+                minimap: {
+                    enabled: true
+                },
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                tabSize: 4,
+                insertSpaces: true,
+                lineNumbers: 'on',
+                glyphMargin: false,
+                folding: true,
+                // Minimal configuration - no fancy features
+                cursorBlinking: 'solid',
+                smoothScrolling: false,
+                mouseWheelZoom: false,
+                quickSuggestions: false,
+                suggestOnTriggerCharacters: false,
+                hover: {
+                    enabled: true,  // Re-enable hover for better UX in popup
+                    delay: 500
+                },
+                parameterHints: {
+                    enabled: false
+                }
+            });
+            
+            // Focus editor
+            editor.focus();
+            
+            // Handle Ctrl+S to save
+            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+                saveFile();
+            });
+        });
+        
+        async function saveFile() {
+            if (!editor) return;
+            
+            const saveBtn = document.getElementById('saveBtn');
+            const cancelBtn = document.getElementById('cancelBtn');
+            const spinner = document.getElementById('spinner');
+            
+            // Show loading state
+            saveBtn.disabled = true;
+            cancelBtn.disabled = true;
+            saveBtn.classList.add('saving');
+            spinner.style.display = 'inline-block';
+            
+            try {
+                const content = editor.getValue();
+                
+                const response = await fetch(`/servers/${serverId}/files/content?path=${encodeURIComponent(filePath)}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content: content })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+                
+                // Show success
+                saveBtn.textContent = 'Saved!';
+                saveBtn.classList.remove('btn-primary');
+                saveBtn.classList.add('btn-success');
+                
+                // Close window after a brief delay
+                setTimeout(() => {
+                    if (window.opener) {
+                        // Notify parent to refresh file list
+                        window.opener.postMessage({ type: 'file-saved' }, '*');
+                    }
+                    window.close();
+                }, 800);
+                
+            } catch (error) {
+                console.error('Error saving file:', error);
+                alert('Error saving file: ' + error.message);
+                
+                // Restore button state
+                saveBtn.disabled = false;
+                cancelBtn.disabled = false;
+                saveBtn.classList.remove('saving');
+                spinner.style.display = 'none';
+            }
+        }
+        
+        function closeWindow() {
+            if (editor && editor.getValue() !== `{{ file_content | safe }}`) {
+                if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
+                    return;
+                }
+            }
+            window.close();
+        }
+        
+        // Handle window close
+        window.onbeforeunload = (e) => {
+            if (editor && editor.getValue() !== `{{ file_content | safe }}`) {
+                e.preventDefault();
+                e.returnValue = '';
+                return '';
+            }
+        };
+    </script>
+</body>
+</html>

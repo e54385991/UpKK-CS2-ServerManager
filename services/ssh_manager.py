@@ -3,7 +3,9 @@ SSH connection and server management utilities (Async)
 """
 import asyncssh
 import asyncio
-from typing import Optional, Tuple
+import os
+from typing import Optional, Tuple, List, Dict, Any
+from datetime import datetime
 from modules.models import Server, AuthType
 from services.server_monitor import server_monitor
 
@@ -1189,6 +1191,7 @@ class SSHManager:
             update_cmd = (
                 f"cd {steamcmd_dir} && "
                 f"./steamcmd.sh "
+                f"+force_install_dir {game_dir}/cs2 "
                 f"+login anonymous "
                 f"+app_update 730 "
                 f"+quit"
@@ -1278,6 +1281,7 @@ class SSHManager:
             update_cmd = (
                 f"cd {steamcmd_dir} && "
                 f"./steamcmd.sh "
+                f"+force_install_dir {game_dir}/cs2 "
                 f"+login anonymous "
                 f"+app_update 730 validate "
                 f"+quit"
@@ -1744,3 +1748,279 @@ class SSHManager:
         
         # Just reinstall - this will update to the latest version
         return await self.install_counterstrikesharp(server, progress_callback)
+    
+    async def list_directory(self, path: str, server: Server) -> Tuple[bool, List[Dict[str, Any]], str]:
+        """
+        List directory contents with file metadata
+        
+        Args:
+            path: Directory path to list
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, List[Dict], str]: (success, files_list, error_message)
+            Each file dict contains: name, path, type, size, modified, permissions
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, [], f"Connection failed: {msg}"
+        
+        try:
+            # Use SFTP to list directory
+            async with self.conn.start_sftp_client() as sftp:
+                # Get directory listing
+                files = []
+                async for entry in sftp.scandir(path):
+                    attrs = entry.attrs
+                    file_info = {
+                        'name': entry.filename,
+                        'path': os.path.join(path, entry.filename),
+                        'type': 'directory' if attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY else 'file',
+                        'size': attrs.size or 0,
+                        'modified': attrs.mtime or 0,
+                        'permissions': oct(attrs.permissions)[-3:] if attrs.permissions else '000',
+                        'is_symlink': attrs.type == asyncssh.FILEXFER_TYPE_SYMLINK
+                    }
+                    files.append(file_info)
+                
+                # Sort: directories first, then by name
+                files.sort(key=lambda x: (x['type'] != 'directory', x['name'].lower()))
+                
+                return True, files, ""
+        except asyncssh.SFTPError as e:
+            return False, [], f"SFTP error: {str(e)}"
+        except Exception as e:
+            return False, [], f"Error listing directory: {str(e)}"
+    
+    async def read_file(self, file_path: str, server: Server, max_size: int = 10*1024*1024) -> Tuple[bool, str, str]:
+        """
+        Read file contents
+        
+        Args:
+            file_path: Path to file
+            server: Server instance
+            max_size: Maximum file size to read (default 10MB)
+        
+        Returns:
+            Tuple[bool, str, str]: (success, file_content, error_message)
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, "", f"Connection failed: {msg}"
+        
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                # Check file size first
+                attrs = await sftp.stat(file_path)
+                if attrs.size > max_size:
+                    return False, "", f"File too large ({attrs.size} bytes). Maximum size is {max_size} bytes."
+                
+                # Read file content
+                async with sftp.open(file_path, 'r') as f:
+                    content = await f.read()
+                    # Try to decode as UTF-8, fallback to latin-1 if fails
+                    try:
+                        if isinstance(content, bytes):
+                            text_content = content.decode('utf-8')
+                        else:
+                            text_content = content
+                    except UnicodeDecodeError:
+                        if isinstance(content, bytes):
+                            text_content = content.decode('latin-1')
+                        else:
+                            text_content = content
+                    
+                    return True, text_content, ""
+        except asyncssh.SFTPError as e:
+            return False, "", f"SFTP error: {str(e)}"
+        except Exception as e:
+            return False, "", f"Error reading file: {str(e)}"
+    
+    async def write_file(self, file_path: str, content: str, server: Server) -> Tuple[bool, str]:
+        """
+        Write content to file
+        
+        Args:
+            file_path: Path to file
+            content: Content to write (string)
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                # Ensure parent directory exists
+                parent_dir = os.path.dirname(file_path)
+                if parent_dir:
+                    try:
+                        await sftp.stat(parent_dir)
+                    except:
+                        # Parent directory doesn't exist, create it
+                        await sftp.makedirs(parent_dir)
+                
+                # Write file - use text mode and write string directly
+                async with sftp.open(file_path, 'w', encoding='utf-8') as f:
+                    await f.write(content)
+                
+                return True, ""
+        except asyncssh.SFTPError as e:
+            return False, f"SFTP error: {str(e)}"
+        except Exception as e:
+            return False, f"Error writing file: {str(e)}"
+    
+    async def delete_path(self, path: str, server: Server) -> Tuple[bool, str]:
+        """
+        Delete file or directory
+        
+        Args:
+            path: Path to delete
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                attrs = await sftp.stat(path)
+                
+                if attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY:
+                    # Remove directory recursively
+                    await sftp.rmtree(path)
+                else:
+                    # Remove file
+                    await sftp.remove(path)
+                
+                return True, ""
+        except asyncssh.SFTPError as e:
+            return False, f"SFTP error: {str(e)}"
+        except Exception as e:
+            return False, f"Error deleting: {str(e)}"
+    
+    async def create_directory(self, path: str, server: Server) -> Tuple[bool, str]:
+        """
+        Create directory
+        
+        Args:
+            path: Directory path to create
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                await sftp.makedirs(path)
+                return True, ""
+        except asyncssh.SFTPError as e:
+            return False, f"SFTP error: {str(e)}"
+        except Exception as e:
+            return False, f"Error creating directory: {str(e)}"
+    
+    async def rename_path(self, old_path: str, new_path: str, server: Server) -> Tuple[bool, str]:
+        """
+        Rename or move file/directory
+        
+        Args:
+            old_path: Current path
+            new_path: New path
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                await sftp.rename(old_path, new_path)
+                return True, ""
+        except asyncssh.SFTPError as e:
+            return False, f"SFTP error: {str(e)}"
+        except Exception as e:
+            return False, f"Error renaming: {str(e)}"
+    
+    async def upload_file(self, local_path: str, remote_path: str, server: Server) -> Tuple[bool, str]:
+        """
+        Upload file from local to remote
+        
+        Args:
+            local_path: Local file path
+            remote_path: Remote file path
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                # Ensure parent directory exists
+                parent_dir = os.path.dirname(remote_path)
+                if parent_dir:
+                    try:
+                        await sftp.stat(parent_dir)
+                    except:
+                        await sftp.makedirs(parent_dir)
+                
+                # Upload file
+                await sftp.put(local_path, remote_path)
+                return True, ""
+        except asyncssh.SFTPError as e:
+            return False, f"SFTP error: {str(e)}"
+        except Exception as e:
+            return False, f"Error uploading file: {str(e)}"
+    
+    async def download_file(self, remote_path: str, local_path: str, server: Server) -> Tuple[bool, str]:
+        """
+        Download file from remote to local
+        
+        Args:
+            remote_path: Remote file path
+            local_path: Local file path
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                # Ensure local parent directory exists
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                
+                # Download file
+                await sftp.get(remote_path, local_path)
+                return True, ""
+        except asyncssh.SFTPError as e:
+            return False, f"SFTP error: {str(e)}"
+        except Exception as e:
+            return False, f"Error downloading file: {str(e)}"

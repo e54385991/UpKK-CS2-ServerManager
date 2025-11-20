@@ -336,7 +336,8 @@
     "failed": "Failed",
     "none": "None",
     "seconds": "seconds",
-    "hours": "hours"
+    "hours": "hours",
+    "fileManager": "File Manager"
   },
   "setupWizard": {
     "title": "New Server Initialization",
@@ -498,5 +499,41 @@
       "connecting": "Connecting"
     },
     "initialMessage": "Enter a server ID and connect to start monitoring..."
+  },
+  "fileManager": {
+    "title": "File Manager",
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified",
+    "newFolder": "New Folder",
+    "upload": "Upload",
+    "download": "Download",
+    "delete": "Delete",
+    "rename": "Rename",
+    "edit": "Edit",
+    "editFile": "Edit File",
+    "newName": "New Name",
+    "folderName": "Folder Name",
+    "parentDirectory": "Parent Directory",
+    "emptyFolder": "This folder is empty",
+    "uploadSuccess": "File uploaded successfully",
+    "downloadSuccess": "File downloaded successfully",
+    "deleteSuccess": "Deleted successfully",
+    "renameSuccess": "Renamed successfully",
+    "createFolderSuccess": "Folder created successfully",
+    "saveSuccess": "File saved successfully",
+    "errorLoading": "Error loading files",
+    "errorUploading": "Error uploading file",
+    "errorDownloading": "Error downloading file",
+    "errorDeleting": "Error deleting",
+    "errorRenaming": "Error renaming",
+    "errorCreatingFolder": "Error creating folder",
+    "errorSaving": "Error saving file",
+    "confirmDelete": "Are you sure you want to delete this",
+    "file": "file",
+    "folder": "folder",
+    "submitting": "Submitting...",
+    "saved": "Saved!",
+    "uploading": "Uploading"
   }
 }

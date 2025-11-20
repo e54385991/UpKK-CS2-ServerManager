@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     BACKEND_URL: str = "http://localhost:8000"  # Backend URL for server status reporting
     
     # Security
-    SECRET_KEY: str = "your-secret-d52vu7LqPwdn4drq"
-    JWT_SECRET_KEY: str = "your-jwt-secret-key-change-d52vu7LqPwdn4drq"
+    SECRET_KEY: str = "your-secret-key-change-this-in-production"
+    JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 1 week (7 days * 24 hours * 60 minutes)
     

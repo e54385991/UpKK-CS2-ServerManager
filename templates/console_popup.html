@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ console_type }} Console - Server {{ server_id }}</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        
+        #terminal {
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: #fff;
+            padding: 10px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.2;
+        }
+        
+        /* Cursor */
+        #terminal .cursor {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background-color: #fff;
+            animation: blink 1s step-end infinite;
+            vertical-align: text-bottom;
+        }
+        
+        @keyframes blink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+        }
+        
+        /* Scrollbar styling */
+        #terminal::-webkit-scrollbar {
+            width: 10px;
+        }
+        
+        #terminal::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+        
+        #terminal::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 5px;
+        }
+        
+        #terminal::-webkit-scrollbar-thumb:hover {
+            background: #888;
+        }
+        
+        /* ANSI Colors */
+        .ansi-black { color: #000000; }
+        .ansi-red { color: #cd3131; }
+        .ansi-green { color: #0dbc79; }
+        .ansi-yellow { color: #e5e510; }
+        .ansi-blue { color: #2472c8; }
+        .ansi-magenta { color: #bc3fbc; }
+        .ansi-cyan { color: #11a8cd; }
+        .ansi-white { color: #e5e5e5; }
+        .ansi-bright-black { color: #666666; }
+        .ansi-bright-red { color: #f14c4c; }
+        .ansi-bright-green { color: #23d18b; }
+        .ansi-bright-yellow { color: #f5f543; }
+        .ansi-bright-blue { color: #3b8eea; }
+        .ansi-bright-magenta { color: #d670d6; }
+        .ansi-bright-cyan { color: #29b8db; }
+        .ansi-bright-white { color: #ffffff; }
+        .ansi-bold { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="terminal"></div>
+    
+    
+    <script>
+        // Configuration
+        const CONSOLE_TYPE = '{{ console_type }}'.toLowerCase();
+        const SERVER_ID = {{ server_id }};
+        
+        // State
+        let terminal = null;
+        let ws = null;
+        let wsReconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+        let inputBuffer = '';
+        
+        // Terminal class
+        class NativeTerminal {
+            constructor(element) {
+                this.element = element;
+                this.buffer = '';
+                this.maxLines = 10000;
+                this.inputHandler = null;
+            }
+            
+            writeln(text) {
+                this.write(text + '\n');
+            }
+            
+            write(text) {
+                // Process ANSI codes
+                const processedText = this._processAnsiCodes(text);
+                this.element.innerHTML += processedText;
+                this._trimBuffer();
+                this._scrollToBottom();
+            }
+            
+            _processAnsiCodes(text) {
+                // Simple ANSI color code processing
+                return text
+                    .replace(/\x1b\[0m/g, '</span>')
+                    .replace(/\x1b\[1;?(\d+)m/g, (match, p1) => {
+                        const colorMap = {
+                            '30': 'ansi-black', '31': 'ansi-red', '32': 'ansi-green',
+                            '33': 'ansi-yellow', '34': 'ansi-blue', '35': 'ansi-magenta',
+                            '36': 'ansi-cyan', '37': 'ansi-white'
+                        };
+                        return `<span class="${colorMap[p1] || ''} ansi-bold">`;
+                    })
+                    .replace(/\x1b\[(\d+)m/g, (match, p1) => {
+                        const colorMap = {
+                            '30': 'ansi-black', '31': 'ansi-red', '32': 'ansi-green',
+                            '33': 'ansi-yellow', '34': 'ansi-blue', '35': 'ansi-magenta',
+                            '36': 'ansi-cyan', '37': 'ansi-white',
+                            '90': 'ansi-bright-black', '91': 'ansi-bright-red',
+                            '92': 'ansi-bright-green', '93': 'ansi-bright-yellow',
+                            '94': 'ansi-bright-blue', '95': 'ansi-bright-magenta',
+                            '96': 'ansi-bright-cyan', '97': 'ansi-bright-white'
+                        };
+                        return `<span class="${colorMap[p1] || ''}">`;
+                    })
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/\n/g, '<br>')
+                    .replace(/\r/g, '');
+            }
+            
+            _trimBuffer() {
+                const lines = this.element.innerHTML.split('<br>');
+                if (lines.length > this.maxLines) {
+                    this.element.innerHTML = lines.slice(-this.maxLines).join('<br>');
+                }
+            }
+            
+            _scrollToBottom() {
+                this.element.scrollTop = this.element.scrollHeight;
+            }
+            
+            onData(handler) {
+                this.inputHandler = handler;
+            }
+            
+            focus() {
+                this.element.focus();
+            }
+            
+            clear() {
+                this.element.innerHTML = '';
+            }
+        }
+        
+        // Initialize terminal
+        function initTerminal() {
+            terminal = new NativeTerminal(document.getElementById('terminal'));
+            
+            // Setup keyboard input
+            document.addEventListener('keydown', handleKeyPress);
+            
+            // Show welcome message
+            if (CONSOLE_TYPE === 'ssh') {
+                terminal.writeln('\x1b[1;36m╔════════════════════════════════════════════════╗\x1b[0m');
+                terminal.writeln('\x1b[1;36m║         Interactive SSH Terminal              ║\x1b[0m');
+                terminal.writeln('\x1b[1;36m╚════════════════════════════════════════════════╝\x1b[0m');
+            } else {
+                terminal.writeln('\x1b[1;32m╔════════════════════════════════════════════════╗\x1b[0m');
+                terminal.writeln('\x1b[1;32m║         Game Server Console                    ║\x1b[0m');
+                terminal.writeln('\x1b[1;32m╚════════════════════════════════════════════════╝\x1b[0m');
+            }
+            terminal.writeln('');
+            terminal.writeln('Connecting...');
+            terminal.writeln('');
+            
+            // Auto-connect after terminal is ready
+            setTimeout(connectWebSocket, 100);
+        }
+        
+        // Handle keyboard input
+        function handleKeyPress(e) {
+            if (!terminal.inputHandler) return;
+            
+            if (e.key === 'Enter') {
+                terminal.inputHandler('\r');
+            } else if (e.key === 'Backspace') {
+                terminal.inputHandler('\b');
+            } else if (e.key.length === 1) {
+                terminal.inputHandler(e.key);
+            }
+        }
+        
+        // Connect to WebSocket
+        function connectWebSocket() {
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const endpoint = CONSOLE_TYPE === 'ssh' ? 'ssh-console' : 'game-console';
+                const wsUrl = `${protocol}//${window.location.host}/servers/${SERVER_ID}/${endpoint}`;
+                
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    wsReconnectAttempts = 0;
+                    terminal.writeln('\x1b[32m✓ Connected\x1b[0m');
+                    terminal.writeln('');
+                };
+                
+                ws.onmessage = (event) => {
+                    handleMessage(event.data);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    terminal.writeln('\x1b[31m✗ Connection error\x1b[0m');
+                };
+                
+                ws.onclose = () => {
+                    terminal.writeln('\r\n\x1b[33m✗ Disconnected\x1b[0m\r\n');
+                    
+                    // Auto-reconnect
+                    if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        wsReconnectAttempts++;
+                        terminal.writeln(`Reconnecting (attempt ${wsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+                        setTimeout(connectWebSocket, 2000);
+                    } else {
+                        terminal.writeln('Reconnection failed. Please refresh the page.');
+                    }
+                };
+                
+            } catch (error) {
+                console.error('Failed to create WebSocket:', error);
+                terminal.writeln('\x1b[31mFailed to establish connection\x1b[0m');
+            }
+        }
+        
+        // Handle WebSocket messages
+        function handleMessage(data) {
+            try {
+                const msg = JSON.parse(data);
+                
+                switch (msg.type) {
+                    case 'connected':
+                        terminal.writeln(`\x1b[32m${msg.message}\x1b[0m`);
+                        terminal.writeln('');
+                        
+                        // Set up input handler after connected
+                        terminal.onData((input) => {
+                            sendInput(input);
+                        });
+                        
+                        // Focus terminal
+                        terminal.focus();
+                        break;
+                        
+                    case 'output':
+                        let output = msg.data;
+                        // For game console, convert newlines
+                        if (CONSOLE_TYPE === 'game' && output.includes('\n') && !output.includes('\r\n')) {
+                            output = output.replace(/\n/g, '\r\n');
+                        }
+                        terminal.write(output);
+                        break;
+                        
+                    case 'error':
+                        terminal.writeln(`\r\n\x1b[31m✗ ${msg.message}\x1b[0m\r\n`);
+                        break;
+                        
+                    case 'warning':
+                        terminal.writeln(`\r\n\x1b[33m⚠ ${msg.data || msg.message}\x1b[0m\r\n`);
+                        break;
+                        
+                    case 'pong':
+                        // Heartbeat acknowledged
+                        break;
+                        
+                    default:
+                        console.log('Unknown message type:', msg.type);
+                }
+            } catch (e) {
+                // Not JSON, write as raw text
+                terminal.write(data);
+            }
+        }
+        
+        // Send input to server
+        function sendInput(data) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({
+                        type: 'input',
+                        data: data
+                    }));
+                } catch (e) {
+                    console.error('Failed to send input:', e);
+                }
+            }
+        }
+        
+        // Cleanup on close
+        window.addEventListener('beforeunload', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({ type: 'disconnect' }));
+                    ws.close();
+                } catch (e) {
+                    // Ignore errors during cleanup
+                }
+            }
+        });
+        
+        // Initialize when page loads
+        window.addEventListener('load', initTerminal);
+    </script>
+</body>
+</html>

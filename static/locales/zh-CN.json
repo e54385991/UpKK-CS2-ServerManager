@@ -336,7 +336,8 @@
     "failed": "失败",
     "none": "无",
     "seconds": "秒",
-    "hours": "小时"
+    "hours": "小时",
+    "fileManager": "文件管理器"
   },
   "setupWizard": {
     "title": "新服务器初始化",
@@ -498,5 +499,41 @@
       "connecting": "连接中"
     },
     "initialMessage": "输入服务器 ID 并连接以开始监控..."
+  },
+  "fileManager": {
+    "title": "文件管理器",
+    "name": "名称",
+    "size": "大小",
+    "modified": "修改时间",
+    "newFolder": "新建文件夹",
+    "upload": "上传",
+    "download": "下载",
+    "delete": "删除",
+    "rename": "重命名",
+    "edit": "编辑",
+    "editFile": "编辑文件",
+    "newName": "新名称",
+    "folderName": "文件夹名称",
+    "parentDirectory": "上级目录",
+    "emptyFolder": "此文件夹为空",
+    "uploadSuccess": "文件上传成功",
+    "downloadSuccess": "文件下载成功",
+    "deleteSuccess": "删除成功",
+    "renameSuccess": "重命名成功",
+    "createFolderSuccess": "文件夹创建成功",
+    "saveSuccess": "文件保存成功",
+    "errorLoading": "加载文件错误",
+    "errorUploading": "上传文件错误",
+    "errorDownloading": "下载文件错误",
+    "errorDeleting": "删除错误",
+    "errorRenaming": "重命名错误",
+    "errorCreatingFolder": "创建文件夹错误",
+    "errorSaving": "保存文件错误",
+    "confirmDelete": "确定要删除此",
+    "file": "文件",
+    "folder": "文件夹",
+    "submitting": "提交中...",
+    "saved": "已保存！",
+    "uploading": "上传中"
   }
 }

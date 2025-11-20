@@ -12,7 +12,7 @@ import os
 
 from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse
 from services import redis_manager
-from api.routes import servers, actions, setup, auth, server_status, public, captcha
+from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager
 
 # Create FastAPI app
 app = FastAPI(
@@ -39,6 +39,7 @@ app.include_router(servers.router)
 app.include_router(actions.router)
 app.include_router(setup.router)
 app.include_router(server_status.router)
+app.include_router(file_manager.router)
 
 
 @app.on_event("startup")
@@ -161,6 +162,69 @@ async def server_detail_ui(request: Request, server_id: int):
             "server": server,  # Pass original SQLAlchemy object for template attribute access
             "server_json": server_json  # Pass JSON string for JavaScript
         })
+
+
+@app.get("/servers/{server_id}/console-popup/{console_type}", response_class=HTMLResponse)
+async def console_popup(request: Request, server_id: int, console_type: str):
+    """Console popup window"""
+    from modules.database import async_session_maker
+    
+    async with async_session_maker() as db:
+        result = await db.execute(select(Server).filter(Server.id == server_id))
+        server = result.scalar_one_or_none()
+        
+        if not server:
+            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
+    
+    return templates.TemplateResponse("console_popup.html", {
+        "request": request,
+        "server_id": server_id,
+        "console_type": console_type.upper()
+    })
+
+
+@app.get("/servers/{server_id}/file-editor-popup", response_class=HTMLResponse)
+async def file_editor_popup(request: Request, server_id: int, file_path: str, file_name: str):
+    """File editor popup window"""
+    from modules.database import async_session_maker
+    
+    async with async_session_maker() as db:
+        result = await db.execute(select(Server).filter(Server.id == server_id))
+        server = result.scalar_one_or_none()
+        
+        if not server:
+            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
+    
+    # Fetch file content
+    from services.ssh_manager import SSHManager
+    ssh_manager = SSHManager()
+    success, msg = await ssh_manager.connect(server)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to server: {msg}")
+    
+    try:
+        # Read file content - execute_command returns (success, stdout, stderr)
+        success, stdout, stderr = await ssh_manager.execute_command(f"cat {file_path}")
+        
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Failed to read file: {stderr}")
+        
+        file_content = stdout
+        
+        # Escape content for safe JavaScript embedding
+        file_content = file_content.replace('\\', '\\\\').replace('`', '\\`').replace('${', '\\${')
+        
+    finally:
+        await ssh_manager.disconnect()
+    
+    return templates.TemplateResponse("file_editor_popup.html", {
+        "request": request,
+        "server_id": server_id,
+        "file_path": file_path,
+        "file_name": file_name,
+        "file_content": file_content
+    })
 
 
 @app.get("/setup-wizard", response_class=HTMLResponse)
