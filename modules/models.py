@@ -146,3 +146,22 @@ class MonitoringLog(Base):
     
     def __repr__(self):
         return f"<MonitoringLog(id={self.id}, server_id={self.server_id}, event_type='{self.event_type}', status='{self.status}')>"
+
+
+class InitializedServer(Base):
+    """Initialized server configuration from setup wizard"""
+    __tablename__ = "initialized_servers"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)  # User-friendly name for this server
+    host = Column(String(255), nullable=False)
+    ssh_port = Column(Integer, default=22)
+    ssh_user = Column(String(100), nullable=False)  # Usually cs2server from setup wizard
+    ssh_password = Column(String(255), nullable=False)  # Password set during initialization
+    game_directory = Column(String(500), default="/home/cs2server/cs2")  # Game directory from setup
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<InitializedServer(id={self.id}, user_id={self.user_id}, name='{self.name}', host='{self.host}')>"

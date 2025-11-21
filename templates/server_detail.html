@@ -78,6 +78,20 @@
         opacity: 1 !important;
     }
     
+    /* Prevent rename modal flicker - disable transitions */
+    #renameModal,
+    #renameModal *,
+    #renameModal.fade .modal-dialog {
+        transition: none !important;
+        -webkit-transition: none !important;
+        animation: none !important;
+        -webkit-animation: none !important;
+    }
+    
+    #renameModal.show {
+        opacity: 1 !important;
+    }
+    
     /* Prevent Alpine.js from causing reflows on hover */
     #fileEditorModal [x-show],
     #fileEditorModal [x-text],
@@ -256,8 +270,10 @@
                                         <h6 class="text-muted" data-i18n="serverDetail.details">Details</h6>
                                         <ul class="list-unstyled">
                                             <li><i class="bi bi-shield-check"></i> <strong
-                                                    data-i18n="serverDetail.authType">Auth Type:</strong> {{
-                                                server.auth_type }}</li>
+                                                    data-i18n="serverDetail.authType">Auth Type:</strong> 
+                                                <span data-i18n="{% if server.auth_type == 'password' %}common.password{% else %}servers.authKeyOption{% endif %}">
+                                                    {% if server.auth_type == 'password' %}Password{% else %}SSH Key File{% endif %}
+                                                </span></li>
                                             <li><i class="bi bi-calendar"></i> <strong
                                                     data-i18n="serverDetail.created">Created:</strong> {{
                                                 server.created_at.strftime('%Y-%m-%d %H:%M') if server.created_at else
@@ -272,6 +288,25 @@
                                         </ul>
                                     </div>
                                 </div>
+                                
+                                <!-- Deploy Alert for Undeployed Servers -->
+                                {% if not server.last_deployed %}
+                                <div class="alert alert-warning mt-3" role="alert">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-exclamation-triangle-fill me-2" style="font-size: 1.5rem;"></i>
+                                        <div class="flex-grow-1">
+                                            <h6 class="alert-heading mb-1" data-i18n="serverDetail.notDeployed">Server Not Deployed</h6>
+                                            <p class="mb-0 small" data-i18n="serverDetail.notDeployedMessage">
+                                                This server has not been deployed yet. Deploy it to install CS2 and start using it.
+                                            </p>
+                                        </div>
+                                        <button @click="$el.closest('.tab-content').querySelector('#actions-tab').click(); setTimeout(() => executeAction('deploy'), 100)" 
+                                                class="btn btn-warning">
+                                            <i class="bi bi-cloud-download"></i> <span data-i18n="serverDetail.deployNow">Deploy Now</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% endif %}
                             </div>
 
                             <!-- Edit Mode -->
@@ -545,6 +580,113 @@
                                         </button>
                                         <button type="button" class="btn btn-secondary" @click="showConfigEdit = false"
                                             data-i18n="serverDetail.cancel">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Auto-Update Configuration Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-cloud-arrow-down"></i> <span
+                                    data-i18n="serverDetail.autoUpdate">Server Auto-Update</span></h5>
+                            <button @click="showAutoUpdateEdit = !showAutoUpdateEdit"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> <span
+                                    x-text="showAutoUpdateEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div x-show="!showAutoUpdateEdit" x-cloak>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.autoUpdateSettings">Auto-Update Settings</h6>
+                                        <ul class="list-unstyled">
+                                            <li>
+                                                <i
+                                                    :class="server.enable_auto_update ? 'bi bi-check-circle text-success' : 'bi bi-x-circle text-secondary'"></i>
+                                                <strong data-i18n="serverDetail.autoUpdateLabel">Auto-Update:</strong>
+                                                <span
+                                                    x-text="server.enable_auto_update ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') : (window.i18n?.t('serverDetail.disabled') || 'Disabled')"
+                                                    :class="server.enable_auto_update ? 'text-success fw-bold' : 'text-secondary'"></span>
+                                            </li>
+                                            <li><i class="bi bi-clock-history"></i> <strong
+                                                    data-i18n="serverDetail.updateCheckInterval">Update Check Interval:</strong>
+                                                <span x-text="server.update_check_interval_hours || 1"></span> <span
+                                                    data-i18n="serverDetail.hours">hour(s)</span></li>
+                                            <li><i class="bi bi-code-square"></i> <strong
+                                                    data-i18n="serverDetail.currentVersion">Current Version:</strong>
+                                                <span x-text="server.current_game_version || 'Unknown'"></span></li>
+                                            <li>
+                                                <i class="bi bi-calendar-check"></i>
+                                                <strong data-i18n="serverDetail.lastUpdateCheck">Last Update Check:</strong>
+                                                <span
+                                                    x-text="server.last_update_check ? new Date(server.last_update_check).toLocaleString() : (window.i18n?.t('serverDetail.never') || 'Never')"></span>
+                                            </li>
+                                            <li>
+                                                <i class="bi bi-calendar-check"></i>
+                                                <strong data-i18n="serverDetail.lastUpdated">Last Updated:</strong>
+                                                <span
+                                                    x-text="server.last_update_time ? new Date(server.last_update_time).toLocaleString() : (window.i18n?.t('serverDetail.never') || 'Never')"></span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="alert alert-info" role="alert">
+                                            <i class="bi bi-info-circle"></i> <strong data-i18n="serverDetail.autoUpdate">Auto-Update:</strong> <span data-i18n="serverDetail.autoUpdateInfo">The system automatically checks for CS2 updates based on Steam API version data and updates the server when a new version is available.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div x-show="showAutoUpdateEdit" x-cloak>
+                                <form @submit.prevent="saveAutoUpdate()">
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox"
+                                                    id="enableAutoUpdate"
+                                                    x-model="autoUpdateForm.enable_auto_update">
+                                                <label class="form-check-label" for="enableAutoUpdate">
+                                                    <strong data-i18n="serverDetail.enableAutoUpdate">Enable Auto-Update</strong>
+                                                    <small class="d-block text-muted" data-i18n="serverDetail.autoUpdateHint">Automatically update server when new CS2 version is available</small>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-6" x-show="autoUpdateForm.enable_auto_update">
+                                            <label class="form-label">
+                                                <span data-i18n="serverDetail.updateCheckInterval">Update Check Interval</span>
+                                                <span class="badge bg-secondary"
+                                                    x-text="autoUpdateForm.update_check_interval_hours + 'h'"></span>
+                                            </label>
+                                            <input type="range" class="form-range"
+                                                x-model.number="autoUpdateForm.update_check_interval_hours" min="1"
+                                                max="24" step="1">
+                                            <small class="text-muted" data-i18n="serverDetail.updateCheckIntervalHint">How often to check for updates (1-24 hours)</small>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <div class="alert alert-warning mb-0" role="alert">
+                                                <i class="bi bi-exclamation-triangle"></i> <strong data-i18n="common.note">Note:</strong>
+                                                <small class="d-block" data-i18n="serverDetail.autoUpdateWarning">Auto-updates will only occur when a new Steam version is detected. The server will be restarted after the update.</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingAutoUpdate">
+                                            <span x-show="!savingAutoUpdate"><i class="bi bi-save"></i> <span data-i18n="serverDetail.saveAutoUpdateSettings">Save Auto-Update Settings</span></span>
+                                            <span x-show="savingAutoUpdate"><span
+                                                    class="spinner-border spinner-border-sm"></span> <span data-i18n="serverDetail.saving">Saving...</span></span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary"
+                                            @click="showAutoUpdateEdit = false" data-i18n="serverDetail.cancel">
                                             Cancel
                                         </button>
                                     </div>
@@ -1311,6 +1453,29 @@
 
                 <!-- Console & Logs Tab -->
                 <div class="tab-pane fade" id="console" role="tabpanel">
+                    <!-- Console Access Buttons -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-terminal"></i> <span
+                                    data-i18n="serverDetail.consoleAccess">Console Access</span></h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">
+                                <i class="bi bi-info-circle"></i> Open interactive console in a new popup window
+                            </p>
+                            <div class="d-flex gap-2">
+                                <button @click="connectSSHConsole()" class="btn btn-primary">
+                                    <i class="bi bi-terminal-fill"></i> <span
+                                        data-i18n="serverDetail.openSSHConsole">Open SSH Console</span>
+                                </button>
+                                <button @click="connectGameConsole()" class="btn btn-success">
+                                    <i class="bi bi-controller"></i> <span
+                                        data-i18n="serverDetail.openGameConsole">Open Game Console</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Live Logs -->
                     <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
@@ -1332,85 +1497,6 @@
                                     <span class="log-status">[<span data-i18n="serverDetail.ready">Ready</span>] <span
                                             data-i18n="serverDetail.waitingForOperations">Waiting for
                                             operations...</span></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Interactive Consoles -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <ul class="nav nav-tabs card-header-tabs" role="tablist">
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link active" id="ssh-console-tab" data-bs-toggle="tab"
-                                        data-bs-target="#ssh-console" type="button" role="tab">
-                                        <i class="bi bi-terminal-fill"></i> <span
-                                            data-i18n="serverDetail.sshConsole">SSH Console</span>
-                                    </button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="game-console-tab" data-bs-toggle="tab"
-                                        data-bs-target="#game-console" type="button" role="tab">
-                                        <i class="bi bi-controller"></i> <span data-i18n="serverDetail.gameConsole">Game
-                                            Console</span>
-                                    </button>
-                                </li>
-                            </ul>
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="tab-content">
-                                <!-- SSH Console Tab -->
-                                <div class="tab-pane fade show active" id="ssh-console" role="tabpanel">
-                                    <div
-                                        class="console-header p-2 bg-dark text-white d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <span x-show="!sshConsoleConnected" class="badge bg-danger"
-                                                data-i18n="serverDetail.disconnected">Disconnected</span>
-                                            <span x-show="sshConsoleConnected" class="badge bg-success"
-                                                data-i18n="serverDetail.connected">Connected</span>
-                                            <small class="ms-2 text-muted">Interactive SSH Terminal - Type directly</small>
-                                        </div>
-                                        <div>
-                                            <button @click="connectSSHConsole()" :disabled="sshConsoleConnected"
-                                                class="btn btn-sm btn-success">
-                                                <i class="bi bi-power"></i> <span
-                                                    data-i18n="serverDetail.connect">Connect</span>
-                                            </button>
-                                            <button @click="disconnectSSHConsole()" :disabled="!sshConsoleConnected"
-                                                class="btn btn-sm btn-danger">
-                                                <i class="bi bi-x-circle"></i> <span
-                                                    data-i18n="serverDetail.disconnect">Disconnect</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="terminal-container" id="sshTerminal"></div>
-                                </div>
-
-                                <!-- Game Console Tab -->
-                                <div class="tab-pane fade" id="game-console" role="tabpanel">
-                                    <div
-                                        class="console-header p-2 bg-dark text-white d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <span x-show="!gameConsoleConnected" class="badge bg-danger"
-                                                data-i18n="serverDetail.disconnected">Disconnected</span>
-                                            <span x-show="gameConsoleConnected" class="badge bg-success"
-                                                data-i18n="serverDetail.connected">Connected</span>
-                                            <small class="ms-2 text-muted">Interactive Console - Type commands directly</small>
-                                        </div>
-                                        <div>
-                                            <button @click="connectGameConsole()" :disabled="gameConsoleConnected"
-                                                class="btn btn-sm btn-success">
-                                                <i class="bi bi-power"></i> <span
-                                                    data-i18n="serverDetail.connect">Connect</span>
-                                            </button>
-                                            <button @click="disconnectGameConsole()" :disabled="!gameConsoleConnected"
-                                                class="btn btn-sm btn-danger">
-                                                <i class="bi bi-x-circle"></i> <span
-                                                    data-i18n="serverDetail.disconnect">Disconnect</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="terminal-container" id="gameTerminal"></div>
                                 </div>
                             </div>
                         </div>
@@ -1993,13 +2079,15 @@
                                             savingServerInfo: false,
                                                 showMonitoringEdit: false,
                                                     savingMonitoring: false,
-                                                        statusCheckLogs: [],
-                                                            autoRestartLogs: [],
-                                                                a2sCheckLogs: [],
-                                                                    loadingStatusLogs: false,
-                                                                        loadingRestartLogs: false,
-                                                                            loadingA2SCheckLogs: false,
-                                                                                pluginSelection: {
+                                                        showAutoUpdateEdit: false,
+                                                            savingAutoUpdate: false,
+                                                                statusCheckLogs: [],
+                                                                    autoRestartLogs: [],
+                                                                        a2sCheckLogs: [],
+                                                                            loadingStatusLogs: false,
+                                                                                loadingRestartLogs: false,
+                                                                                    loadingA2SCheckLogs: false,
+                                                                                        pluginSelection: {
             metamod: false,
                 counterstrikesharp: false
         },
@@ -2034,6 +2122,10 @@
                     auto_restart_on_crash: true,
                         auto_clear_crash_hours: null
         },
+        autoUpdateForm: {
+            enable_auto_update: true,
+            update_check_interval_hours: 1
+        },
         // A2S Query
         showA2SEdit: false,
             savingA2SConfig: false,
@@ -2051,6 +2143,7 @@
             this.loadConfigForm();
             this.loadServerEditForm();
             this.loadMonitoringForm();
+            this.loadAutoUpdateForm();
             this.loadA2SConfigForm();
             this.connectWebSocket();
             await this.loadHistory();
@@ -2241,6 +2334,46 @@
                 this.addLog('error', `Error: ${err.message}`);
             } finally {
                 this.savingMonitoring = false;
+            }
+        },
+        
+        loadAutoUpdateForm() {
+            // Load current auto-update settings into edit form
+            this.autoUpdateForm = {
+                enable_auto_update: this.server.enable_auto_update !== undefined ? this.server.enable_auto_update : true,
+                update_check_interval_hours: this.server.update_check_interval_hours || 1
+            };
+        },
+        
+        async saveAutoUpdate() {
+            this.savingAutoUpdate = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.autoUpdateForm)
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showAutoUpdateEdit = false;
+
+                    if (updated.enable_auto_update) {
+                        this.addLog('complete', 'Auto-update enabled and configured successfully');
+                    } else {
+                        this.addLog('complete', 'Auto-update disabled successfully');
+                    }
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save auto-update settings: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingAutoUpdate = false;
             }
         },
         

@@ -2,15 +2,15 @@
 FastAPI application for CS2 Server Manager
 Main entry point with organized structure
 """
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import os
 
-from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse
+from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse, get_optional_current_user, User
 from services import redis_manager
 from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager
 
@@ -265,8 +265,9 @@ async def file_editor_popup(request: Request, server_id: int, file_path: str, fi
 
 @app.get("/setup-wizard", response_class=HTMLResponse)
 async def setup_wizard(request: Request):
-    """Server setup wizard UI"""
+    """Server setup wizard UI - authentication checked client-side"""
     return templates.TemplateResponse("server_setup_wizard.html", {"request": request})
+
 
 
 @app.get("/profile", response_class=HTMLResponse)

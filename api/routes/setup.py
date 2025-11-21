@@ -1,31 +1,62 @@
 """
 Server setup automation routes
 """
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
-from typing import Optional, Tuple
+from fastapi import APIRouter, HTTPException, status, Depends
+from pydantic import BaseModel, Field
+from typing import Optional, Tuple, List
+from sqlalchemy.ext.asyncio import AsyncSession
 import asyncssh
 import secrets
 import string
+import time
 
 from services.captcha_service import captcha_service
+from services.redis_manager import redis_manager
+from modules import get_current_active_user, User
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
 
+# Redis-based schemas
+class RedisServerListItem(BaseModel):
+    """Schema for Redis-stored server in list (without password)"""
+    key: str = Field(..., description="Redis key for this server")
+    name: str
+    host: str
+    ssh_port: int
+    ssh_user: str
+    game_directory: str
+    created_at: float = Field(..., description="Unix timestamp")
+
+
+class RedisServerDetail(BaseModel):
+    """Schema for Redis-stored server detail (with password)"""
+    user_id: int
+    name: str
+    host: str
+    ssh_port: int
+    ssh_user: str
+    ssh_password: str
+    game_directory: str
+    created_at: float = Field(..., description="Unix timestamp")
+
+
+
+
 class ServerSetupRequest(BaseModel):
-    """Request model for automated server setup"""
+    """Request model for automated server setup (password authentication only)"""
+    name: str  # Friendly name for the server
     host: str
     ssh_port: int = 22
     ssh_user: str  # Can be root or regular user with sudo access
-    ssh_password: Optional[str] = None
-    ssh_key_path: Optional[str] = None
+    ssh_password: str  # SSH password (required, key-based auth not supported)
     sudo_password: Optional[str] = None  # Required if ssh_user is not root and sudo needs password
     cs2_username: str = "cs2server"  # User to create for CS2
     cs2_password: Optional[str] = None  # If None, will auto-generate
     auto_sudo: bool = True  # Automatically use sudo for non-root users
     captcha_token: str  # CAPTCHA token from /api/captcha/generate
     captcha_code: str  # User-entered CAPTCHA code
+    save_config: bool = True  # Whether to save the initialized server config
 
 
 class ServerSetupResponse(BaseModel):
@@ -36,6 +67,7 @@ class ServerSetupResponse(BaseModel):
     cs2_password: str
     game_directory: str
     logs: list[str]
+    initialized_server_id: Optional[str] = None  # Redis key of saved server if save_config is True
 
 
 def generate_secure_password(length: int = 16) -> str:
@@ -73,7 +105,10 @@ async def run_sudo_command(conn: asyncssh.SSHClientConnection, command: str,
 
 
 @router.post("/auto-setup", response_model=ServerSetupResponse)
-async def auto_setup_server(setup_req: ServerSetupRequest):
+async def auto_setup_server(
+    setup_req: ServerSetupRequest,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Automatically setup a server for CS2 deployment
     
@@ -84,11 +119,14 @@ async def auto_setup_server(setup_req: ServerSetupRequest):
     4. Creates a dedicated CS2 user
     5. Sets up the game directory
     6. Returns credentials for CS2 Manager to use
+    7. Optionally saves the initialized server configuration for reuse
     
     Supports:
     - Root user login (no sudo needed)
     - Regular user with passwordless sudo
     - Regular user with password sudo (requires sudo_password)
+    
+    **Authentication Required**: User must be logged in to use this endpoint.
     """
     # Validate CAPTCHA first
     is_valid = await captcha_service.validate_captcha(setup_req.captcha_token, setup_req.captcha_code)
@@ -108,37 +146,24 @@ async def auto_setup_server(setup_req: ServerSetupRequest):
         logs.append(f"正在连接到 {setup_req.host}:{setup_req.ssh_port} (用户: {setup_req.ssh_user})...")
         
         # Connect to server
-        if setup_req.ssh_password:
-            conn = await asyncssh.connect(
-                host=setup_req.host,
-                port=setup_req.ssh_port,
-                username=setup_req.ssh_user,
-                password=setup_req.ssh_password,
-                known_hosts=None
-            )
-        elif setup_req.ssh_key_path:
-            conn = await asyncssh.connect(
-                host=setup_req.host,
-                port=setup_req.ssh_port,
-                username=setup_req.ssh_user,
-                client_keys=[setup_req.ssh_key_path],
-                known_hosts=None
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="必须提供 SSH 密码或密钥文件"
-            )
+        # Connect using password authentication only
+        conn = await asyncssh.connect(
+            host=setup_req.host,
+            port=setup_req.ssh_port,
+            username=setup_req.ssh_user,
+            password=setup_req.ssh_password,
+            known_hosts=None
+        )
         
         logs.append("✓ SSH 连接成功")
         
         # Detect if we need sudo
         result = await conn.run("whoami", check=False)
-        current_user = result.stdout.strip()
-        needs_sudo = current_user != "root"
+        ssh_current_user = result.stdout.strip()
+        needs_sudo = ssh_current_user != "root"
         
         if needs_sudo:
-            logs.append(f"检测到非 root 用户 ({current_user})，将使用 sudo")
+            logs.append(f"检测到非 root 用户 ({ssh_current_user})，将使用 sudo")
             
             # If sudo_password not provided, try to use ssh_password
             sudo_pass = setup_req.sudo_password
@@ -281,13 +306,41 @@ async def auto_setup_server(setup_req: ServerSetupRequest):
         logs.append("✓ 服务器环境设置完成！")
         logs.append("=" * 50)
         
+        # Save initialized server configuration to Redis if requested (24-hour expiration)
+        initialized_server_id = None
+        if setup_req.save_config:
+            try:
+                logs.append("保存服务器配置到 Redis...")
+                # Note: We save the CS2 user credentials (cs2server), not the SSH login credentials
+                # This allows quick-fill when adding CS2 servers later
+                server_data = {
+                    'user_id': current_user.id,
+                    'name': setup_req.name,
+                    'host': setup_req.host,
+                    'ssh_port': setup_req.ssh_port,
+                    'ssh_user': setup_req.cs2_username,  # CS2 user (e.g., cs2server)
+                    'ssh_password': cs2_password,  # CS2 user's password (auto-generated)
+                    'game_directory': game_dir,
+                    'created_at': time.time()
+                }
+                server_key = await redis_manager.set_initialized_server(current_user.id, server_data)
+                initialized_server_id = server_key
+                logs.append(f"✓ 服务器配置已保存到 Redis (用户: {setup_req.cs2_username}, 24小时有效期)")
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                logs.append(f"⚠ 保存配置失败: {str(e)}")
+                logs.append(f"错误详情: {error_details}")
+                # Don't fail the whole operation if saving fails
+        
         return ServerSetupResponse(
             success=True,
             message="服务器环境设置成功",
             cs2_username=setup_req.cs2_username,
             cs2_password=cs2_password,
             game_directory=game_dir,
-            logs=logs
+            logs=logs,
+            initialized_server_id=initialized_server_id
         )
         
     except asyncssh.PermissionDenied:
@@ -314,3 +367,96 @@ async def auto_setup_server(setup_req: ServerSetupRequest):
         if conn:
             conn.close()
             await conn.wait_closed()
+
+
+@router.get("/initialized-servers", response_model=List[RedisServerListItem])
+async def list_initialized_servers(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    List all initialized servers for the current user from Redis (without sensitive credentials)
+    
+    **Authentication Required**: User must be logged in.
+    Note: Data stored in Redis with 24-hour expiration.
+    """
+    servers = await redis_manager.get_initialized_servers(current_user.id)
+    
+    # Remove sensitive data from list response
+    safe_servers = []
+    for server in servers:
+        safe_server = RedisServerListItem(
+            key=server.get('key'),
+            name=server.get('name'),
+            host=server.get('host'),
+            ssh_port=server.get('ssh_port'),
+            ssh_user=server.get('ssh_user'),
+            game_directory=server.get('game_directory'),
+            created_at=server.get('created_at')
+        )
+        safe_servers.append(safe_server)
+    
+    return safe_servers
+
+
+@router.delete("/initialized-servers/{server_key:path}")
+async def delete_initialized_server(
+    server_key: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Delete an initialized server configuration from Redis
+    
+    **Authentication Required**: User must be logged in and own the server.
+    """
+    # Verify ownership by checking if server belongs to user
+    server_data = await redis_manager.get_initialized_server(server_key)
+    
+    if not server_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initialized server not found or already expired"
+        )
+    
+    if server_data.get('user_id') != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this server configuration"
+        )
+    
+    success = await redis_manager.delete_initialized_server(current_user.id, server_key)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete server configuration"
+        )
+    
+    return {"success": True, "message": "Initialized server deleted successfully"}
+
+
+@router.get("/initialized-servers/{server_key:path}", response_model=RedisServerDetail)
+async def get_initialized_server(
+    server_key: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get a specific initialized server configuration from Redis (including credentials)
+    
+    **Authentication Required**: User must be logged in and own the server.
+    """
+    server_data = await redis_manager.get_initialized_server(server_key)
+    
+    if not server_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initialized server not found or expired (24-hour limit)"
+        )
+    
+    if server_data.get('user_id') != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this server configuration"
+        )
+    
+    return RedisServerDetail(**server_data)
+

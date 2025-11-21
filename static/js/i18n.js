@@ -9,6 +9,10 @@ class I18n {
         this.translations = {};
         this.fallbackLocale = 'en-US';
         this.supportedLocales = ['en-US', 'zh-CN'];
+        // Version for cache busting - update when translations change
+        this.version = '1.0.4';
+        // Track if translations are loaded
+        this.isInitialized = false;
     }
 
     /**
@@ -26,11 +30,17 @@ class I18n {
         // Set the locale
         await this.setLocale(savedLocale);
         
+        // Mark as initialized
+        this.isInitialized = true;
+        
         // Apply translations to the page
         this.applyTranslations();
         
         // Watch for dynamic content changes
         this.observeDOMChanges();
+        
+        // Dispatch initialization complete event for Alpine.js and other components
+        window.dispatchEvent(new CustomEvent('i18nReady', { detail: { locale: this.currentLocale } }));
     }
 
     /**
@@ -93,7 +103,8 @@ class I18n {
      */
     async loadTranslations(locale) {
         try {
-            const response = await fetch(`/static/locales/${locale}.json`);
+            // Add version parameter for cache busting
+            const response = await fetch(`/static/locales/${locale}.json?v=${this.version}`);
             if (!response.ok) {
                 throw new Error(`Failed to load locale: ${locale}`);
             }
@@ -114,6 +125,12 @@ class I18n {
      * @param {object} params - Optional parameters for string interpolation
      */
     t(key, params = {}) {
+        // If not initialized yet, return undefined to allow fallbacks in expressions
+        // This prevents showing raw keys like "serverDetail.none" before translations load
+        if (!this.isInitialized) {
+            return undefined;
+        }
+        
         const keys = key.split('.');
         let value = this.translations[this.currentLocale];
         
@@ -141,7 +158,7 @@ class I18n {
             value = fallbackValue;
         }
         
-        // Return key if no translation found
+        // Return key if no translation found (only warn after initialization)
         if (value === undefined) {
             console.warn(`Translation not found for key: ${key}`);
             return key;

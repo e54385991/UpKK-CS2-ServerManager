@@ -246,6 +246,20 @@
                     </a>
                 </div>
                 
+                <!-- Initialized Server Selection -->
+                <div class="alert alert-success mb-3">
+                    <h6><i class="bi bi-server"></i> <span data-i18n="servers.quickFillTitle">快速填写</span></h6>
+                    <p class="small mb-2" data-i18n="servers.quickFillDescription">从已保存的服务器配置中选择以快速填写 SSH 信息</p>
+                    <select class="form-select form-select-sm" id="initializedServerSelect" onchange="fillFromInitializedServer(this.value)">
+                        <option value="" data-i18n="servers.selectServer">-- 选择服务器 --</option>
+                    </select>
+                    <small class="text-muted" id="noInitializedServersMsg" style="display: none;">
+                        <span data-i18n="servers.noSavedServers">
+                            暂无保存的服务器配置。请先在 <a href="/setup-wizard">设置向导</a> 中初始化服务器并保存配置。
+                        </span>
+                    </small>
+                </div>
+                
                 <form id="addServerForm">
                     <div class="row g-3">
                         <div class="col-md-6">
@@ -275,16 +289,11 @@
                             <label for="authType" class="form-label" data-i18n="servers.authTypeLabel">Auth Type *</label>
                             <select class="form-select" id="authType" onchange="toggleAuthFields()">
                                 <option value="password" selected data-i18n="servers.authPasswordOption">Password</option>
-                                <option value="key_file" data-i18n="servers.authKeyOption">SSH Key File</option>
                             </select>
                         </div>
                         <div class="col-md-6" id="passwordField">
                             <label for="sshPassword" class="form-label" data-i18n="servers.sshPasswordLabel">SSH Password *</label>
                             <input type="password" class="form-control" id="sshPassword">
-                        </div>
-                        <div class="col-md-6" id="keyFileField" style="display: none;">
-                            <label for="sshKeyPath" class="form-label" data-i18n="servers.sshKeyPathLabel">SSH Key Path *</label>
-                            <input type="text" class="form-control" id="sshKeyPath" placeholder="/path/to/key.pem">
                         </div>
                         <div class="col-12">
                             <label for="gameDirectory" class="form-label" data-i18n="servers.gameDirectoryLabel">Game Directory *</label>
@@ -700,20 +709,12 @@ function serverManager() {
 }
 
 function toggleAuthFields() {
-    const authType = document.getElementById('authType').value;
+    // Only password authentication is supported for quick-fill servers
+    // Auth type is always 'password', so just ensure password field is visible
     const passwordField = document.getElementById('passwordField');
-    const keyFileField = document.getElementById('keyFileField');
-    
-    if (authType === 'password') {
+    if (passwordField) {
         passwordField.style.display = 'block';
-        keyFileField.style.display = 'none';
         document.getElementById('sshPassword').required = true;
-        document.getElementById('sshKeyPath').required = false;
-    } else {
-        passwordField.style.display = 'none';
-        keyFileField.style.display = 'block';
-        document.getElementById('sshPassword').required = false;
-        document.getElementById('sshKeyPath').required = true;
     }
 }
 
@@ -736,8 +737,11 @@ async function loadServerCaptcha() {
 document.getElementById('refresh-server-captcha')?.addEventListener('click', loadServerCaptcha);
 document.getElementById('server-captcha-image')?.addEventListener('click', loadServerCaptcha);
 
-// Load CAPTCHA when modal is shown
-document.getElementById('addServerModal')?.addEventListener('shown.bs.modal', loadServerCaptcha);
+// Load CAPTCHA and initialized servers when modal is shown
+document.getElementById('addServerModal')?.addEventListener('shown.bs.modal', () => {
+    loadServerCaptcha();
+    loadInitializedServers();
+});
 
 async function submitAddServer() {
     const form = document.getElementById('addServerForm');
@@ -746,25 +750,18 @@ async function submitAddServer() {
         return;
     }
     
-    const authType = document.getElementById('authType').value;
     const data = {
         name: document.getElementById('serverName').value,
         host: document.getElementById('serverHost').value,
         ssh_port: parseInt(document.getElementById('sshPort').value),
         ssh_user: document.getElementById('sshUser').value,
+        ssh_password: document.getElementById('sshPassword').value,
         game_port: parseInt(document.getElementById('gamePort').value),
-        auth_type: authType,
         game_directory: document.getElementById('gameDirectory').value,
         description: document.getElementById('serverDescription').value,
         captcha_token: document.getElementById('server-captcha-token').value,
         captcha_code: document.getElementById('serverCaptcha').value
     };
-    
-    if (authType === 'password') {
-        data.ssh_password = document.getElementById('sshPassword').value;
-    } else {
-        data.ssh_key_path = document.getElementById('sshKeyPath').value;
-    }
     
     try {
         const response = await authFetch('/servers', {
@@ -792,6 +789,67 @@ async function submitAddServer() {
         alert('Error creating server: ' + err.message);
         // Refresh CAPTCHA on error
         loadServerCaptcha();
+    }
+}
+
+// Load initialized servers when modal is shown
+async function loadInitializedServers() {
+    try {
+        const response = await authFetch('/api/setup/initialized-servers');
+        if (response.ok) {
+            const servers = await response.json();
+            const select = document.getElementById('initializedServerSelect');
+            const noServersMsg = document.getElementById('noInitializedServersMsg');
+            
+            // Clear existing options (except the first one)
+            while (select.options.length > 1) {
+                select.remove(1);
+            }
+            
+            if (servers.length > 0) {
+                servers.forEach(server => {
+                    const option = document.createElement('option');
+                    option.value = server.key;  // Store Redis key
+                    option.textContent = `${server.name} (${server.host})`;
+                    select.appendChild(option);
+                });
+                select.style.display = 'block';
+                noServersMsg.style.display = 'none';
+            } else {
+                select.style.display = 'none';
+                noServersMsg.style.display = 'block';
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load initialized servers:', error);
+    }
+}
+
+async function fillFromInitializedServer(serverKey) {
+    if (!serverKey) return;
+    
+    try {
+        // Fetch full server details including credentials using Redis key
+        const response = await authFetch(`/api/setup/initialized-servers/${encodeURIComponent(serverKey)}`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch server details');
+        }
+        
+        const server = await response.json();
+        
+        // Initialized servers always use password authentication
+        toggleAuthFields(); // Ensure password field is visible
+        
+        // Fill in server details
+        document.getElementById('serverName').value = server.name;
+        document.getElementById('serverHost').value = server.host;
+        document.getElementById('sshPort').value = server.ssh_port;
+        document.getElementById('sshUser').value = server.ssh_user;
+        document.getElementById('sshPassword').value = server.ssh_password;
+        document.getElementById('gameDirectory').value = server.game_directory;
+    } catch (error) {
+        console.error('Error filling server details:', error);
+        alert('Error loading server details: ' + error.message);
     }
 }
 </script>

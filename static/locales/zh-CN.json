@@ -188,12 +188,16 @@
     "descriptionLabel": "描述",
     "captcha": "验证码",
     "addServerBtn": "添加服务器",
-    "sshUserHint": "必须使用 cs2server 用户（由 /setup-wizard 初始化而来）",
+    "sshUserHint": "建议使用初始化创建成功的 用户（由 /setup-wizard 初始化而来）",
     "initializationRequired": "如果是新服务器",
     "initializationMessage": "如果是新服务器 请到这里先初始化一次（单台服务器 开多个CS2服务器 无需重复操作）",
     "goToSetupWizard": "前往初始化",
     "checkingInitialization": "正在检查服务器初始化状态...",
-    "initializationCheckFailed": "无法验证服务器初始化状态"
+    "initializationCheckFailed": "无法验证服务器初始化状态",
+    "quickFillTitle": "快速填写",
+    "quickFillDescription": "从已保存的服务器配置中选择以快速填写 SSH 信息",
+    "selectServer": "-- 选择服务器 --",
+    "noSavedServers": "暂无保存的服务器配置。请先在 <a href=\"/setup-wizard\">设置向导</a> 中初始化服务器并保存配置。"
   },
   "serverDetail": {
     "title": "服务器详情",
@@ -337,7 +341,24 @@
     "none": "无",
     "seconds": "秒",
     "hours": "小时",
-    "fileManager": "文件管理器"
+    "fileManager": "文件管理器",
+    "autoUpdate": "自动更新",
+    "autoUpdateSettings": "自动更新设置",
+    "autoUpdateLabel": "自动更新",
+    "updateCheckInterval": "更新检查间隔",
+    "currentVersion": "当前版本",
+    "querying": "查询中...",
+    "consoleAccess": "控制台访问",
+    "openSSHConsole": "打开 SSH 控制台",
+    "openGameConsole": "打开游戏控制台",
+    "autoUpdateHint": "自动检查并更新服务器",
+    "autoUpdateInfo": "启用后，服务器将按指定间隔检查更新",
+    "autoUpdateWarning": "自动更新将在有可用更新时重启服务器",
+    "updateCheckIntervalHint": "检查更新的频率（小时）",
+    "saveAutoUpdateSettings": "保存自动更新设置",
+    "enableAutoUpdate": "启用自动更新",
+    "lastUpdateCheck": "上次更新检查",
+    "lastUpdated": "最后更新"
   },
   "setupWizard": {
     "title": "新服务器初始化",
@@ -352,6 +373,7 @@
     "cancel": "取消",
     "serverName": "服务器名称",
     "serverNamePlaceholder": "我的 CS2 服务器",
+    "serverNameHint": "用于识别此服务器的友好名称",
     "serverDescription": "描述",
     "serverDescriptionPlaceholder": "一个 Counter-Strike 2 服务器",
     "sshHost": "SSH 主机",
@@ -405,7 +427,7 @@
     "differentSudoPassword": "sudo 密码与 SSH 密码不同（可选）",
     "sudoPasswordLabel": "sudo 密码",
     "sudoPasswordPlaceholder": "仅当 sudo 密码不同时填写",
-    "cs2UsernameLabel": "CS2 服务器用户名",
+    "cs2UsernameLabel": "CS2 服务器用户名(不建议修改)",
     "captchaLabel": "验证码",
     "captchaPlaceholder": "输入验证码",
     "clickToRefresh": "点击刷新",
@@ -434,7 +456,12 @@
     "manualGameDir": "游戏目录:",
     "addServerButton": "添加服务器",
     "toastSuccess": "成功",
-    "copiedToClipboard": "已复制到剪贴板"
+    "copiedToClipboard": "已复制到剪贴板",
+    "saveServerConfig": "保存此服务器配置，以便快速添加 CS2 服务器时使用",
+    "savedServers": "已保存的服务器配置",
+    "savedServersDescription": "这些服务器已经初始化完成。您可以在添加 CS2 服务器时快速选择这些配置。",
+    "confirmDelete": "确定要删除此服务器配置吗？",
+    "deleteSuccess": "服务器配置删除成功"
   },
   "common": {
     "loading": "加载中...",
@@ -475,7 +502,12 @@
     "noDataAvailable": "无可用数据",
     "lastUpdated": "最后更新",
     "createdAt": "创建时间",
-    "updatedAt": "更新时间"
+    "updatedAt": "更新时间",
+    "password": "密码",
+    "actions": "操作",
+    "create": "创建",
+    "rename": "重命名",
+    "note": "备注"
   },
   "dashboard": {
     "title": "CS2 服务器管理器",

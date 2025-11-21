@@ -6,9 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Dict, Any
 from datetime import datetime, timezone
+import asyncssh
 
 from modules import (
-    Server, ServerCreate, ServerUpdate, ServerResponse,
+    Server, ServerCreate, ServerUpdate, ServerResponse, AuthType,
     get_db, User, get_current_active_user, get_optional_current_user, generate_api_key
 )
 from services import redis_manager
@@ -46,9 +47,69 @@ async def create_server(
             detail=f"Server with name '{server_data.name}' already exists"
         )
     
-    # Create server with user_id and auto-generated API key
+    # Check if server with same host and game_directory already exists for this user
+    result = await db.execute(
+        select(Server).filter(
+            Server.host == server_data.host,
+            Server.game_directory == server_data.game_directory,
+            Server.user_id == current_user.id
+        )
+    )
+    duplicate_server = result.scalar_one_or_none()
+    if duplicate_server:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"A server with the same host ({server_data.host}) and game directory ({server_data.game_directory}) already exists. "
+                   f"If you want to add a new server on this host, please use a different game directory or manually delete the existing directory on the server first."
+        )
+    
+    # Validate SSH connection before creating server (password authentication only)
+    try:
+        if not server_data.ssh_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SSH password is required"
+            )
+        
+        conn = await asyncssh.connect(
+            server_data.host,
+            port=server_data.ssh_port,
+            username=server_data.ssh_user,
+            password=server_data.ssh_password,
+            known_hosts=None,
+            connect_timeout=10
+        )
+        
+        # Test the connection with a simple command
+        result = await conn.run("echo 'SSH connection successful'", check=False)
+        conn.close()
+        
+        if result.exit_status != 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SSH connection succeeded but command execution failed. Please verify SSH user permissions."
+            )
+            
+    except asyncssh.PermissionDenied:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SSH authentication failed. Please verify your username and password."
+        )
+    except asyncssh.Error as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"SSH connection failed: {str(e)}. Please verify the host, port, and credentials."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to connect to server: {str(e)}"
+        )
+    
+    # Create server with user_id, auto-generated API key, and password auth
     # Exclude captcha fields from server creation
     server_dict = server_data.model_dump(exclude={'captcha_token', 'captcha_code'})
+    server_dict['auth_type'] = AuthType.PASSWORD  # Always use password authentication
     server = Server(**server_dict, user_id=current_user.id, api_key=generate_api_key())
     db.add(server)
     await db.commit()

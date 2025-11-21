@@ -193,7 +193,11 @@
     "initializationMessage": "If this is a new server, please initialize it first (one initialization per physical server supports multiple CS2 instances)",
     "goToSetupWizard": "Go to Initialization",
     "checkingInitialization": "Checking server initialization...",
-    "initializationCheckFailed": "Failed to verify server initialization"
+    "initializationCheckFailed": "Failed to verify server initialization",
+    "quickFillTitle": "Quick Fill",
+    "quickFillDescription": "Select from saved server configurations to quickly fill SSH credentials",
+    "selectServer": "-- Select Server --",
+    "noSavedServers": "No saved server configurations. Please initialize a server in the <a href=\"/setup-wizard\">Setup Wizard</a> and save the configuration first."
   },
   "serverDetail": {
     "title": "Server Details",
@@ -337,7 +341,24 @@
     "none": "None",
     "seconds": "seconds",
     "hours": "hours",
-    "fileManager": "File Manager"
+    "fileManager": "File Manager",
+    "autoUpdate": "Auto Update",
+    "autoUpdateSettings": "Auto Update Settings",
+    "autoUpdateLabel": "Auto Update",
+    "updateCheckInterval": "Update Check Interval",
+    "currentVersion": "Current Version",
+    "querying": "Querying...",
+    "consoleAccess": "Console Access",
+    "openSSHConsole": "Open SSH Console",
+    "openGameConsole": "Open Game Console",
+    "autoUpdateHint": "Automatically check and update the server",
+    "autoUpdateInfo": "When enabled, the server will check for updates at the specified interval",
+    "autoUpdateWarning": "Auto-update will restart the server when an update is available",
+    "updateCheckIntervalHint": "How often to check for updates (in hours)",
+    "saveAutoUpdateSettings": "Save Auto Update Settings",
+    "enableAutoUpdate": "Enable Auto Update",
+    "lastUpdateCheck": "Last Update Check",
+    "lastUpdated": "Last Updated"
   },
   "setupWizard": {
     "title": "New Server Initialization",
@@ -352,6 +373,7 @@
     "cancel": "Cancel",
     "serverName": "Server Name",
     "serverNamePlaceholder": "My CS2 Server",
+    "serverNameHint": "A friendly name to identify this server",
     "serverDescription": "Description",
     "serverDescriptionPlaceholder": "A Counter-Strike 2 server",
     "sshHost": "SSH Host",
@@ -434,7 +456,12 @@
     "manualGameDir": "Game Directory:",
     "addServerButton": "Add Server",
     "toastSuccess": "Success",
-    "copiedToClipboard": "Copied to clipboard"
+    "copiedToClipboard": "Copied to clipboard",
+    "saveServerConfig": "Save this server configuration for quick use when adding CS2 servers",
+    "savedServers": "Saved Server Configurations",
+    "savedServersDescription": "These servers have been initialized. You can quickly select these configurations when adding a CS2 server.",
+    "confirmDelete": "Are you sure you want to delete this server configuration?",
+    "deleteSuccess": "Server configuration deleted successfully"
   },
   "common": {
     "loading": "Loading...",
@@ -475,7 +502,12 @@
     "noDataAvailable": "No data available",
     "lastUpdated": "Last updated",
     "createdAt": "Created at",
-    "updatedAt": "Updated at"
+    "updatedAt": "Updated at",
+    "password": "Password",
+    "actions": "Actions",
+    "create": "Create",
+    "rename": "Rename",
+    "note": "Note"
   },
   "dashboard": {
     "title": "CS2 Server Manager",

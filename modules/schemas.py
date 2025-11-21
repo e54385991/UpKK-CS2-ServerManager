@@ -4,7 +4,7 @@ Pydantic schemas for request/response validation
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from .models import AuthType, ServerStatus
+from .models import ServerStatus
 
 
 # User schemas
@@ -68,14 +68,12 @@ class UserProfileUpdate(BaseModel):
 
 # Server schemas
 class ServerCreate(BaseModel):
-    """Schema for creating a new server"""
+    """Schema for creating a new server (password authentication only)"""
     name: str = Field(..., min_length=1, max_length=255)
     host: str = Field(..., min_length=1, max_length=255)
     ssh_port: int = Field(default=22, ge=1, le=65535)
     ssh_user: str = Field(..., min_length=1, max_length=100)
-    auth_type: AuthType
-    ssh_password: Optional[str] = None
-    ssh_key_path: Optional[str] = None
+    ssh_password: str = Field(..., min_length=1, description="SSH password (required)")
     sudo_password: Optional[str] = None
     game_port: int = Field(default=27015, ge=1, le=65535)
     game_directory: str = Field(default="/home/cs2server/cs2")
@@ -127,14 +125,12 @@ class ServerCreate(BaseModel):
 
 
 class ServerUpdate(BaseModel):
-    """Schema for updating a server"""
+    """Schema for updating a server (password authentication only)"""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     host: Optional[str] = Field(None, min_length=1, max_length=255)
     ssh_port: Optional[int] = Field(None, ge=1, le=65535)
     ssh_user: Optional[str] = Field(None, min_length=1, max_length=100)
-    auth_type: Optional[AuthType] = None
     ssh_password: Optional[str] = None
-    ssh_key_path: Optional[str] = None
     sudo_password: Optional[str] = None
     game_port: Optional[int] = Field(None, ge=1, le=65535)
     game_directory: Optional[str] = None
@@ -182,14 +178,13 @@ class ServerUpdate(BaseModel):
 
 
 class ServerResponse(BaseModel):
-    """Schema for server response"""
+    """Schema for server response (password authentication only)"""
     id: int
     user_id: int
     name: str
     host: str
     ssh_port: int
     ssh_user: str
-    auth_type: AuthType
     game_port: int
     game_directory: str
     status: ServerStatus
@@ -316,3 +311,47 @@ class A2SCacheResponse(BaseModel):
     """Schema for A2S cache response containing all servers"""
     servers: Dict[str, A2SCachedData]
     timestamp: str
+
+
+# Initialized Server schemas
+class InitializedServerCreate(BaseModel):
+    """Schema for saving an initialized server from setup wizard"""
+    name: str = Field(..., min_length=1, max_length=255, description="Friendly name for the server")
+    host: str = Field(..., min_length=1, max_length=255)
+    ssh_port: int = Field(default=22, ge=1, le=65535)
+    ssh_user: str = Field(..., min_length=1, max_length=100)
+    ssh_password: str = Field(..., min_length=1, max_length=255)
+    game_directory: str = Field(default="/home/cs2server/cs2")
+
+
+class InitializedServerListItem(BaseModel):
+    """Schema for initialized server in list (without sensitive data)"""
+    id: int
+    user_id: int
+    name: str
+    host: str
+    ssh_port: int
+    ssh_user: str
+    game_directory: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class InitializedServerResponse(BaseModel):
+    """Schema for initialized server response (includes password for filling forms)"""
+    id: int
+    user_id: int
+    name: str
+    host: str
+    ssh_port: int
+    ssh_user: str
+    ssh_password: str
+    game_directory: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
