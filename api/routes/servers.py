@@ -453,3 +453,76 @@ async def get_server_a2s_info(
     }
     
     return response
+
+
+@router.get("/{server_id}/cpu-count")
+async def get_server_cpu_count(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get CPU core count from the remote server"""
+    from services.ssh_manager import SSHManager
+    
+    # Verify server exists and user has access
+    result = await db.execute(select(Server).filter(Server.id == server_id))
+    server = result.scalar_one_or_none()
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server with ID {server_id} not found"
+        )
+    
+    # Check ownership
+    if server.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this server"
+        )
+    
+    ssh_manager = SSHManager()
+    
+    try:
+        # Connect to server
+        success, msg = await ssh_manager.connect(server)
+        if not success:
+            return {
+                "success": False,
+                "cpu_count": 32,  # Default fallback
+                "message": f"Failed to connect: {msg}"
+            }
+        
+        # Get CPU count using nproc command
+        success, stdout, stderr = await ssh_manager.execute_command("nproc")
+        
+        if success and stdout.strip().isdigit():
+            cpu_count = int(stdout.strip())
+            return {
+                "success": True,
+                "cpu_count": cpu_count,
+                "message": "CPU count retrieved successfully"
+            }
+        else:
+            # Fallback to /proc/cpuinfo
+            success, stdout, stderr = await ssh_manager.execute_command("grep -c ^processor /proc/cpuinfo")
+            if success and stdout.strip().isdigit():
+                cpu_count = int(stdout.strip())
+                return {
+                    "success": True,
+                    "cpu_count": cpu_count,
+                    "message": "CPU count retrieved successfully"
+                }
+            else:
+                return {
+                    "success": False,
+                    "cpu_count": 32,  # Default fallback
+                    "message": "Failed to detect CPU count, using default"
+                }
+    except Exception as e:
+        return {
+            "success": False,
+            "cpu_count": 32,  # Default fallback
+            "message": f"Error: {str(e)}"
+        }
+    finally:
+        await ssh_manager.disconnect()

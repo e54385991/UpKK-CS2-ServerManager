@@ -364,7 +364,23 @@
     "deployNow": "立即部署",
     "operationSubmitted": "操作已提交",
     "checkConsoleForDetails": "请点击控制台和日志查看详情",
-    "deploymentCommandSent": "已向服务器发送部署命令，请注意查看控制台和日志。"
+    "deploymentCommandSent": "已向服务器发送部署命令，请注意查看控制台和日志。",
+    "operationStatus": "操作状态",
+    "operationInProgress": "操作进行中...",
+    "operationCompleted": "操作已完成",
+    "operationFailed": "操作失败",
+    "cpuAffinity": "CPU 亲和性（线程绑定）",
+    "cpuAffinitySettings": "CPU 亲和性设置",
+    "cpuCores": "CPU 核心",
+    "cpuAffinityInfo": "信息",
+    "cpuAffinityDescription": "将 screen 进程绑定到特定的 CPU 核心以避免干扰。适用于高性能服务器。",
+    "selectCpuCores": "选择 CPU 核心",
+    "cpuCoresHelp": "选择服务器进程应绑定到哪些 CPU 核心。留空则使用所有可用核心。",
+    "core": "核心",
+    "selected": "已选择",
+    "saveCpuAffinity": "保存 CPU 亲和性",
+    "clearSelection": "清空选择",
+    "noneAllCores": "无（所有核心可用）"
   },
   "setupWizard": {
     "title": "新服务器初始化",
@@ -518,7 +534,8 @@
     "actions": "操作",
     "create": "创建",
     "rename": "重命名",
-    "note": "备注"
+    "note": "备注",
+    "and": "和"
   },
   "dashboard": {
     "title": "CS2 服务器管理器",

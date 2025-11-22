@@ -107,6 +107,9 @@ class Server(Base):
     last_update_check = Column(DateTime, nullable=True)  # Last time version was checked against Steam API
     last_update_time = Column(DateTime, nullable=True)  # Last time server was updated
     
+    # CPU affinity configuration
+    cpu_affinity = Column(String(500), nullable=True)  # Comma-separated list of CPU cores (e.g., "0,1,2,3" or "0-3,8-11")
+    
     # Additional info
     description = Column(Text, nullable=True)
     last_deployed = Column(DateTime, nullable=True)

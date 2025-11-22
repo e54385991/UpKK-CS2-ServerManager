@@ -251,6 +251,30 @@ async def migrate_db():
             else:
                 print(f"✓ {column} column exists")
         
+        # Check if cpu_affinity column exists in servers table
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'servers' 
+                AND COLUMN_NAME = 'cpu_affinity'
+            """)
+        )
+        cpu_affinity_exists = result.fetchone() is not None
+        
+        if not cpu_affinity_exists:
+            print("Adding cpu_affinity column to servers table...")
+            await conn.execute(
+                text("""
+                    ALTER TABLE servers 
+                    ADD COLUMN cpu_affinity VARCHAR(500) NULL
+                """)
+            )
+            print("✓ Migration completed: cpu_affinity column added")
+        else:
+            print("✓ cpu_affinity column exists")
+        
         print("✓ Database schema migration completed")
 
 

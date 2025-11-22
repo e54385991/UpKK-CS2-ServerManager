@@ -364,7 +364,23 @@
     "deployNow": "Deploy Now",
     "operationSubmitted": "Operation Submitted",
     "checkConsoleForDetails": "Please check Console & Logs tab to view details",
-    "deploymentCommandSent": "Deployment command sent to server. Please check the console and logs for progress."
+    "deploymentCommandSent": "Deployment command sent to server. Please check the console and logs for progress.",
+    "operationStatus": "Operation Status",
+    "operationInProgress": "Operation in progress...",
+    "operationCompleted": "Operation completed",
+    "operationFailed": "Operation failed",
+    "cpuAffinity": "CPU Affinity (Thread Binding)",
+    "cpuAffinitySettings": "CPU Affinity Settings",
+    "cpuCores": "CPU Cores",
+    "cpuAffinityInfo": "Info",
+    "cpuAffinityDescription": "Bind the screen process to specific CPU cores to avoid interference. Useful for high-performance servers.",
+    "selectCpuCores": "Select CPU Cores",
+    "cpuCoresHelp": "Select which CPU cores the server process should be bound to. Leave all unchecked to use all available cores.",
+    "core": "Core",
+    "selected": "Selected",
+    "saveCpuAffinity": "Save CPU Affinity",
+    "clearSelection": "Clear Selection",
+    "noneAllCores": "None (All cores available)"
   },
   "setupWizard": {
     "title": "New Server Initialization",
@@ -518,7 +534,8 @@
     "actions": "Actions",
     "create": "Create",
     "rename": "Rename",
-    "note": "Note"
+    "note": "Note",
+    "and": " and "
   },
   "dashboard": {
     "title": "CS2 Server Manager",

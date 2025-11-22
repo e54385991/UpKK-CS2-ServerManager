@@ -593,6 +593,97 @@
                         </div>
                     </div>
 
+                    <!-- CPU Affinity Configuration Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-cpu"></i> <span
+                                    data-i18n="serverDetail.cpuAffinity">CPU Affinity (Thread Binding)</span></h5>
+                            <button @click="showCpuAffinityEdit = !showCpuAffinityEdit"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> <span
+                                    x-text="showCpuAffinityEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div x-show="!showCpuAffinityEdit" x-cloak>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.cpuAffinitySettings">CPU Affinity Settings</h6>
+                                        <ul class="list-unstyled">
+                                            <li>
+                                                <i class="bi bi-cpu"></i>
+                                                <strong data-i18n="serverDetail.cpuCores">CPU Cores:</strong>
+                                                <span x-text="server.cpu_affinity || (window.i18n?.t('serverDetail.noneAllCores') || 'None (All cores available)')"></span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="alert alert-info" role="alert">
+                                            <i class="bi bi-info-circle"></i> <strong data-i18n="serverDetail.cpuAffinityInfo">Info:</strong> 
+                                            <span data-i18n="serverDetail.cpuAffinityDescription">Bind the screen process to specific CPU cores to avoid interference. Useful for high-performance servers.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div x-show="showCpuAffinityEdit" x-cloak>
+                                <form @submit.prevent="saveCpuAffinity()">
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label class="form-label">
+                                                <i class="bi bi-cpu"></i> <span data-i18n="serverDetail.selectCpuCores">Select CPU Cores</span>
+                                            </label>
+                                            <div class="form-text mb-2" data-i18n="serverDetail.cpuCoresHelp">
+                                                Select which CPU cores the server process should be bound to. Leave all unchecked to use all available cores.
+                                            </div>
+                                            <div class="row g-2">
+                                                <template x-for="core in Array.from({length: cpuCoreCount}, (_, i) => i)" :key="core">
+                                                    <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" 
+                                                                   :id="'cpu-core-' + core"
+                                                                   :value="core"
+                                                                   @change="toggleCore(core)"
+                                                                   :checked="parseCpuAffinity(cpuAffinityForm.cpu_affinity).includes(core)">
+                                                            <label class="form-check-label" :for="'cpu-core-' + core">
+                                                                <span data-i18n="serverDetail.core">Core</span> <span x-text="core"></span>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                            <div class="mt-2">
+                                                <small class="text-muted">
+                                                    <strong data-i18n="serverDetail.selected">Selected:</strong> 
+                                                    <span x-text="cpuAffinityForm.cpu_affinity || (window.i18n?.t('serverDetail.none') || 'None')"></span>
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingCpuAffinity">
+                                            <span x-show="!savingCpuAffinity"><i class="bi bi-save"></i> <span
+                                                    data-i18n="serverDetail.saveCpuAffinity">Save CPU Affinity</span></span>
+                                            <span x-show="savingCpuAffinity"><span
+                                                    class="spinner-border spinner-border-sm"></span> <span
+                                                    data-i18n="serverDetail.saving">Saving...</span></span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" @click="showCpuAffinityEdit = false"
+                                            data-i18n="serverDetail.cancel">
+                                            Cancel
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" @click="clearCpuAffinity()"
+                                            data-i18n="serverDetail.clearSelection">
+                                            Clear Selection
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Auto-Update Configuration Card -->
                     <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
@@ -1810,6 +1901,64 @@
         </div>
     </div>
 
+    <!-- Operation Status Modal -->
+    <div class="modal fade" id="operationStatusModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-terminal"></i>
+                        <span data-i18n="serverDetail.operationStatus">Operation Status</span>: 
+                        <span x-text="currentOperationName"></span>
+                    </h5>
+                    <button type="button" class="btn-close" @click="closeOperationModal()" :disabled="operationInProgress"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <!-- Terminal output container -->
+                    <div id="operationTerminal" style="height: 500px; background-color: #1e1e1e; color: #d4d4d4; padding: 15px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 14px; line-height: 1.4;">
+                        <template x-for="msg in operationMessages" :key="msg.id">
+                            <div :class="{
+                                'text-info': msg.type === 'status',
+                                'text-success': msg.type === 'complete',
+                                'text-danger': msg.type === 'error',
+                                'text-warning': msg.type === 'warning',
+                                'text-light': msg.type === 'output' || msg.type === 'info'
+                            }">
+                                <span class="text-muted" x-text="msg.timestamp"></span>
+                                <span x-text="msg.message"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="flex-grow-1 d-flex align-items-center">
+                        <template x-if="operationInProgress">
+                            <div class="text-muted">
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span data-i18n="serverDetail.operationInProgress">Operation in progress...</span>
+                            </div>
+                        </template>
+                        <template x-if="!operationInProgress && operationCompleted">
+                            <div class="text-success">
+                                <i class="bi bi-check-circle me-2"></i>
+                                <span data-i18n="serverDetail.operationCompleted">Operation completed</span>
+                            </div>
+                        </template>
+                        <template x-if="!operationInProgress && operationFailed">
+                            <div class="text-danger">
+                                <i class="bi bi-x-circle me-2"></i>
+                                <span data-i18n="serverDetail.operationFailed">Operation failed</span>
+                            </div>
+                        </template>
+                    </div>
+                    <button type="button" class="btn btn-secondary" @click="closeOperationModal()" :disabled="operationInProgress">
+                        <span data-i18n="common.close">Close</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- WebSocket Status -->
     <div class="ws-indicator" :class="wsConnected ? 'ws-connected' : 'ws-disconnected'">
         <i :class="wsConnected ? 'bi bi-wifi' : 'bi bi-wifi-off'"></i>
@@ -2102,6 +2251,14 @@
                 counterstrikesharp: false,
                 cs2fixes: false
         },
+        // Operation status modal
+        operationMessages: [],
+        currentOperationName: '',
+        operationInProgress: false,
+        operationCompleted: false,
+        operationFailed: false,
+        operationWs: null,
+        operationModalInstance: null,
         serverEditForm: {
             name: '',
                 host: '',
@@ -2136,6 +2293,16 @@
         autoUpdateForm: {
             enable_auto_update: true,
             update_check_interval_hours: 1
+        },
+        // CPU Affinity
+        showCpuAffinityEdit: false,
+        savingCpuAffinity: false,
+        // NOTE: Default to 32 cores which is a common server configuration
+        // Users can modify server.cpu_affinity field directly if they need more/fewer cores displayed
+        // TODO: Consider adding server-side CPU core detection for automatic configuration
+        cpuCoreCount: 32,
+        cpuAffinityForm: {
+            cpu_affinity: ''
         },
         // A2S Query
         showA2SEdit: false,
@@ -2182,8 +2349,12 @@
             this.loadMonitoringForm();
             this.loadAutoUpdateForm();
             this.loadA2SConfigForm();
+            this.loadCpuAffinityForm();
             this.connectWebSocket();
             await this.loadHistory();
+            
+            // Fetch remote server CPU count
+            await this.fetchCpuCount();
 
             // Load monitoring logs if monitoring is enabled
             if (this.server.enable_panel_monitoring) {
@@ -2201,6 +2372,26 @@
                 });
             });
             
+        },
+        
+        async fetchCpuCount() {
+            // Fetch CPU count from remote server
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/cpu-count`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.cpu_count) {
+                        this.cpuCoreCount = data.cpu_count;
+                        console.log(`Remote server has ${data.cpu_count} CPU cores`);
+                    } else {
+                        console.warn('Failed to fetch CPU count, using default:', data.message);
+                    }
+                } else {
+                    console.warn('Failed to fetch CPU count from server');
+                }
+            } catch (err) {
+                console.warn('Error fetching CPU count:', err.message);
+            }
         },
         
         showToast(message, type = 'success') {
@@ -2627,10 +2818,131 @@
             }
         },
         
+        // CPU Affinity functions
+        loadCpuAffinityForm() {
+            // Load current CPU affinity configuration into edit form
+            this.cpuAffinityForm = {
+                cpu_affinity: this.server.cpu_affinity || ''
+            };
+        },
+        
+        parseCpuAffinity(cpuAffinity) {
+            // Parse CPU affinity string into array of core numbers with validation
+            if (!cpuAffinity) return [];
+            
+            const cores = [];
+            const parts = cpuAffinity.split(',');
+            const invalidParts = [];
+            
+            for (const part of parts) {
+                const trimmed = part.trim();
+                if (!trimmed) continue; // Skip empty parts
+                
+                if (trimmed.includes('-')) {
+                    // Range like "0-3"
+                    const rangeParts = trimmed.split('-');
+                    if (rangeParts.length !== 2) {
+                        invalidParts.push(trimmed);
+                        continue;
+                    }
+                    
+                    const start = parseInt(rangeParts[0].trim());
+                    const end = parseInt(rangeParts[1].trim());
+                    
+                    // Validate both are numbers, non-negative, and range is valid
+                    if (isNaN(start) || isNaN(end) || start < 0 || end < 0 || start > end) {
+                        invalidParts.push(trimmed);
+                        continue;
+                    }
+                    
+                    for (let i = start; i <= end; i++) {
+                        if (!cores.includes(i)) {
+                            cores.push(i);
+                        }
+                    }
+                } else {
+                    // Single core
+                    const core = parseInt(trimmed);
+                    if (isNaN(core) || core < 0) {
+                        invalidParts.push(trimmed);
+                        continue;
+                    }
+                    if (!cores.includes(core)) {
+                        cores.push(core);
+                    }
+                }
+            }
+            
+            // Log warning for invalid parts (for debugging)
+            if (invalidParts.length > 0) {
+                console.warn('Invalid CPU affinity parts ignored:', invalidParts.join(', '));
+            }
+            
+            return cores.sort((a, b) => a - b);
+        },
+        
+        toggleCore(core) {
+            // Toggle CPU core selection
+            const cores = this.parseCpuAffinity(this.cpuAffinityForm.cpu_affinity);
+            const index = cores.indexOf(core);
+            
+            if (index > -1) {
+                // Remove core
+                cores.splice(index, 1);
+            } else {
+                // Add core
+                cores.push(core);
+            }
+            
+            // Sort and convert back to string
+            cores.sort((a, b) => a - b);
+            this.cpuAffinityForm.cpu_affinity = cores.join(',');
+        },
+        
+        clearCpuAffinity() {
+            // Clear all CPU affinity selections
+            this.cpuAffinityForm.cpu_affinity = '';
+        },
+        
+        async saveCpuAffinity() {
+            this.savingCpuAffinity = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.cpuAffinityForm)
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showCpuAffinityEdit = false;
+                    this.addLog('complete', 'CPU affinity configuration saved successfully');
+                    this.showToast('CPU affinity configuration saved successfully', 'success');
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save CPU affinity configuration: ${error.detail}`);
+                    this.showToast(`Failed to save CPU affinity configuration: ${error.detail}`, 'error');
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+                this.showToast(`Error: ${err.message}`, 'error');
+            } finally {
+                this.savingCpuAffinity = false;
+            }
+        },
+        
         async executeAction(action) {
             if (this.isActionRunning) return;
 
             this.isActionRunning = true;
+            
+            // Open operation status modal
+            this.openOperationModal(action);
+            
+            // Also add to main logs
             this.addLog('status', `Executing action: ${action}...`);
 
             try {
@@ -2713,6 +3025,153 @@
             }
         },
         
+        // Operation Status Modal Methods
+        openOperationModal(action) {
+            // Get friendly operation name with i18n support
+            const operationNames = {
+                'deploy': window.i18n?.t('serverDetail.deployServer') || 'Deploy Server',
+                'start': window.i18n?.t('serverDetail.start') || 'Start',
+                'stop': window.i18n?.t('serverDetail.stop') || 'Stop',
+                'restart': window.i18n?.t('serverDetail.restart') || 'Restart',
+                'update': window.i18n?.t('serverDetail.update') || 'Update',
+                'validate': window.i18n?.t('serverDetail.updateValidate') || 'Update + Validate',
+                'status': window.i18n?.t('serverDetail.checkStatus') || 'Check Status',
+                'install_metamod': 'Install Metamod:Source',
+                'update_metamod': 'Update Metamod:Source',
+                'install_counterstrikesharp': 'Install CounterStrikeSharp',
+                'update_counterstrikesharp': 'Update CounterStrikeSharp',
+                'install_cs2fixes': 'Install CS2Fixes',
+                'update_cs2fixes': 'Update CS2Fixes'
+            };
+            
+            this.currentOperationName = operationNames[action] || action;
+            
+            // If modal is already open, just update the operation name and continue
+            // This allows batch operations to reuse the same modal
+            if (this.operationModalInstance && this.operationMessages.length > 0) {
+                // Add separator for new operation in batch mode
+                this.addOperationMessage('info', `--- Starting: ${this.currentOperationName} ---`);
+                this.operationInProgress = true;
+                this.operationCompleted = false;
+                this.operationFailed = false;
+                return;
+            }
+            
+            // First time opening modal
+            this.operationMessages = [];
+            this.operationInProgress = true;
+            this.operationCompleted = false;
+            this.operationFailed = false;
+            
+            // Initialize Bootstrap modal if not already done
+            if (!this.operationModalInstance) {
+                const modalElement = document.getElementById('operationStatusModal');
+                if (!modalElement) {
+                    console.error('Operation status modal element not found');
+                    this.addLog('error', 'Failed to open operation status modal - UI element not found');
+                    return;
+                }
+                this.operationModalInstance = new bootstrap.Modal(modalElement);
+            }
+            
+            // Show the modal
+            this.operationModalInstance.show();
+            
+            // Connect to deployment status WebSocket for real-time updates
+            this.connectOperationWebSocket();
+        },
+        
+        connectOperationWebSocket() {
+            // Don't create a new connection if we already have an active one
+            if (this.operationWs && this.operationWs.readyState === WebSocket.OPEN) {
+                return;
+            }
+            
+            // Close existing connection if any (in case it's in CONNECTING or CLOSING state)
+            if (this.operationWs) {
+                this.operationWs.close();
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/servers/${this.serverId}/deployment-status`;
+            
+            this.operationWs = new WebSocket(wsUrl);
+            
+            this.operationWs.onopen = () => {
+                this.addOperationMessage('info', 'Connected to operation monitor');
+            };
+            
+            this.operationWs.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type !== 'ack') {
+                        this.addOperationMessage(data.type, data.message);
+                        
+                        // Check if operation completed or failed
+                        if (data.type === 'complete') {
+                            this.operationInProgress = false;
+                            this.operationCompleted = true;
+                            this.isActionRunning = false;
+                        } else if (data.type === 'error') {
+                            this.operationInProgress = false;
+                            this.operationFailed = true;
+                            this.isActionRunning = false;
+                        }
+                    }
+                } catch (parseErr) {
+                    console.error('Failed to parse WebSocket message:', parseErr);
+                    this.addOperationMessage('error', 'Invalid message received from server');
+                }
+            };
+            
+            this.operationWs.onerror = () => {
+                this.addOperationMessage('error', 'WebSocket connection error');
+            };
+            
+            this.operationWs.onclose = () => {
+                // Connection closed, operation might be complete
+                if (this.operationInProgress) {
+                    this.addOperationMessage('info', 'Connection closed');
+                }
+            };
+        },
+        
+        addOperationMessage(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            this.operationMessages.push({
+                id: Date.now() + Math.random(),
+                timestamp: timestamp,
+                type: type,
+                message: message
+            });
+            
+            // Auto-scroll to bottom
+            this.$nextTick(() => {
+                const container = document.getElementById('operationTerminal');
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            });
+        },
+        
+        closeOperationModal() {
+            if (this.operationModalInstance) {
+                this.operationModalInstance.hide();
+            }
+            
+            // Close WebSocket connection
+            if (this.operationWs) {
+                this.operationWs.close();
+                this.operationWs = null;
+            }
+            
+            // Reset state
+            this.operationMessages = [];
+            this.operationInProgress = false;
+            this.operationCompleted = false;
+            this.operationFailed = false;
+        },
+        
         async installSelectedPlugins() {
             const plugins = [];
             if (this.pluginSelection.metamod) {
@@ -2730,7 +3189,21 @@
                 return;
             }
 
-            this.addLog('status', `Installing ${plugins.join(' and ')}...`);
+            // Format plugin list with proper separators (supports i18n)
+            let pluginList;
+            if (plugins.length === 1) {
+                pluginList = plugins[0];
+            } else if (plugins.length === 2) {
+                // Use ' and ' for English, can be customized for other languages
+                const separator = window.i18n?.t('common.and') || ' and ';
+                pluginList = plugins.join(separator);
+            } else {
+                // For 3+ items: "item1, item2, and item3"
+                const separator = window.i18n?.t('common.and') || ' and ';
+                pluginList = plugins.slice(0, -1).join(', ') + ',' + separator + plugins[plugins.length - 1];
+            }
+            
+            this.addLog('status', `Installing ${pluginList}...`);
 
             // Action mapping for plugins
             const actionMap = {

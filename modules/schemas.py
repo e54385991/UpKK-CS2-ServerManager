@@ -1,10 +1,20 @@
 """
 Pydantic schemas for request/response validation
 """
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from .models import ServerStatus
+import re
+
+
+# Server action constants
+ALLOWED_SERVER_ACTIONS = [
+    "deploy", "start", "stop", "restart", "status", "update", "validate",
+    "install_metamod", "install_counterstrikesharp", "install_cs2fixes",
+    "update_metamod", "update_counterstrikesharp", "update_cs2fixes"
+]
+SERVER_ACTION_PATTERN = f"^({'|'.join(ALLOWED_SERVER_ACTIONS)})$"
 
 
 # User schemas
@@ -122,6 +132,20 @@ class ServerCreate(BaseModel):
     current_game_version: Optional[str] = Field(None, max_length=50, description="Current installed CS2 version")
     enable_auto_update: bool = Field(default=True, description="Enable automatic updates based on Steam API version check")
     update_check_interval_hours: int = Field(default=1, ge=1, le=24, description="Hours between version checks (1-24)")
+    
+    # CPU affinity configuration
+    cpu_affinity: Optional[str] = Field(None, max_length=500, description="Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')")
+    
+    @field_validator('cpu_affinity')
+    @classmethod
+    def validate_cpu_affinity(cls, v):
+        """Validate CPU affinity format to prevent command injection"""
+        if v is None or v.strip() == '':
+            return v
+        # Only allow digits, commas, and hyphens
+        if not re.match(r'^[\d,\-\s]+$', v):
+            raise ValueError('CPU affinity must only contain digits, commas, and hyphens')
+        return v.strip()
 
 
 class ServerUpdate(BaseModel):
@@ -175,6 +199,21 @@ class ServerUpdate(BaseModel):
     current_game_version: Optional[str] = Field(None, max_length=50, description="Current installed CS2 version")
     enable_auto_update: Optional[bool] = Field(None, description="Enable automatic updates based on Steam API version check")
     update_check_interval_hours: Optional[int] = Field(None, ge=1, le=24, description="Hours between version checks (1-24)")
+    
+    # CPU affinity configuration
+    cpu_affinity: Optional[str] = Field(None, max_length=500, description="Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')")
+    
+    @field_validator('cpu_affinity')
+    @classmethod
+    def validate_cpu_affinity(cls, v):
+        """Validate CPU affinity format to prevent command injection"""
+        if v is None or v.strip() == '':
+            return v
+        # Only allow digits, commas, and hyphens
+        if not re.match(r'^[\d,\-\s]+$', v):
+            raise ValueError('CPU affinity must only contain digits, commas, and hyphens')
+        return v.strip()
+
 
 
 class ServerResponse(BaseModel):
@@ -237,13 +276,16 @@ class ServerResponse(BaseModel):
     last_update_check: Optional[datetime]
     last_update_time: Optional[datetime]
     
+    # CPU affinity configuration
+    cpu_affinity: Optional[str]
+    
     class Config:
         from_attributes = True
 
 
 class ServerAction(BaseModel):
     """Schema for server actions"""
-    action: str = Field(..., pattern="^(deploy|start|stop|restart|status|update|validate|install_metamod|install_counterstrikesharp|update_metamod|update_counterstrikesharp)$")
+    action: str = Field(..., pattern=SERVER_ACTION_PATTERN)
 
 
 class ActionResponse(BaseModel):

@@ -4,6 +4,7 @@ SSH connection and server management utilities (Async)
 import asyncssh
 import asyncio
 import os
+import re
 from typing import Optional, Tuple, List, Dict, Any
 from datetime import datetime
 from modules.models import Server, AuthType
@@ -18,6 +19,70 @@ class SSHManager:
     
     def __init__(self):
         self.conn: Optional[asyncssh.SSHClientConnection] = None
+    
+    async def _fetch_github_release_url(self, repo: str, pattern: str, progress_callback=None) -> Tuple[bool, str]:
+        """
+        Helper function to fetch the latest release URL from GitHub
+        
+        Args:
+            repo: Repository in format "owner/repo" (e.g., "Source2ZE/CS2Fixes")
+                  Supports alphanumeric, hyphens, underscores, and periods
+            pattern: Grep pattern to match the browser_download_url (basic grep pattern, not regex)
+                    Example: '\"browser_download_url\": \"[^\"]*CS2Fixes-[^\"]*-linux\\.tar\\.gz\"'
+                    NOTE: This pattern is used in shell command - ensure it comes from trusted source
+            progress_callback: Optional callback for progress messages
+        
+        Returns:
+            Tuple[bool, str]: (success, download_url or error_message)
+        """
+        async def send_progress(message: str):
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(message)
+                else:
+                    progress_callback(message)
+        
+        # Validate repo parameter to prevent command injection
+        # Repository should only contain alphanumeric, hyphens, underscores, periods, and one slash
+        # Supports names like "jquery/jquery.ui"
+        if not re.match(r'^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$', repo):
+            return False, f"Invalid repository format: {repo}. Expected format: owner/repo"
+        
+        # Note: pattern parameter is used in shell command and should be from trusted source only
+        # In this codebase, it's called with hardcoded patterns from install_cs2fixes method
+        
+        # Primary method: Use grep pattern
+        # Use basic grep without -P flag for better portability
+        get_url_cmd = f"curl -sL https://api.github.com/repos/{repo}/releases/latest | grep -o '{pattern}' | grep -o 'https://[^\"]*' | head -1"
+        success, url, stderr = await self.execute_command(get_url_cmd, timeout=30)
+        
+        if success and url.strip():
+            return True, url.strip()
+        
+        # Fallback 1: Try to find any download URL from browser_download_url
+        # This is a broader search when specific pattern fails
+        await send_progress("⚠ Trying alternative API query...")
+        alt_cmd = f"curl -sL https://api.github.com/repos/{repo}/releases/latest | grep '\"browser_download_url\"' | grep -o 'https://[^\"]*' | head -1"
+        success, url, _ = await self.execute_command(alt_cmd, timeout=30)
+        
+        if success and url.strip():
+            # Verify the URL is a valid GitHub release URL
+            # Must start with https://github.com/owner/repo/releases/download/
+            url_stripped = url.strip()
+            expected_prefix = f"https://github.com/{repo}/releases/download/"
+            if url_stripped.startswith(expected_prefix):
+                return True, url_stripped
+        
+        # Fallback 2: Get tag with proper semantic version matching
+        await send_progress("⚠ Could not fetch from GitHub API, trying tag-based approach...")
+        # Match semantic versioning: v1.2.3 or v1.2 format
+        tag_cmd = f"curl -sL https://api.github.com/repos/{repo}/releases/latest | grep '\"tag_name\"' | grep -o 'v[0-9]\\+\\(\\.[0-9]\\+\\)*' | head -1"
+        tag_success, tag, _ = await self.execute_command(tag_cmd, timeout=30)
+        
+        if tag_success and tag.strip():
+            return False, f"Found tag {tag.strip()} but could not construct download URL automatically. Please check the repository."
+        
+        return False, f"Failed to fetch latest release from GitHub repository {repo}. Please check your internet connection."
     
     async def connect(self, server: Server) -> Tuple[bool, str]:
         """
@@ -846,10 +911,21 @@ class SSHManager:
             )
             
             # Build the complete startup command with proper environment
+            # Prepare CPU affinity prefix if configured
+            cpu_affinity_prefix = ""
+            if server.cpu_affinity:
+                # Validate cpu_affinity format to prevent command injection
+                # Only allow digits, commas, hyphens, and whitespace (which gets stripped)
+                if re.match(r'^[\d,\-\s]+$', server.cpu_affinity.strip()):
+                    cpu_affinity_prefix = f"taskset -c {server.cpu_affinity.strip()} "
+                    await send_progress(f"✓ CPU affinity configured: cores {server.cpu_affinity.strip()}")
+                else:
+                    await send_progress(f"⚠ Warning: Invalid CPU affinity format '{server.cpu_affinity}', ignoring")
+            
             if use_autorestart and api_key:
                 # Use autorestart wrapper with screen
                 start_cmd = (
-                    f"screen -dmS cs2server_{server.id} "
+                    f"{cpu_affinity_prefix}screen -dmS cs2server_{server.id} "
                     f"bash {autorestart_script_path} "
                     f"{server.id} '{api_key}' '{backend_url}' '{server.game_directory}' "
                     f"'{cs2_start_cmd}'"
@@ -860,7 +936,7 @@ class SSHManager:
                 start_cmd = (
                     f"cd {game_bin_dir} && "
                     f"export LD_LIBRARY_PATH=\"{game_bin_dir}:$LD_LIBRARY_PATH\" && "
-                    f"screen -dmS cs2server_{server.id} "
+                    f"{cpu_affinity_prefix}screen -dmS cs2server_{server.id} "
                     f"bash -c '{cs2_executable} {params_str} 2>&1 | tee {server.game_directory}/cs2/game/csgo/console.log'"
                 )
                 if not api_key:
@@ -1346,8 +1422,13 @@ class SSHManager:
             # Restart server if it was running before
             if was_running:
                 await send_progress("Restarting server...")
-                # We'll let the caller handle the restart to keep this method focused
-                await send_progress("Server update complete. Please restart the server.")
+                # Actually restart the server instead of just suggesting it
+                restart_success, restart_msg = await self.start_server(server, progress_callback)
+                if restart_success:
+                    await send_progress("✓ Server restarted successfully after update")
+                else:
+                    await send_progress(f"⚠ Warning: Failed to restart server after update: {restart_msg}")
+                    await send_progress("You may need to manually start the server")
             
             return True, "Server updated successfully"
         
@@ -1449,7 +1530,13 @@ class SSHManager:
             # Restart server if it was running before
             if was_running:
                 await send_progress("Restarting server...")
-                await send_progress("Server validation complete. Please restart the server.")
+                # Actually restart the server instead of just suggesting it
+                restart_success, restart_msg = await self.start_server(server, progress_callback)
+                if restart_success:
+                    await send_progress("✓ Server restarted successfully after validation")
+                else:
+                    await send_progress(f"⚠ Warning: Failed to restart server after validation: {restart_msg}")
+                    await send_progress("You may need to manually start the server")
             
             return True, "Server updated and validated successfully"
         
@@ -1933,30 +2020,33 @@ class SSHManager:
             
             await send_progress("✓ CS2 server directory found")
             
-            # Check if Metamod is installed
+            # Check if Metamod is installed (required for CS2Fixes)
             metamod_dir = f"{cs2_dir}/game/csgo/addons/metamod"
             check_mm_cmd = f"test -d {metamod_dir} && echo 'exists'"
             check_mm_success, check_mm_stdout, _ = await self.execute_command(check_mm_cmd)
             
             if not check_mm_success or 'exists' not in check_mm_stdout:
-                return False, "Metamod:Source is required but not found. Please install Metamod first."
-            
-            await send_progress("✓ Metamod:Source found")
+                await send_progress("⚠ Warning: Metamod not found. Installing Metamod first...")
+                mm_success, mm_msg = await self.install_metamod(server, progress_callback)
+                if not mm_success:
+                    return False, f"Metamod installation failed: {mm_msg}"
+            else:
+                await send_progress("✓ Metamod:Source found")
             
             # Get latest CS2Fixes version from GitHub releases
             await send_progress("Fetching latest CS2Fixes version from GitHub...")
             
-            get_latest_cmd = (
-                "curl -sL https://api.github.com/repos/Source2ZE/CS2Fixes/releases/latest | "
-                "grep -o '\"browser_download_url\": \"[^\"]*cs2fixes-linux[^\"]*\\.zip\"' | "
-                "grep -o 'https://[^\"]*' | head -1"
+            # Use helper function with fallback strategies
+            pattern = '\"browser_download_url\": \"[^\"]*CS2Fixes-[^\"]*-linux\\.tar\\.gz\"'
+            fetch_success, cs2fixes_url = await self._fetch_github_release_url(
+                "Source2ZE/CS2Fixes", 
+                pattern, 
+                progress_callback
             )
-            success, cs2fixes_url, stderr = await self.execute_command(get_latest_cmd, timeout=30)
             
-            if not success or not cs2fixes_url.strip():
-                return False, "Failed to fetch latest CS2Fixes release from GitHub. Please check your internet connection."
+            if not fetch_success:
+                return False, cs2fixes_url  # cs2fixes_url contains error message
             
-            cs2fixes_url = cs2fixes_url.strip()
             await send_progress(f"✓ Found latest version: {cs2fixes_url}")
             
             # Create temp directory for download
@@ -1966,7 +2056,7 @@ class SSHManager:
             
             # Download CS2Fixes
             await send_progress(f"Downloading CS2Fixes from {cs2fixes_url}...")
-            download_cmd = f"curl -L -o {temp_dir}/cs2fixes.zip {cs2fixes_url} || wget -O {temp_dir}/cs2fixes.zip {cs2fixes_url}"
+            download_cmd = f"curl -L -o {temp_dir}/cs2fixes.tar.gz {cs2fixes_url} || wget -O {temp_dir}/cs2fixes.tar.gz {cs2fixes_url}"
             success, stdout, stderr = await self.execute_command_streaming(
                 download_cmd,
                 output_callback=send_progress,
@@ -1974,15 +2064,16 @@ class SSHManager:
             )
             
             # Verify the file was downloaded
-            check_cmd = f"test -f {temp_dir}/cs2fixes.zip && echo 'exists'"
+            check_cmd = f"test -f {temp_dir}/cs2fixes.tar.gz && echo 'exists'"
             check_success, check_stdout, _ = await self.execute_command(check_cmd)
             
             if not check_success or 'exists' not in check_stdout:
                 await self.execute_command(f"rm -rf {temp_dir}")
-                return False, f"CS2Fixes download failed. Please check the URL and try again."
+                error_detail = f"Download failed. stderr: {stderr[:500] if stderr else 'No error output'}"
+                return False, f"CS2Fixes download failed: {error_detail}"
             
             # Check file size to ensure it's not empty
-            size_cmd = f"stat -f%z {temp_dir}/cs2fixes.zip 2>/dev/null || stat -c%s {temp_dir}/cs2fixes.zip 2>/dev/null"
+            size_cmd = f"stat -f%z {temp_dir}/cs2fixes.tar.gz 2>/dev/null || stat -c%s {temp_dir}/cs2fixes.tar.gz 2>/dev/null"
             size_success, size_out, _ = await self.execute_command(size_cmd)
             if size_success and size_out.strip():
                 file_size = int(size_out.strip())
@@ -1993,30 +2084,20 @@ class SSHManager:
             
             await send_progress("✓ CS2Fixes downloaded successfully")
             
-            # Extract CS2Fixes to temp directory first
-            await send_progress(f"Extracting CS2Fixes...")
-            extract_cmd = f"unzip -o {temp_dir}/cs2fixes.zip -d {temp_dir}"
+            # Extract CS2Fixes directly to CS2 directory
+            csgo_dir = f"{cs2_dir}/game/csgo"
+            await send_progress(f"Extracting and installing CS2Fixes to {csgo_dir}...")
+            
+            # The tar.gz contains multiple directories: addons, cfg, materials, particles, soundevents, sounds
+            # Extract directly to csgo directory to install all files
+            extract_cmd = f"tar -xzf {temp_dir}/cs2fixes.tar.gz -C {csgo_dir}"
             success, stdout, stderr = await self.execute_command(extract_cmd, timeout=60)
             
             if not success:
                 await self.execute_command(f"rm -rf {temp_dir}")
-                return False, f"CS2Fixes extraction failed: {stderr}"
+                return False, f"CS2Fixes installation failed: {stderr}"
             
-            await send_progress("✓ CS2Fixes extracted successfully")
-            
-            # Copy to CS2 addons directory
-            csgo_dir = f"{cs2_dir}/game/csgo"
-            await send_progress(f"Installing CS2Fixes to {csgo_dir}...")
-            
-            # The zip should contain an addons folder with cs2fixes
-            copy_cmd = f"cp -r {temp_dir}/addons {csgo_dir}/"
-            success, stdout, stderr = await self.execute_command(copy_cmd, timeout=60)
-            
-            if not success:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                return False, f"Failed to copy CS2Fixes files: {stderr}"
-            
-            await send_progress("✓ CS2Fixes files copied successfully")
+            await send_progress("✓ CS2Fixes files installed successfully")
             
             # Clean up temp directory
             await self.execute_command(f"rm -rf {temp_dir}")
