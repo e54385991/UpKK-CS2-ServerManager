@@ -17,6 +17,9 @@ from services import SSHManager, redis_manager
 
 router = APIRouter(tags=["actions"])
 
+# Constants
+DEPLOYMENT_PROGRESS_CLEANUP_DELAY = 300  # 5 minutes - allows clients to fetch final messages before cleanup
+
 
 class DeploymentWebSocket:
     """WebSocket manager for deployment status updates"""
@@ -68,9 +71,24 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
         "message": "...",
         "timestamp": "2024-01-01T00:00:00"
     }
+    
+    On connection, sends all accumulated progress from Redis if available.
     """
     await deployment_ws.connect(websocket, server_id)
     try:
+        # Send accumulated progress on connection (for recovery after disconnect/restart)
+        accumulated_progress = await redis_manager.get_deployment_progress(server_id)
+        if accumulated_progress:
+            # Send a header message
+            await websocket.send_json({
+                "type": "info",
+                "message": f"Recovered {len(accumulated_progress)} progress message(s) from previous session",
+                "timestamp": get_current_time().isoformat()
+            })
+            # Send all accumulated progress
+            for progress_entry in accumulated_progress:
+                await websocket.send_json(progress_entry)
+        
         while True:
             # Keep connection alive and receive any client messages
             data = await websocket.receive_text()
@@ -85,12 +103,35 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
 
 
 async def send_deployment_update(server_id: int, msg_type: str, message: str):
-    """Helper to send deployment updates via WebSocket"""
+    """Helper to send deployment updates via WebSocket and persist to Redis"""
+    timestamp = get_current_time().isoformat()
+    
+    # Send via WebSocket to active connections
     await deployment_ws.send_message(server_id, {
         "type": msg_type,
         "message": message,
-        "timestamp": get_current_time().isoformat()
+        "timestamp": timestamp
     })
+    
+    # Persist to Redis for recovery after disconnect/restart
+    await redis_manager.append_deployment_progress(server_id, msg_type, message, timestamp)
+
+
+async def clear_deployment_progress_after_delay(server_id: int, delay: int = DEPLOYMENT_PROGRESS_CLEANUP_DELAY):
+    """
+    Clear deployment progress after a delay
+    
+    This delay allows clients to retrieve the final deployment messages after the deployment
+    completes. Without the delay, clients reconnecting shortly after deployment completion
+    would not be able to see the final status. The progress also auto-expires after 2 hours
+    as a fallback.
+    
+    Args:
+        server_id: Server ID
+        delay: Delay in seconds before clearing (default: 5 minutes)
+    """
+    await asyncio.sleep(delay)
+    await redis_manager.clear_deployment_progress(server_id)
 
 
 @router.post("/servers/{server_id}/actions", response_model=ActionResponse)
@@ -151,27 +192,30 @@ async def server_action(
             server.status = ServerStatus.DEPLOYING
             await db.commit()
             
-            await send_deployment_update(server_id, "status", "Connecting to server via SSH...")
-            success, message = await ssh_manager.deploy_cs2_server(server, 
-                                                                   lambda msg: asyncio.create_task(
-                                                                       send_deployment_update(server_id, "output", msg)
-                                                                   ))
-            
-            if success:
-                server.status = ServerStatus.STOPPED
-                server.last_deployed = get_current_time()
-                log.status = "success"
-                log.output = message
-                await send_deployment_update(server_id, "complete", "Deployment completed successfully")
-                # Remove deployment lock on success
+            try:
+                await send_deployment_update(server_id, "status", "Connecting to server via SSH...")
+                success, message = await ssh_manager.deploy_cs2_server(server, 
+                                                                       lambda msg: asyncio.create_task(
+                                                                           send_deployment_update(server_id, "output", msg)
+                                                                       ))
+                
+                if success:
+                    server.status = ServerStatus.STOPPED
+                    server.last_deployed = get_current_time()
+                    log.status = "success"
+                    log.output = message
+                    await send_deployment_update(server_id, "complete", "Deployment completed successfully")
+                else:
+                    server.status = ServerStatus.ERROR
+                    log.status = "failed"
+                    log.error_message = message
+                    await send_deployment_update(server_id, "error", f"Deployment failed: {message}")
+            finally:
+                # ALWAYS remove deployment lock when deployment completes, regardless of success/failure/exception
                 await redis_manager.delete(deployment_lock_key)
-            else:
-                server.status = ServerStatus.ERROR
-                log.status = "failed"
-                log.error_message = message
-                await send_deployment_update(server_id, "error", f"Deployment failed: {message}")
-                # Remove deployment lock on failure
-                await redis_manager.delete(deployment_lock_key)
+                # Clear deployment progress after a delay to allow clients to fetch final messages
+                # The progress cache will also auto-expire after 2 hours
+                asyncio.create_task(clear_deployment_progress_after_delay(server_id))
             
         elif action == "start":
             await send_deployment_update(server_id, "status", "Starting server...")
@@ -462,16 +506,50 @@ async def server_action(
         server.status = ServerStatus.ERROR
         await db.commit()
         
-        # Remove deployment lock if exception occurs during deployment
-        if action == "deploy":
-            await redis_manager.delete(deployment_lock_key)
-        
         await send_deployment_update(server_id, "error", f"Action failed: {str(e)}")
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Action failed: {str(e)}"
         )
+
+
+@router.get("/servers/{server_id}/deployment-progress")
+async def get_deployment_progress(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get accumulated deployment progress for a server
+    
+    This endpoint allows clients to retrieve deployment progress after reconnecting
+    or if the WebSocket connection was lost. Useful for recovering progress after
+    program restart or SSH disconnect.
+    """
+    result = await db.execute(select(Server).filter(Server.id == server_id))
+    server = result.scalar_one_or_none()
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server with ID {server_id} not found"
+        )
+    
+    # Check ownership
+    if server.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view deployment progress for this server"
+        )
+    
+    # Get accumulated progress from Redis
+    progress = await redis_manager.get_deployment_progress(server_id)
+    
+    return {
+        "server_id": server_id,
+        "progress_messages": progress,
+        "total_messages": len(progress)
+    }
 
 
 @router.get("/servers/{server_id}/logs", response_model=List[DeploymentLogResponse])

@@ -148,6 +148,67 @@ class RedisManager:
         
         # Delete the server data
         return await self.delete(server_key)
+    
+    # Deployment progress methods
+    async def append_deployment_progress(self, server_id: int, msg_type: str, message: str, timestamp: str) -> bool:
+        """
+        Append deployment progress message to Redis list
+        
+        Args:
+            server_id: Server ID
+            msg_type: Message type (status|output|error|complete)
+            message: Progress message
+            timestamp: ISO format timestamp
+        
+        Returns:
+            bool: Success status
+        """
+        key = f"deployment_progress:{server_id}"
+        try:
+            # Store as JSON for structured data
+            progress_entry = json.dumps({
+                "type": msg_type,
+                "message": message,
+                "timestamp": timestamp
+            })
+            await self.client.rpush(key, progress_entry)
+            # Set expiration to 2 hours (matches deployment lock TTL)
+            await self.client.expire(key, 7200)
+            return True
+        except Exception as e:
+            print(f"Redis append deployment progress error: {e}")
+            return False
+    
+    async def get_deployment_progress(self, server_id: int) -> list:
+        """
+        Get all accumulated deployment progress messages
+        
+        Args:
+            server_id: Server ID
+        
+        Returns:
+            list: List of progress message dicts
+        """
+        key = f"deployment_progress:{server_id}"
+        try:
+            progress_entries = await self.client.lrange(key, 0, -1)
+            return [json.loads(entry) for entry in progress_entries]
+        except Exception as e:
+            print(f"Redis get deployment progress error: {e}")
+            return []
+    
+    async def clear_deployment_progress(self, server_id: int) -> bool:
+        """
+        Clear deployment progress for a server
+        
+        Args:
+            server_id: Server ID
+        
+        Returns:
+            bool: Success status
+        """
+        key = f"deployment_progress:{server_id}"
+        return await self.delete(key)
 
 
 # Global Redis manager instance

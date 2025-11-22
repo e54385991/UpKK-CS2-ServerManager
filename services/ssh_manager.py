@@ -720,6 +720,10 @@ class SSHManager:
                     await self.execute_command(final_kill_cmd)
                     await asyncio.sleep(1)
             
+            # Kill any stray CS2 processes that might be running outside screen
+            # This is an additional safety check to prevent duplicate processes
+            await self._kill_stray_cs2_processes(server, progress_callback)
+            
             # Perform universal self-check and auto-fix common issues
             selfcheck_success, selfcheck_msg = await self.perform_server_selfcheck(server, progress_callback)
             if not selfcheck_success:
@@ -1149,6 +1153,20 @@ class SSHManager:
         finally:
             await self.disconnect()
     
+    async def _send_progress_if_callback(self, progress_callback, message: str):
+        """
+        Shared helper to send progress updates if callback is provided
+        
+        Args:
+            progress_callback: Optional callback for progress messages
+            message: Progress message to send
+        """
+        if progress_callback:
+            if asyncio.iscoroutinefunction(progress_callback):
+                await progress_callback(message)
+            else:
+                progress_callback(message)
+    
     async def _kill_steamcmd_processes(self, server: Server, progress_callback=None) -> None:
         """
         Kill any existing steamcmd processes for this server to prevent concurrent updates
@@ -1157,14 +1175,6 @@ class SSHManager:
             server: Server instance
             progress_callback: Optional callback for progress messages
         """
-        async def send_progress(message: str):
-            """Helper to send progress updates"""
-            if progress_callback:
-                if asyncio.iscoroutinefunction(progress_callback):
-                    await progress_callback(message)
-                else:
-                    progress_callback(message)
-        
         try:
             # Find steamcmd processes related to this server's directory
             # We look for processes that contain both "steamcmd" and the server's game directory path
@@ -1176,7 +1186,7 @@ class SSHManager:
             
             if stdout.strip():
                 pids = stdout.strip().split('\n')
-                await send_progress(f"⚠ Found {len(pids)} existing steamcmd process(es), terminating...")
+                await self._send_progress_if_callback(progress_callback, f"⚠ Found {len(pids)} existing steamcmd process(es), terminating...")
                 
                 # Kill the processes
                 for pid in pids:
@@ -1192,13 +1202,58 @@ class SSHManager:
                 success, verify_output, _ = await self.execute_command(verify_cmd, timeout=10)
                 
                 if verify_output.strip():
-                    await send_progress("⚠ Some steamcmd processes may still be running")
+                    await self._send_progress_if_callback(progress_callback, "⚠ Some steamcmd processes may still be running")
                 else:
-                    await send_progress("✓ All existing steamcmd processes terminated")
+                    await self._send_progress_if_callback(progress_callback, "✓ All existing steamcmd processes terminated")
             
         except Exception as e:
             # Non-critical error, log but continue
-            await send_progress(f"Note: Error checking for existing steamcmd processes: {str(e)}")
+            await self._send_progress_if_callback(progress_callback, f"Note: Error checking for existing steamcmd processes: {str(e)}")
+    
+    async def _kill_stray_cs2_processes(self, server: Server, progress_callback=None) -> None:
+        """
+        Kill any CS2 server processes running outside of screen sessions
+        
+        This prevents duplicate processes when starting/updating/validating servers.
+        Only kills CS2 processes matching this server's port to avoid affecting other servers.
+        Uses word boundary matching to ensure exact port matching (e.g., port 27015 won't match 270).
+        
+        Args:
+            server: Server instance
+            progress_callback: Optional callback for progress messages
+        """
+        try:
+            # Find CS2 processes for this server's port with exact matching
+            # Use word boundary \b to prevent matching ports as substrings (e.g., 270 matching in 27015)
+            # The pattern 'cs2.*-port\s+{port}\b' ensures we match "-port 27015" but not "-port 270159"
+            check_cmd = f"pgrep -f 'cs2.*-port\\s+{server.game_port}\\b' || true"
+            success, stdout, stderr = await self.execute_command(check_cmd, timeout=10)
+            
+            if stdout.strip():
+                pids = stdout.strip().split('\n')
+                await self._send_progress_if_callback(progress_callback, f"⚠ Found {len(pids)} stray CS2 process(es) on port {server.game_port}, terminating...")
+                
+                # Kill the processes
+                for pid in pids:
+                    if pid:
+                        kill_cmd = f"kill -9 {pid} 2>/dev/null || true"
+                        await self.execute_command(kill_cmd, timeout=5)
+                
+                # Give a moment for processes to terminate
+                await asyncio.sleep(0.5)
+                
+                # Verify they're gone using the same precise pattern
+                verify_cmd = f"pgrep -f 'cs2.*-port\\s+{server.game_port}\\b' || true"
+                success, verify_output, _ = await self.execute_command(verify_cmd, timeout=10)
+                
+                if verify_output.strip():
+                    await self._send_progress_if_callback(progress_callback, "⚠ Some CS2 processes may still be running")
+                else:
+                    await self._send_progress_if_callback(progress_callback, "✓ All stray CS2 processes terminated")
+            
+        except Exception as e:
+            # Non-critical error, log but continue
+            await self._send_progress_if_callback(progress_callback, f"Note: Error checking for stray CS2 processes: {str(e)}")
     
     async def update_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """Update CS2 server using SteamCMD (without validation)"""
@@ -1250,6 +1305,9 @@ class SSHManager:
                     kill_cmd = f"pkill -f 'SCREEN.*{screen_name}' || true"
                     await self.execute_command(kill_cmd)
                     await asyncio.sleep(1)
+            
+            # Kill any stray CS2 processes that might be running outside screen
+            await self._kill_stray_cs2_processes(server, progress_callback)
             
             # Navigate to game directory
             game_dir = server.game_directory
@@ -1349,6 +1407,9 @@ class SSHManager:
                     kill_cmd = f"pkill -f 'SCREEN.*{screen_name}' || true"
                     await self.execute_command(kill_cmd)
                     await asyncio.sleep(1)
+            
+            # Kill any stray CS2 processes that might be running outside screen
+            await self._kill_stray_cs2_processes(server, progress_callback)
             
             # Navigate to game directory
             game_dir = server.game_directory
