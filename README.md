@@ -8,13 +8,13 @@
 
 ## 🚀 超简单部署（2分钟上手）
 
-[![超简单部署](https://img.youtube.com/vi/PPzykUZmNy0/maxresdefault.jpg)](https://youtu.be/PPzykUZmNy0)
+[![](https://img.youtube.com/vi/8GksFZHmO0c/maxresdefault.jpg)](https://youtu.be/8GksFZHmO0c)
 
 ## ⚙️ 操作和管理（完整功能演示）
 
-[![操作和管理](https://img.youtube.com/vi/PPzykUZmNy0/maxresdefault.jpg)](https://youtu.be/PPzykUZmNy0)
+[![](https://img.youtube.com/vi/PPzykUZmNy0/maxresdefault.jpg)](https://youtu.be/PPzykUZmNy0)
 
-> 温馨提示：点图片或标题即可播放视频，建议全，2 分钟学会全部操作！
+> 点图片立即播放 ·  2 分钟学会全部操作
 
 
 <a name="chinese"></a>
