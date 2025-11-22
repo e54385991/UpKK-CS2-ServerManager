@@ -184,6 +184,15 @@ async def server_action(
     db.add(log)
     await db.commit()
     
+    # Clear previous websocket records before starting new operation
+    # This is a non-critical operation - if it fails, continue with the action
+    try:
+        await redis_manager.clear_deployment_progress(server_id)
+    except Exception:
+        # Silently continue if cleanup fails - old messages are better than blocking the operation
+        # This catches Redis connection errors, timeouts, and other non-critical failures
+        pass
+    
     # Send WebSocket notification
     await send_deployment_update(server_id, "status", f"Starting action: {action}")
     
