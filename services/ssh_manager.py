@@ -748,6 +748,12 @@ class SSHManager:
                 await progress_callback(message)
         
         try:
+            # Clean up any dead screen sessions first
+            # This prevents false positives when checking for existing sessions
+            await send_progress("Cleaning up dead screen sessions...")
+            await self.execute_command("screen -wipe || true")
+            await send_progress("✓ Dead screen sessions cleaned up")
+            
             # CRITICAL: Ensure no existing screen session before starting
             # This prevents duplicate screen sessions for the same server
             # This check is essential for restart operations and edge cases
