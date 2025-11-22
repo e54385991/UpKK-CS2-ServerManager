@@ -9,9 +9,9 @@ from datetime import timedelta
 
 from modules import (
     User, UserCreate, UserLogin, UserResponse, Token,
-    PasswordReset, UserProfileUpdate,
+    PasswordReset, UserProfileUpdate, ApiKeyResponse, ApiKeyGenerate,
     get_db, get_password_hash, verify_password, create_access_token,
-    get_current_active_user, settings
+    get_current_active_user, settings, generate_api_key
 )
 from services.captcha_service import captcha_service
 
@@ -177,3 +177,86 @@ async def update_profile(
     await db.refresh(current_user)
     
     return current_user
+
+
+@router.get("/api-key", response_model=ApiKeyResponse)
+async def get_api_key(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get current user's API key"""
+    if not current_user.api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No API key generated. Please generate one first."
+        )
+    
+    # Note: Using updated_at as a proxy for API key creation time.
+    # This timestamp reflects the last time the user record was updated,
+    # which includes API key generation/regeneration.
+    return {
+        "api_key": current_user.api_key,
+        "created_at": current_user.updated_at
+    }
+
+
+@router.post("/api-key/generate", response_model=ApiKeyResponse)
+async def generate_user_api_key(
+    api_key_data: ApiKeyGenerate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Generate a new API key for the current user (or regenerate if exists)"""
+    # Validate CAPTCHA if provided (optional for automation)
+    if api_key_data.captcha_token and api_key_data.captcha_code:
+        is_valid = await captcha_service.validate_captcha(api_key_data.captcha_token, api_key_data.captcha_code)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired CAPTCHA code"
+            )
+    
+    # Generate new API key
+    new_api_key = generate_api_key()
+    
+    # Check if the generated key already exists (very unlikely but possible)
+    max_retries = 5
+    for _ in range(max_retries):
+        result = await db.execute(select(User).filter(User.api_key == new_api_key))
+        existing_user = result.scalar_one_or_none()
+        if not existing_user:
+            break
+        new_api_key = generate_api_key()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate unique API key. Please try again."
+        )
+    
+    # Update user's API key
+    current_user.api_key = new_api_key
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return {
+        "api_key": current_user.api_key,
+        "created_at": current_user.updated_at
+    }
+
+
+@router.delete("/api-key")
+async def revoke_api_key(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Revoke (delete) the current user's API key"""
+    if not current_user.api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No API key to revoke"
+        )
+    
+    # Remove API key
+    current_user.api_key = None
+    await db.commit()
+    
+    return {"success": True, "message": "API key revoked successfully"}

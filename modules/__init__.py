@@ -8,6 +8,7 @@ from .schemas import (
     ServerAction, ActionResponse, DeploymentLogResponse,
     UserCreate, UserLogin, UserResponse, Token, TokenData,
     PasswordReset, UserProfileUpdate,
+    ApiKeyResponse, ApiKeyGenerate,
     A2SServerInfo, A2SPlayerInfo, A2SCachedData, A2SCacheResponse,
     InitializedServerCreate, InitializedServerResponse, InitializedServerListItem
 )
@@ -15,7 +16,7 @@ from .database import get_db, init_db, engine, async_session_maker, migrate_db
 from .auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, get_current_active_user, get_current_admin_user,
-    get_optional_current_user
+    get_optional_current_user, get_user_from_api_key, get_current_user_flexible
 )
 from .utils import generate_api_key, verify_api_key_format, get_current_time
 
@@ -43,6 +44,8 @@ __all__ = [
     'TokenData',
     'PasswordReset',
     'UserProfileUpdate',
+    'ApiKeyResponse',
+    'ApiKeyGenerate',
     'A2SServerInfo',
     'A2SPlayerInfo',
     'A2SCachedData',
@@ -62,6 +65,8 @@ __all__ = [
     'get_current_active_user',
     'get_current_admin_user',
     'get_optional_current_user',
+    'get_user_from_api_key',
+    'get_current_user_flexible',
     'generate_api_key',
     'verify_api_key_format',
     'get_current_time',

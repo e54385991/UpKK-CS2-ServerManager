@@ -45,8 +45,10 @@ app.include_router(file_manager.router)
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and start monitoring on startup"""
-    await init_db()
+    # Run migrations first to add any missing columns to existing tables
     await migrate_db()
+    # Then initialize database (create tables if they don't exist, create default admin)
+    await init_db()
     
     # Clear old A2S cache to prevent double-encoding issues
     from services.redis_manager import redis_manager

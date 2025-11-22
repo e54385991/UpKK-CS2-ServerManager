@@ -275,6 +275,55 @@ async def migrate_db():
         else:
             print("✓ cpu_affinity column exists")
         
+        # Check if api_key column exists in users table
+        # First ensure users table exists
+        result = await conn.execute(
+            text("""
+                SELECT TABLE_NAME 
+                FROM INFORMATION_SCHEMA.TABLES 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'users'
+            """)
+        )
+        users_table_exists = result.fetchone() is not None
+        
+        if not users_table_exists:
+            print("Creating users table first...")
+            await conn.run_sync(Base.metadata.create_all)
+        
+        # Now check if api_key column exists
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'users' 
+                AND COLUMN_NAME = 'api_key'
+            """)
+        )
+        user_api_key_exists = result.fetchone() is not None
+        
+        if not user_api_key_exists:
+            print("Adding api_key column to users table...")
+            await conn.execute(
+                text("""
+                    ALTER TABLE users 
+                    ADD COLUMN api_key VARCHAR(64) NULL
+                """)
+            )
+            # Add unique index
+            try:
+                await conn.execute(
+                    text("""
+                        CREATE UNIQUE INDEX idx_user_api_key ON users(api_key)
+                    """)
+                )
+                print("✓ Migration completed: api_key column and index added to users table")
+            except Exception as e:
+                print(f"✓ Migration completed: api_key column added to users table (index may already exist): {e}")
+        else:
+            print("✓ api_key column exists in users table")
+        
         print("✓ Database schema migration completed")
 
 

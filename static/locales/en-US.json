@@ -111,7 +111,22 @@
     "resetPasswordButton": "Reset Password",
     "resetting": "Resetting...",
     "passwordResetSuccess": "Password reset successfully",
-    "passwordResetFailed": "Failed to reset password"
+    "passwordResetFailed": "Failed to reset password",
+    "apiKey": "API Key Management",
+    "apiKeyDescription": "Use API keys to authenticate API requests without exposing your password. You can use the API key in the X-API-Key header.",
+    "currentApiKey": "Current API Key",
+    "apiKeyWarning": "⚠️ Keep this key secret! Anyone with this key can access your servers.",
+    "noApiKey": "You haven't generated an API key yet.",
+    "generateApiKey": "Generate API Key",
+    "regenerateApiKey": "Regenerate",
+    "revokeApiKey": "Revoke",
+    "generating": "Generating...",
+    "apiKeyGenerated": "API key generated successfully",
+    "apiKeyGenerateFailed": "Failed to generate API key",
+    "revoking": "Revoking...",
+    "apiKeyRevoked": "API key revoked successfully",
+    "apiKeyRevokeFailed": "Failed to revoke API key",
+    "confirmRevokeApiKey": "Are you sure you want to revoke your API key? This action cannot be undone."
   },
   "servers": {
     "title": "Server Management",

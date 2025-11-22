@@ -111,7 +111,22 @@
     "resetPasswordButton": "重置密码",
     "resetting": "重置中...",
     "passwordResetSuccess": "密码重置成功",
-    "passwordResetFailed": "密码重置失败"
+    "passwordResetFailed": "密码重置失败",
+    "apiKey": "API 密钥管理",
+    "apiKeyDescription": "使用 API 密钥进行身份验证，无需暴露您的密码。您可以在 X-API-Key 请求头中使用 API 密钥。",
+    "currentApiKey": "当前 API 密钥",
+    "apiKeyWarning": "⚠️ 请保密此密钥！任何拥有此密钥的人都可以访问您的服务器。",
+    "noApiKey": "您还没有生成 API 密钥。",
+    "generateApiKey": "生成 API 密钥",
+    "regenerateApiKey": "重新生成",
+    "revokeApiKey": "撤销",
+    "generating": "生成中...",
+    "apiKeyGenerated": "API 密钥生成成功",
+    "apiKeyGenerateFailed": "API 密钥生成失败",
+    "revoking": "撤销中...",
+    "apiKeyRevoked": "API 密钥撤销成功",
+    "apiKeyRevokeFailed": "API 密钥撤销失败",
+    "confirmRevokeApiKey": "确定要撤销您的 API 密钥吗？此操作不可撤销。"
   },
   "servers": {
     "title": "服务器管理",

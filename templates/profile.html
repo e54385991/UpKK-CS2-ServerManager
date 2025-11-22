@@ -115,6 +115,72 @@
                 </form>
             </div>
         </div>
+        
+        <!-- API Key Management Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-key"></i> <span data-i18n="profile.apiKey">API Key Management</span></h5>
+            </div>
+            <div class="card-body">
+                <div id="apikey-error-message" class="alert alert-danger d-none" role="alert"></div>
+                <div id="apikey-success-message" class="alert alert-success d-none" role="alert"></div>
+                
+                <p class="text-muted" data-i18n="profile.apiKeyDescription">
+                    Use API keys to authenticate API requests without exposing your password. You can use the API key in the <code>X-API-Key</code> header.
+                </p>
+                
+                <div id="apikey-display" class="d-none mb-3">
+                    <div class="alert alert-info">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong data-i18n="profile.currentApiKey">Current API Key:</strong>
+                                <div class="mt-2">
+                                    <code id="apikey-value" class="user-select-all bg-light p-2 d-inline-block rounded" style="font-size: 0.9em;">Loading...</code>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="copy-apikey-btn" title="Copy to clipboard">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </div>
+                                <small class="text-muted d-block mt-2" data-i18n="profile.apiKeyWarning">
+                                    ⚠️ Keep this key secret! Anyone with this key can access your servers.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="no-apikey-message" class="alert alert-warning d-none" data-i18n="profile.noApiKey">
+                    You haven't generated an API key yet.
+                </div>
+                
+                <div class="mb-3">
+                    <label for="apikey-captcha" class="form-label">
+                        <span data-i18n="profile.captcha">Verification Code</span>
+                        <small class="text-muted">(Optional - recommended for web UI)</small>
+                    </label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <img id="apikey-captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" title="Click to refresh">
+                        <input type="text" class="form-control" id="apikey-captcha" maxlength="4" placeholder="Enter code (optional)" style="max-width: 120px;">
+                        <button type="button" class="btn btn-outline-secondary" id="apikey-refresh-captcha" title="Refresh CAPTCHA">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                    <input type="hidden" id="apikey-captcha-token">
+                    <div class="form-text">CAPTCHA is optional when using API. Recommended when using web UI for extra security.</div>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary" id="generate-apikey-btn">
+                        <i class="bi bi-plus-circle"></i> <span data-i18n="profile.generateApiKey">Generate API Key</span>
+                    </button>
+                    <button type="button" class="btn btn-warning d-none" id="regenerate-apikey-btn">
+                        <i class="bi bi-arrow-clockwise"></i> <span data-i18n="profile.regenerateApiKey">Regenerate</span>
+                    </button>
+                    <button type="button" class="btn btn-danger d-none" id="revoke-apikey-btn">
+                        <i class="bi bi-trash"></i> <span data-i18n="profile.revokeApiKey">Revoke</span>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -313,9 +379,224 @@ document.getElementById('password-form').addEventListener('submit', async (e) =>
     }
 });
 
+// API Key Management
+// Load CAPTCHA for API key operations
+async function loadApiKeyCaptcha() {
+    try {
+        const response = await fetch('/api/captcha/image/new');
+        const token = response.headers.get('X-Captcha-Token');
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        
+        document.getElementById('apikey-captcha-image').src = imageUrl;
+        document.getElementById('apikey-captcha-token').value = token;
+    } catch (error) {
+        console.error('Failed to load CAPTCHA:', error);
+    }
+}
+
+// Load current API key
+async function loadApiKey() {
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/auth/api-key', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            document.getElementById('apikey-value').textContent = data.api_key;
+            document.getElementById('apikey-display').classList.remove('d-none');
+            document.getElementById('no-apikey-message').classList.add('d-none');
+            document.getElementById('generate-apikey-btn').classList.add('d-none');
+            document.getElementById('regenerate-apikey-btn').classList.remove('d-none');
+            document.getElementById('revoke-apikey-btn').classList.remove('d-none');
+        } else if (response.status === 404) {
+            // No API key generated yet
+            document.getElementById('apikey-display').classList.add('d-none');
+            document.getElementById('no-apikey-message').classList.remove('d-none');
+            document.getElementById('generate-apikey-btn').classList.remove('d-none');
+            document.getElementById('regenerate-apikey-btn').classList.add('d-none');
+            document.getElementById('revoke-apikey-btn').classList.add('d-none');
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Failed to load API key:', error);
+    }
+}
+
+// Copy API key to clipboard with fallback for older browsers
+document.getElementById('copy-apikey-btn').addEventListener('click', () => {
+    const apiKey = document.getElementById('apikey-value').textContent;
+    const btn = document.getElementById('copy-apikey-btn');
+    const originalHTML = btn.innerHTML;
+    
+    // Try modern Clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(apiKey).then(() => {
+            btn.innerHTML = '<i class="bi bi-check"></i>';
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+            // Fallback to old method
+            copyToClipboardFallback(apiKey, btn, originalHTML);
+        });
+    } else {
+        // Use fallback for older browsers or non-HTTPS contexts
+        copyToClipboardFallback(apiKey, btn, originalHTML);
+    }
+});
+
+// Fallback clipboard copy function for older browsers
+function copyToClipboardFallback(text, btn, originalHTML) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            btn.innerHTML = '<i class="bi bi-check"></i>';
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+            }, 2000);
+        } else {
+            alert('Failed to copy. Please copy manually: ' + text);
+        }
+    } catch (err) {
+        console.error('Fallback copy failed:', err);
+        alert('Failed to copy. Please copy manually: ' + text);
+    } finally {
+        document.body.removeChild(textArea);
+    }
+}
+
+// Generate/Regenerate API key
+async function generateApiKey() {
+    const errorDiv = document.getElementById('apikey-error-message');
+    const successDiv = document.getElementById('apikey-success-message');
+    const generateBtn = document.getElementById('generate-apikey-btn');
+    const regenerateBtn = document.getElementById('regenerate-apikey-btn');
+    
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+    
+    const activeBtn = generateBtn.classList.contains('d-none') ? regenerateBtn : generateBtn;
+    activeBtn.disabled = true;
+    const generatingText = window.i18n ? window.i18n.t('profile.generating') : 'Generating...';
+    activeBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> ${generatingText}`;
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/auth/api-key/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                captcha_token: document.getElementById('apikey-captcha-token').value,
+                captcha_code: document.getElementById('apikey-captcha').value
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            const successMsg = window.i18n ? window.i18n.t('profile.apiKeyGenerated') : 'API key generated successfully';
+            successDiv.textContent = successMsg;
+            successDiv.classList.remove('d-none');
+            document.getElementById('apikey-captcha').value = '';
+            document.getElementById('apikey-captcha-token').value = '';  // Clear token to prevent reuse
+            loadApiKey();
+        } else {
+            errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.apiKeyGenerateFailed') : 'Failed to generate API key');
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (error) {
+        const errorMsg = window.i18n ? window.i18n.t('profile.apiKeyGenerateFailed') : 'Failed to generate API key';
+        errorDiv.textContent = `${errorMsg}: ${error.message}`;
+        errorDiv.classList.remove('d-none');
+    } finally {
+        activeBtn.disabled = false;
+        const btnText = activeBtn === generateBtn ? 
+            (window.i18n ? window.i18n.t('profile.generateApiKey') : 'Generate API Key') :
+            (window.i18n ? window.i18n.t('profile.regenerateApiKey') : 'Regenerate');
+        const btnIcon = activeBtn === generateBtn ? 'plus-circle' : 'arrow-clockwise';
+        activeBtn.innerHTML = `<i class="bi bi-${btnIcon}"></i> ${btnText}`;
+        loadApiKeyCaptcha();
+    }
+}
+
+// Revoke API key
+document.getElementById('revoke-apikey-btn').addEventListener('click', async () => {
+    if (!confirm(window.i18n ? window.i18n.t('profile.confirmRevokeApiKey') : 'Are you sure you want to revoke your API key? This action cannot be undone.')) {
+        return;
+    }
+    
+    const errorDiv = document.getElementById('apikey-error-message');
+    const successDiv = document.getElementById('apikey-success-message');
+    const revokeBtn = document.getElementById('revoke-apikey-btn');
+    
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+    
+    revokeBtn.disabled = true;
+    const revokingText = window.i18n ? window.i18n.t('profile.revoking') : 'Revoking...';
+    revokeBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> ${revokingText}`;
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/auth/api-key', {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            const successMsg = window.i18n ? window.i18n.t('profile.apiKeyRevoked') : 'API key revoked successfully';
+            successDiv.textContent = successMsg;
+            successDiv.classList.remove('d-none');
+            loadApiKey();
+        } else {
+            errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.apiKeyRevokeFailed') : 'Failed to revoke API key');
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (error) {
+        const errorMsg = window.i18n ? window.i18n.t('profile.apiKeyRevokeFailed') : 'Failed to revoke API key';
+        errorDiv.textContent = `${errorMsg}: ${error.message}`;
+        errorDiv.classList.remove('d-none');
+    } finally {
+        revokeBtn.disabled = false;
+        const revokeText = window.i18n ? window.i18n.t('profile.revokeApiKey') : 'Revoke';
+        revokeBtn.innerHTML = `<i class="bi bi-trash"></i> ${revokeText}`;
+    }
+});
+
+// Event listeners
+document.getElementById('apikey-refresh-captcha').addEventListener('click', loadApiKeyCaptcha);
+document.getElementById('apikey-captcha-image').addEventListener('click', loadApiKeyCaptcha);
+document.getElementById('generate-apikey-btn').addEventListener('click', generateApiKey);
+document.getElementById('regenerate-apikey-btn').addEventListener('click', generateApiKey);
+
 // Load user info and CAPTCHAs on page load
 loadUserInfo();
 loadProfileCaptcha();
 loadPasswordCaptcha();
+loadApiKeyCaptcha();
+loadApiKey();
 </script>
 {% endblock %}

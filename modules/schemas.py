@@ -76,6 +76,22 @@ class UserProfileUpdate(BaseModel):
     captcha_code: str = Field(..., min_length=4, max_length=4, description="User-entered CAPTCHA code")
 
 
+class ApiKeyResponse(BaseModel):
+    """Schema for API key response"""
+    api_key: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class ApiKeyGenerate(BaseModel):
+    """Schema for generating API key"""
+    captcha_token: Optional[str] = Field(None, description="CAPTCHA token from /api/captcha/generate (optional)")
+    captcha_code: Optional[str] = Field(None, min_length=4, max_length=4, description="User-entered CAPTCHA code (optional)")
+
+
+
 # Server schemas
 class ServerCreate(BaseModel):
     """Schema for creating a new server (password authentication only)"""

@@ -16,6 +16,7 @@
 - ✅ **异步架构**: 完全使用 async/await 实现高性能异步操作
 - 🚀 **多服务器管理**: 支持同时管理多个 CS2 服务器
 - 👥 **用户认证**: JWT 令牌认证，用户只能管理自己创建的服务器
+- 🔑 **API 密钥**: 支持 API 密钥认证，方便用户控制服务器而无需密码交换 ([查看文档](docs/API_KEY_USAGE.md))
 - 🔐 **SSH 连接**: 支持密码和密钥文件两种认证方式
 - 📦 **自动部署**: 通过 SSH 自动部署 CS2 服务器
 - 🎮 **服务器控制**: 启动、停止、重启服务器
@@ -43,9 +44,8 @@
 
 #### 步骤 1: 准备服务器
 
-详细的服务器准备说明请参阅 [DEPLOYMENT.md](docs/DEPLOYMENT.md)。
 
-#### 步骤 2: 克隆仓库
+#### 步骤 2: 克隆仓库 或 下载整个源码
 
 ```bash
 git clone https://github.com/e54385991/CS2-ServerManager.git
@@ -135,6 +135,7 @@ A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + My
 - ✅ **Async Architecture**: High-performance async operations using async/await
 - 🚀 **Multi-Server Management**: Manage multiple CS2 servers simultaneously
 - 👥 **User Authentication**: JWT token authentication, users can only manage their own servers
+- 🔑 **API Key Authentication**: Support API key authentication for controlling servers without password exchange ([View Docs](docs/API_KEY_USAGE.md))
 - 🔐 **SSH Connection**: Supports both password and key file authentication
 - 📦 **Auto Deployment**: Automatic CS2 server deployment via SSH
 - 🎮 **Server Control**: Start, stop, and restart servers
