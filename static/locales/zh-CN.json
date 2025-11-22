@@ -358,7 +358,13 @@
     "saveAutoUpdateSettings": "保存自动更新设置",
     "enableAutoUpdate": "启用自动更新",
     "lastUpdateCheck": "上次更新检查",
-    "lastUpdated": "最后更新"
+    "lastUpdated": "最后更新",
+    "notDeployed": "服务器未部署",
+    "notDeployedMessage": "此服务器尚未部署。请部署以安装 CS2 并开始使用。",
+    "deployNow": "立即部署",
+    "operationSubmitted": "操作已提交",
+    "checkConsoleForDetails": "请点击控制台和日志查看详情",
+    "deploymentCommandSent": "已向服务器发送部署命令，请注意查看控制台和日志。"
   },
   "setupWizard": {
     "title": "新服务器初始化",
@@ -461,7 +467,12 @@
     "savedServers": "已保存的服务器配置",
     "savedServersDescription": "这些服务器已经初始化完成。您可以在添加 CS2 服务器时快速选择这些配置。",
     "confirmDelete": "确定要删除此服务器配置吗？",
-    "deleteSuccess": "服务器配置删除成功"
+    "deleteSuccess": "服务器配置删除成功",
+    "host": "主机",
+    "sshUser": "SSH 用户",
+    "createdAt": "创建时间",
+    "actions": "操作",
+    "manualGameDirNote": "/home/{username}/ 下任何目录"
   },
   "common": {
     "loading": "加载中...",
@@ -567,5 +578,39 @@
     "submitting": "提交中...",
     "saved": "已保存！",
     "uploading": "上传中"
+  },
+  "dialog": {
+    "success": "成功",
+    "error": "错误",
+    "warning": "警告",
+    "info": "信息",
+    "confirm": "确认",
+    "ok": "确定",
+    "cancel": "取消"
+  },
+  "errors": {
+    "sshAuthFailed": "SSH 认证失败",
+    "sshAuthFailedDetail": "请检查服务器用户名、密码和端口设置。",
+    "connectionFailed": "连接失败",
+    "errorLoadingFiles": "加载文件错误",
+    "errorSavingFile": "保存文件错误",
+    "errorUploadingFile": "上传文件错误",
+    "errorDownloadingFile": "下载文件错误",
+    "errorCreatingFolder": "创建文件夹错误",
+    "errorRenaming": "重命名错误",
+    "errorDeleting": "删除错误",
+    "errorCreatingServer": "创建服务器错误",
+    "deploymentInProgress": "服务器正在部署中，请查看控制台了解进度。"
+  },
+  "confirmMessages": {
+    "deleteServer": "确定要删除服务器 \"{serverName}\" 吗？",
+    "bulkAction": "确定要对 {count} 个服务器执行 {action} 操作吗？",
+    "deleteFile": "确定要删除此{type}吗？",
+    "unsavedChanges": "您有未保存的更改。确定要关闭吗？",
+    "install": "在 {count} 个服务器上安装 {plugins}？",
+    "installMetamod": "安装 Metamod:Source？\n\n（大多数 CS2 插件需要）",
+    "installCSS": "安装 CounterStrikeSharp？\n\n（用 C# 编写服务器插件。需要 Metamod）",
+    "file": "文件",
+    "folder": "文件夹"
   }
 }

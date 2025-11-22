@@ -9,6 +9,7 @@ import asyncssh
 import secrets
 import string
 import time
+import shlex
 
 from services.captcha_service import captcha_service
 from services.redis_manager import redis_manager
@@ -51,7 +52,7 @@ class ServerSetupRequest(BaseModel):
     ssh_user: str  # Can be root or regular user with sudo access
     ssh_password: str  # SSH password (required, key-based auth not supported)
     sudo_password: Optional[str] = None  # Required if ssh_user is not root and sudo needs password
-    cs2_username: str = "cs2server"  # User to create for CS2
+    cs2_username: str = Field(default="cs2server", pattern=r"^[a-z_][a-z0-9_-]*$")  # User to create for CS2 (alphanumeric + _ - only)
     cs2_password: Optional[str] = None  # If None, will auto-generate
     auto_sudo: bool = True  # Automatically use sudo for non-root users
     captcha_token: str  # CAPTCHA token from /api/captcha/generate
@@ -71,17 +72,31 @@ class ServerSetupResponse(BaseModel):
 
 
 def generate_secure_password(length: int = 16) -> str:
-    """Generate a secure random password"""
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-    # Ensure password has at least one of each type
+    """
+    Generate a secure random password with special characters to meet PAM requirements
+    Uses safe special characters and proper escaping to avoid shell issues
+    """
+    # Use safe special characters that are commonly accepted by PAM policies
+    # Avoiding characters that have special meaning in shell: ' " ` $ \ ! and others
+    safe_special_chars = "!@#%^&*()_+-=[]{}|;:,.<>?"
+    
+    # Build character sets
+    lowercase = string.ascii_lowercase
+    uppercase = string.ascii_uppercase
+    digits = string.digits
+    
+    # Ensure password has at least one of each required type for PAM compliance
     password = [
-        secrets.choice(string.ascii_lowercase),
-        secrets.choice(string.ascii_uppercase),
-        secrets.choice(string.digits),
-        secrets.choice("!@#$%^&*"),
+        secrets.choice(lowercase),          # At least one lowercase
+        secrets.choice(uppercase),          # At least one uppercase
+        secrets.choice(digits),             # At least one digit
+        secrets.choice(safe_special_chars), # At least one special character
     ]
-    # Fill the rest randomly
-    password += [secrets.choice(alphabet) for _ in range(length - 4)]
+    
+    # Fill the rest randomly from all character sets
+    all_chars = lowercase + uppercase + digits + safe_special_chars
+    password += [secrets.choice(all_chars) for _ in range(length - 4)]
+    
     # Shuffle to avoid predictable patterns
     secrets.SystemRandom().shuffle(password)
     return ''.join(password)
@@ -263,8 +278,13 @@ async def auto_setup_server(
                 )
         
         # Set user password
+        # Use a here-document approach which is safe for special characters
+        # and works properly with sudo
         logs.append("设置用户密码...")
-        chpasswd_cmd = f"sh -c \"echo '{setup_req.cs2_username}:{cs2_password}' | chpasswd\""
+        
+        # Create a safe command using a here-document wrapped in bash -c
+        # This avoids all shell escaping issues and works with sudo
+        chpasswd_cmd = f"bash -c \"chpasswd <<'EOFPWD'\n{setup_req.cs2_username}:{cs2_password}\nEOFPWD\""
         
         if needs_sudo:
             stdout, stderr, exit_code = await run_sudo_command(conn, chpasswd_cmd, sudo_pass)

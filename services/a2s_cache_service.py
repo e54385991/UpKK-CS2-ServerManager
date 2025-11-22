@@ -5,10 +5,10 @@ Periodically queries all servers using A2S protocol and caches results in Redis
 import asyncio
 import logging
 from typing import Dict, Optional
-from datetime import datetime, timezone
 
 from services.a2s_query import a2s_service
 from services.redis_manager import redis_manager
+from modules.utils import get_current_time
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class A2SCacheService:
                     cache_data = {
                         'version': steam_version,
                         'message': result.get('message', ''),
-                        'timestamp': datetime.now(timezone.utc).isoformat()
+                        'timestamp': get_current_time().isoformat()
                     }
                     
                     await redis_manager.set(
@@ -163,8 +163,8 @@ class A2SCacheService:
                 "server_info": server_info,
                 "players": player_list if players_success else [],
                 "response_time_ms": response_time,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "last_updated": datetime.now(timezone.utc).isoformat()
+                "timestamp": get_current_time().isoformat(),
+                "last_updated": get_current_time().isoformat()
             }
             
             # Store in Redis with TTL
@@ -211,7 +211,7 @@ class A2SCacheService:
             cache_data = {
                 "success": False,
                 "error": str(e),
-                "timestamp": datetime.now(timezone.utc).isoformat()
+                "timestamp": get_current_time().isoformat()
             }
             cache_key = f"a2s:server:{server.id}"
             try:

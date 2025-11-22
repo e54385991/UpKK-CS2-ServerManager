@@ -317,10 +317,22 @@
                         </div>
                     </div>
                 </form>
+                
+                <!-- Progress/Status Display -->
+                <div id="addServerProgress" class="mt-3" style="display: none;">
+                    <div class="alert alert-info mb-0">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span id="addServerProgressText">Processing...</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="common.cancel">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitAddServer()">
+                <button type="button" class="btn btn-primary" id="submitAddServerBtn" onclick="submitAddServer()">
                     <i class="bi bi-plus-circle"></i> <span data-i18n="servers.addServerBtn">Add Server</span>
                 </button>
             </div>
@@ -517,15 +529,26 @@ function serverManager() {
         
         async bulkAction(action) {
             if (this.selectedServers.length === 0) {
-                alert('Please select at least one server');
+                showWarning('Please select at least one server');
                 return;
             }
             
             const actionName = action.charAt(0).toUpperCase() + action.slice(1);
-            if (!confirm(`Are you sure you want to ${action} ${this.selectedServers.length} server(s)?`)) {
-                return;
-            }
             
+            // Use confirm dialog with i18n support
+            const message = window.i18n?.t('confirmMessages.bulkAction', {
+                action: action,
+                count: this.selectedServers.length
+            }) || `Are you sure you want to ${action} ${this.selectedServers.length} server(s)?`;
+            
+            showConfirm(
+                message,
+                () => { this.executeBulkAction(action, actionName); },
+                null
+            );
+        },
+        
+        async executeBulkAction(action, actionName) {
             this.bulkActionRunning = true;
             this.bulkProgress = 0;
             
@@ -560,7 +583,7 @@ function serverManager() {
             this.bulkActionRunning = false;
             this.bulkProgress = 0;
             
-            alert(`Bulk ${actionName} completed:\n✓ ${succeeded} succeeded\n✗ ${failed} failed`);
+            showInfo(`Bulk ${actionName} completed:\n✓ ${succeeded} succeeded\n✗ ${failed} failed`);
             
             // Reload servers to get updated status
             await this.loadServers();
@@ -569,7 +592,7 @@ function serverManager() {
         
         async bulkInstallPlugins() {
             if (this.selectedServers.length === 0) {
-                alert('Please select at least one server');
+                showWarning('Please select at least one server');
                 return;
             }
             
@@ -579,10 +602,15 @@ function serverManager() {
                 return;
             }
             
-            if (!confirm(`Install ${pluginSelection.join(', ')} on ${this.selectedServers.length} server(s)?`)) {
-                return;
-            }
-            
+            // Confirm installation
+            showConfirm(
+                `Install ${pluginSelection.join(', ')} on ${this.selectedServers.length} server(s)?`,
+                () => { this.executeBulkInstallPlugins(pluginSelection); },
+                null
+            );
+        },
+        
+        async executeBulkInstallPlugins(pluginSelection) {
             this.bulkActionRunning = true;
             this.bulkProgress = 0;
             
@@ -646,8 +674,8 @@ function serverManager() {
                 progressLog += `SUMMARY: ${totalSuccess} succeeded, ${totalFailed} failed\n`;
                 progressLog += '='.repeat(60) + '\n';
                 
-                // Show results in alert (could be improved with a modal)
-                alert(progressLog);
+                // Show results as plain text (will be safely converted to HTML in dialog manager)
+                showInfo(progressLog);
                 
             } catch (err) {
                 let errorMsg = 'Unknown error';
@@ -658,7 +686,7 @@ function serverManager() {
                 } else {
                     errorMsg = String(err);
                 }
-                alert('Error installing plugins: ' + errorMsg);
+                showError('Error installing plugins: ' + errorMsg);
             } finally {
                 this.bulkActionRunning = false;
                 this.bulkProgress = 0;
@@ -670,32 +698,64 @@ function serverManager() {
         async showPluginSelectionDialog() {
             return new Promise((resolve) => {
                 const plugins = [];
-                const metamodSelected = confirm('Install Metamod:Source?\n\n(Required for most CS2 plugins)');
-                if (metamodSelected) {
-                    plugins.push('metamod');
-                }
                 
-                const cssSelected = confirm('Install CounterStrikeSharp?\n\n(Write server plugins in C#. Requires Metamod)');
-                if (cssSelected) {
-                    plugins.push('counterstrikesharp');
-                }
+                // First ask about Metamod
+                const metamodMsg = window.i18n?.t('confirmMessages.installMetamod') || 'Install Metamod:Source?\n\n(Required for most CS2 plugins)';
+                const cssMsg = window.i18n?.t('confirmMessages.installCSS') || 'Install CounterStrikeSharp?\n\n(Write server plugins in C#. Requires Metamod)';
                 
-                resolve(plugins);
+                showConfirm(
+                    metamodMsg,
+                    () => {
+                        plugins.push('metamod');
+                        // Then ask about CounterStrikeSharp
+                        showConfirm(
+                            cssMsg,
+                            () => {
+                                plugins.push('counterstrikesharp');
+                                resolve(plugins);
+                            },
+                            () => {
+                                resolve(plugins);
+                            }
+                        );
+                    },
+                    () => {
+                        // If Metamod not selected, still ask about CounterStrikeSharp
+                        showConfirm(
+                            cssMsg,
+                            () => {
+                                plugins.push('counterstrikesharp');
+                                resolve(plugins);
+                            },
+                            () => {
+                                resolve(plugins);
+                            }
+                        );
+                    }
+                );
             });
         },
         
         async deleteServer(id, name) {
-            if (!confirm(`Are you sure you want to delete server "${name}"?`)) return;
+            const message = window.i18n?.t('confirmMessages.deleteServer', {
+                serverName: name
+            }) || `Are you sure you want to delete server "${name}"?`;
             
-            try {
-                const response = await authFetch(`/servers/${id}`, {
-                    method: 'DELETE'
-                });
-                if (!response.ok) throw new Error('Failed to delete server');
-                await this.loadServers();
-            } catch (err) {
-                alert('Error deleting server: ' + err.message);
-            }
+            showConfirm(
+                message,
+                async () => {
+                    try {
+                        const response = await authFetch(`/servers/${id}`, {
+                            method: 'DELETE'
+                        });
+                        if (!response.ok) throw new Error('Failed to delete server');
+                        await this.loadServers();
+                    } catch (err) {
+                        showError('Error deleting server: ' + err.message);
+                    }
+                },
+                null
+            );
         },
         
         destroy() {
@@ -750,6 +810,18 @@ async function submitAddServer() {
         return;
     }
     
+    const progressDiv = document.getElementById('addServerProgress');
+    const progressText = document.getElementById('addServerProgressText');
+    const submitBtn = document.getElementById('submitAddServerBtn');
+    
+    // Show progress and disable button
+    progressDiv.style.display = 'block';
+    submitBtn.disabled = true;
+    
+    const updateProgress = (message) => {
+        progressText.textContent = message;
+    };
+    
     const data = {
         name: document.getElementById('serverName').value,
         host: document.getElementById('serverHost').value,
@@ -764,6 +836,10 @@ async function submitAddServer() {
     };
     
     try {
+        updateProgress('Validating...');
+        updateProgress('Connecting to server...');
+        updateProgress('Verifying credentials...');
+        
         const response = await authFetch('/servers', {
             method: 'POST',
             headers: {
@@ -777,6 +853,9 @@ async function submitAddServer() {
             throw new Error(error.detail || 'Failed to create server');
         }
         
+        updateProgress('Server added successfully!');
+        await new Promise(resolve => setTimeout(resolve, 300)); // Brief delay to show success message
+        
         // Close modal and reload
         const modal = bootstrap.Modal.getInstance(document.getElementById('addServerModal'));
         modal.hide();
@@ -786,9 +865,14 @@ async function submitAddServer() {
         const app = Alpine.$data(document.querySelector('[x-data]'));
         await app.loadServers();
     } catch (err) {
-        alert('Error creating server: ' + err.message);
+        const prefix = window.i18n?.t('errors.errorCreatingServer') || 'Error creating server';
+        showError(`${prefix}: ${err.message}`);
         // Refresh CAPTCHA on error
         loadServerCaptcha();
+    } finally {
+        // Hide progress and re-enable button
+        progressDiv.style.display = 'none';
+        submitBtn.disabled = false;
     }
 }
 
@@ -849,7 +933,7 @@ async function fillFromInitializedServer(serverKey) {
         document.getElementById('gameDirectory').value = server.game_directory;
     } catch (error) {
         console.error('Error filling server details:', error);
-        alert('Error loading server details: ' + error.message);
+        showError('Error loading server details: ' + error.message);
     }
 }
 </script>

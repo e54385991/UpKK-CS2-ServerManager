@@ -13,6 +13,9 @@ from services.server_monitor import server_monitor
 class SSHManager:
     """Async SSH manager for remote server operations"""
     
+    # Constants for file validation
+    MIN_EXPECTED_FILE_SIZE = 1000  # Minimum file size in bytes (1KB) for downloaded packages
+    
     def __init__(self):
         self.conn: Optional[asyncssh.SSHClientConnection] = None
     
@@ -1832,6 +1835,174 @@ class SSHManager:
         
         # Just reinstall - this will update to the latest version
         return await self.install_counterstrikesharp(server, progress_callback)
+    
+    async def install_cs2fixes(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
+        """
+        Install CS2Fixes for CS2 server
+        
+        Args:
+            server: Server instance
+            progress_callback: Optional async callback for progress updates
+        Returns: (success: bool, message: str)
+        """
+        async def send_progress(message: str):
+            """Helper to send progress updates"""
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(message)
+                else:
+                    progress_callback(message)
+        
+        success, msg = await self.connect(server)
+        if not success:
+            return False, f"Connection failed: {msg}"
+        
+        try:
+            await send_progress("=" * 60)
+            await send_progress("Installing CS2Fixes...")
+            await send_progress("=" * 60)
+            
+            # Check if CS2 is installed
+            cs2_dir = f"{server.game_directory}/cs2"
+            check_cmd = f"test -d {cs2_dir} && echo 'exists'"
+            check_success, check_stdout, _ = await self.execute_command(check_cmd)
+            
+            if not check_success or 'exists' not in check_stdout:
+                return False, "CS2 server not found. Please deploy the server first."
+            
+            await send_progress("✓ CS2 server directory found")
+            
+            # Check if Metamod is installed
+            metamod_dir = f"{cs2_dir}/game/csgo/addons/metamod"
+            check_mm_cmd = f"test -d {metamod_dir} && echo 'exists'"
+            check_mm_success, check_mm_stdout, _ = await self.execute_command(check_mm_cmd)
+            
+            if not check_mm_success or 'exists' not in check_mm_stdout:
+                return False, "Metamod:Source is required but not found. Please install Metamod first."
+            
+            await send_progress("✓ Metamod:Source found")
+            
+            # Get latest CS2Fixes version from GitHub releases
+            await send_progress("Fetching latest CS2Fixes version from GitHub...")
+            
+            get_latest_cmd = (
+                "curl -sL https://api.github.com/repos/Source2ZE/CS2Fixes/releases/latest | "
+                "grep -o '\"browser_download_url\": \"[^\"]*cs2fixes-linux[^\"]*\\.zip\"' | "
+                "grep -o 'https://[^\"]*' | head -1"
+            )
+            success, cs2fixes_url, stderr = await self.execute_command(get_latest_cmd, timeout=30)
+            
+            if not success or not cs2fixes_url.strip():
+                return False, "Failed to fetch latest CS2Fixes release from GitHub. Please check your internet connection."
+            
+            cs2fixes_url = cs2fixes_url.strip()
+            await send_progress(f"✓ Found latest version: {cs2fixes_url}")
+            
+            # Create temp directory for download
+            temp_dir = f"/tmp/cs2fixes_install_{server.id}"
+            await send_progress(f"Creating temporary directory: {temp_dir}")
+            await self.execute_command(f"mkdir -p {temp_dir}")
+            
+            # Download CS2Fixes
+            await send_progress(f"Downloading CS2Fixes from {cs2fixes_url}...")
+            download_cmd = f"curl -L -o {temp_dir}/cs2fixes.zip {cs2fixes_url} || wget -O {temp_dir}/cs2fixes.zip {cs2fixes_url}"
+            success, stdout, stderr = await self.execute_command_streaming(
+                download_cmd,
+                output_callback=send_progress,
+                timeout=180
+            )
+            
+            # Verify the file was downloaded
+            check_cmd = f"test -f {temp_dir}/cs2fixes.zip && echo 'exists'"
+            check_success, check_stdout, _ = await self.execute_command(check_cmd)
+            
+            if not check_success or 'exists' not in check_stdout:
+                await self.execute_command(f"rm -rf {temp_dir}")
+                return False, f"CS2Fixes download failed. Please check the URL and try again."
+            
+            # Check file size to ensure it's not empty
+            size_cmd = f"stat -f%z {temp_dir}/cs2fixes.zip 2>/dev/null || stat -c%s {temp_dir}/cs2fixes.zip 2>/dev/null"
+            size_success, size_out, _ = await self.execute_command(size_cmd)
+            if size_success and size_out.strip():
+                file_size = int(size_out.strip())
+                if file_size < self.MIN_EXPECTED_FILE_SIZE:
+                    await self.execute_command(f"rm -rf {temp_dir}")
+                    return False, f"Downloaded file is too small ({file_size} bytes). Download may have failed."
+                await send_progress(f"✓ Downloaded {file_size} bytes")
+            
+            await send_progress("✓ CS2Fixes downloaded successfully")
+            
+            # Extract CS2Fixes to temp directory first
+            await send_progress(f"Extracting CS2Fixes...")
+            extract_cmd = f"unzip -o {temp_dir}/cs2fixes.zip -d {temp_dir}"
+            success, stdout, stderr = await self.execute_command(extract_cmd, timeout=60)
+            
+            if not success:
+                await self.execute_command(f"rm -rf {temp_dir}")
+                return False, f"CS2Fixes extraction failed: {stderr}"
+            
+            await send_progress("✓ CS2Fixes extracted successfully")
+            
+            # Copy to CS2 addons directory
+            csgo_dir = f"{cs2_dir}/game/csgo"
+            await send_progress(f"Installing CS2Fixes to {csgo_dir}...")
+            
+            # The zip should contain an addons folder with cs2fixes
+            copy_cmd = f"cp -r {temp_dir}/addons {csgo_dir}/"
+            success, stdout, stderr = await self.execute_command(copy_cmd, timeout=60)
+            
+            if not success:
+                await self.execute_command(f"rm -rf {temp_dir}")
+                return False, f"Failed to copy CS2Fixes files: {stderr}"
+            
+            await send_progress("✓ CS2Fixes files copied successfully")
+            
+            # Clean up temp directory
+            await self.execute_command(f"rm -rf {temp_dir}")
+            
+            # Verify installation
+            cs2fixes_dir = f"{csgo_dir}/addons/cs2fixes"
+            verify_cmd = f"test -d {cs2fixes_dir} && echo 'installed'"
+            verify_success, verify_stdout, _ = await self.execute_command(verify_cmd)
+            
+            if verify_success and 'installed' in verify_stdout:
+                await send_progress("=" * 60)
+                await send_progress("✓ CS2Fixes installed successfully!")
+                await send_progress("=" * 60)
+                await send_progress("NOTE: You need to restart your server for changes to take effect.")
+                await send_progress("Use 'meta list' command to verify CS2Fixes is loaded.")
+                return True, "CS2Fixes installed successfully"
+            else:
+                return False, "CS2Fixes installation verification failed"
+        
+        except Exception as e:
+            await send_progress(f"Installation error: {str(e)}")
+            return False, f"Installation error: {str(e)}"
+        finally:
+            await self.disconnect()
+    
+    async def update_cs2fixes(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
+        """
+        Update CS2Fixes to the latest version
+        
+        Args:
+            server: Server instance
+            progress_callback: Optional async callback for progress updates
+        Returns: (success: bool, message: str)
+        """
+        async def send_progress(message: str):
+            """Helper to send progress updates"""
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(message)
+                else:
+                    progress_callback(message)
+        
+        await send_progress("Updating CS2Fixes to latest version...")
+        await send_progress("This will reinstall CS2Fixes with the latest version.")
+        
+        # Just reinstall - this will update to the latest version
+        return await self.install_cs2fixes(server, progress_callback)
     
     async def list_directory(self, path: str, server: Server) -> Tuple[bool, List[Dict[str, Any]], str]:
         """

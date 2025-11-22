@@ -204,7 +204,7 @@
                 
             } catch (error) {
                 console.error('Error saving file:', error);
-                alert('Error saving file: ' + error.message);
+                showError('Error saving file: ' + error.message);
                 
                 // Restore button state
                 saveBtn.disabled = false;
@@ -216,11 +216,17 @@
         
         function closeWindow() {
             if (editor && editor.getValue() !== `{{ file_content | safe }}`) {
-                if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
-                    return;
-                }
+                const message = window.i18n?.t('confirmMessages.unsavedChanges') || 'You have unsaved changes. Are you sure you want to close?';
+                showConfirm(
+                    message,
+                    () => {
+                        window.close();
+                    },
+                    null
+                );
+            } else {
+                window.close();
             }
-            window.close();
         }
         
         // Handle window close

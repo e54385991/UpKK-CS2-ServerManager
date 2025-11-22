@@ -358,7 +358,13 @@
     "saveAutoUpdateSettings": "Save Auto Update Settings",
     "enableAutoUpdate": "Enable Auto Update",
     "lastUpdateCheck": "Last Update Check",
-    "lastUpdated": "Last Updated"
+    "lastUpdated": "Last Updated",
+    "notDeployed": "Server Not Deployed",
+    "notDeployedMessage": "This server has not been deployed yet. Deploy it to install CS2 and start using it.",
+    "deployNow": "Deploy Now",
+    "operationSubmitted": "Operation Submitted",
+    "checkConsoleForDetails": "Please check Console & Logs tab to view details",
+    "deploymentCommandSent": "Deployment command sent to server. Please check the console and logs for progress."
   },
   "setupWizard": {
     "title": "New Server Initialization",
@@ -461,7 +467,12 @@
     "savedServers": "Saved Server Configurations",
     "savedServersDescription": "These servers have been initialized. You can quickly select these configurations when adding a CS2 server.",
     "confirmDelete": "Are you sure you want to delete this server configuration?",
-    "deleteSuccess": "Server configuration deleted successfully"
+    "deleteSuccess": "Server configuration deleted successfully",
+    "host": "Host",
+    "sshUser": "SSH User",
+    "createdAt": "Created At",
+    "actions": "Actions",
+    "manualGameDirNote": "Any directory under /home/{username}/"
   },
   "common": {
     "loading": "Loading...",
@@ -567,5 +578,39 @@
     "submitting": "Submitting...",
     "saved": "Saved!",
     "uploading": "Uploading"
+  },
+  "dialog": {
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Information",
+    "confirm": "Confirm",
+    "ok": "OK",
+    "cancel": "Cancel"
+  },
+  "errors": {
+    "sshAuthFailed": "SSH Authentication Failed",
+    "sshAuthFailedDetail": "Please check your server username, password, and port settings.",
+    "connectionFailed": "Connection Failed",
+    "errorLoadingFiles": "Error loading files",
+    "errorSavingFile": "Error saving file",
+    "errorUploadingFile": "Error uploading file",
+    "errorDownloadingFile": "Error downloading file",
+    "errorCreatingFolder": "Error creating folder",
+    "errorRenaming": "Error renaming",
+    "errorDeleting": "Error deleting",
+    "errorCreatingServer": "Error creating server",
+    "deploymentInProgress": "Server is currently being deployed. Please check the console for progress."
+  },
+  "confirmMessages": {
+    "deleteServer": "Are you sure you want to delete server \"{serverName}\"?",
+    "bulkAction": "Are you sure you want to {action} {count} server(s)?",
+    "deleteFile": "Are you sure you want to delete this {type}?",
+    "unsavedChanges": "You have unsaved changes. Are you sure you want to close?",
+    "install": "Install {plugins} on {count} server(s)?",
+    "installMetamod": "Install Metamod:Source?\n\n(Required for most CS2 plugins)",
+    "installCSS": "Install CounterStrikeSharp?\n\n(Write server plugins in C#. Requires Metamod)",
+    "file": "file",
+    "folder": "folder"
   }
 }

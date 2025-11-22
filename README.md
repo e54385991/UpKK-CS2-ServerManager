@@ -2,11 +2,6 @@
 
 [English](#english) | [中文](#chinese)
 
-
-# 2分钟轻松创建您的CS2服务器并便于管理
-[![观看视频](https://img.youtube.com/vi/t6dZQRykOgg/maxresdefault.jpg)](https://www.youtube.com/watch?v=t6dZQRykOgg)
-
-
 ---
 
 <a name="chinese"></a>

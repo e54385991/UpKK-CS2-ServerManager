@@ -3,9 +3,9 @@ Routes for a2s-cache - requires authentication to filter by user
 Separate router to avoid /servers prefix issues
 """
 from fastapi import APIRouter, Depends
-from datetime import datetime, timezone
 from modules.models import User
 from modules.auth import get_current_active_user
+from modules.utils import get_current_time
 
 # Create a router with NO prefix
 router = APIRouter(tags=["cache"])
@@ -28,7 +28,7 @@ async def test_a2s_cache():
     return {
         "status": "ok",
         "message": "Public test endpoint working",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": get_current_time().isoformat(),
         "public": True
     }
 
@@ -55,7 +55,7 @@ async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_ac
     # Initialize response
     response = {
         "servers": {},
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": get_current_time().isoformat(),
         "debug": {
             "endpoint": "a2s-cache",
             "router": "cache",

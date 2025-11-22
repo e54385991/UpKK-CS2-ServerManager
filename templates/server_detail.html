@@ -78,20 +78,6 @@
         opacity: 1 !important;
     }
     
-    /* Prevent rename modal flicker - disable transitions */
-    #renameModal,
-    #renameModal *,
-    #renameModal.fade .modal-dialog {
-        transition: none !important;
-        -webkit-transition: none !important;
-        animation: none !important;
-        -webkit-animation: none !important;
-    }
-    
-    #renameModal.show {
-        opacity: 1 !important;
-    }
-    
     /* Prevent Alpine.js from causing reflows on hover */
     #fileEditorModal [x-show],
     #fileEditorModal [x-text],
@@ -153,6 +139,19 @@
 {% endblock %}
 
 {% block content %}
+<!-- Toast Notification Container -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+    <div id="actionToast" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <span id="toastMessage"></span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
 <div x-data="serverDetail({{ server.id }})" x-init="init()">
     <!-- Back Button -->
     <div class="mb-3">
@@ -271,8 +270,8 @@
                                         <ul class="list-unstyled">
                                             <li><i class="bi bi-shield-check"></i> <strong
                                                     data-i18n="serverDetail.authType">Auth Type:</strong> 
-                                                <span data-i18n="{% if server.auth_type == 'password' %}common.password{% else %}servers.authKeyOption{% endif %}">
-                                                    {% if server.auth_type == 'password' %}Password{% else %}SSH Key File{% endif %}
+                                                <span data-i18n="{% if server.auth_type.value == 'password' %}common.password{% else %}servers.authKeyOption{% endif %}">
+                                                    {% if server.auth_type.value == 'password' %}Password{% else %}SSH Key File{% endif %}
                                                 </span></li>
                                             <li><i class="bi bi-calendar"></i> <strong
                                                     data-i18n="serverDetail.created">Created:</strong> {{
@@ -300,8 +299,14 @@
                                                 This server has not been deployed yet. Deploy it to install CS2 and start using it.
                                             </p>
                                         </div>
-                                        <button @click="$el.closest('.tab-content').querySelector('#actions-tab').click(); setTimeout(() => executeAction('deploy'), 100)" 
-                                                class="btn btn-warning">
+                                        <button @click="
+                                            document.querySelector('#actions-tab').click(); 
+                                            setTimeout(() => {
+                                                executeAction('deploy');
+                                                const msg = window.i18n?.t('serverDetail.deploymentCommandSent') || 'Deployment command sent to server. Please check the console and logs for progress.';
+                                                showInfo(msg);
+                                            }, 100)
+                                        " class="btn btn-warning">
                                             <i class="bi bi-cloud-download"></i> <span data-i18n="serverDetail.deployNow">Deploy Now</span>
                                         </button>
                                     </div>
@@ -1013,7 +1018,7 @@
                                     <h6 class="card-title mb-3"><i class="bi bi-ui-checks"></i> <span
                                             data-i18n="serverDetail.batchInstallation">Batch Installation</span></h6>
                                     <div class="row mb-3">
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <div class="form-check">
                                                 <input class="form-check-input" type="checkbox"
                                                     x-model="pluginSelection.metamod" id="selectMetamod">
@@ -1024,7 +1029,7 @@
                                                 </label>
                                             </div>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <div class="form-check">
                                                 <input class="form-check-input" type="checkbox"
                                                     x-model="pluginSelection.counterstrikesharp" id="selectCSS">
@@ -1034,10 +1039,20 @@
                                                 </label>
                                             </div>
                                         </div>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox"
+                                                    x-model="pluginSelection.cs2fixes" id="selectCS2Fixes">
+                                                <label class="form-check-label" for="selectCS2Fixes">
+                                                    <strong>CS2Fixes</strong>
+                                                    <small class="d-block text-muted">Essential fixes and features</small>
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="d-grid">
                                         <button @click="installSelectedPlugins()"
-                                            :disabled="isActionRunning || (!pluginSelection.metamod && !pluginSelection.counterstrikesharp)"
+                                            :disabled="isActionRunning || (!pluginSelection.metamod && !pluginSelection.counterstrikesharp && !pluginSelection.cs2fixes)"
                                             class="btn btn-success">
                                             <i class="bi bi-cloud-download"></i> <span
                                                 data-i18n="serverDetail.installSelectedFrameworks">Install Selected
@@ -1049,7 +1064,7 @@
 
                             <!-- Individual Plugin Cards -->
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <div class="card h-100 border">
                                         <div class="card-body">
                                             <h6 class="card-title"><i class="bi bi-box-seam"></i> Metamod:Source</h6>
@@ -1071,7 +1086,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <div class="card h-100 border">
                                         <div class="card-body">
                                             <h6 class="card-title"><i class="bi bi-box-seam"></i> CounterStrikeSharp
@@ -1086,6 +1101,28 @@
                                                         data-i18n="serverDetail.install">Install</span>
                                                 </button>
                                                 <button @click="executeAction('update_counterstrikesharp')"
+                                                    :disabled="isActionRunning" class="btn btn-outline-primary btn-sm">
+                                                    <i class="bi bi-arrow-repeat"></i> <span
+                                                        data-i18n="serverDetail.update">Update</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card h-100 border">
+                                        <div class="card-body">
+                                            <h6 class="card-title"><i class="bi bi-box-seam"></i> CS2Fixes</h6>
+                                            <p class="card-text small text-muted">
+                                                Essential bug fixes and features for CS2. Requires Metamod:Source.
+                                            </p>
+                                            <div class="d-grid gap-2">
+                                                <button @click="executeAction('install_cs2fixes')"
+                                                    :disabled="isActionRunning" class="btn btn-primary btn-sm">
+                                                    <i class="bi bi-download"></i> <span
+                                                        data-i18n="serverDetail.install">Install</span>
+                                                </button>
+                                                <button @click="executeAction('update_cs2fixes')"
                                                     :disabled="isActionRunning" class="btn btn-outline-primary btn-sm">
                                                     <i class="bi bi-arrow-repeat"></i> <span
                                                         data-i18n="serverDetail.update">Update</span>
@@ -1692,10 +1729,6 @@
                                                                 class="btn btn-outline-secondary" title="Edit">
                                                                 <i class="bi bi-pencil"></i>
                                                             </button>
-                                                            <button @click.stop="renameFile(file)"
-                                                                class="btn btn-outline-warning" title="Rename">
-                                                                <i class="bi bi-pencil-square"></i>
-                                                            </button>
                                                             <button @click.stop="deleteFile(file)"
                                                                 class="btn btn-outline-danger" title="Delete">
                                                                 <i class="bi bi-trash"></i>
@@ -1772,29 +1805,6 @@
                         </div>
                     </div>
 
-                    <!-- Rename Modal -->
-                    <div class="modal fade" id="renameModal" tabindex="-1" x-show="showRenameModal"
-                        @click.self="showRenameModal = false">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title" data-i18n="fileManager.rename">Rename</h5>
-                                    <button type="button" class="btn-close" @click="showRenameModal = false"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <label class="form-label" data-i18n="fileManager.newName">New Name</label>
-                                    <input type="text" class="form-control" x-model="renameNewName"
-                                        @keyup.enter="confirmRename()">
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" @click="showRenameModal = false"
-                                        data-i18n="common.cancel">Cancel</button>
-                                    <button type="button" class="btn btn-primary" @click="confirmRename()"
-                                        data-i18n="common.rename">Rename</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -2089,7 +2099,8 @@
                                                                                     loadingA2SCheckLogs: false,
                                                                                         pluginSelection: {
             metamod: false,
-                counterstrikesharp: false
+                counterstrikesharp: false,
+                cs2fixes: false
         },
         serverEditForm: {
             name: '',
@@ -2139,6 +2150,32 @@
                             a2s_check_interval_seconds: 60
         },
 
+        // Helper function to format SSH error messages with i18n support
+        formatSSHError(errorMessage, defaultPrefixKey) {
+            let displayMessage = '';
+            
+            // Check for authentication failures
+            if (errorMessage.includes('Authentication failed') || errorMessage.includes('认证失败')) {
+                const title = window.i18n?.t('errors.sshAuthFailed') || 'SSH Authentication Failed';
+                const detail = window.i18n?.t('errors.sshAuthFailedDetail') || 'Please check your server username, password, and port settings.';
+                displayMessage = `${title}\n\n${detail}`;
+            } else if (errorMessage.includes('Connection failed') || errorMessage.includes('连接失败')) {
+                const title = window.i18n?.t('errors.connectionFailed') || 'Connection Failed';
+                displayMessage = `${title}: ${errorMessage}`;
+            } else {
+                // Get translated prefix or extract fallback from key
+                let prefix = window.i18n?.t(defaultPrefixKey);
+                if (!prefix || prefix === defaultPrefixKey) {
+                    // Fallback: extract readable text from key like 'errors.errorSavingFile' -> 'Error Saving File'
+                    const keyParts = defaultPrefixKey.split('.');
+                    prefix = keyParts[keyParts.length - 1].replace(/([A-Z])/g, ' $1').trim();
+                }
+                displayMessage = `${prefix}: ${errorMessage}`;
+            }
+            
+            return displayMessage;
+        },
+
                                             async init() {
             this.loadConfigForm();
             this.loadServerEditForm();
@@ -2164,6 +2201,41 @@
                 });
             });
             
+        },
+        
+        showToast(message, type = 'success') {
+            const toastEl = document.getElementById('actionToast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            if (!toastEl || !toastMessage) return;
+            
+            // Set message
+            toastMessage.textContent = message;
+            
+            // Remove existing background color classes
+            toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-info');
+            
+            // Add appropriate background color based on type
+            const bgClass = {
+                'success': 'bg-success',
+                'error': 'bg-danger',
+                'warning': 'bg-warning',
+                'info': 'bg-info'
+            }[type] || 'bg-info';
+            
+            toastEl.classList.add(bgClass);
+            
+            // Get or create Bootstrap Toast instance
+            let toast = bootstrap.Toast.getInstance(toastEl);
+            if (!toast) {
+                toast = new bootstrap.Toast(toastEl, {
+                    autohide: true,
+                    delay: 5000
+                });
+            }
+            
+            // Show toast
+            toast.show();
         },
         
 
@@ -2583,6 +2655,11 @@
                 }
 
                 if (response.ok) {
+                    // Show success toast notification
+                    const operationMsg = window.i18n ? window.i18n.t('serverDetail.operationSubmitted') : 'Operation Submitted';
+                    const detailMsg = window.i18n ? window.i18n.t('serverDetail.checkConsoleForDetails') : 'Please check Console & Logs tab to view details';
+                    this.showToast(`${operationMsg} - ${detailMsg}`, 'success');
+                    
                     if (result.data && result.data.status) {
                         this.server.status = result.data.status.toUpperCase();
                     }
@@ -2614,6 +2691,16 @@
                         }
                     }
 
+                    // Show dialog for deployment conflicts (409)
+                    if (response.status === 409) {
+                        // Translate deployment in progress message if it matches
+                        let displayMsg = errorMsg;
+                        if (errorMsg.toLowerCase().includes('deployed') || errorMsg.toLowerCase().includes('deploy')) {
+                            displayMsg = window.i18n?.t('errors.deploymentInProgress') || errorMsg;
+                        }
+                        showWarning(displayMsg);
+                    }
+                    
                     this.addLog('error', `Action failed: ${errorMsg}`);
                 }
             } catch (err) {
@@ -2634,6 +2721,9 @@
             if (this.pluginSelection.counterstrikesharp) {
                 plugins.push('counterstrikesharp');
             }
+            if (this.pluginSelection.cs2fixes) {
+                plugins.push('cs2fixes');
+            }
 
             if (plugins.length === 0) {
                 this.addLog('error', 'Please select at least one plugin framework to install');
@@ -2642,10 +2732,19 @@
 
             this.addLog('status', `Installing ${plugins.join(' and ')}...`);
 
+            // Action mapping for plugins
+            const actionMap = {
+                'metamod': 'install_metamod',
+                'counterstrikesharp': 'install_counterstrikesharp',
+                'cs2fixes': 'install_cs2fixes'
+            };
+
             // Install plugins sequentially
             for (const plugin of plugins) {
-                const action = plugin === 'metamod' ? 'install_metamod' : 'install_counterstrikesharp';
-                await this.executeAction(action);
+                const action = actionMap[plugin];
+                if (action) {
+                    await this.executeAction(action);
+                }
 
                 // Wait a bit between installations
                 if (plugins.length > 1 && plugin !== plugins[plugins.length - 1]) {
@@ -2656,6 +2755,7 @@
             // Reset selection after installation
             this.pluginSelection.metamod = false;
             this.pluginSelection.counterstrikesharp = false;
+            this.pluginSelection.cs2fixes = false;
         },
         
         async loadHistory() {
@@ -2735,14 +2835,11 @@
                 selectedFile: null,
                 showEditorModal: false,
                 showCreateFolderModal: false,
-                showRenameModal: false,
                 editingFile: null,
                 fileContent: '',
                 savingFile: false,
                 saveStatus: '',  // For showing save status messages
                 newFolderName: '',
-                renameFile: null,
-                renameNewName: '',
                 uploading: false,
                 uploadProgress: 0,
                 uploadingFileName: '',
@@ -2781,7 +2878,18 @@
                         });
 
                         if (!response.ok) {
-                            throw new Error(await response.text());
+                            const errorText = await response.text();
+                            let errorDetail = errorText;
+                            
+                            // Try to parse as JSON
+                            try {
+                                const errorJson = JSON.parse(errorText);
+                                errorDetail = errorJson.detail || errorText;
+                            } catch (e) {
+                                // Not JSON, use as is
+                            }
+                            
+                            throw new Error(errorDetail);
                         }
 
                         const data = await response.json();
@@ -2789,7 +2897,10 @@
                         this.currentPath = data.path;
                     } catch (error) {
                         console.error('Error loading files:', error);
-                        alert('Error loading files: ' + error.message);
+                        
+                        // Use helper function for consistent error formatting
+                        const errorMessage = error.message || String(error);
+                        showError(this.formatSSHError(errorMessage, 'errors.errorLoadingFiles'));
                     } finally {
                         this.loading = false;
                     }
@@ -2884,7 +2995,7 @@
                     } catch (error) {
                         console.error('Error saving file:', error);
                         this.saveStatus = 'error';
-                        alert('Error saving file: ' + error.message);
+                        showError(this.formatSSHError(error.message, 'errors.errorSavingFile'));
                     } finally {
                         this.savingFile = false;
                     }
@@ -2962,7 +3073,7 @@
                             console.log(`Uploaded ${file.name}`);
                         } catch (error) {
                             console.error('Error uploading file:', error);
-                            alert(`Error uploading ${file.name}: ${error.message}`);
+                            showError(this.formatSSHError(error.message, 'errors.errorUploadingFile') + ` (${file.name})`);
                         }
                     }
 
@@ -2999,7 +3110,7 @@
                         document.body.removeChild(a);
                     } catch (error) {
                         console.error('Error downloading file:', error);
-                        alert('Error downloading file: ' + error.message);
+                        showError(this.formatSSHError(error.message, 'errors.errorDownloadingFile'));
                     }
                 },
 
@@ -3029,74 +3140,41 @@
                         if (modal) modal.hide();
                     } catch (error) {
                         console.error('Error creating folder:', error);
-                        alert('Error creating folder: ' + error.message);
-                    }
-                },
-
-                renameFile(file) {
-                    this.renamingFile = file;
-                    this.renameNewName = file.name;
-                    this.showRenameModal = true;
-
-                    // Show Bootstrap modal
-                    const modal = new bootstrap.Modal(document.getElementById('renameModal'));
-                    modal.show();
-                },
-
-                async confirmRename() {
-                    if (!this.renameNewName.trim() || !this.renamingFile) return;
-
-                    try {
-                        const response = await fetch(`/servers/{{ server.id }}/files/rename?path=${encodeURIComponent(this.renamingFile.path)}`, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ new_name: this.renameNewName })
-                        });
-
-                        if (!response.ok) {
-                            throw new Error(await response.text());
-                        }
-
-                        this.showRenameModal = false;
-                        this.renamingFile = null;
-                        this.renameNewName = '';
-                        this.refreshFiles();
-
-                        // Hide Bootstrap modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('renameModal'));
-                        if (modal) modal.hide();
-                    } catch (error) {
-                        console.error('Error renaming:', error);
-                        alert('Error renaming: ' + error.message);
+                        showError(this.formatSSHError(error.message, 'errors.errorCreatingFolder'));
                     }
                 },
 
                 async deleteFile(file) {
-                    const type = file.type === 'directory' ? 'folder' : 'file';
-                    if (!confirm(`Are you sure you want to delete this ${type}?\n\n${file.name}`)) {
-                        return;
-                    }
+                    const typeKey = file.type === 'directory' ? 'folder' : 'file';
+                    const type = window.i18n?.t(`confirmMessages.${typeKey}`) || typeKey;
+                    
+                    const message = window.i18n?.t('confirmMessages.deleteFile', {
+                        type: type
+                    }) || `Are you sure you want to delete this ${type}?`;
+                    
+                    showConfirm(
+                        `${message}\n\n${file.name}`,
+                        async () => {
+                            try {
+                                const response = await fetch(`/servers/{{ server.id }}/files?path=${encodeURIComponent(file.path)}`, {
+                                    method: 'DELETE',
+                                    headers: {
+                                        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                                    }
+                                });
 
-                    try {
-                        const response = await fetch(`/servers/{{ server.id }}/files?path=${encodeURIComponent(file.path)}`, {
-                            method: 'DELETE',
-                            headers: {
-                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                                if (!response.ok) {
+                                    throw new Error(await response.text());
+                                }
+
+                                this.refreshFiles();
+                            } catch (error) {
+                                console.error('Error deleting:', error);
+                                showError(this.formatSSHError(error.message, 'errors.errorDeleting'));
                             }
-                        });
-
-                        if (!response.ok) {
-                            throw new Error(await response.text());
-                        }
-
-                        this.refreshFiles();
-                    } catch (error) {
-                        console.error('Error deleting:', error);
-                        alert('Error deleting: ' + error.message);
-                    }
+                        },
+                        null
+                    );
                 },
 
                 isTextFile(filename) {

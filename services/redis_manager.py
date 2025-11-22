@@ -11,6 +11,9 @@ from modules.config import settings
 class RedisManager:
     """Async Redis connection manager for caching"""
     
+    # Cache duration constants
+    INITIALIZED_SERVER_CACHE_TTL = 2592000  # 30 days in seconds
+    
     def __init__(self):
         self.client = aioredis.Redis(
             host=settings.REDIS_HOST,
@@ -87,11 +90,13 @@ class RedisManager:
         await self.client.close()
     
     # Initialized server methods
-    async def set_initialized_server(self, user_id: int, server_data: dict, expire: int = 86400) -> str:
+    async def set_initialized_server(self, user_id: int, server_data: dict, expire: int = None) -> str:
         """
-        Store initialized server data for a user with 24-hour expiration
+        Store initialized server data for a user with 30-day expiration
         Returns: server_key (unique identifier for this server)
         """
+        if expire is None:
+            expire = self.INITIALIZED_SERVER_CACHE_TTL
         server_key = f"initialized_server:{user_id}:{int(time.time() * 1000)}"
         success = await self.set(server_key, server_data, expire)
         

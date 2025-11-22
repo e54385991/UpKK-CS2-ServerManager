@@ -5,7 +5,8 @@ Implements version checking against Steam API for automatic updates
 import aiohttp
 import logging
 from typing import Optional, Tuple, Dict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
+from modules.utils import get_current_time
 
 logger = logging.getLogger(__name__)
 
@@ -170,11 +171,16 @@ class SteamAPIService:
             return True
         
         # Calculate time since last check
-        now = datetime.now(timezone.utc)
+        now = get_current_time()
         
         # Make last_check timezone-aware if it's naive
+        # Note: This assumes naive timestamps from the database were recorded in local timezone
+        # If database contains timestamps from different environments, they should be migrated
+        # to timezone-aware format
         if last_check.tzinfo is None:
-            last_check = last_check.replace(tzinfo=timezone.utc)
+            # If last_check is naive, assume it was in the local timezone
+            # and convert it to timezone-aware
+            last_check = last_check.astimezone()
         
         time_since_check = (now - last_check).total_seconds()
         

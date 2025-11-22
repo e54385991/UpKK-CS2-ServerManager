@@ -5,7 +5,7 @@ Periodically checks server versions against Steam API and triggers updates when 
 import asyncio
 import logging
 from typing import Optional
-from datetime import datetime, timezone
+from modules.utils import get_current_time
 
 from services.steam_api_service import steam_api_service
 from services.ssh_manager import SSHManager
@@ -94,7 +94,7 @@ class AutoUpdateService:
             await db.execute(
                 sql_update(Server)
                 .where(Server.id == server.id)
-                .values(last_update_check=datetime.now(timezone.utc))
+                .values(last_update_check=get_current_time())
             )
             await db.commit()
             
@@ -173,7 +173,7 @@ class AutoUpdateService:
                     await db.execute(
                         sql_update(Server)
                         .where(Server.id == server.id)
-                        .values(last_update_time=datetime.now(timezone.utc))
+                        .values(last_update_time=get_current_time())
                     )
                     await db.commit()
                 

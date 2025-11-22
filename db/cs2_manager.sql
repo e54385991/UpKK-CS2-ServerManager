@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- 主机： 1Panel-mysql-KZBC
--- 生成日期： 2025-11-19 03:49:07
+-- 生成日期： 2025-11-22 05:57:23
 -- 服务器版本： 8.4.7
 -- PHP 版本： 8.3.27
 
@@ -48,6 +48,25 @@ CREATE TABLE `global_settings` (
   `setting_key` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
   `setting_value` text COLLATE utf8mb4_general_ci NOT NULL,
   `description` text COLLATE utf8mb4_general_ci,
+  `created_at` datetime DEFAULT (now()),
+  `updated_at` datetime DEFAULT (now())
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- 表的结构 `initialized_servers`
+--
+
+CREATE TABLE `initialized_servers` (
+  `id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `host` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `ssh_port` int DEFAULT NULL,
+  `ssh_user` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
+  `ssh_password` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `game_directory` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `created_at` datetime DEFAULT (now()),
   `updated_at` datetime DEFAULT (now())
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -121,7 +140,8 @@ CREATE TABLE `servers` (
   `current_game_version` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Current installed CS2 version from A2S query or manual entry',
   `enable_auto_update` tinyint(1) DEFAULT '1' COMMENT 'Enable automatic updates based on Steam API version check',
   `last_update_check` datetime DEFAULT NULL COMMENT 'Last time version was checked against Steam API',
-  `last_update_time` datetime DEFAULT NULL COMMENT 'Last time server was updated'
+  `last_update_time` datetime DEFAULT NULL COMMENT 'Last time server was updated',
+  `update_check_interval_hours` int DEFAULT '1' COMMENT 'Hours between version checks (1-24)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -160,6 +180,14 @@ ALTER TABLE `global_settings`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `ix_global_settings_setting_key` (`setting_key`),
   ADD KEY `ix_global_settings_id` (`id`);
+
+--
+-- 表的索引 `initialized_servers`
+--
+ALTER TABLE `initialized_servers`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `ix_initialized_servers_user_id` (`user_id`),
+  ADD KEY `ix_initialized_servers_id` (`id`);
 
 --
 -- 表的索引 `monitoring_logs`
@@ -209,6 +237,12 @@ ALTER TABLE `global_settings`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
+-- 使用表AUTO_INCREMENT `initialized_servers`
+--
+ALTER TABLE `initialized_servers`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
 -- 使用表AUTO_INCREMENT `monitoring_logs`
 --
 ALTER TABLE `monitoring_logs`
@@ -225,6 +259,16 @@ ALTER TABLE `servers`
 --
 ALTER TABLE `users`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
+-- 限制导出的表
+--
+
+--
+-- 限制表 `initialized_servers`
+--
+ALTER TABLE `initialized_servers`
+  ADD CONSTRAINT `initialized_servers_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

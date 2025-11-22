@@ -267,7 +267,7 @@
         function connectWebSocket() {
             serverId = getServerId();
             if (!serverId) {
-                alert('Please enter a server ID');
+                showWarning('Please enter a server ID');
                 return;
             }
             
@@ -320,7 +320,7 @@
         async function executeAction(action) {
             const sid = getServerId();
             if (!sid) {
-                alert('Please enter a server ID');
+                showWarning('Please enter a server ID');
                 return;
             }
             

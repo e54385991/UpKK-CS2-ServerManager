@@ -5,14 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSoc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
-from datetime import datetime, timezone, timedelta
 import asyncio
 import json
 
 from modules import (
     Server, DeploymentLog, ServerStatus,
     ServerAction, ActionResponse, DeploymentLogResponse,
-    get_db, User, get_current_active_user
+    get_db, User, get_current_active_user, get_current_time
 )
 from services import SSHManager, redis_manager
 
@@ -79,7 +78,7 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
             await websocket.send_json({
                 "type": "ack",
                 "message": "Connected to deployment status stream",
-                "timestamp": datetime.now(timezone.utc).isoformat()
+                "timestamp": get_current_time().isoformat()
             })
     except WebSocketDisconnect:
         deployment_ws.disconnect(websocket, server_id)
@@ -90,7 +89,7 @@ async def send_deployment_update(server_id: int, msg_type: str, message: str):
     await deployment_ws.send_message(server_id, {
         "type": msg_type,
         "message": message,
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": get_current_time().isoformat()
     })
 
 
@@ -117,8 +116,23 @@ async def server_action(
             detail="Not authorized to perform actions on this server"
         )
     
-    ssh_manager = SSHManager()
+    # Check if server is already being deployed (prevent concurrent operations during deployment)
     action = action_data.action
+    deployment_lock_key = f"deployment_lock:{server_id}"
+    is_deploying = await redis_manager.get(deployment_lock_key)
+    
+    if is_deploying:
+        # If deployment is in progress, reject all operations
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Server is currently being deployed. Please check the console for progress."
+        )
+    
+    # Set deployment lock only for deploy action (with 2 hour expiration in case of crashes)
+    if action == "deploy":
+        await redis_manager.set(deployment_lock_key, "1", expire=7200)
+    
+    ssh_manager = SSHManager()
     
     # Create deployment log
     log = DeploymentLog(
@@ -145,15 +159,19 @@ async def server_action(
             
             if success:
                 server.status = ServerStatus.STOPPED
-                server.last_deployed = datetime.now(timezone.utc)
+                server.last_deployed = get_current_time()
                 log.status = "success"
                 log.output = message
                 await send_deployment_update(server_id, "complete", "Deployment completed successfully")
+                # Remove deployment lock on success
+                await redis_manager.delete(deployment_lock_key)
             else:
                 server.status = ServerStatus.ERROR
                 log.status = "failed"
                 log.error_message = message
                 await send_deployment_update(server_id, "error", f"Deployment failed: {message}")
+                # Remove deployment lock on failure
+                await redis_manager.delete(deployment_lock_key)
             
         elif action == "start":
             await send_deployment_update(server_id, "status", "Starting server...")
@@ -197,7 +215,7 @@ async def server_action(
             # Check if auto-clear is configured and server was offline long enough
             if server.auto_clear_crash_hours and server.auto_clear_crash_hours > 0:
                 if server.last_status_check:
-                    offline_duration = datetime.now(timezone.utc) - server.last_status_check
+                    offline_duration = get_current_time() - server.last_status_check
                     offline_hours = offline_duration.total_seconds() / 3600
                     
                     if offline_hours >= server.auto_clear_crash_hours:
@@ -267,7 +285,7 @@ async def server_action(
             success, status_msg = await ssh_manager.get_server_status(server)
             
             # Update last status check time
-            server.last_status_check = datetime.now(timezone.utc)
+            server.last_status_check = get_current_time()
             
             if success:
                 if status_msg == "running":
@@ -393,6 +411,38 @@ async def server_action(
                 log.error_message = message
                 await send_deployment_update(server_id, "error", f"CounterStrikeSharp update failed: {message}")
         
+        elif action == "install_cs2fixes":
+            await send_deployment_update(server_id, "status", "Installing CS2Fixes...")
+            success, message = await ssh_manager.install_cs2fixes(server,
+                                                                 lambda msg: asyncio.create_task(
+                                                                     send_deployment_update(server_id, "output", msg)
+                                                                 ))
+            
+            if success:
+                log.status = "success"
+                log.output = message
+                await send_deployment_update(server_id, "complete", "CS2Fixes installed successfully")
+            else:
+                log.status = "failed"
+                log.error_message = message
+                await send_deployment_update(server_id, "error", f"CS2Fixes installation failed: {message}")
+        
+        elif action == "update_cs2fixes":
+            await send_deployment_update(server_id, "status", "Updating CS2Fixes...")
+            success, message = await ssh_manager.update_cs2fixes(server,
+                                                                lambda msg: asyncio.create_task(
+                                                                    send_deployment_update(server_id, "output", msg)
+                                                                ))
+            
+            if success:
+                log.status = "success"
+                log.output = message
+                await send_deployment_update(server_id, "complete", "CS2Fixes updated successfully")
+            else:
+                log.status = "failed"
+                log.error_message = message
+                await send_deployment_update(server_id, "error", f"CS2Fixes update failed: {message}")
+        
         await db.commit()
         await db.refresh(server)
         await db.refresh(log)
@@ -411,6 +461,10 @@ async def server_action(
         log.error_message = str(e)
         server.status = ServerStatus.ERROR
         await db.commit()
+        
+        # Remove deployment lock if exception occurs during deployment
+        if action == "deploy":
+            await redis_manager.delete(deployment_lock_key)
         
         await send_deployment_update(server_id, "error", f"Action failed: {str(e)}")
         
@@ -514,6 +568,8 @@ async def batch_install_plugins(
                     success, message = await ssh_manager.install_metamod(server)
                 elif plugin == "counterstrikesharp":
                     success, message = await ssh_manager.install_counterstrikesharp(server)
+                elif plugin == "cs2fixes":
+                    success, message = await ssh_manager.install_cs2fixes(server)
                 else:
                     success = False
                     message = f"Unknown plugin: {plugin}"

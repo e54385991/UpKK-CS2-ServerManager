@@ -3,6 +3,9 @@ Utility functions for the CS2 Server Manager
 """
 import secrets
 import string
+import os
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 
 def generate_api_key(length: int = 64) -> str:
@@ -35,3 +38,32 @@ def verify_api_key_format(api_key: str) -> bool:
     
     # Check that it only contains alphanumeric characters
     return all(c in string.ascii_letters + string.digits for c in api_key)
+
+
+def get_current_time() -> datetime:
+    """
+    Get the current time using system timezone or TZ environment variable.
+    
+    This function respects the TZ environment variable if set, otherwise uses
+    the system's local timezone. This replaces hardcoded UTC usage.
+    
+    Returns:
+        Timezone-aware datetime object representing the current time
+    """
+    # Check if TZ environment variable is set
+    tz_name = os.environ.get('TZ')
+    
+    if tz_name:
+        try:
+            # Use the timezone from TZ environment variable
+            from zoneinfo import ZoneInfoNotFoundError
+            tz = ZoneInfo(tz_name)
+            return datetime.now(tz)
+        except (ZoneInfoNotFoundError, ValueError, KeyError):
+            # If TZ is invalid or not found, fall back to system timezone
+            pass
+    
+    # Use system local timezone
+    # datetime.now() without arguments uses local timezone
+    # We make it timezone-aware by using astimezone()
+    return datetime.now().astimezone()

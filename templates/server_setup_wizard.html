@@ -35,7 +35,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <template x-for="server in initializedServers" :key="server.id">
+                        <template x-for="server in initializedServers" :key="server.key">
                             <tr>
                                 <td x-text="server.name"></td>
                                 <td><span x-text="server.host"></span>:<span x-text="server.ssh_port"></span></td>
@@ -367,9 +367,12 @@
                     <h5 data-i18n="setupWizard.manualStep3">步骤 3: 添加服务器</h5>
                     <p data-i18n="setupWizard.manualUseInfo">使用以下信息：</p>
                     <ul>
-                        <li><span data-i18n="setupWizard.manualUsername">用户名:</span> <code>cs2server</code></li>
+                        <li><span data-i18n="setupWizard.manualUsername">用户名:</span> <code x-text="formData.cs2_username"></code></li>
                         <li><span data-i18n="setupWizard.manualPassword">密码:</span> <code x-text="password"></code></li>
-                        <li><span data-i18n="setupWizard.manualGameDir">游戏目录:</span> <code>/home/cs2server/cs2</code>
+                        <li>
+                            <span data-i18n="setupWizard.manualGameDir">游戏目录:</span> 
+                            <code x-text="`/home/${formData.cs2_username}/*`"></code>
+                            <small class="text-muted" x-text="window.i18n?.t('setupWizard.manualGameDirNote', {username: formData.cs2_username}) || `/home/${formData.cs2_username}/ 下任何目录`"></small>
                         </li>
                     </ul>
                     <a href="/servers-ui" class="btn btn-primary">
@@ -494,7 +497,22 @@ echo "密码: ${this.password}"`;
                 this.setupLogs = [];
                 this.setupResult = null;
 
+                // Add initial progress messages
+                const addLog = (message) => {
+                    this.setupLogs.push({ id: this.setupLogs.length, message: message });
+                    // Auto-scroll to bottom
+                    setTimeout(() => {
+                        const logTerminal = document.querySelector('.log-terminal');
+                        if (logTerminal) {
+                            logTerminal.scrollTop = logTerminal.scrollHeight;
+                        }
+                    }, 100);
+                };
+
                 try {
+                    addLog('Initializing setup process...');
+                    addLog(`Connecting to ${this.autoSetupForm.host}:${this.autoSetupForm.ssh_port}...`);
+
                     const payload = {
                         name: this.autoSetupForm.name,
                         host: this.autoSetupForm.host,
@@ -512,6 +530,7 @@ echo "密码: ${this.password}"`;
                         payload.sudo_password = this.autoSetupForm.sudo_password;
                     }
 
+                    addLog('正在执行服务器初始化...');
                     const response = await authFetch('/api/setup/auto-setup', {
                         method: 'POST',
                         headers: {
@@ -523,6 +542,7 @@ echo "密码: ${this.password}"`;
                     const result = await response.json();
 
                     if (response.ok) {
+                        // Replace initial progress logs with detailed server logs
                         this.setupLogs = result.logs.map((msg, i) => ({ id: i, message: msg }));
                         this.setupResult = result;
 
@@ -533,13 +553,13 @@ echo "密码: ${this.password}"`;
                     } else {
                         this.setupLogs = result.logs ? result.logs.map((msg, i) => ({ id: i, message: msg })) : [];
                         this.setupLogs.push({ id: this.setupLogs.length, message: `✗ 错误: ${result.detail}` });
-                        alert(`设置失败: ${result.detail}`);
+                        showError(`设置失败: ${result.detail}`);
                         // Refresh CAPTCHA on error
                         this.loadSetupCaptcha();
                     }
                 } catch (error) {
                     this.setupLogs.push({ id: this.setupLogs.length, message: `✗ 请求失败: ${error.message}` });
-                    alert(`请求失败: ${error.message}`);
+                    showError(`请求失败: ${error.message}`);
                     // Refresh CAPTCHA on error
                     this.loadSetupCaptcha();
                 } finally {
@@ -559,25 +579,27 @@ echo "密码: ${this.password}"`;
             },
 
             async deleteInitializedServer(serverKey) {
-                if (!confirm(window.i18n?.t('setupWizard.confirmDelete') || 'Are you sure you want to delete this server configuration?')) {
-                    return;
-                }
+                showConfirm(
+                    window.i18n?.t('setupWizard.confirmDelete') || 'Are you sure you want to delete this server configuration?',
+                    async () => {
+                        try {
+                            const response = await authFetch(`/api/setup/initialized-servers/${encodeURIComponent(serverKey)}`, {
+                                method: 'DELETE'
+                            });
 
-                try {
-                    const response = await authFetch(`/api/setup/initialized-servers/${encodeURIComponent(serverKey)}`, {
-                        method: 'DELETE'
-                    });
-
-                    if (response.ok) {
-                        await this.loadInitializedServers();
-                        alert(window.i18n?.t('setupWizard.deleteSuccess') || 'Server configuration deleted successfully');
-                    } else {
-                        throw new Error('Failed to delete server configuration');
-                    }
-                } catch (error) {
-                    console.error('Delete error:', error);
-                    alert('Error: ' + error.message);
-                }
+                            if (response.ok) {
+                                await this.loadInitializedServers();
+                                showSuccess(window.i18n?.t('setupWizard.deleteSuccess') || 'Server configuration deleted successfully');
+                            } else {
+                                throw new Error('Failed to delete server configuration');
+                            }
+                        } catch (error) {
+                            console.error('Delete error:', error);
+                            showError('Error: ' + error.message);
+                        }
+                    },
+                    null
+                );
             },
 
             async copyToClipboard(text) {

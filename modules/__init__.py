@@ -17,7 +17,7 @@ from .auth import (
     get_current_user, get_current_active_user, get_current_admin_user,
     get_optional_current_user
 )
-from .utils import generate_api_key, verify_api_key_format
+from .utils import generate_api_key, verify_api_key_format, get_current_time
 
 __all__ = [
     'settings',
@@ -64,4 +64,5 @@ __all__ = [
     'get_optional_current_user',
     'generate_api_key',
     'verify_api_key_format',
+    'get_current_time',
 ]

@@ -1,7 +1,7 @@
 """
 Authentication utilities for user management
 """
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -14,6 +14,7 @@ from .config import settings
 from .models import User
 from .schemas import TokenData
 from .database import get_db
+from .utils import get_current_time
 
 # Password hashing - configure bcrypt to handle long passwords automatically
 pwd_context = CryptContext(
@@ -51,9 +52,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """Create a JWT access token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = get_current_time() + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = get_current_time() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)

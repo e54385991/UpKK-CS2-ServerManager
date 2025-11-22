@@ -5,9 +5,10 @@ Allows up to 5 restarts within 10 minutes to prevent restart loops
 """
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 import logging
+from modules.utils import get_current_time
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class ServerMonitor:
         Returns:
             Tuple[bool, str]: (can_restart, reason)
         """
-        now = datetime.now()
+        now = get_current_time()
         
         # Get restart history for this server
         if server_id not in self.restart_history:
@@ -62,7 +63,7 @@ class ServerMonitor:
     
     def record_restart(self, server_id: int):
         """Record a restart attempt for a server"""
-        now = datetime.now()
+        now = get_current_time()
         
         if server_id not in self.restart_history:
             self.restart_history[server_id] = []
@@ -87,7 +88,7 @@ class ServerMonitor:
     
     def get_restart_info(self, server_id: int) -> Dict:
         """Get restart information for a server"""
-        now = datetime.now()
+        now = get_current_time()
         cutoff_time = now - self.time_window
         
         if server_id not in self.restart_history:
@@ -193,7 +194,7 @@ class ServerMonitor:
                         break
                     
                     # Update last status check time
-                    server.last_status_check = datetime.now(timezone.utc)
+                    server.last_status_check = get_current_time()
                     
                     # Determine if server is down based on monitoring type
                     is_down = False

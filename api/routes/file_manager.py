@@ -44,11 +44,6 @@ class CreateDirectoryRequest(BaseModel):
     name: str
 
 
-class RenameRequest(BaseModel):
-    """Rename/move file request"""
-    new_name: str
-
-
 class DeleteRequest(BaseModel):
     """Delete file/directory request"""
     path: str
@@ -361,44 +356,3 @@ async def delete_path(
         )
     
     return {"success": True, "message": "Deleted successfully"}
-
-
-@router.post("/rename")
-async def rename_path(
-    server_id: int,
-    path: str,
-    request: RenameRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Rename or move file/directory"""
-    server = await get_server_for_user(server_id, db, current_user)
-    
-    # Construct new path
-    parent_dir = os.path.dirname(path)
-    new_path = os.path.join(parent_dir, request.new_name)
-    
-    # Security checks
-    if not is_path_safe(server.game_directory, path):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: source path is outside server directory"
-        )
-    
-    if not is_path_safe(server.game_directory, new_path):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: destination path is outside server directory"
-        )
-    
-    # Rename using SSH
-    ssh_manager = SSHManager()
-    success, error = await ssh_manager.rename_path(path, new_path, server)
-    
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=error
-        )
-    
-    return {"success": True, "message": "Renamed successfully", "new_path": new_path}

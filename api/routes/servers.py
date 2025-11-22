@@ -5,12 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Dict, Any
-from datetime import datetime, timezone
 import asyncssh
 
 from modules import (
     Server, ServerCreate, ServerUpdate, ServerResponse, AuthType,
-    get_db, User, get_current_active_user, get_optional_current_user, generate_api_key
+    get_db, User, get_current_active_user, get_optional_current_user, generate_api_key,
+    get_current_time
 )
 from services import redis_manager
 from services.captcha_service import captcha_service
@@ -71,39 +71,48 @@ async def create_server(
                 detail="SSH password is required"
             )
         
-        conn = await asyncssh.connect(
-            server_data.host,
-            port=server_data.ssh_port,
-            username=server_data.ssh_user,
-            password=server_data.ssh_password,
-            known_hosts=None,
-            connect_timeout=10
-        )
+        # Step 1: Attempt SSH connection
+        try:
+            conn = await asyncssh.connect(
+                server_data.host,
+                port=server_data.ssh_port,
+                username=server_data.ssh_user,
+                password=server_data.ssh_password,
+                known_hosts=None,
+                connect_timeout=10
+            )
+        except asyncssh.PermissionDenied:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"SSH authentication failed for {server_data.ssh_user}@{server_data.host}. Please verify your username and password."
+            )
+        except asyncssh.ConnectionLost as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Connection to {server_data.host}:{server_data.ssh_port} was lost. Please check if the server is reachable."
+            )
+        except asyncssh.Error as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"SSH connection to {server_data.host}:{server_data.ssh_port} failed: {str(e)}. Please verify the host and port."
+            )
         
-        # Test the connection with a simple command
+        # Step 2: Test command execution
         result = await conn.run("echo 'SSH connection successful'", check=False)
         conn.close()
         
         if result.exit_status != 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="SSH connection succeeded but command execution failed. Please verify SSH user permissions."
+                detail=f"SSH connection succeeded but command execution failed. Please verify that user {server_data.ssh_user} has proper shell access and permissions."
             )
             
-    except asyncssh.PermissionDenied:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="SSH authentication failed. Please verify your username and password."
-        )
-    except asyncssh.Error as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"SSH connection failed: {str(e)}. Please verify the host, port, and credentials."
-        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to connect to server: {str(e)}"
+            detail=f"Failed to validate server connection: {str(e)}"
         )
     
     # Create server with user_id, auto-generated API key, and password auth
@@ -319,11 +328,10 @@ async def test_a2s_cache():
     If this returns 200 but /a2s-cache returns 422, 
     then the issue is with the a2s-cache endpoint itself.
     """
-    from datetime import datetime, timezone
     return {
         "status": "ok",
         "message": "Test endpoint working - no dependencies, no validation",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": get_current_time().isoformat(),
         "note": "If you see this with 200 OK, routing is working correctly"
     }
 
@@ -340,7 +348,6 @@ async def get_all_servers_a2s_cache():
     to avoid path parameter matching conflicts.
     """
     import logging
-    from datetime import datetime, timezone
     
     logger = logging.getLogger(__name__)
     logger.info("=== A2S-CACHE ENDPOINT CALLED ===")
@@ -349,7 +356,7 @@ async def get_all_servers_a2s_cache():
     # Initialize response with current timestamp
     response = {
         "servers": {},
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": get_current_time().isoformat(),
         "debug": {
             "endpoint": "a2s-cache",
             "version": "2.0-no-deps",
@@ -442,7 +449,7 @@ async def get_server_a2s_info(
         "success": info_success,
         "server_info": server_info,
         "players": player_list if players_success else [],
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": get_current_time().isoformat()
     }
     
     return response
