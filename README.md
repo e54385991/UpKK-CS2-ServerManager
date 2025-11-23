@@ -80,13 +80,8 @@ cd CS2-ServerManager
 ```
 
 
-#### 步骤 3: 方案手动部署 安装依赖
 
-```bash
-pip install -r requirements.txt
-```
-
-#### 步骤 4: 配置数据库和 Redis
+#### 步骤 3: 配置数据库和 Redis
 
 编辑 `modules/config.py` 文件，配置必要的数据库和 Redis 服务器连接信息。
 
@@ -99,7 +94,7 @@ pip install -r requirements.txt
 REDIS_PASSWORD: Optional[str] = None   # 没有密码就写 None，不要写空字符串 "" 
 ```
 
-##### 使用 1Panel 部署示例
+##### 使用 1Panel 部署示例 (推荐使用 1panel 运行环境-Python 3.14 来部署更容易)
 
 如果您使用 1Panel 部署 MySQL 和 Redis，参考配置如下：
 
@@ -124,15 +119,15 @@ SECRET_KEY: str = "your-secret-key-change-this-in-production"  # 至少 32 位�
 JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"  # 至少 32 位，建议随机生成
 ```
 
-#### 步骤 5: 启动服务
+#### 步骤 4: 启动服务
 
-使用 uvicorn 启动应用：
+使用 uvicorn 启动应用(1panel 启动命令相同)：
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-#### 步骤 6: 访问应用
+#### 步骤 5: 访问应用
 
 打开浏览器访问以下地址：
 
