@@ -1,0 +1,102 @@
+                <div class="tab-pane fade" id="console" role="tabpanel">
+                    <!-- Console Access Buttons -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-terminal"></i> <span
+                                    data-i18n="serverDetail.consoleAccess">Console Access</span></h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">
+                                <i class="bi bi-info-circle"></i> Open interactive console in a new popup window
+                            </p>
+                            <div class="d-flex gap-2">
+                                <button @click="connectSSHConsole()" class="btn btn-primary">
+                                    <i class="bi bi-terminal-fill"></i> <span
+                                        data-i18n="serverDetail.openSSHConsole">Open SSH Console</span>
+                                </button>
+                                <button @click="connectGameConsole()" class="btn btn-success">
+                                    <i class="bi bi-controller"></i> <span
+                                        data-i18n="serverDetail.openGameConsole">Open Game Console</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Logs -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-terminal"></i> <span
+                                    data-i18n="serverDetail.liveDeploymentLogs">Live Deployment Logs</span></h5>
+                            <button @click="clearLogs()" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-trash"></i> <span data-i18n="serverDetail.clear">Clear</span>
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="log-terminal" id="logContainer">
+                                <template x-for="log in logs" :key="log.id">
+                                    <div class="log-entry">
+                                        <span class="log-timestamp" x-text="'[' + log.timestamp + ']'"></span>
+                                        <span :class="'log-' + log.type" x-text="log.message"></span>
+                                    </div>
+                                </template>
+                                <div x-show="logs.length === 0" class="log-entry">
+                                    <span class="log-status">[<span data-i18n="serverDetail.ready">Ready</span>] <span
+                                            data-i18n="serverDetail.waitingForOperations">Waiting for
+                                            operations...</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Deployment History -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-clock-history"></i> <span
+                                    data-i18n="serverDetail.deploymentHistory">Deployment History</span></h5>
+                        </div>
+                        <div class="card-body">
+                            <div x-show="loadingHistory" class="text-center py-3">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span class="visually-hidden" data-i18n="serverDetail.loading">Loading...</span>
+                                </div>
+                            </div>
+
+                            <div x-show="!loadingHistory && history.length === 0" x-cloak
+                                class="text-center text-muted py-3" data-i18n="serverDetail.noDeploymentHistory">
+                                No deployment history available
+                            </div>
+
+                            <div x-show="!loadingHistory && history.length > 0" x-cloak class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th data-i18n="serverDetail.time">Time</th>
+                                            <th data-i18n="serverDetail.action">Action</th>
+                                            <th data-i18n="serverDetail.status">Status</th>
+                                            <th data-i18n="serverDetail.output">Output</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="item in history" :key="item.id">
+                                            <tr>
+                                                <td x-text="formatDateTime(item.created_at)"></td>
+                                                <td>
+                                                    <span class="badge bg-primary" x-text="item.action"></span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge"
+                                                        :class="item.status === 'success' ? 'bg-success' : (item.status === 'failed' ? 'bg-danger' : 'bg-warning')"
+                                                        x-text="item.status"></span>
+                                                </td>
+                                                <td>
+                                                    <small x-text="item.output || item.error_message || 'N/A'"
+                                                        class="text-muted"></small>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>

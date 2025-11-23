@@ -12,7 +12,7 @@ import os
 
 from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse, get_optional_current_user, User
 from services import redis_manager
-from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager
+from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks
 
 # Create FastAPI app
 app = FastAPI(
@@ -40,6 +40,7 @@ app.include_router(actions.router)
 app.include_router(setup.router)
 app.include_router(server_status.router)
 app.include_router(file_manager.router)
+app.include_router(scheduled_tasks.router)
 
 
 @app.on_event("startup")
@@ -49,6 +50,11 @@ async def startup_event():
     await migrate_db()
     # Then initialize database (create tables if they don't exist, create default admin)
     await init_db()
+    
+    # Start SSH connection pool cleanup task
+    from services.ssh_connection_pool import ssh_connection_pool
+    await ssh_connection_pool.start_cleanup()
+    print("SSH connection pool started")
     
     # Clear old A2S cache to prevent double-encoding issues
     from services.redis_manager import redis_manager
@@ -69,10 +75,20 @@ async def startup_event():
     await a2s_cache_service.start()
     print("A2S cache service started")
     
+    # Start steam.inf version cache service
+    from services.steam_inf_service import steam_inf_service
+    await steam_inf_service.start()
+    print("Steam.inf version cache service started")
+    
     # Start auto-update service
     from services.auto_update_service import auto_update_service
     await auto_update_service.start()
     print("Auto-update service started")
+    
+    # Start scheduled task service
+    from services.scheduled_task_service import scheduled_task_service
+    await scheduled_task_service.start()
+    print("Scheduled task service started")
     
     # Start monitoring for servers with panel monitoring enabled
     from modules.database import async_session_maker
@@ -98,13 +114,27 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
+    # Stop SSH connection pool cleanup task and close all connections
+    from services.ssh_connection_pool import ssh_connection_pool
+    await ssh_connection_pool.stop_cleanup()
+    await ssh_connection_pool.close_all()
+    print("SSH connection pool stopped")
+    
     # Stop A2S cache service
     from services.a2s_cache_service import a2s_cache_service
     a2s_cache_service.stop()
     
+    # Stop steam.inf version cache service
+    from services.steam_inf_service import steam_inf_service
+    steam_inf_service.stop()
+    
     # Stop auto-update service
     from services.auto_update_service import auto_update_service
     auto_update_service.stop()
+    
+    # Stop scheduled task service
+    from services.scheduled_task_service import scheduled_task_service
+    scheduled_task_service.stop()
     
     # Stop all monitoring tasks
     from services.server_monitor import server_monitor

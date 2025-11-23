@@ -1,0 +1,100 @@
+                <div class="tab-pane fade" id="scheduled-tasks" role="tabpanel" x-data="scheduledTasksManager()">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> <span data-i18n="scheduledTasks.title">Scheduled Tasks</span></h5>
+                                </div>
+                                <div>
+                                    <button @click="openCreateModal()" class="btn btn-sm btn-primary">
+                                        <i class="bi bi-plus-lg"></i>
+                                        <span data-i18n="scheduledTasks.addTask">Add Task</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- Loading State -->
+                            <div x-show="loading" class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+
+                            <!-- No Tasks State -->
+                            <div x-show="!loading && tasks.length === 0" class="text-center py-5 text-muted">
+                                <i class="bi bi-calendar-x" style="font-size: 3rem;"></i>
+                                <p class="mt-3" data-i18n="scheduledTasks.noTasks">No scheduled tasks configured</p>
+                            </div>
+
+                            <!-- Tasks Table -->
+                            <div x-show="!loading && tasks.length > 0" class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th data-i18n="scheduledTasks.taskName">Task Name</th>
+                                            <th data-i18n="scheduledTasks.action">Action</th>
+                                            <th data-i18n="scheduledTasks.schedule">Schedule</th>
+                                            <th data-i18n="scheduledTasks.nextRun">Next Run</th>
+                                            <th data-i18n="scheduledTasks.lastRun">Last Run</th>
+                                            <th data-i18n="scheduledTasks.status">Status</th>
+                                            <th data-i18n="scheduledTasks.enabled">Enabled</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="task in tasks" :key="task.id">
+                                            <tr>
+                                                <td x-text="task.name"></td>
+                                                <td>
+                                                    <span class="badge bg-secondary" x-text="getActionLabel(task.action)"></span>
+                                                </td>
+                                                <td>
+                                                    <small>
+                                                        <strong x-text="getScheduleTypeLabel(task.schedule_type)"></strong>:
+                                                        <span x-text="task.schedule_value"></span>
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <small x-text="formatDateTime(task.next_run)" class="text-muted"></small>
+                                                </td>
+                                                <td>
+                                                    <small x-text="formatDateTime(task.last_run)" class="text-muted"></small>
+                                                    <template x-if="task.run_count > 0">
+                                                        <br><span class="badge bg-info" x-text="`${task.run_count} runs`"></span>
+                                                    </template>
+                                                </td>
+                                                <td>
+                                                    <span x-show="task.last_status === 'success'" class="badge bg-success" data-i18n="scheduledTasks.statusValues.success">Success</span>
+                                                    <span x-show="task.last_status === 'failed'" class="badge bg-danger" data-i18n="scheduledTasks.statusValues.failed">Failed</span>
+                                                    <span x-show="task.last_status === 'running'" class="badge bg-warning" data-i18n="scheduledTasks.statusValues.running">Running</span>
+                                                    <template x-if="task.last_error">
+                                                        <br><small class="text-danger" x-text="task.last_error"></small>
+                                                    </template>
+                                                </td>
+                                                <td>
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox" 
+                                                            :checked="task.enabled" 
+                                                            @change="toggleTask(task.id)">
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button @click="editTask(task)" class="btn btn-outline-primary" title="Edit">
+                                                            <i class="bi bi-pencil"></i>
+                                                        </button>
+                                                        <button @click="deleteTask(task.id)" class="btn btn-outline-danger" title="Delete">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>

@@ -1,0 +1,223 @@
+                <div class="tab-pane fade" id="files" role="tabpanel" x-data="fileManager()">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-0"><i class="bi bi-folder"></i> <span
+                                            data-i18n="fileManager.title">File Manager</span></h5>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button @click="refreshFiles" class="btn btn-sm btn-outline-primary"
+                                        :disabled="loading">
+                                        <i class="bi"
+                                            :class="loading ? 'bi-arrow-repeat spin' : 'bi-arrow-clockwise'"></i>
+                                        <span data-i18n="common.refresh">Refresh</span>
+                                    </button>
+                                    <button @click="showCreateFolderModal = true"
+                                        class="btn btn-sm btn-outline-success">
+                                        <i class="bi bi-folder-plus"></i>
+                                        <span data-i18n="fileManager.newFolder">New Folder</span>
+                                    </button>
+                                    <button @click="document.getElementById('fileUpload').click()"
+                                        class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-upload"></i>
+                                        <span data-i18n="fileManager.upload">Upload</span>
+                                    </button>
+                                    <input type="file" id="fileUpload" style="display: none" @change="uploadFile"
+                                        multiple>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <!-- Breadcrumb -->
+                            <nav aria-label="breadcrumb" class="px-3 pt-3">
+                                <ol class="breadcrumb mb-0">
+                                    <template x-for="(part, index) in pathParts" :key="index">
+                                        <li class="breadcrumb-item"
+                                            :class="index === pathParts.length - 1 ? 'active' : ''">
+                                            <a href="#" x-show="index < pathParts.length - 1"
+                                                @click.prevent="navigateToPath(index)" x-text="part.name"></a>
+                                            <span x-show="index === pathParts.length - 1" x-text="part.name"></span>
+                                        </li>
+                                    </template>
+                                </ol>
+                            </nav>
+
+                            <!-- Upload Progress -->
+                            <div x-show="uploading" class="px-3 pt-2">
+                                <div class="alert alert-info mb-0">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <div>
+                                            <i class="bi bi-cloud-upload me-2"></i>
+                                            <span data-i18n="fileManager.uploading">Uploading</span>:
+                                            <strong x-text="uploadingFileName"></strong>
+                                        </div>
+                                        <span x-text="uploadProgress + '%'"></span>
+                                    </div>
+                                    <div class="progress" style="height: 6px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                            :style="'width: ' + uploadProgress + '%'"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- File List -->
+                            <div class="file-browser">
+                                <div x-show="loading" class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+
+                                <div x-show="!loading && files.length === 0" class="text-center py-5 text-muted">
+                                    <i class="bi bi-folder-x" style="font-size: 3rem;"></i>
+                                    <p class="mt-2" data-i18n="fileManager.emptyFolder">This folder is empty</p>
+                                </div>
+
+                                <div x-show="!loading && files.length > 0" class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th width="50%"><i class="bi bi-file-text"></i> <span
+                                                        data-i18n="fileManager.name">Name</span></th>
+                                                <th width="15%"><i class="bi bi-arrows-angle-expand"></i> <span
+                                                        data-i18n="fileManager.size">Size</span></th>
+                                                <th width="20%"><i class="bi bi-clock"></i> <span
+                                                        data-i18n="fileManager.modified">Modified</span></th>
+                                                <th width="15%"><i class="bi bi-gear"></i> <span
+                                                        data-i18n="common.actions">Actions</span></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Parent directory link -->
+                                            <tr x-show="currentPath !== serverGameDirectory" class="parent-dir-row"
+                                                @click="navigateUp()">
+                                                <td colspan="4">
+                                                    <i class="bi bi-arrow-90deg-up"></i>
+                                                    <span data-i18n="fileManager.parentDirectory">Parent
+                                                        Directory</span>
+                                                </td>
+                                            </tr>
+
+                                            <!-- Files and directories -->
+                                            <template x-for="file in files" :key="file.path">
+                                                <tr class="file-row"
+                                                    :class="selectedFile && selectedFile.path === file.path ? 'table-active' : ''"
+                                                    @click="selectFile(file)"
+                                                    @dblclick="file.type === 'directory' ? navigate(file.path) : openFile(file)">
+                                                    <td>
+                                                        <i class="bi"
+                                                            :class="file.type === 'directory' ? 'bi-folder-fill text-warning' : getFileIcon(file.name)"></i>
+                                                        <span class="ms-2" x-text="file.name"></span>
+                                                        <small x-show="file.is_symlink"
+                                                            class="badge bg-info ms-1">symlink</small>
+                                                    </td>
+                                                    <td>
+                                                        <span x-show="file.type === 'file'"
+                                                            x-text="formatFileSize(file.size)"></span>
+                                                        <span x-show="file.type === 'directory'"
+                                                            class="text-muted">-</span>
+                                                    </td>
+                                                    <td>
+                                                        <small x-text="formatTimestamp(file.modified)"></small>
+                                                    </td>
+                                                    <td>
+                                                        <div class="btn-group btn-group-sm" role="group">
+                                                            <button x-show="file.type === 'file'"
+                                                                @click.stop="downloadFile(file)"
+                                                                class="btn btn-outline-primary" title="Download">
+                                                                <i class="bi bi-download"></i>
+                                                            </button>
+                                                            <button
+                                                                x-show="file.type === 'file' && isTextFile(file.name)"
+                                                                @click.stop="editFile(file)"
+                                                                class="btn btn-outline-secondary" title="Edit">
+                                                                <i class="bi bi-pencil"></i>
+                                                            </button>
+                                                            <button
+                                                                x-show="file.type === 'file' && isArchiveFile(file.name)"
+                                                                @click.stop="showExtractModal(file)"
+                                                                class="btn btn-outline-info" title="Extract">
+                                                                <i class="bi bi-file-zip"></i>
+                                                            </button>
+                                                            <button @click.stop="showRenameModal(file)"
+                                                                class="btn btn-outline-warning" title="Rename">
+                                                                <i class="bi bi-pencil-square"></i>
+                                                            </button>
+                                                            <button @click.stop="deleteFile(file)"
+                                                                class="btn btn-outline-danger" title="Delete">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- File Editor Modal -->
+                    <div class="modal fade" id="fileEditorModal" tabindex="-1">
+                        <div class="modal-dialog modal-xl">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">
+                                        <i class="bi bi-file-text"></i>
+                                        <span data-i18n="fileManager.editFile">Edit File</span>: <span
+                                            x-text="editingFile ? editingFile.name : ''"></span>
+                                    </h5>
+                                    <button type="button" class="btn-close" @click="closeEditor()"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="monacoEditor"></div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" @click="closeEditor()"
+                                        :disabled="savingFile" data-i18n="common.cancel">Cancel</button>
+                                    <button type="button" class="btn btn-primary" @click="saveFile()"
+                                        :disabled="savingFile">
+                                        <span x-show="!savingFile && saveStatus === ''"
+                                            data-i18n="common.save">Save</span>
+                                        <span x-show="savingFile && saveStatus === 'submitting'">
+                                            <span class="spinner-border spinner-border-sm me-1"></span>
+                                            <span data-i18n="fileManager.submitting">Submitting...</span>
+                                        </span>
+                                        <span x-show="saveStatus === 'success'" class="text-success">
+                                            <i class="bi bi-check-circle me-1"></i>
+                                            <span data-i18n="fileManager.saved">Saved!</span>
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Create Folder Modal -->
+                    <div class="modal fade" id="createFolderModal" tabindex="-1" x-show="showCreateFolderModal"
+                        @click.self="showCreateFolderModal = false">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" data-i18n="fileManager.newFolder">New Folder</h5>
+                                    <button type="button" class="btn-close"
+                                        @click="showCreateFolderModal = false"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <label class="form-label" data-i18n="fileManager.folderName">Folder Name</label>
+                                    <input type="text" class="form-control" x-model="newFolderName"
+                                        @keyup.enter="createFolder()">
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary"
+                                        @click="showCreateFolderModal = false" data-i18n="common.cancel">Cancel</button>
+                                    <button type="button" class="btn btn-primary" @click="createFolder()"
+                                        data-i18n="common.create">Create</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>

@@ -200,6 +200,42 @@
                             </div>
                         </template>
                         
+                        <!-- Disk Space Info -->
+                        <template x-if="getDiskSpace(server.id)">
+                            <div class="mt-2 p-2 bg-light rounded">
+                                <div class="d-flex align-items-center mb-1">
+                                    <i class="bi bi-hdd text-info me-2"></i>
+                                    <strong class="small">Disk Space</strong>
+                                </div>
+                                <ul class="list-unstyled small mb-0">
+                                    <li>
+                                        <i class="bi bi-folder"></i> Directory: 
+                                        <strong x-text="formatDiskSpace(getDiskSpace(server.id).used_gb)"></strong>
+                                    </li>
+                                    <li>
+                                        <i class="bi bi-device-hdd"></i> Total: 
+                                        <strong x-text="formatDiskSpace(getDiskSpace(server.id).total_gb)"></strong>
+                                    </li>
+                                    <li>
+                                        <i class="bi bi-pie-chart"></i> Usage: 
+                                        <strong>
+                                            <span x-text="getDiskSpace(server.id).used_percent + '%'"></span>
+                                        </strong>
+                                        <div class="progress mt-1" style="height: 6px;">
+                                            <div class="progress-bar" 
+                                                 :class="{
+                                                     'bg-success': getDiskSpace(server.id).used_percent < 70,
+                                                     'bg-warning': getDiskSpace(server.id).used_percent >= 70 && getDiskSpace(server.id).used_percent < 90,
+                                                     'bg-danger': getDiskSpace(server.id).used_percent >= 90
+                                                 }"
+                                                 :style="'width: ' + getDiskSpace(server.id).used_percent + '%'">
+                                            </div>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
+                        </template>
+                        
                         <div class="mt-3">
                             <a :href="'/servers-ui/' + server.id" class="btn btn-sm btn-primary w-100">
                                 <i class="bi bi-gear"></i> <span data-i18n="servers.manageServer">Manage Server</span>
@@ -344,6 +380,11 @@
 {% block extra_js %}
 <script>
 function serverManager() {
+    // Constants
+    const AGGRESSIVE_POLL_INTERVAL_MS = 3000;  // 3 seconds
+    const NORMAL_POLL_INTERVAL_MS = 30000;  // 30 seconds
+    const DISK_SPACE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;  // 6 hours
+    
     return {
         servers: [],
         loading: true,
@@ -353,8 +394,10 @@ function serverManager() {
         bulkProgress: 0,
         a2sData: {},  // Store A2S data keyed by server ID
         a2sLoading: false,  // Track if A2S data is being loaded
+        diskSpaceData: {},  // Store disk space data keyed by server ID
         steamLatestVersion: null,  // Store Steam latest version info
         refreshInterval: null,
+        diskSpaceInterval: null,
         pollAttempts: 0,  // Track polling attempts
         maxAggressivePolls: 20,  // Max aggressive polls (20 * 3s = 60s max)
         
@@ -362,8 +405,12 @@ function serverManager() {
             await this.loadServers();
             // Initial A2S data load
             await this.refreshA2SData();
+            // Initial disk space data load
+            await this.refreshDiskSpaceData();
             // Start with aggressive polling (every 3 seconds) until we have data
             this.startPolling();
+            // Start disk space polling (every 6 hours)
+            this.startDiskSpacePolling();
         },
         
         startPolling() {
@@ -375,7 +422,7 @@ function serverManager() {
             // Determine polling interval based on whether we have data or max attempts reached
             const hasData = Object.keys(this.a2sData).length > 0;
             const maxAttemptsReached = this.pollAttempts >= this.maxAggressivePolls;
-            const interval = (hasData || maxAttemptsReached) ? 30000 : 3000;  // 30s if we have data or max attempts, 3s if not
+            const interval = (hasData || maxAttemptsReached) ? NORMAL_POLL_INTERVAL_MS : AGGRESSIVE_POLL_INTERVAL_MS;
             
             this.refreshInterval = setInterval(() => this.refreshA2SData(), interval);
             console.log(`Polling interval set to ${interval/1000} seconds (hasData: ${hasData}, attempts: ${this.pollAttempts}/${this.maxAggressivePolls})`);
@@ -437,6 +484,36 @@ function serverManager() {
             } finally {
                 this.a2sLoading = false;
             }
+        },
+        
+        startDiskSpacePolling() {
+            // Poll disk space every 6 hours
+            this.diskSpaceInterval = setInterval(() => this.refreshDiskSpaceData(), DISK_SPACE_POLL_INTERVAL_MS);
+            console.log('Disk space polling started (every 6 hours)');
+        },
+        
+        async refreshDiskSpaceData() {
+            try {
+                const response = await authFetch('/servers/disk-space-all');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.diskSpaceData = data.servers || {};
+                    console.log('Disk space data refreshed:', Object.keys(this.diskSpaceData).length, 'servers');
+                } else {
+                    console.warn('Failed to fetch disk space data:', response.status);
+                }
+            } catch (err) {
+                console.error('Error fetching disk space data:', err);
+            }
+        },
+        
+        getDiskSpace(serverId) {
+            return this.diskSpaceData[serverId] || null;
+        },
+        
+        formatDiskSpace(gb) {
+            if (gb === null || gb === undefined) return 'N/A';
+            return gb.toFixed(2) + ' GB';
         },
         
         getA2SInfo(serverId) {
@@ -763,6 +840,11 @@ function serverManager() {
             if (this.refreshInterval) {
                 clearInterval(this.refreshInterval);
                 this.refreshInterval = null;
+            }
+            // Clean up disk space interval
+            if (this.diskSpaceInterval) {
+                clearInterval(this.diskSpaceInterval);
+                this.diskSpaceInterval = null;
             }
         }
     };

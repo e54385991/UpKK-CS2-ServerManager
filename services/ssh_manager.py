@@ -5,20 +5,30 @@ import asyncssh
 import asyncio
 import os
 import re
+import shlex
 from typing import Optional, Tuple, List, Dict, Any
 from datetime import datetime
 from modules.models import Server, AuthType
 from services.server_monitor import server_monitor
+from services.ssh_connection_pool import ssh_connection_pool
 
 
 class SSHManager:
-    """Async SSH manager for remote server operations"""
+    """Async SSH manager for remote server operations with connection pooling"""
     
     # Constants for file validation
     MIN_EXPECTED_FILE_SIZE = 1000  # Minimum file size in bytes (1KB) for downloaded packages
     
-    def __init__(self):
+    def __init__(self, use_pool: bool = True):
+        """
+        Initialize SSH Manager
+        
+        Args:
+            use_pool: Whether to use connection pooling (default: True)
+        """
         self.conn: Optional[asyncssh.SSHClientConnection] = None
+        self.use_pool = use_pool
+        self.current_server: Optional[Server] = None
     
     async def _fetch_github_release_url(self, repo: str, pattern: str, progress_callback=None) -> Tuple[bool, str]:
         """
@@ -86,38 +96,47 @@ class SSHManager:
     
     async def connect(self, server: Server) -> Tuple[bool, str]:
         """
-        Connect to server via SSH
+        Connect to server via SSH (uses connection pool by default)
         Returns: (success: bool, message: str)
         """
-        try:
-            if server.auth_type == AuthType.PASSWORD:
-                # Password authentication
-                self.conn = await asyncssh.connect(
-                    host=server.host,
-                    port=server.ssh_port,
-                    username=server.ssh_user,
-                    password=server.ssh_password,
-                    known_hosts=None
-                )
-            elif server.auth_type == AuthType.KEY_FILE:
-                # Key file authentication
-                self.conn = await asyncssh.connect(
-                    host=server.host,
-                    port=server.ssh_port,
-                    username=server.ssh_user,
-                    client_keys=[server.ssh_key_path],
-                    known_hosts=None
-                )
-            else:
-                return False, f"Unsupported auth type: {server.auth_type}"
-            
-            return True, "Connected successfully"
-        except asyncssh.PermissionDenied:
-            return False, "Authentication failed"
-        except asyncssh.Error as e:
-            return False, f"SSH error: {str(e)}"
-        except Exception as e:
-            return False, f"Connection error: {str(e)}"
+        self.current_server = server
+        
+        if self.use_pool:
+            # Use connection pool
+            success, conn, msg = await ssh_connection_pool.get_connection(server)
+            self.conn = conn
+            return success, msg
+        else:
+            # Direct connection (legacy mode)
+            try:
+                if server.auth_type == AuthType.PASSWORD:
+                    # Password authentication
+                    self.conn = await asyncssh.connect(
+                        host=server.host,
+                        port=server.ssh_port,
+                        username=server.ssh_user,
+                        password=server.ssh_password,
+                        known_hosts=None
+                    )
+                elif server.auth_type == AuthType.KEY_FILE:
+                    # Key file authentication
+                    self.conn = await asyncssh.connect(
+                        host=server.host,
+                        port=server.ssh_port,
+                        username=server.ssh_user,
+                        client_keys=[server.ssh_key_path],
+                        known_hosts=None
+                    )
+                else:
+                    return False, f"Unsupported auth type: {server.auth_type}"
+                
+                return True, "Connected successfully"
+            except asyncssh.PermissionDenied:
+                return False, "Authentication failed"
+            except asyncssh.Error as e:
+                return False, f"SSH error: {str(e)}"
+            except Exception as e:
+                return False, f"Connection error: {str(e)}"
     
     async def execute_command(self, command: str, timeout: int = 30) -> Tuple[bool, str, str]:
         """
@@ -240,11 +259,18 @@ class SSHManager:
             return False, "", str(e)
     
     async def disconnect(self):
-        """Close SSH connection"""
+        """Release or close SSH connection"""
         if self.conn:
-            self.conn.close()
-            await self.conn.wait_closed()
+            if self.use_pool and self.current_server:
+                # Release connection back to pool
+                await ssh_connection_pool.release_connection(self.current_server)
+            else:
+                # Direct connection - close it
+                self.conn.close()
+                await self.conn.wait_closed()
+            
             self.conn = None
+            self.current_server = None
     
     async def deploy_cs2_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """
@@ -832,6 +858,10 @@ class SSHManager:
             elif server.game_port:
                 params.append(f"+clientport {server.game_port + 1}")
             
+            # Steam account token (GSLT) - required for public servers
+            if server.steam_account_token:
+                params.append(f'+sv_setsteamaccount "{server.steam_account_token}"')
+            
             # Server password
             if server.server_password:
                 params.append(f'+sv_password "{server.server_password}"')
@@ -1081,6 +1111,16 @@ class SSHManager:
             success, stdout, stderr = await self.execute_command(check_cmd)
             
             if stdout and f"cs2server_{server.id}" in stdout:
+                # Server started successfully, refresh steam.inf version cache
+                try:
+                    from services.steam_inf_service import steam_inf_service
+                    success, version = await steam_inf_service.refresh_version_cache(server)
+                    if success and version:
+                        await send_progress(f"✓ Server version: {version}")
+                except Exception as e:
+                    # Non-critical, just log
+                    await send_progress(f"Note: Could not refresh version cache: {str(e)}")
+                
                 return True, "Server started successfully"
             
             # Method 2: Check if CS2 process is running
@@ -1088,6 +1128,16 @@ class SSHManager:
             proc_success, proc_stdout, _ = await self.execute_command(process_check)
             
             if 'running' in proc_stdout:
+                # Server started successfully, refresh steam.inf version cache
+                try:
+                    from services.steam_inf_service import steam_inf_service
+                    success, version = await steam_inf_service.refresh_version_cache(server)
+                    if success and version:
+                        await send_progress(f"✓ Server version: {version}")
+                except Exception as e:
+                    # Non-critical, just log
+                    await send_progress(f"Note: Could not refresh version cache: {str(e)}")
+                
                 return True, "Server started successfully (process verified)"
             
             # Method 3: Check if port is listening
@@ -1095,6 +1145,16 @@ class SSHManager:
             port_success, port_stdout, _ = await self.execute_command(port_check)
             
             if 'not listening' not in port_stdout and port_stdout.strip():
+                # Server started successfully, refresh steam.inf version cache
+                try:
+                    from services.steam_inf_service import steam_inf_service
+                    success, version = await steam_inf_service.refresh_version_cache(server)
+                    if success and version:
+                        await send_progress(f"✓ Server version: {version}")
+                except Exception as e:
+                    # Non-critical, just log
+                    await send_progress(f"Note: Could not refresh version cache: {str(e)}")
+                
                 return True, "Server started successfully (port listening)"
             
             # If no check confirms the server is running, it likely failed to start
@@ -1425,6 +1485,17 @@ class SSHManager:
             else:
                 await send_progress("CS2 server updated successfully")
             
+            # Refresh steam.inf version cache after update
+            try:
+                await send_progress("Refreshing version cache...")
+                from services.steam_inf_service import steam_inf_service
+                success, version = await steam_inf_service.refresh_version_cache(server)
+                if success and version:
+                    await send_progress(f"✓ Updated to version: {version}")
+            except Exception as e:
+                # Non-critical, just log
+                await send_progress(f"Note: Could not refresh version cache: {str(e)}")
+            
             # Restart server if it was running before
             if was_running:
                 await send_progress("Restarting server...")
@@ -1532,6 +1603,17 @@ class SSHManager:
                 await send_progress(f"Validation completed with warnings: {stderr}")
             else:
                 await send_progress("CS2 server updated and validated successfully")
+            
+            # Refresh steam.inf version cache after validation
+            try:
+                await send_progress("Refreshing version cache...")
+                from services.steam_inf_service import steam_inf_service
+                success, version = await steam_inf_service.refresh_version_cache(server)
+                if success and version:
+                    await send_progress(f"✓ Validated version: {version}")
+            except Exception as e:
+                # Non-critical, just log
+                await send_progress(f"Note: Could not refresh version cache: {str(e)}")
             
             # Restart server if it was running before
             if was_running:
@@ -2362,6 +2444,111 @@ class SSHManager:
             return False, f"SFTP error: {str(e)}"
         except Exception as e:
             return False, f"Error renaming: {str(e)}"
+    
+    async def extract_archive(self, archive_path: str, destination_path: str, 
+                            server: Server, overwrite: bool = False) -> Tuple[bool, str]:
+        """
+        Extract archive file (zip, tar, tar.gz, tar.bz2, 7z, etc.)
+        
+        Args:
+            archive_path: Path to archive file
+            destination_path: Path to extract to
+            server: Server instance
+            overwrite: Whether to overwrite existing files (default: False)
+        
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        
+        try:
+            # Properly escape paths to prevent shell injection
+            safe_archive_path = shlex.quote(archive_path)
+            safe_destination_path = shlex.quote(destination_path)
+            
+            # Determine archive type from extension
+            archive_lower = archive_path.lower()
+            
+            if archive_lower.endswith('.zip'):
+                # Handle zip files
+                overwrite_flag = "-o" if overwrite else "-n"
+                extract_cmd = f"unzip {overwrite_flag} {safe_archive_path} -d {safe_destination_path}"
+            elif archive_lower.endswith('.tar.gz') or archive_lower.endswith('.tgz'):
+                # Handle tar.gz files
+                # tar by default overwrites existing files
+                # For non-overwrite, use --keep-old-files to prevent overwriting (skips existing files)
+                overwrite_flag = "" if overwrite else "--keep-old-files"
+                extract_cmd = f"tar -xzf {safe_archive_path} -C {safe_destination_path} {overwrite_flag}"
+            elif archive_lower.endswith('.tar.bz2') or archive_lower.endswith('.tbz2'):
+                # Handle tar.bz2 files
+                overwrite_flag = "" if overwrite else "--keep-old-files"
+                extract_cmd = f"tar -xjf {safe_archive_path} -C {safe_destination_path} {overwrite_flag}"
+            elif archive_lower.endswith('.tar'):
+                # Handle tar files
+                overwrite_flag = "" if overwrite else "--keep-old-files"
+                extract_cmd = f"tar -xf {safe_archive_path} -C {safe_destination_path} {overwrite_flag}"
+            elif archive_lower.endswith('.gz'):
+                # Handle gzip files (single file compression)
+                # For gzip, we extract to the same directory
+                base_name = os.path.basename(archive_path)[:-3]  # Remove .gz extension
+                output_file = os.path.join(destination_path, base_name)
+                safe_output_file = shlex.quote(output_file)
+                if overwrite:
+                    extract_cmd = f"gunzip -c {safe_archive_path} > {safe_output_file}"
+                else:
+                    # Check if file exists first - split into separate safe commands
+                    # We'll check first, then extract conditionally
+                    check_cmd = f"test -f {safe_output_file}"
+                    check_success, _, _ = await self.execute_command(check_cmd, timeout=5)
+                    if check_success:
+                        # File exists and we're not overwriting
+                        return False, "File already exists in destination. Enable overwrite to replace existing files."
+                    # File doesn't exist, proceed with extraction
+                    extract_cmd = f"gunzip -c {safe_archive_path} > {safe_output_file}"
+            elif archive_lower.endswith('.bz2'):
+                # Handle bzip2 files (single file compression)
+                base_name = os.path.basename(archive_path)[:-4]  # Remove .bz2 extension
+                output_file = os.path.join(destination_path, base_name)
+                safe_output_file = shlex.quote(output_file)
+                if overwrite:
+                    extract_cmd = f"bunzip2 -c {safe_archive_path} > {safe_output_file}"
+                else:
+                    # Check if file exists first - split into separate safe commands
+                    check_cmd = f"test -f {safe_output_file}"
+                    check_success, _, _ = await self.execute_command(check_cmd, timeout=5)
+                    if check_success:
+                        # File exists and we're not overwriting
+                        return False, "File already exists in destination. Enable overwrite to replace existing files."
+                    # File doesn't exist, proceed with extraction
+                    extract_cmd = f"bunzip2 -c {safe_archive_path} > {safe_output_file}"
+            elif archive_lower.endswith('.7z'):
+                # Handle 7z files
+                # 7z command: x = extract with full paths, -o = output directory
+                # -y = assume Yes on all queries (for overwrite)
+                # -aos = skip extracting of existing files (for non-overwrite)
+                if overwrite:
+                    # -aoa = Overwrite All existing files without prompt
+                    extract_cmd = f"7z x -aoa -o{safe_destination_path} {safe_archive_path}"
+                else:
+                    # -aos = Skip extracting of existing files
+                    extract_cmd = f"7z x -aos -o{safe_destination_path} {safe_archive_path}"
+            else:
+                return False, f"Unsupported archive format. Supported formats: .zip, .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .gz, .bz2, .7z"
+            
+            # Execute extraction command
+            success, stdout, stderr = await self.execute_command(extract_cmd, timeout=300)
+            
+            # Check for specific error cases
+            if not success:
+                return False, f"Extraction failed: {stderr if stderr else stdout}"
+            
+            return True, ""
+            
+        except Exception as e:
+            return False, f"Error extracting archive: {str(e)}"
     
     async def upload_file(self, local_path: str, remote_path: str, server: Server) -> Tuple[bool, str]:
         """

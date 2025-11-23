@@ -526,3 +526,74 @@ async def get_server_cpu_count(
         }
     finally:
         await ssh_manager.disconnect()
+
+
+@router.get("/{server_id}/disk-space")
+async def get_server_disk_space(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get disk space information for server directory"""
+    from services.system_info_helper import system_info_helper
+    
+    # Verify server exists and user has access
+    result = await db.execute(select(Server).filter(Server.id == server_id))
+    server = result.scalar_one_or_none()
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server with ID {server_id} not found"
+        )
+    
+    # Check ownership
+    if server.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this server"
+        )
+    
+    # Get disk space info from system info helper
+    disk_info = await system_info_helper.get_disk_space(server)
+    
+    if disk_info:
+        return {
+            "success": True,
+            "disk_space": disk_info,
+            "server_directory": server.game_directory
+        }
+    else:
+        return {
+            "success": False,
+            "message": "Failed to retrieve disk space information",
+            "server_directory": server.game_directory
+        }
+
+
+@router.get("/disk-space-all", dependencies=[])
+async def get_all_servers_disk_space(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get cached disk space information for all servers owned by current user.
+    Returns cached data only - does not trigger new SSH connections.
+    """
+    from services.system_info_helper import system_info_helper
+    
+    # Get all servers for current user
+    result = await db.execute(
+        select(Server).filter(Server.user_id == current_user.id)
+    )
+    servers = result.scalars().all()
+    
+    # Get disk space for all servers (from cache only)
+    disk_space_map = await system_info_helper.get_all_servers_disk_space(servers, force_refresh=False)
+    
+    # Convert to string keys for JSON
+    response = {str(k): v for k, v in disk_space_map.items()}
+    
+    return {
+        "servers": response,
+        "timestamp": get_current_time().isoformat()
+    }

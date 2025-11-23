@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- 主机： 1Panel-mysql-KZBC
--- 生成日期： 2025-11-22 05:57:23
+-- 生成日期： 2025-11-23 15:57:02
 -- 服务器版本： 8.4.7
 -- PHP 版本： 8.3.27
 
@@ -89,6 +89,29 @@ CREATE TABLE `monitoring_logs` (
 -- --------------------------------------------------------
 
 --
+-- 表的结构 `scheduled_tasks`
+--
+
+CREATE TABLE `scheduled_tasks` (
+  `id` int NOT NULL,
+  `server_id` int NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `action` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
+  `enabled` tinyint(1) DEFAULT NULL,
+  `schedule_type` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
+  `schedule_value` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `last_run` datetime DEFAULT NULL,
+  `next_run` datetime DEFAULT NULL,
+  `run_count` int DEFAULT NULL,
+  `last_status` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `last_error` text COLLATE utf8mb4_general_ci,
+  `created_at` datetime DEFAULT (now()),
+  `updated_at` datetime DEFAULT (now())
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- 表的结构 `servers`
 --
 
@@ -141,7 +164,9 @@ CREATE TABLE `servers` (
   `enable_auto_update` tinyint(1) DEFAULT '1' COMMENT 'Enable automatic updates based on Steam API version check',
   `last_update_check` datetime DEFAULT NULL COMMENT 'Last time version was checked against Steam API',
   `last_update_time` datetime DEFAULT NULL COMMENT 'Last time server was updated',
-  `update_check_interval_hours` int DEFAULT '1' COMMENT 'Hours between version checks (1-24)'
+  `update_check_interval_hours` int DEFAULT '1' COMMENT 'Hours between version checks (1-24)',
+  `cpu_affinity` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `steam_account_token` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -157,6 +182,24 @@ CREATE TABLE `users` (
   `hashed_password` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
   `is_active` tinyint(1) DEFAULT NULL,
   `is_admin` tinyint(1) DEFAULT NULL,
+  `created_at` datetime DEFAULT (now()),
+  `updated_at` datetime DEFAULT (now()),
+  `api_key` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `steam_api_key` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- 表的结构 `user_settings`
+--
+
+CREATE TABLE `user_settings` (
+  `id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `steamcmd_mirror_url` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `github_api_mirror_url` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `github_objects_mirror_url` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `created_at` datetime DEFAULT (now()),
   `updated_at` datetime DEFAULT (now())
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -199,6 +242,14 @@ ALTER TABLE `monitoring_logs`
   ADD KEY `idx_event_type` (`event_type`);
 
 --
+-- 表的索引 `scheduled_tasks`
+--
+ALTER TABLE `scheduled_tasks`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `ix_scheduled_tasks_server_id` (`server_id`),
+  ADD KEY `ix_scheduled_tasks_id` (`id`);
+
+--
 -- 表的索引 `servers`
 --
 ALTER TABLE `servers`
@@ -218,7 +269,16 @@ ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `ix_users_username` (`username`),
   ADD UNIQUE KEY `ix_users_email` (`email`),
+  ADD UNIQUE KEY `idx_user_api_key` (`api_key`),
   ADD KEY `ix_users_id` (`id`);
+
+--
+-- 表的索引 `user_settings`
+--
+ALTER TABLE `user_settings`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `ix_user_settings_user_id` (`user_id`),
+  ADD KEY `ix_user_settings_id` (`id`);
 
 --
 -- 在导出的表使用AUTO_INCREMENT
@@ -249,6 +309,12 @@ ALTER TABLE `monitoring_logs`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
+-- 使用表AUTO_INCREMENT `scheduled_tasks`
+--
+ALTER TABLE `scheduled_tasks`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
 -- 使用表AUTO_INCREMENT `servers`
 --
 ALTER TABLE `servers`
@@ -261,6 +327,12 @@ ALTER TABLE `users`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
+-- 使用表AUTO_INCREMENT `user_settings`
+--
+ALTER TABLE `user_settings`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
 -- 限制导出的表
 --
 
@@ -269,6 +341,18 @@ ALTER TABLE `users`
 --
 ALTER TABLE `initialized_servers`
   ADD CONSTRAINT `initialized_servers_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+
+--
+-- 限制表 `scheduled_tasks`
+--
+ALTER TABLE `scheduled_tasks`
+  ADD CONSTRAINT `scheduled_tasks_ibfk_1` FOREIGN KEY (`server_id`) REFERENCES `servers` (`id`) ON DELETE CASCADE;
+
+--
+-- 限制表 `user_settings`
+--
+ALTER TABLE `user_settings`
+  ADD CONSTRAINT `user_settings_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

@@ -1,0 +1,176 @@
+                <div class="tab-pane fade show active" id="overview" role="tabpanel">
+                    <!-- Server Info Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h4 class="mb-0"><i class="bi bi-hdd-rack"></i> {{ server.name }}</h4>
+                            <div class="d-flex gap-2 align-items-center">
+                                <span class="status-badge" :class="'status-' + server.status.toLowerCase()">
+                                    <span class="status-dot"></span>
+                                    <span x-text="server.status" class="text-capitalize"></span>
+                                </span>
+                                <button @click="showServerEdit = !showServerEdit"
+                                    class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil"></i> <span
+                                        x-text="showServerEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div x-show="!showServerEdit" x-cloak>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.serverInfo">Server Information
+                                        </h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-diagram-3"></i> <strong
+                                                    data-i18n="serverDetail.host">Host:</strong> {{ server.host }}</li>
+                                            <li><i class="bi bi-plugin"></i> <strong
+                                                    data-i18n="serverDetail.gamePort">Game Port:</strong> {{
+                                                server.game_port }}</li>
+                                            <li><i class="bi bi-door-open"></i> <strong
+                                                    data-i18n="serverDetail.sshPort">SSH Port:</strong> {{
+                                                server.ssh_port }}</li>
+                                            <li><i class="bi bi-person"></i> <strong
+                                                    data-i18n="serverDetail.sshUser">SSH User:</strong> {{
+                                                server.ssh_user }}</li>
+                                            <li><i class="bi bi-folder"></i> <strong
+                                                    data-i18n="serverDetail.directory">Directory:</strong> {{
+                                                server.game_directory }}</li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.details">Details</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-shield-check"></i> <strong
+                                                    data-i18n="serverDetail.authType">Auth Type:</strong> 
+                                                <span data-i18n="{% if server.auth_type.value == 'password' %}common.password{% else %}servers.authKeyOption{% endif %}">
+                                                    {% if server.auth_type.value == 'password' %}Password{% else %}SSH Key File{% endif %}
+                                                </span></li>
+                                            <li><i class="bi bi-calendar"></i> <strong
+                                                    data-i18n="serverDetail.created">Created:</strong> {{
+                                                server.created_at.strftime('%Y-%m-%d %H:%M') if server.created_at else
+                                                'N/A' }}</li>
+                                            <li><i class="bi bi-clock-history"></i> <strong
+                                                    data-i18n="serverDetail.lastDeployed">Last Deployed:</strong> {{
+                                                server.last_deployed.strftime('%Y-%m-%d %H:%M') if server.last_deployed
+                                                else 'Never' }}</li>
+                                            <li><i class="bi bi-info-circle"></i> <strong
+                                                    data-i18n="serverDetail.description">Description:</strong> {{
+                                                server.description or 'No description' }}</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <!-- Deploy Alert for Undeployed Servers -->
+                                {% if not server.last_deployed %}
+                                <div class="alert alert-warning mt-3" role="alert">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-exclamation-triangle-fill me-2" style="font-size: 1.5rem;"></i>
+                                        <div class="flex-grow-1">
+                                            <h6 class="alert-heading mb-1" data-i18n="serverDetail.notDeployed">Server Not Deployed</h6>
+                                            <p class="mb-0 small" data-i18n="serverDetail.notDeployedMessage">
+                                                This server has not been deployed yet. Deploy it to install CS2 and start using it.
+                                            </p>
+                                        </div>
+                                        <button @click="
+                                            document.querySelector('#actions-tab').click(); 
+                                            setTimeout(() => {
+                                                executeAction('deploy');
+                                                const msg = window.i18n?.t('serverDetail.deploymentCommandSent') || 'Deployment command sent to server. Please check the console and logs for progress.';
+                                                showInfo(msg);
+                                            }, 100)
+                                        " class="btn btn-warning">
+                                            <i class="bi bi-cloud-download"></i> <span data-i18n="serverDetail.deployNow">Deploy Now</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div x-show="showServerEdit" x-cloak>
+                                <form @submit.prevent="saveServerInfo()">
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label" data-i18n="serverDetail.serverName">Server
+                                                Name</label>
+                                            <input type="text" class="form-control" x-model="serverEditForm.name"
+                                                required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label" data-i18n="serverDetail.hostIP">Host IP</label>
+                                            <input type="text" class="form-control" x-model="serverEditForm.host"
+                                                required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" data-i18n="serverDetail.sshPort">SSH Port</label>
+                                            <input type="number" class="form-control" x-model="serverEditForm.ssh_port"
+                                                required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" data-i18n="serverDetail.sshUser">SSH User</label>
+                                            <input type="text" class="form-control" x-model="serverEditForm.ssh_user"
+                                                required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" data-i18n="serverDetail.gamePort">Game
+                                                Port</label>
+                                            <input type="number" class="form-control" x-model="serverEditForm.game_port"
+                                                required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label" data-i18n="serverDetail.authType">Auth
+                                                Type</label>
+                                            <select class="form-select" x-model="serverEditForm.auth_type">
+                                                <option value="password" data-i18n="common.password">Password</option>
+                                                <option value="key_file" data-i18n="servers.authKeyOption">SSH Key File
+                                                </option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6" x-show="serverEditForm.auth_type === 'password'">
+                                            <label class="form-label" data-i18n="serverDetail.sshPassword">SSH
+                                                Password</label>
+                                            <input type="password" class="form-control"
+                                                x-model="serverEditForm.ssh_password"
+                                                data-i18n-placeholder="serverDetail.leaveEmptyToKeep"
+                                                placeholder="Leave empty to keep current">
+                                        </div>
+                                        <div class="col-md-6" x-show="serverEditForm.auth_type === 'key_file'">
+                                            <label class="form-label" data-i18n="serverDetail.sshKeyPath">SSH Key
+                                                Path</label>
+                                            <input type="text" class="form-control"
+                                                x-model="serverEditForm.ssh_key_path"
+                                                data-i18n-placeholder="serverDetail.keyPathPlaceholder"
+                                                placeholder="/path/to/key.pem">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label" data-i18n="serverDetail.directory">Game
+                                                Directory</label>
+                                            <input type="text" class="form-control"
+                                                x-model="serverEditForm.game_directory" required>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label"
+                                                data-i18n="serverDetail.description">Description</label>
+                                            <textarea class="form-control" x-model="serverEditForm.description"
+                                                rows="2"></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingServerInfo">
+                                            <span x-show="!savingServerInfo"><i class="bi bi-save"></i> Save
+                                                Changes</span>
+                                            <span x-show="savingServerInfo"><span
+                                                    class="spinner-border spinner-border-sm"></span> Saving...</span>
+                                        </button>
+                                        <button type="button" @click="showServerEdit = false" class="btn btn-secondary">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>

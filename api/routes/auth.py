@@ -10,10 +10,12 @@ from datetime import timedelta
 from modules import (
     User, UserCreate, UserLogin, UserResponse, Token,
     PasswordReset, UserProfileUpdate, ApiKeyResponse, ApiKeyGenerate,
+    SteamApiKeyResponse, GenerateServerTokenRequest, GenerateServerTokenResponse,
     get_db, get_password_hash, verify_password, create_access_token,
     get_current_active_user, settings, generate_api_key
 )
 from services.captcha_service import captcha_service
+from services.steam_api_service import steam_api_service
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
@@ -173,6 +175,14 @@ async def update_profile(
             )
         current_user.email = profile_data.email
     
+    # Update Steam API key if provided
+    if profile_data.steam_api_key is not None:
+        # Allow empty string to clear the Steam API key
+        if profile_data.steam_api_key.strip() == "":
+            current_user.steam_api_key = None
+        else:
+            current_user.steam_api_key = profile_data.steam_api_key.strip()
+    
     await db.commit()
     await db.refresh(current_user)
     
@@ -260,3 +270,57 @@ async def revoke_api_key(
     await db.commit()
     
     return {"success": True, "message": "API key revoked successfully"}
+
+
+@router.get("/steam-api-key", response_model=SteamApiKeyResponse)
+async def get_steam_api_key(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get current user's Steam API key"""
+    return {"steam_api_key": current_user.steam_api_key}
+
+
+@router.post("/generate-server-token", response_model=GenerateServerTokenResponse)
+async def generate_server_token(
+    request_data: GenerateServerTokenRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Generate a Steam game server login token (GSLT) using user's Steam API key"""
+    # Validate CAPTCHA (required for security)
+    is_valid = await captcha_service.validate_captcha(request_data.captcha_token, request_data.captcha_code)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired CAPTCHA code"
+        )
+    
+    # Check if user has Steam API key set
+    if not current_user.steam_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Steam API key not set. Please set your Steam API key in profile settings first."
+        )
+    
+    # Use provided server name or fallback to username-based name
+    if request_data.server_name and isinstance(request_data.server_name, str):
+        memo = request_data.server_name.strip() or f"CS2 Server - {current_user.username}"
+    else:
+        memo = f"CS2 Server - {current_user.username}"
+    
+    success, result = await steam_api_service.create_game_server_account(
+        steam_api_key=current_user.steam_api_key,
+        memo=memo
+    )
+    
+    if not success or not result.get('success'):
+        error_msg = result.get('error', 'Unknown error') if result else 'Failed to generate token'
+        return GenerateServerTokenResponse(
+            success=False,
+            error=error_msg
+        )
+    
+    return GenerateServerTokenResponse(
+        success=True,
+        login_token=result.get('login_token')
+    )

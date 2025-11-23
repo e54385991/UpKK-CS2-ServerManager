@@ -234,8 +234,8 @@ async def auto_setup_server(
             logs.append(f"⚠ 包列表更新失败 (继续): {stderr[:100]}")
         
         # Install required packages
-        logs.append("安装系统依赖 (lib32gcc-s1, lib32stdc++6, screen, curl, wget)...")
-        packages = "lib32gcc-s1 lib32stdc++6 screen curl wget unzip"
+        logs.append("安装系统依赖 (lib32gcc-s1, lib32stdc++6, screen, curl, wget, p7zip-full, bzip2)...")
+        packages = "lib32gcc-s1 lib32stdc++6 screen curl wget unzip p7zip-full bzip2"
         install_cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages}"
         
         if needs_sudo:

@@ -1,0 +1,2131 @@
+    <script>
+        function serverDetail(serverId) {
+            return {
+                serverId: serverId,
+                server: {{ server_json | safe }},
+                logs: [],
+                history: [],
+                loadingHistory: true,
+                isActionRunning: false,
+                ws: null,
+                wsConnected: false,
+                                showConfigEdit: false,
+                                    savingConfig: false,
+                                        showServerEdit: false,
+                                            savingServerInfo: false,
+                                                showMonitoringEdit: false,
+                                                    savingMonitoring: false,
+                                                        showAutoUpdateEdit: false,
+                                                            savingAutoUpdate: false,
+                                                                statusCheckLogs: [],
+                                                                    autoRestartLogs: [],
+                                                                        a2sCheckLogs: [],
+                                                                            loadingStatusLogs: false,
+                                                                                loadingRestartLogs: false,
+                                                                                    loadingA2SCheckLogs: false,
+                                                                                        pluginSelection: {
+            metamod: false,
+                counterstrikesharp: false,
+                cs2fixes: false
+        },
+        // Operation status modal
+        operationMessages: [],
+        currentOperationName: '',
+        operationInProgress: false,
+        operationCompleted: false,
+        operationFailed: false,
+        operationWs: null,
+        operationModalInstance: null,
+        serverEditForm: {
+            name: '',
+                host: '',
+                    ssh_port: 22,
+                        ssh_user: '',
+                            auth_type: 'password',
+                                ssh_password: '',
+                                    ssh_key_path: '',
+                                        game_port: 27015,
+                                            game_directory: '',
+                                                description: ''
+        },
+        configForm: {
+            server_name: '',
+                default_map: 'de_dust2',
+                    max_players: 32,
+                        tickrate: 128,
+                            game_mode: 'competitive',
+                                game_type: '0',
+                                    server_password: '',
+                                        rcon_password: '',
+                                            steam_account_token: '',
+                                                tv_enable: false,
+                                                    tv_port: 27020,
+                                                        additional_parameters: ''
+        },
+        generatingToken: false,
+        showTokenGeneratorModal: false,
+        tokenCaptchaCode: '',
+        monitoringForm: {
+            enable_panel_monitoring: false,
+                monitor_interval_seconds: 60,
+                    auto_restart_on_crash: true,
+                        auto_clear_crash_hours: null
+        },
+        autoUpdateForm: {
+            enable_auto_update: true,
+            update_check_interval_hours: 1
+        },
+        // CPU Affinity
+        showCpuAffinityEdit: false,
+        savingCpuAffinity: false,
+        // NOTE: Default to 32 cores which is a common server configuration
+        // Users can modify server.cpu_affinity field directly if they need more/fewer cores displayed
+        // TODO: Consider adding server-side CPU core detection for automatic configuration
+        cpuCoreCount: 32,
+        cpuAffinityForm: {
+            cpu_affinity: ''
+        },
+        // A2S Query
+        showA2SEdit: false,
+            savingA2SConfig: false,
+                loadingA2SInfo: false,
+                    a2sInfo: null,
+                        a2sConfigForm: {
+            a2s_query_host: '',
+                a2s_query_port: null,
+                    enable_a2s_monitoring: false,
+                        a2s_failure_threshold: 3,
+                            a2s_check_interval_seconds: 60
+        },
+
+        // Helper function to format SSH error messages with i18n support
+        formatSSHError(errorMessage, defaultPrefixKey) {
+            let displayMessage = '';
+            
+            // Check for authentication failures
+            if (errorMessage.includes('Authentication failed') || errorMessage.includes('认证失败')) {
+                const title = window.i18n?.t('errors.sshAuthFailed') || 'SSH Authentication Failed';
+                const detail = window.i18n?.t('errors.sshAuthFailedDetail') || 'Please check your server username, password, and port settings.';
+                displayMessage = `${title}\n\n${detail}`;
+            } else if (errorMessage.includes('Connection failed') || errorMessage.includes('连接失败')) {
+                const title = window.i18n?.t('errors.connectionFailed') || 'Connection Failed';
+                displayMessage = `${title}: ${errorMessage}`;
+            } else {
+                // Get translated prefix or extract fallback from key
+                let prefix = window.i18n?.t(defaultPrefixKey);
+                if (!prefix || prefix === defaultPrefixKey) {
+                    // Fallback: extract readable text from key like 'errors.errorSavingFile' -> 'Error Saving File'
+                    const keyParts = defaultPrefixKey.split('.');
+                    prefix = keyParts[keyParts.length - 1].replace(/([A-Z])/g, ' $1').trim();
+                }
+                displayMessage = `${prefix}: ${errorMessage}`;
+            }
+            
+            return displayMessage;
+        },
+
+                                            async init() {
+            this.loadConfigForm();
+            this.loadServerEditForm();
+            this.loadMonitoringForm();
+            this.loadAutoUpdateForm();
+            this.loadA2SConfigForm();
+            this.loadCpuAffinityForm();
+            this.connectWebSocket();
+            await this.loadHistory();
+            
+            // Fetch remote server CPU count
+            await this.fetchCpuCount();
+
+            // Load monitoring logs if monitoring is enabled
+            if (this.server.enable_panel_monitoring) {
+                await this.loadMonitoringLogs('status_check');
+                await this.loadMonitoringLogs('auto_restart');
+            }
+
+            // Auto-scroll logs
+            this.$watch('logs', () => {
+                this.$nextTick(() => {
+                    const container = document.getElementById('logContainer');
+                    if (container) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                });
+            });
+            
+            // Load token captcha when modal is shown
+            this.$watch('showTokenGeneratorModal', (value) => {
+                if (value) {
+                    this.loadTokenCaptcha();
+                }
+            });
+            
+        },
+        
+        async fetchCpuCount() {
+            // Fetch CPU count from remote server
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/cpu-count`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.cpu_count) {
+                        this.cpuCoreCount = data.cpu_count;
+                        console.log(`Remote server has ${data.cpu_count} CPU cores`);
+                    } else {
+                        console.warn('Failed to fetch CPU count, using default:', data.message);
+                    }
+                } else {
+                    console.warn('Failed to fetch CPU count from server');
+                }
+            } catch (err) {
+                console.warn('Error fetching CPU count:', err.message);
+            }
+        },
+        
+        showToast(message, type = 'success') {
+            const toastEl = document.getElementById('actionToast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            if (!toastEl || !toastMessage) return;
+            
+            // Set message
+            toastMessage.textContent = message;
+            
+            // Remove existing background color classes
+            toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-info');
+            
+            // Add appropriate background color based on type
+            const bgClass = {
+                'success': 'bg-success',
+                'error': 'bg-danger',
+                'warning': 'bg-warning',
+                'info': 'bg-info'
+            }[type] || 'bg-info';
+            
+            toastEl.classList.add(bgClass);
+            
+            // Get or create Bootstrap Toast instance
+            let toast = bootstrap.Toast.getInstance(toastEl);
+            if (!toast) {
+                toast = new bootstrap.Toast(toastEl, {
+                    autohide: true,
+                    delay: 5000
+                });
+            }
+            
+            // Show toast
+            toast.show();
+        },
+        
+
+        loadServerEditForm() {
+            // Load current server info into edit form
+            this.serverEditForm = {
+                name: this.server.name || '',
+                host: this.server.host || '',
+                ssh_port: this.server.ssh_port || 22,
+                ssh_user: this.server.ssh_user || '',
+                auth_type: this.server.auth_type || 'password',
+                ssh_password: '',  // Don't load password for security
+                ssh_key_path: this.server.ssh_key_path || '',
+                game_port: this.server.game_port || 27015,
+                game_directory: this.server.game_directory || '',
+                description: this.server.description || ''
+            };
+        },
+        
+        async saveServerInfo() {
+            this.savingServerInfo = true;
+            try {
+                // Only send non-empty fields
+                const updateData = {};
+                Object.keys(this.serverEditForm).forEach(key => {
+                    const value = this.serverEditForm[key];
+                    // Skip ssh_password if empty (keep current password)
+                    if (key === 'ssh_password' && !value) {
+                        return;
+                    }
+                    // Skip ssh_key_path if auth_type is password
+                    if (key === 'ssh_key_path' && this.serverEditForm.auth_type === 'password') {
+                        return;
+                    }
+                    updateData[key] = value;
+                });
+
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateData)
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showServerEdit = false;
+                    this.addLog('complete', 'Server information saved successfully');
+                    // Reload page to reflect changes
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingServerInfo = false;
+            }
+        },
+
+        loadConfigForm() {
+            // Load current configuration into form
+            this.configForm = {
+                server_name: this.server.server_name || 'CS2 Server',
+                default_map: this.server.default_map || 'de_dust2',
+                max_players: this.server.max_players || 32,
+                tickrate: this.server.tickrate || 128,
+                game_mode: this.server.game_mode || 'competitive',
+                game_type: this.server.game_type || '0',
+                server_password: this.server.server_password || '',
+                rcon_password: this.server.rcon_password || '',
+                steam_account_token: this.server.steam_account_token || '',
+                tv_enable: this.server.tv_enable || false,
+                tv_port: this.server.tv_port || 27020,
+                additional_parameters: this.server.additional_parameters || ''
+            };
+            this.updateGameTypeFromMode();
+        },
+
+        updateGameTypeFromMode() {
+            // Map game modes to game types based on Valve's documentation
+            const gameModeMap = {
+                'casual': '0',
+                'competitive': '0',
+                'deathmatch': '1',
+                'armsrace': '1',
+                'demolition': '1',
+                'training': '2',
+                'custom': '3',
+                'cooperative': '4',
+                'coopmission': '4',
+                'scrimcomp2v2': '5',
+                'skirmish': '5',
+                'survival': '6'
+            };
+
+            this.configForm.game_type = gameModeMap[this.configForm.game_mode] || '0';
+        },
+        
+        async loadTokenCaptcha() {
+            try {
+                const response = await fetch('/api/captcha/image/new');
+                const token = response.headers.get('X-Captcha-Token');
+                const blob = await response.blob();
+                const imageUrl = URL.createObjectURL(blob);
+                
+                document.getElementById('token-captcha-image').src = imageUrl;
+                document.getElementById('token-captcha-token').value = token;
+            } catch (error) {
+                console.error('Failed to load CAPTCHA:', error);
+            }
+        },
+        
+        async generateSteamToken() {
+            this.generatingToken = true;
+            const errorDiv = document.getElementById('token-gen-error');
+            errorDiv.classList.add('d-none');
+            
+            try {
+                const captchaToken = document.getElementById('token-captcha-token').value;
+                const captchaCode = this.tokenCaptchaCode;
+                
+                if (!captchaToken || !captchaCode) {
+                    errorDiv.textContent = 'Please complete the CAPTCHA verification';
+                    errorDiv.classList.remove('d-none');
+                    return;
+                }
+                
+                const response = await authFetch('/api/auth/generate-server-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        server_name: this.server.name || this.server.server_name,
+                        captcha_token: captchaToken,
+                        captcha_code: captchaCode
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    this.configForm.steam_account_token = data.login_token;
+                    this.showTokenGeneratorModal = false;
+                    this.tokenCaptchaCode = '';
+                    this.addLog('complete', 'Steam game server login token generated successfully!');
+                } else {
+                    let errorMsg = data.error || data.detail || 'Failed to generate token';
+                    if (errorMsg.includes('Steam API key not set')) {
+                        errorMsg += ' Please set your Steam API key in Profile Settings first.';
+                    }
+                    errorDiv.textContent = errorMsg;
+                    errorDiv.classList.remove('d-none');
+                    // Reload CAPTCHA on error
+                    await this.loadTokenCaptcha();
+                }
+            } catch (err) {
+                errorDiv.textContent = `Error generating token: ${err.message}`;
+                errorDiv.classList.remove('d-none');
+                await this.loadTokenCaptcha();
+            } finally {
+                this.generatingToken = false;
+            }
+        },
+
+        async saveConfiguration() {
+            this.savingConfig = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.configForm)
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showConfigEdit = false;
+                    this.addLog('complete', 'Configuration saved successfully');
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingConfig = false;
+            }
+        },
+
+        loadMonitoringForm() {
+            // Load current monitoring settings into edit form
+            this.monitoringForm = {
+                enable_panel_monitoring: this.server.enable_panel_monitoring || false,
+                monitor_interval_seconds: this.server.monitor_interval_seconds || 60,
+                auto_restart_on_crash: this.server.auto_restart_on_crash !== undefined ? this.server.auto_restart_on_crash : true,
+                auto_clear_crash_hours: this.server.auto_clear_crash_hours || null
+            };
+        },
+        
+        async saveMonitoring() {
+            this.savingMonitoring = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.monitoringForm)
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showMonitoringEdit = false;
+
+                    if (updated.enable_panel_monitoring) {
+                        this.addLog('complete', 'Panel monitoring enabled and configured successfully');
+                        // Load monitoring logs when enabled
+                        await this.loadMonitoringLogs('status_check');
+                        await this.loadMonitoringLogs('auto_restart');
+                    } else {
+                        this.addLog('complete', 'Panel monitoring disabled successfully');
+                    }
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save monitoring settings: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingMonitoring = false;
+            }
+        },
+        
+        loadAutoUpdateForm() {
+            // Load current auto-update settings into edit form
+            this.autoUpdateForm = {
+                enable_auto_update: this.server.enable_auto_update !== undefined ? this.server.enable_auto_update : true,
+                update_check_interval_hours: this.server.update_check_interval_hours || 1
+            };
+        },
+        
+        async saveAutoUpdate() {
+            this.savingAutoUpdate = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.autoUpdateForm)
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showAutoUpdateEdit = false;
+
+                    if (updated.enable_auto_update) {
+                        this.addLog('complete', 'Auto-update enabled and configured successfully');
+                    } else {
+                        this.addLog('complete', 'Auto-update disabled successfully');
+                    }
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save auto-update settings: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingAutoUpdate = false;
+            }
+        },
+        
+        async loadMonitoringLogs(eventType) {
+            if (eventType === 'status_check') {
+                this.loadingStatusLogs = true;
+            } else if (eventType === 'auto_restart') {
+                this.loadingRestartLogs = true;
+            }
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/monitoring-logs?event_type=${eventType}&limit=50`);
+
+                if (response.ok) {
+                    const logs = await response.json();
+                    if (eventType === 'status_check') {
+                        this.statusCheckLogs = logs;
+                    } else if (eventType === 'auto_restart') {
+                        this.autoRestartLogs = logs;
+                    }
+                } else {
+                    console.error('Failed to load monitoring logs:', await response.text());
+                }
+            } catch (err) {
+                console.error(`Error loading monitoring logs: ${err.message}`);
+            } finally {
+                if (eventType === 'status_check') {
+                    this.loadingStatusLogs = false;
+                } else if (eventType === 'auto_restart') {
+                    this.loadingRestartLogs = false;
+                }
+            }
+        },
+        
+        async loadA2SCheckLogs() {
+            this.loadingA2SCheckLogs = true;
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/monitoring-logs?event_type=a2s_check&limit=50`);
+
+                if (response.ok) {
+                    this.a2sCheckLogs = await response.json();
+                }
+            } catch (err) {
+                console.error('Error loading A2S check logs:', err);
+            } finally {
+                this.loadingA2SCheckLogs = false;
+            }
+        },
+
+        connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/servers/${this.serverId}/deployment-status`;
+
+            this.addLog('status', 'Connecting to deployment monitor...');
+            this.ws = new WebSocket(wsUrl);
+
+            this.ws.onopen = () => {
+                this.wsConnected = true;
+                this.addLog('complete', 'Connected to real-time monitoring');
+            };
+
+            this.ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type !== 'ack') {
+                    this.addLog(data.type, data.message);
+                }
+            };
+
+            this.ws.onerror = () => {
+                this.addLog('error', 'WebSocket connection error');
+            };
+
+            this.ws.onclose = () => {
+                this.wsConnected = false;
+                this.addLog('status', 'Disconnected from monitoring');
+
+                // Try to reconnect after 5 seconds
+                setTimeout(() => {
+                    if (!this.wsConnected) {
+                        this.connectWebSocket();
+                    }
+                }, 5000);
+            };
+        },
+
+        addLog(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            this.logs.push({
+                id: Date.now() + Math.random(),
+                timestamp: timestamp,
+                type: type,
+                message: message
+            });
+
+            // Keep only last 100 logs
+            if (this.logs.length > 100) {
+                this.logs = this.logs.slice(-100);
+            }
+        },
+
+        clearLogs() {
+            this.logs = [];
+        },
+
+        // A2S Query Functions
+        loadA2SConfigForm() {
+            // Load current A2S configuration into edit form
+            this.a2sConfigForm = {
+                a2s_query_host: this.server.a2s_query_host || '',
+                a2s_query_port: this.server.a2s_query_port || null,
+                enable_a2s_monitoring: this.server.enable_a2s_monitoring || false,
+                a2s_failure_threshold: this.server.a2s_failure_threshold || 3,
+                a2s_check_interval_seconds: this.server.a2s_check_interval_seconds || 60
+            };
+        },
+        
+        async saveA2SConfig() {
+            this.savingA2SConfig = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.a2sConfigForm)
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showA2SEdit = false;
+                    this.addLog('complete', 'A2S configuration saved successfully');
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save A2S configuration: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.savingA2SConfig = false;
+            }
+        },
+        
+        async refreshA2SInfo() {
+            this.loadingA2SInfo = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/a2s-info`);
+
+                if (response.ok) {
+                    this.a2sInfo = await response.json();
+                    if (this.a2sInfo.success) {
+                        this.addLog('complete', 'A2S query successful');
+                    } else {
+                        this.addLog('warning', 'A2S query failed - server may be offline or unreachable');
+                    }
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to query A2S: ${error.detail}`);
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+            } finally {
+                this.loadingA2SInfo = false;
+            }
+        },
+
+        formatDuration(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+
+            if (hours > 0) {
+                return `${hours}h ${minutes}m ${secs}s`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${secs}s`;
+            } else {
+                return `${secs}s`;
+            }
+        },
+        
+        // CPU Affinity functions
+        loadCpuAffinityForm() {
+            // Load current CPU affinity configuration into edit form
+            this.cpuAffinityForm = {
+                cpu_affinity: this.server.cpu_affinity || ''
+            };
+        },
+        
+        parseCpuAffinity(cpuAffinity) {
+            // Parse CPU affinity string into array of core numbers with validation
+            if (!cpuAffinity) return [];
+            
+            const cores = [];
+            const parts = cpuAffinity.split(',');
+            const invalidParts = [];
+            
+            for (const part of parts) {
+                const trimmed = part.trim();
+                if (!trimmed) continue; // Skip empty parts
+                
+                if (trimmed.includes('-')) {
+                    // Range like "0-3"
+                    const rangeParts = trimmed.split('-');
+                    if (rangeParts.length !== 2) {
+                        invalidParts.push(trimmed);
+                        continue;
+                    }
+                    
+                    const start = parseInt(rangeParts[0].trim());
+                    const end = parseInt(rangeParts[1].trim());
+                    
+                    // Validate both are numbers, non-negative, and range is valid
+                    if (isNaN(start) || isNaN(end) || start < 0 || end < 0 || start > end) {
+                        invalidParts.push(trimmed);
+                        continue;
+                    }
+                    
+                    for (let i = start; i <= end; i++) {
+                        if (!cores.includes(i)) {
+                            cores.push(i);
+                        }
+                    }
+                } else {
+                    // Single core
+                    const core = parseInt(trimmed);
+                    if (isNaN(core) || core < 0) {
+                        invalidParts.push(trimmed);
+                        continue;
+                    }
+                    if (!cores.includes(core)) {
+                        cores.push(core);
+                    }
+                }
+            }
+            
+            // Log warning for invalid parts (for debugging)
+            if (invalidParts.length > 0) {
+                console.warn('Invalid CPU affinity parts ignored:', invalidParts.join(', '));
+            }
+            
+            return cores.sort((a, b) => a - b);
+        },
+        
+        toggleCore(core) {
+            // Toggle CPU core selection
+            const cores = this.parseCpuAffinity(this.cpuAffinityForm.cpu_affinity);
+            const index = cores.indexOf(core);
+            
+            if (index > -1) {
+                // Remove core
+                cores.splice(index, 1);
+            } else {
+                // Add core
+                cores.push(core);
+            }
+            
+            // Sort and convert back to string
+            cores.sort((a, b) => a - b);
+            this.cpuAffinityForm.cpu_affinity = cores.join(',');
+        },
+        
+        clearCpuAffinity() {
+            // Clear all CPU affinity selections
+            this.cpuAffinityForm.cpu_affinity = '';
+        },
+        
+        async saveCpuAffinity() {
+            this.savingCpuAffinity = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.cpuAffinityForm)
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showCpuAffinityEdit = false;
+                    this.addLog('complete', 'CPU affinity configuration saved successfully');
+                    this.showToast('CPU affinity configuration saved successfully', 'success');
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save CPU affinity configuration: ${error.detail}`);
+                    this.showToast(`Failed to save CPU affinity configuration: ${error.detail}`, 'error');
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+                this.showToast(`Error: ${err.message}`, 'error');
+            } finally {
+                this.savingCpuAffinity = false;
+            }
+        },
+        
+        async executeAction(action) {
+            if (this.isActionRunning) return;
+
+            this.isActionRunning = true;
+            
+            // Open operation status modal
+            this.openOperationModal(action);
+            
+            // Also add to main logs
+            this.addLog('status', `Executing action: ${action}...`);
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/actions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: action })
+                });
+
+                // Get response text first
+                const responseText = await response.text();
+
+                // Try to parse as JSON
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (parseErr) {
+                    this.addLog('error', `Action failed: Invalid JSON response - ${responseText.substring(0, 200)}`);
+                    return;
+                }
+
+                if (response.ok) {
+                    // Show success toast notification
+                    const operationMsg = window.i18n ? window.i18n.t('serverDetail.operationSubmitted') : 'Operation Submitted';
+                    const detailMsg = window.i18n ? window.i18n.t('serverDetail.checkConsoleForDetails') : 'Please check Console & Logs tab to view details';
+                    this.showToast(`${operationMsg} - ${detailMsg}`, 'success');
+                    
+                    if (result.data && result.data.status) {
+                        this.server.status = result.data.status.toUpperCase();
+                    }
+                    await this.loadHistory();
+                } else {
+                    // Handle error response - extract meaningful message
+                    let errorMsg = 'Unknown error occurred';
+
+                    // Try various ways to get error message
+                    if (typeof result === 'string') {
+                        errorMsg = result;
+                    } else if (result && typeof result === 'object') {
+                        if (typeof result.detail === 'string') {
+                            errorMsg = result.detail;
+                        } else if (typeof result.message === 'string') {
+                            errorMsg = result.message;
+                        } else if (result.detail) {
+                            try {
+                                errorMsg = JSON.stringify(result.detail, null, 2);
+                            } catch {
+                                errorMsg = 'Error detail: ' + String(result.detail);
+                            }
+                        } else {
+                            try {
+                                errorMsg = JSON.stringify(result, null, 2);
+                            } catch {
+                                errorMsg = 'Error: Unable to parse error details';
+                            }
+                        }
+                    }
+
+                    // Show dialog for deployment conflicts (409)
+                    if (response.status === 409) {
+                        // Translate deployment in progress message if it matches
+                        let displayMsg = errorMsg;
+                        if (errorMsg.toLowerCase().includes('deployed') || errorMsg.toLowerCase().includes('deploy')) {
+                            displayMsg = window.i18n?.t('errors.deploymentInProgress') || errorMsg;
+                        }
+                        showWarning(displayMsg);
+                    }
+                    
+                    this.addLog('error', `Action failed: ${errorMsg}`);
+                }
+            } catch (err) {
+                // Handle network or other errors
+                const errorMsg = err && err.message ? err.message : String(err);
+                this.addLog('error', `Error: ${errorMsg}`);
+                console.error('executeAction error:', err);
+            } finally {
+                this.isActionRunning = false;
+            }
+        },
+        
+        // Operation Status Modal Methods
+        openOperationModal(action) {
+            // Get friendly operation name with i18n support
+            const operationNames = {
+                'deploy': window.i18n?.t('serverDetail.deployServer') || 'Deploy Server',
+                'start': window.i18n?.t('serverDetail.start') || 'Start',
+                'stop': window.i18n?.t('serverDetail.stop') || 'Stop',
+                'restart': window.i18n?.t('serverDetail.restart') || 'Restart',
+                'update': window.i18n?.t('serverDetail.update') || 'Update',
+                'validate': window.i18n?.t('serverDetail.updateValidate') || 'Update + Validate',
+                'status': window.i18n?.t('serverDetail.checkStatus') || 'Check Status',
+                'install_metamod': 'Install Metamod:Source',
+                'update_metamod': 'Update Metamod:Source',
+                'install_counterstrikesharp': 'Install CounterStrikeSharp',
+                'update_counterstrikesharp': 'Update CounterStrikeSharp',
+                'install_cs2fixes': 'Install CS2Fixes',
+                'update_cs2fixes': 'Update CS2Fixes'
+            };
+            
+            this.currentOperationName = operationNames[action] || action;
+            
+            // If modal is already open, just update the operation name and continue
+            // This allows batch operations to reuse the same modal
+            if (this.operationModalInstance && this.operationMessages.length > 0) {
+                // Add separator for new operation in batch mode
+                this.addOperationMessage('info', `--- Starting: ${this.currentOperationName} ---`);
+                this.operationInProgress = true;
+                this.operationCompleted = false;
+                this.operationFailed = false;
+                return;
+            }
+            
+            // First time opening modal
+            this.operationMessages = [];
+            this.operationInProgress = true;
+            this.operationCompleted = false;
+            this.operationFailed = false;
+            
+            // Initialize Bootstrap modal if not already done
+            if (!this.operationModalInstance) {
+                const modalElement = document.getElementById('operationStatusModal');
+                if (!modalElement) {
+                    console.error('Operation status modal element not found');
+                    this.addLog('error', 'Failed to open operation status modal - UI element not found');
+                    return;
+                }
+                this.operationModalInstance = new bootstrap.Modal(modalElement);
+            }
+            
+            // Show the modal
+            this.operationModalInstance.show();
+            
+            // Connect to deployment status WebSocket for real-time updates
+            this.connectOperationWebSocket();
+        },
+        
+        connectOperationWebSocket() {
+            // Don't create a new connection if we already have an active one
+            if (this.operationWs && this.operationWs.readyState === WebSocket.OPEN) {
+                return;
+            }
+            
+            // Close existing connection if any (in case it's in CONNECTING or CLOSING state)
+            if (this.operationWs) {
+                this.operationWs.close();
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/servers/${this.serverId}/deployment-status`;
+            
+            this.operationWs = new WebSocket(wsUrl);
+            
+            this.operationWs.onopen = () => {
+                this.addOperationMessage('info', 'Connected to operation monitor');
+            };
+            
+            this.operationWs.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type !== 'ack') {
+                        this.addOperationMessage(data.type, data.message);
+                        
+                        // Check if operation completed or failed
+                        if (data.type === 'complete') {
+                            this.operationInProgress = false;
+                            this.operationCompleted = true;
+                            this.isActionRunning = false;
+                        } else if (data.type === 'error') {
+                            this.operationInProgress = false;
+                            this.operationFailed = true;
+                            this.isActionRunning = false;
+                        }
+                    }
+                } catch (parseErr) {
+                    console.error('Failed to parse WebSocket message:', parseErr);
+                    this.addOperationMessage('error', 'Invalid message received from server');
+                }
+            };
+            
+            this.operationWs.onerror = () => {
+                this.addOperationMessage('error', 'WebSocket connection error');
+            };
+            
+            this.operationWs.onclose = () => {
+                // Connection closed, operation might be complete
+                if (this.operationInProgress) {
+                    this.addOperationMessage('info', 'Connection closed');
+                }
+            };
+        },
+        
+        addOperationMessage(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            this.operationMessages.push({
+                id: Date.now() + Math.random(),
+                timestamp: timestamp,
+                type: type,
+                message: message
+            });
+            
+            // Auto-scroll to bottom
+            this.$nextTick(() => {
+                const container = document.getElementById('operationTerminal');
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            });
+        },
+        
+        closeOperationModal() {
+            if (this.operationModalInstance) {
+                this.operationModalInstance.hide();
+            }
+            
+            // Close WebSocket connection
+            if (this.operationWs) {
+                this.operationWs.close();
+                this.operationWs = null;
+            }
+            
+            // Reset state
+            this.operationMessages = [];
+            this.operationInProgress = false;
+            this.operationCompleted = false;
+            this.operationFailed = false;
+        },
+        
+        async installSelectedPlugins() {
+            const plugins = [];
+            if (this.pluginSelection.metamod) {
+                plugins.push('metamod');
+            }
+            if (this.pluginSelection.counterstrikesharp) {
+                plugins.push('counterstrikesharp');
+            }
+            if (this.pluginSelection.cs2fixes) {
+                plugins.push('cs2fixes');
+            }
+
+            if (plugins.length === 0) {
+                this.addLog('error', 'Please select at least one plugin framework to install');
+                return;
+            }
+
+            // Format plugin list with proper separators (supports i18n)
+            let pluginList;
+            if (plugins.length === 1) {
+                pluginList = plugins[0];
+            } else if (plugins.length === 2) {
+                // Use ' and ' for English, can be customized for other languages
+                const separator = window.i18n?.t('common.and') || ' and ';
+                pluginList = plugins.join(separator);
+            } else {
+                // For 3+ items: "item1, item2, and item3"
+                const separator = window.i18n?.t('common.and') || ' and ';
+                pluginList = plugins.slice(0, -1).join(', ') + ',' + separator + plugins[plugins.length - 1];
+            }
+            
+            this.addLog('status', `Installing ${pluginList}...`);
+
+            // Action mapping for plugins
+            const actionMap = {
+                'metamod': 'install_metamod',
+                'counterstrikesharp': 'install_counterstrikesharp',
+                'cs2fixes': 'install_cs2fixes'
+            };
+
+            // Install plugins sequentially
+            for (const plugin of plugins) {
+                const action = actionMap[plugin];
+                if (action) {
+                    await this.executeAction(action);
+                }
+
+                // Wait a bit between installations
+                if (plugins.length > 1 && plugin !== plugins[plugins.length - 1]) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
+
+            // Reset selection after installation
+            this.pluginSelection.metamod = false;
+            this.pluginSelection.counterstrikesharp = false;
+            this.pluginSelection.cs2fixes = false;
+        },
+        
+        async loadHistory() {
+            this.loadingHistory = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/logs?limit=10`);
+                if (response.ok) {
+                    this.history = await response.json();
+                }
+            } catch (err) {
+                console.error('Failed to load history:', err);
+            } finally {
+                this.loadingHistory = false;
+            }
+        },
+
+        formatDateTime(dateString) {
+            if (!dateString) return 'N/A';
+            return new Date(dateString).toLocaleString();
+        },
+
+        // SSH Console Methods - Opens in popup window
+        connectSSHConsole() {
+            const width = 1000;
+            const height = 700;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
+            
+            window.open(
+                `/servers/${this.serverId}/console-popup/ssh`,
+                'SSH_Console',
+                `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no`
+            );
+        },
+
+        // Initialize terminals
+        initTerminals() {
+            if (!this.gameTerminal) {
+                this.gameTerminal = new NativeTerminal('gameTerminal');
+            }
+            if (!this.sshTerminal) {
+                this.sshTerminal = new NativeTerminal('sshTerminal');
+            }
+        },
+
+        disconnectSSHConsole() {
+            // Console runs in separate window
+        },
+
+        // Game Console Methods - Opens in popup window
+        connectGameConsole() {
+            const width = 1000;
+            const height = 700;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
+            
+            window.open(
+                `/servers/${this.serverId}/console-popup/game`,
+                'Game_Console',
+                `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no`
+            );
+        },
+
+        disconnectGameConsole() {
+            // Console runs in separate window
+        }
+    };
+}
+
+        // Scheduled Tasks Manager Component
+        function scheduledTasksManager() {
+            return {
+                loading: false,
+                saving: false,
+                tasks: [],
+                modalInstance: null,
+                editingTask: null,
+                i18nReady: false,
+                currentTask: {
+                    name: '',
+                    action: 'restart',
+                    enabled: true,
+                    schedule_type: 'daily',
+                    schedule_value: ''
+                },
+
+                init() {
+                    this.loadTasks();
+                    
+                    // Initialize Bootstrap modal
+                    const modalElement = document.getElementById('scheduledTaskModal');
+                    if (modalElement) {
+                        this.modalInstance = new bootstrap.Modal(modalElement);
+                        
+                        // Setup save button handler
+                        const saveBtn = document.getElementById('saveTaskBtn');
+                        if (saveBtn) {
+                            saveBtn.addEventListener('click', () => this.saveTask());
+                        }
+                        
+                        // Setup schedule type change handler for help text
+                        const scheduleTypeSelect = document.getElementById('taskScheduleType');
+                        if (scheduleTypeSelect) {
+                            scheduleTypeSelect.addEventListener('change', () => this.updateScheduleHelp());
+                        }
+                    }
+                    
+                    // Listen for i18n ready event
+                    if (window.i18n && window.i18n.isInitialized) {
+                        this.i18nReady = true;
+                    } else {
+                        window.addEventListener('i18nReady', () => {
+                            this.i18nReady = true;
+                        });
+                    }
+                },
+
+                async loadTasks() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch(`/api/scheduled-tasks/{{ server.id }}`, {
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            }
+                        });
+                        if (response.ok) {
+                            this.tasks = await response.json();
+                        } else {
+                            throw new Error('Failed to load tasks');
+                        }
+                    } catch (error) {
+                        console.error('Error loading scheduled tasks:', error);
+                        showError(this.i18n('scheduledTasks.errorLoading'));
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async saveTask() {
+                    // Get values from DOM
+                    const name = document.getElementById('taskName').value;
+                    const action = document.getElementById('taskAction').value;
+                    const scheduleType = document.getElementById('taskScheduleType').value;
+                    const scheduleValue = document.getElementById('taskScheduleValue').value;
+                    const enabled = document.getElementById('taskEnabled').checked;
+                    
+                    if (!name || !scheduleValue) {
+                        showError(this.i18n('scheduledTasks.requiredFields'));
+                        return;
+                    }
+
+                    const saveBtn = document.getElementById('saveTaskBtn');
+                    const saveText = saveBtn.querySelector('.save-text');
+                    const savingText = saveBtn.querySelector('.saving-text');
+                    
+                    this.saving = true;
+                    saveBtn.disabled = true;
+                    saveText.style.display = 'none';
+                    savingText.style.display = 'inline';
+                    
+                    try {
+                        const taskData = {
+                            name,
+                            action,
+                            schedule_type: scheduleType,
+                            schedule_value: scheduleValue,
+                            enabled
+                        };
+                        
+                        const url = this.editingTask 
+                            ? `/api/scheduled-tasks/{{ server.id }}/tasks/${this.editingTask.id}`
+                            : `/api/scheduled-tasks/{{ server.id }}`;
+                        const method = this.editingTask ? 'PUT' : 'POST';
+
+                        const response = await fetch(url, {
+                            method: method,
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            },
+                            body: JSON.stringify(taskData)
+                        });
+
+                        if (response.ok) {
+                            showSuccess(this.editingTask 
+                                ? this.i18n('scheduledTasks.taskUpdated')
+                                : this.i18n('scheduledTasks.taskCreated'));
+                            this.closeModal();
+                            this.editingTask = null;
+                            this.resetCurrentTask();
+                            await this.loadTasks();
+                        } else {
+                            const error = await response.json();
+                            throw new Error(error.detail || 'Failed to save task');
+                        }
+                    } catch (error) {
+                        console.error('Error saving task:', error);
+                        showError(error.message || this.i18n('scheduledTasks.errorCreating'));
+                    } finally {
+                        this.saving = false;
+                        saveBtn.disabled = false;
+                        saveText.style.display = 'inline';
+                        savingText.style.display = 'none';
+                    }
+                },
+
+                openCreateModal() {
+                    this.editingTask = null;
+                    this.resetCurrentTask();
+                    this.populateModalForm();
+                    document.getElementById('scheduledTaskModalTitle').textContent = this.i18n('scheduledTasks.createTask');
+                    if (this.modalInstance) {
+                        this.modalInstance.show();
+                    }
+                },
+
+                editTask(task) {
+                    this.editingTask = task;
+                    this.currentTask = {
+                        name: task.name,
+                        action: task.action,
+                        enabled: task.enabled,
+                        schedule_type: task.schedule_type,
+                        schedule_value: task.schedule_value
+                    };
+                    this.populateModalForm();
+                    document.getElementById('scheduledTaskModalTitle').textContent = this.i18n('scheduledTasks.editTask');
+                    if (this.modalInstance) {
+                        this.modalInstance.show();
+                    }
+                },
+                
+                populateModalForm() {
+                    document.getElementById('taskName').value = this.currentTask.name;
+                    document.getElementById('taskAction').value = this.currentTask.action;
+                    document.getElementById('taskScheduleType').value = this.currentTask.schedule_type;
+                    document.getElementById('taskScheduleValue').value = this.currentTask.schedule_value;
+                    document.getElementById('taskEnabled').checked = this.currentTask.enabled;
+                    this.updateScheduleHelp();
+                },
+                
+                updateScheduleHelp() {
+                    const scheduleType = document.getElementById('taskScheduleType').value;
+                    const helpText = document.getElementById('taskScheduleHelp');
+                    const valueInput = document.getElementById('taskScheduleValue');
+                    
+                    if (scheduleType === 'daily') {
+                        valueInput.placeholder = '14:30';
+                        helpText.textContent = this.i18n('scheduledTasks.scheduleValueHelp.daily');
+                    } else if (scheduleType === 'weekly') {
+                        valueInput.placeholder = 'MON:14:30';
+                        helpText.textContent = this.i18n('scheduledTasks.scheduleValueHelp.weekly');
+                    } else if (scheduleType === 'interval') {
+                        valueInput.placeholder = '3600';
+                        helpText.textContent = this.i18n('scheduledTasks.scheduleValueHelp.interval');
+                    }
+                },
+
+                closeModal() {
+                    if (this.modalInstance) {
+                        this.modalInstance.hide();
+                    }
+                },
+
+                async deleteTask(taskId) {
+                    if (!confirm(this.i18n('scheduledTasks.deleteTaskConfirm'))) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/api/scheduled-tasks/{{ server.id }}/tasks/${taskId}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            }
+                        });
+
+                        if (response.ok) {
+                            showSuccess(this.i18n('scheduledTasks.taskDeleted'));
+                            await this.loadTasks();
+                        } else {
+                            throw new Error('Failed to delete task');
+                        }
+                    } catch (error) {
+                        console.error('Error deleting task:', error);
+                        showError(this.i18n('scheduledTasks.errorDeleting'));
+                    }
+                },
+
+                async toggleTask(taskId) {
+                    try {
+                        const response = await fetch(`/api/scheduled-tasks/{{ server.id }}/tasks/${taskId}/toggle`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            }
+                        });
+
+                        if (response.ok) {
+                            await this.loadTasks();
+                        } else {
+                            throw new Error('Failed to toggle task');
+                        }
+                    } catch (error) {
+                        console.error('Error toggling task:', error);
+                        showError(this.i18n('scheduledTasks.errorToggling'));
+                    }
+                },
+
+                resetCurrentTask() {
+                    this.currentTask = {
+                        name: '',
+                        action: 'restart',
+                        enabled: true,
+                        schedule_type: 'daily',
+                        schedule_value: ''
+                    };
+                },
+
+                getActionLabel(action) {
+                    return this.i18n(`scheduledTasks.actions.${action}`) || action;
+                },
+
+                getScheduleTypeLabel(scheduleType) {
+                    return this.i18n(`scheduledTasks.scheduleTypes.${scheduleType}`) || scheduleType;
+                },
+
+                getScheduleValuePlaceholder() {
+                    const type = this.currentTask.schedule_type;
+                    if (type === 'daily') return '14:30';
+                    if (type === 'weekly') return 'MON:14:30';
+                    if (type === 'interval') return '3600';
+                    return '';
+                },
+
+                getScheduleValueHelp() {
+                    return this.i18n(`scheduledTasks.scheduleValueHelp.${this.currentTask.schedule_type}`) || '';
+                },
+
+                formatDateTime(dateStr) {
+                    if (!dateStr) return this.i18n('scheduledTasks.never');
+                    const date = new Date(dateStr);
+                    return date.toLocaleString();
+                },
+
+                i18n(key) {
+                    // Use the global i18n instance if available
+                    if (window.i18n && window.i18n.isInitialized) {
+                        return window.i18n.t(key) || key;
+                    }
+                    // Fallback to key if i18n not loaded
+                    return key;
+                }
+            };
+        }
+
+        // File Manager Component
+        function fileManager() {
+            return {
+                loading: false,
+                files: [],
+                currentPath: '',
+                serverGameDirectory: '{{ server.game_directory }}',
+                selectedFile: null,
+                showEditorModal: false,
+                showCreateFolderModal: false,
+                editingFile: null,
+                fileContent: '',
+                savingFile: false,
+                saveStatus: '',  // For showing save status messages
+                newFolderName: '',
+                uploading: false,
+                uploadProgress: 0,
+                uploadingFileName: '',
+                // Rename modal data
+                renamingFile: null,
+                renameNewName: '',
+                // Extract modal data
+                extractingFile: null,
+                extractArchivePath: '',
+                extractDestinationPath: '',
+                extractOverwrite: false,
+
+                init() {
+                    this.currentPath = this.serverGameDirectory;
+                    this.loadFiles();
+                },
+
+                get pathParts() {
+                    const parts = [];
+                    const path = this.currentPath || this.serverGameDirectory;
+                    const segments = path.split('/').filter(s => s);
+
+                    let currentPath = '';
+                    for (let i = 0; i < segments.length; i++) {
+                        currentPath += '/' + segments[i];
+                        parts.push({
+                            name: segments[i],
+                            path: currentPath
+                        });
+                    }
+
+                    return parts;
+                },
+
+                async loadFiles(path = null) {
+                    this.loading = true;
+                    const targetPath = path || this.currentPath;
+
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/files?path=${encodeURIComponent(targetPath)}`, {
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            }
+                        });
+
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            let errorDetail = errorText;
+                            
+                            // Try to parse as JSON
+                            try {
+                                const errorJson = JSON.parse(errorText);
+                                errorDetail = errorJson.detail || errorText;
+                            } catch (e) {
+                                // Not JSON, use as is
+                            }
+                            
+                            throw new Error(errorDetail);
+                        }
+
+                        const data = await response.json();
+                        this.files = data.files;
+                        this.currentPath = data.path;
+                    } catch (error) {
+                        console.error('Error loading files:', error);
+                        
+                        // Use helper function for consistent error formatting
+                        const errorMessage = error.message || String(error);
+                        showError(this.formatSSHError(errorMessage, 'errors.errorLoadingFiles'));
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async refreshFiles() {
+                    await this.loadFiles(this.currentPath);
+                },
+
+                navigate(path) {
+                    this.currentPath = path;
+                    this.selectedFile = null;
+                    this.loadFiles(path);
+                },
+
+                navigateUp() {
+                    const parts = this.currentPath.split('/').filter(s => s);
+                    parts.pop();
+                    const parentPath = '/' + parts.join('/');
+                    this.navigate(parentPath);
+                },
+
+                navigateToPath(index) {
+                    const path = this.pathParts[index].path;
+                    this.navigate(path);
+                },
+
+                selectFile(file) {
+                    this.selectedFile = file;
+                },
+
+                openFile(file) {
+                    if (file.type === 'file' && this.isTextFile(file.name)) {
+                        this.editFile(file);
+                    }
+                },
+
+                async editFile(file) {
+                    // Open file editor in new popup window
+                    const width = 1200;
+                    const height = 800;
+                    const left = (screen.width - width) / 2;
+                    const top = (screen.height - height) / 2;
+                    
+                    const editorWindow = window.open(
+                        `/servers/{{ server.id }}/file-editor-popup?file_path=${encodeURIComponent(file.path)}&file_name=${encodeURIComponent(file.name)}`,
+                        'File_Editor_' + file.name,
+                        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no,menubar=no,toolbar=no`
+                    );
+                    
+                    // Listen for save events from popup
+                    window.addEventListener('message', (event) => {
+                        if (event.data.type === 'file-saved') {
+                            // Refresh file list
+                            this.loadFiles(this.currentPath);
+                        }
+                    });
+                },
+
+                async saveFile() {
+                    if (!this.editingFile) return;
+
+                    this.savingFile = true;
+                    this.saveStatus = 'submitting';  // Submitting...
+                    
+                    // Get content from Monaco Editor
+                    if (monacoEditor) {
+                        this.fileContent = monacoEditor.getValue();
+                    }
+
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/files/content?path=${encodeURIComponent(this.editingFile.path)}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ content: this.fileContent })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(await response.text());
+                        }
+
+                        this.saveStatus = 'success';  // Success!
+
+                        // Show success message briefly then close
+                        setTimeout(() => {
+                            this.closeEditor();
+                            this.refreshFiles();
+                        }, 800);
+                    } catch (error) {
+                        console.error('Error saving file:', error);
+                        this.saveStatus = 'error';
+                        showError(this.formatSSHError(error.message, 'errors.errorSavingFile'));
+                    } finally {
+                        this.savingFile = false;
+                    }
+                },
+
+                closeEditor() {
+                    // Dispose Monaco Editor instance
+                    if (monacoEditor) {
+                        monacoEditor.dispose();
+                        monacoEditor = null;
+                    }
+                    
+                    this.showEditorModal = false;
+                    this.editingFile = null;
+                    this.fileContent = '';
+                    this.saveStatus = '';
+                    
+                    const modalElement = document.getElementById('fileEditorModal');
+                    const modal = bootstrap.Modal.getInstance(modalElement);
+                    if (modal) {
+                        modal.hide();
+                    }
+                    
+                    // Restore fade class after modal is hidden
+                    setTimeout(() => {
+                        if (modalElement) {
+                            modalElement.classList.add('fade');
+                        }
+                    }, 300);
+                },
+
+                async uploadFile(event) {
+                    const files = event.target.files;
+                    if (!files || files.length === 0) return;
+
+                    this.uploading = true;
+
+                    for (const file of files) {
+                        this.uploadingFileName = file.name;
+                        this.uploadProgress = 0;
+
+                        const formData = new FormData();
+                        formData.append('file', file);
+
+                        try {
+                            // Create XMLHttpRequest for progress tracking
+                            await new Promise((resolve, reject) => {
+                                const xhr = new XMLHttpRequest();
+
+                                // Track upload progress
+                                xhr.upload.addEventListener('progress', (e) => {
+                                    if (e.lengthComputable) {
+                                        this.uploadProgress = Math.round((e.loaded / e.total) * 100);
+                                    }
+                                });
+
+                                xhr.addEventListener('load', () => {
+                                    if (xhr.status >= 200 && xhr.status < 300) {
+                                        this.uploadProgress = 100;
+                                        resolve();
+                                    } else {
+                                        reject(new Error(xhr.responseText));
+                                    }
+                                });
+
+                                xhr.addEventListener('error', () => {
+                                    reject(new Error('Upload failed'));
+                                });
+
+                                xhr.open('POST', `/servers/{{ server.id }}/files/upload?path=${encodeURIComponent(this.currentPath)}`);
+                                xhr.setRequestHeader('Authorization', `Bearer ${localStorage.getItem('access_token')}`);
+                                xhr.send(formData);
+                            });
+
+                            console.log(`Uploaded ${file.name}`);
+                        } catch (error) {
+                            console.error('Error uploading file:', error);
+                            showError(this.formatSSHError(error.message, 'errors.errorUploadingFile') + ` (${file.name})`);
+                        }
+                    }
+
+                    // Reset upload state
+                    this.uploading = false;
+                    this.uploadProgress = 0;
+                    this.uploadingFileName = '';
+
+                    // Reset input and refresh
+                    event.target.value = '';
+                    this.refreshFiles();
+                },
+
+                async downloadFile(file) {
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/files/download?path=${encodeURIComponent(file.path)}`, {
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            }
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(await response.text());
+                        }
+
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = file.name;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                    } catch (error) {
+                        console.error('Error downloading file:', error);
+                        showError(this.formatSSHError(error.message, 'errors.errorDownloadingFile'));
+                    }
+                },
+
+                async createFolder() {
+                    if (!this.newFolderName.trim()) return;
+
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/files/mkdir?path=${encodeURIComponent(this.currentPath)}`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ name: this.newFolderName })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(await response.text());
+                        }
+
+                        this.showCreateFolderModal = false;
+                        this.newFolderName = '';
+                        this.refreshFiles();
+
+                        // Hide Bootstrap modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('createFolderModal'));
+                        if (modal) modal.hide();
+                    } catch (error) {
+                        console.error('Error creating folder:', error);
+                        showError(this.formatSSHError(error.message, 'errors.errorCreatingFolder'));
+                    }
+                },
+
+                async deleteFile(file) {
+                    const typeKey = file.type === 'directory' ? 'folder' : 'file';
+                    const type = window.i18n?.t(`confirmMessages.${typeKey}`) || typeKey;
+                    
+                    const message = window.i18n?.t('confirmMessages.deleteFile', {
+                        type: type
+                    }) || `Are you sure you want to delete this ${type}?`;
+                    
+                    showConfirm(
+                        `${message}\n\n${file.name}`,
+                        async () => {
+                            try {
+                                const response = await fetch(`/servers/{{ server.id }}/files?path=${encodeURIComponent(file.path)}`, {
+                                    method: 'DELETE',
+                                    headers: {
+                                        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                                    }
+                                });
+
+                                if (!response.ok) {
+                                    throw new Error(await response.text());
+                                }
+
+                                this.refreshFiles();
+                            } catch (error) {
+                                console.error('Error deleting:', error);
+                                showError(this.formatSSHError(error.message, 'errors.errorDeleting'));
+                            }
+                        },
+                        null
+                    );
+                },
+
+                showRenameModal(file) {
+                    this.renamingFile = file;
+                    this.renameNewName = file.name;
+                    
+                    // Set the input value directly (since modal is outside Alpine scope)
+                    document.getElementById('renameNewName').value = file.name;
+                    
+                    // Show modal using Bootstrap
+                    const modal = new bootstrap.Modal(document.getElementById('renameModal'));
+                    modal.show();
+                    
+                    // Set up the rename button handler (remove previous listeners)
+                    const renameBtn = document.getElementById('renameFileBtn');
+                    const newRenameBtn = renameBtn.cloneNode(true);
+                    renameBtn.parentNode.replaceChild(newRenameBtn, renameBtn);
+                    newRenameBtn.addEventListener('click', () => this.renameFile());
+                    
+                    // Handle Enter key
+                    const input = document.getElementById('renameNewName');
+                    const newInput = input.cloneNode(true);
+                    input.parentNode.replaceChild(newInput, input);
+                    newInput.addEventListener('keyup', (e) => {
+                        if (e.key === 'Enter') this.renameFile();
+                    });
+                },
+
+                async renameFile() {
+                    const newName = document.getElementById('renameNewName').value;
+                    if (!newName.trim() || !this.renamingFile) return;
+
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/files/rename?path=${encodeURIComponent(this.currentPath)}`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ 
+                                old_name: this.renamingFile.name,
+                                new_name: newName
+                            })
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.detail || 'Rename failed');
+                        }
+
+                        // Hide modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('renameModal'));
+                        if (modal) modal.hide();
+
+                        // Reset state
+                        this.renamingFile = null;
+                        this.renameNewName = '';
+
+                        // Refresh file list
+                        this.refreshFiles();
+                        
+                        showSuccess(window.i18n?.t('fileManager.renameSuccess') || 'File renamed successfully');
+                    } catch (error) {
+                        console.error('Error renaming:', error);
+                        showError(this.formatSSHError(error.message, 'errors.errorRenaming'));
+                    }
+                },
+
+                showExtractModal(file) {
+                    this.extractingFile = file;
+                    this.extractArchivePath = file.path;
+                    this.extractDestinationPath = '';
+                    this.extractOverwrite = false;
+                    
+                    // Set the input values directly (since modal is outside Alpine scope)
+                    document.getElementById('extractArchivePath').value = file.path;
+                    document.getElementById('extractDestinationPath').value = '';
+                    document.getElementById('extractOverwrite').checked = false;
+                    
+                    // Show modal using Bootstrap
+                    const modal = new bootstrap.Modal(document.getElementById('extractModal'));
+                    modal.show();
+                    
+                    // Set up the extract button handler (remove previous listeners)
+                    const extractBtn = document.getElementById('extractArchiveBtn');
+                    const newExtractBtn = extractBtn.cloneNode(true);
+                    extractBtn.parentNode.replaceChild(newExtractBtn, extractBtn);
+                    newExtractBtn.addEventListener('click', () => this.extractArchive());
+                },
+
+                async extractArchive() {
+                    if (!this.extractingFile) return;
+
+                    const destinationPath = document.getElementById('extractDestinationPath').value;
+                    const overwrite = document.getElementById('extractOverwrite').checked;
+
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/files/extract`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ 
+                                archive_path: this.extractArchivePath,
+                                destination_path: destinationPath || null,
+                                overwrite: overwrite
+                            })
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.detail || 'Extraction failed');
+                        }
+
+                        // Hide modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('extractModal'));
+                        if (modal) modal.hide();
+
+                        // Reset state
+                        this.extractingFile = null;
+                        this.extractArchivePath = '';
+                        this.extractDestinationPath = '';
+                        this.extractOverwrite = false;
+
+                        // Refresh file list
+                        this.refreshFiles();
+                        
+                        showSuccess(window.i18n?.t('fileManager.extractSuccess') || 'Archive extracted successfully');
+                    } catch (error) {
+                        console.error('Error extracting:', error);
+                        showError(this.formatSSHError(error.message, 'errors.errorExtracting'));
+                    }
+                },
+
+                isTextFile(filename) {
+                    // Only allow specific text file types for viewing and editing
+                    const textExtensions = [
+                        '.txt', '.log', '.cfg', '.conf', '.ini', '.json', '.xml', '.yml', '.yaml',
+                        '.sh', '.bash', '.md', '.html', '.css', '.js', '.py', '.php', '.c', '.cpp',
+                        '.h', '.hpp', '.java', '.cs', '.go', '.rs', '.lua', '.sql', '.env', '.gitignore',
+                        '.properties', '.toml'
+                    ];
+                    const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
+                    return textExtensions.includes(ext);
+                },
+
+                isArchiveFile(filename) {
+                    // Check if file is a supported archive format
+                    const archiveExtensions = [
+                        '.zip', '.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.gz', '.bz2', '.7z'
+                    ];
+                    const lowerName = filename.toLowerCase();
+                    return archiveExtensions.some(ext => lowerName.endsWith(ext));
+                },
+
+                getFileIcon(filename) {
+                    const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
+                    const iconMap = {
+                        '.txt': 'bi-file-text text-secondary',
+                        '.log': 'bi-file-text text-info',
+                        '.cfg': 'bi-gear-fill text-primary',
+                        '.conf': 'bi-gear-fill text-primary',
+                        '.ini': 'bi-gear-fill text-primary',
+                        '.json': 'bi-file-code text-warning',
+                        '.xml': 'bi-file-code text-warning',
+                        '.yml': 'bi-file-code text-warning',
+                        '.yaml': 'bi-file-code text-warning',
+                        '.sh': 'bi-terminal-fill text-success',
+                        '.bash': 'bi-terminal-fill text-success',
+                        '.md': 'bi-file-text text-primary',
+                        '.html': 'bi-filetype-html text-danger',
+                        '.css': 'bi-filetype-css text-primary',
+                        '.js': 'bi-filetype-js text-warning',
+                        '.py': 'bi-filetype-py text-info',
+                        '.jpg': 'bi-file-image text-success',
+                        '.jpeg': 'bi-file-image text-success',
+                        '.png': 'bi-file-image text-success',
+                        '.gif': 'bi-file-image text-success',
+                        '.zip': 'bi-file-zip text-warning',
+                        '.tar': 'bi-file-zip text-warning',
+                        '.gz': 'bi-file-zip text-warning',
+                        '.bz2': 'bi-file-zip text-warning',
+                        '.7z': 'bi-file-zip text-warning',
+                        '.pdf': 'bi-file-pdf text-danger',
+                        '.so': 'bi-file-binary text-secondary',
+                        '.dll': 'bi-file-binary text-secondary',
+                        '.exe': 'bi-file-binary text-danger',
+                        '.bin': 'bi-file-binary text-secondary'
+                    };
+                    return iconMap[ext] || 'bi-file-earmark text-muted';
+                },
+                
+                initMonacoEditor(fileName) {
+                    // Dispose existing editor if any
+                    if (monacoEditor) {
+                        monacoEditor.dispose();
+                        monacoEditor = null;
+                    }
+                    
+                    // Determine language based on file extension
+                    const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+                    const languageMap = {
+                        '.txt': 'plaintext',
+                        '.log': 'plaintext',
+                        '.ini': 'ini',
+                        '.cfg': 'ini',
+                        '.json': 'json',
+                        '.jsonc': 'json',
+                        '.gi': 'ini'
+                    };
+                    const language = languageMap[ext] || 'plaintext';
+                    
+                    // Load Monaco Editor with proper localization
+                    require(['vs/editor/editor.main'], () => {
+                        const editorContainer = document.getElementById('monacoEditor');
+                        if (!editorContainer) {
+                            console.error('Monaco editor container not found');
+                            return;
+                        }
+                        
+                        // Clear container to prevent any rendering issues
+                        editorContainer.innerHTML = '';
+                        
+                        // Create editor with full localization support and flicker prevention
+                        monacoEditor = monaco.editor.create(editorContainer, {
+                            value: this.fileContent,
+                            language: language,
+                            theme: 'vs-dark',
+                            automaticLayout: true,
+                            fontSize: 14,
+                            fontFamily: "'Consolas', 'Courier New', monospace",
+                            minimap: {
+                                enabled: true
+                            },
+                            scrollBeyondLastLine: false,
+                            wordWrap: 'on',
+                            renderWhitespace: 'selection',
+                            tabSize: 4,
+                            insertSpaces: true,
+                            detectIndentation: true,
+                            folding: true,
+                            lineNumbers: 'on',
+                            glyphMargin: false,
+                            readOnly: false,
+                            cursorBlinking: 'solid',  // Solid cursor, no blinking animation
+                            cursorSmoothCaretAnimation: 'off',  // Disable all cursor animations
+                            smoothScrolling: false,  // Disable smooth scrolling to prevent flicker
+                            mouseWheelZoom: false,
+                            quickSuggestions: false,
+                            suggestOnTriggerCharacters: false,
+                            acceptSuggestionOnCommitCharacter: false,
+                            tabCompletion: 'off',
+                            wordBasedSuggestions: 'off',
+                            parameterHints: {
+                                enabled: false
+                            },
+                            hover: {
+                                enabled: false  // Disable hover tooltips completely
+                            },
+                            // Additional options to prevent flickering
+                            renderLineHighlight: 'none',
+                            occurrencesHighlight: 'off',
+                            renderValidationDecorations: 'off',
+                            codeLens: false,
+                            lightbulb: {
+                                enabled: 'off'
+                            },
+                            links: false,
+                            colorDecorators: false,
+                            contextmenu: false,
+                            matchBrackets: 'never',
+                            selectionHighlight: false,
+                            renderWhitespace: 'none',  // Changed from 'selection' to 'none'
+                            renderControlCharacters: false,
+                            renderIndentGuides: false,
+                            renderLineHighlightOnlyWhenFocus: false,
+                            // Additional aggressive options to prevent ANY hover-related activity
+                            mouseWheelScrollSensitivity: 1,
+                            fastScrollSensitivity: 5,
+                            scrollbar: {
+                                useShadows: false,
+                                verticalHasArrows: false,
+                                horizontalHasArrows: false,
+                                vertical: 'visible',
+                                horizontal: 'visible',
+                                verticalScrollbarSize: 10,
+                                horizontalScrollbarSize: 10
+                            },
+                            overviewRulerLanes: 0,
+                            hideCursorInOverviewRuler: true,
+                            overviewRulerBorder: false,
+                            // Disable find widget and other overlays
+                            find: {
+                                addExtraSpaceOnTop: false,
+                                autoFindInSelection: 'never',
+                                seedSearchStringFromSelection: 'never'
+                            }
+                        });
+                        
+                        // Force layout and prevent any further updates that might cause flicker
+                        requestAnimationFrame(() => {
+                            if (monacoEditor) {
+                                monacoEditor.layout();
+                                // Remove all event listeners that might trigger on hover
+                                const domNode = monacoEditor.getDomNode();
+                                if (domNode) {
+                                    domNode.style.pointerEvents = 'auto';
+                                }
+                            }
+                        });
+                    });
+                },
+
+                formatFileSize(bytes) {
+                    if (bytes === 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+                },
+
+                formatTimestamp(timestamp) {
+                    if (!timestamp) return '-';
+                    const date = new Date(timestamp * 1000);
+                    return date.toLocaleString();
+                }
+            };
+        }
+    </script>

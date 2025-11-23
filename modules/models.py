@@ -37,6 +37,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     api_key = Column(String(64), nullable=True, unique=True, index=True)  # User API key for server management
+    steam_api_key = Column(String(64), nullable=True)  # Steam Web API key for game server token generation
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
@@ -68,6 +69,7 @@ class Server(Base):
     server_name = Column(String(255), default="CS2 Server")  # Server hostname
     server_password = Column(String(255), nullable=True)  # Server password (rcon password)
     rcon_password = Column(String(255), nullable=True)  # RCON password
+    steam_account_token = Column(String(255), nullable=True)  # Steam game server account token (GSLT)
     default_map = Column(String(100), default="de_dust2")  # Default map
     max_players = Column(Integer, default=32)  # Maximum players
     tickrate = Column(Integer, default=128)  # Server tickrate (64 or 128)
@@ -150,6 +152,34 @@ class MonitoringLog(Base):
     
     def __repr__(self):
         return f"<MonitoringLog(id={self.id}, server_id={self.server_id}, event_type='{self.event_type}', status='{self.status}')>"
+
+
+class ScheduledTask(Base):
+    """Scheduled task model for automated server operations"""
+    __tablename__ = "scheduled_tasks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    server_id = Column(Integer, ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)  # Task name/description
+    action = Column(String(50), nullable=False)  # restart, start, stop, update, etc.
+    enabled = Column(Boolean, default=True)  # Whether the task is active
+    
+    # Schedule configuration (cron-like)
+    schedule_type = Column(String(50), nullable=False)  # daily, weekly, interval, cron
+    schedule_value = Column(String(255), nullable=False)  # Time or cron expression
+    
+    # Execution tracking
+    last_run = Column(DateTime, nullable=True)  # Last execution time
+    next_run = Column(DateTime, nullable=True)  # Next scheduled execution time
+    run_count = Column(Integer, default=0)  # Number of times executed
+    last_status = Column(String(50), nullable=True)  # success, failed, running
+    last_error = Column(Text, nullable=True)  # Last error message if any
+    
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<ScheduledTask(id={self.id}, server_id={self.server_id}, name='{self.name}', action='{self.action}', enabled={self.enabled})>"
 
 
 class InitializedServer(Base):

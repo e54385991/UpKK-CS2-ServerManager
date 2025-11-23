@@ -1,0 +1,133 @@
+<style>
+    #monacoEditor {
+        width: 100%;
+        height: 600px;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+    
+    /* Prevent cursor flashing issues - disable all animations */
+    .monaco-editor .cursor {
+        animation: none !important;
+        -webkit-animation: none !important;
+    }
+    
+    .monaco-editor .cursors-layer .cursor {
+        animation: none !important;
+        -webkit-animation: none !important;
+    }
+    
+    /* Disable all monaco editor overlays and decorations that cause flicker */
+    .monaco-editor .overlayWidgets,
+    .monaco-editor .lines-content,
+    .monaco-editor .view-overlays {
+        will-change: auto !important;
+    }
+    
+    /* Complete isolation of Monaco editor modal - prevent ALL interactions that cause reflows */
+    #fileEditorModal {
+        pointer-events: none;
+    }
+    
+    #fileEditorModal .modal-dialog {
+        pointer-events: auto;
+        will-change: auto !important;
+    }
+    
+    #fileEditorModal .modal-body {
+        padding: 1rem;
+        overflow: hidden !important;
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
+        will-change: auto !important;
+        contain: layout style paint;  /* CSS containment for isolation */
+    }
+    
+    #fileEditorModal .modal-content {
+        will-change: auto !important;
+    }
+    
+    /* Prevent tooltip/overlay flicker */
+    .monaco-editor .zone-widget,
+    .monaco-editor .monaco-hover,
+    .monaco-editor .suggest-widget,
+    .monaco-editor .parameter-hints-widget,
+    .monaco-editor .editor-widget {
+        pointer-events: none !important;
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* Disable ALL transitions on modal to prevent flash */
+    #fileEditorModal,
+    #fileEditorModal *,
+    #fileEditorModal.fade .modal-dialog {
+        transition: none !important;
+        -webkit-transition: none !important;
+        animation: none !important;
+        -webkit-animation: none !important;
+    }
+    
+    /* Force immediate display without fade */
+    #fileEditorModal.show {
+        opacity: 1 !important;
+    }
+    
+    /* Prevent Alpine.js from causing reflows on hover */
+    #fileEditorModal [x-show],
+    #fileEditorModal [x-text],
+    #fileEditorModal [x-cloak] {
+        will-change: auto !important;
+    }
+    
+    /* Native terminal styling */
+    .terminal-container {
+        height: 500px;
+        background-color: #000;
+        color: #fff;
+        padding: 10px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 14px;
+        line-height: 1.2;
+    }
+    
+    /* ANSI Colors */
+    .ansi-black { color: #000000; }
+    .ansi-red { color: #cd3131; }
+    .ansi-green { color: #0dbc79; }
+    .ansi-yellow { color: #e5e510; }
+    .ansi-blue { color: #2472c8; }
+    .ansi-magenta { color: #bc3fbc; }
+    .ansi-cyan { color: #11a8cd; }
+    .ansi-white { color: #e5e5e5; }
+    .ansi-bright-black { color: #666666; }
+    .ansi-bright-red { color: #f14c4c; }
+    .ansi-bright-green { color: #23d18b; }
+    .ansi-bright-yellow { color: #f5f543; }
+    .ansi-bright-blue { color: #3b8eea; }
+    .ansi-bright-magenta { color: #d670d6; }
+    .ansi-bright-cyan { color: #29b8db; }
+    .ansi-bright-white { color: #ffffff; }
+    .ansi-bold { font-weight: bold; }
+    
+    .terminal-container::-webkit-scrollbar {
+        width: 10px;
+    }
+    
+    .terminal-container::-webkit-scrollbar-track {
+        background: #1e1e1e;
+    }
+    
+    .terminal-container::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 5px;
+    }
+    
+    .terminal-container::-webkit-scrollbar-thumb:hover {
+        background: #888;
+    }
+</style>

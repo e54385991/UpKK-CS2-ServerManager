@@ -1,0 +1,341 @@
+                <div class="tab-pane fade" id="monitoring" role="tabpanel">
+                    <!-- A2S Query & Monitoring Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-search"></i> <span
+                                    data-i18n="serverDetail.a2sServerQuery">A2S Server Query</span></h5>
+                            <div class="btn-group" role="group">
+                                <button @click="refreshA2SInfo()" class="btn btn-sm btn-outline-primary"
+                                    :disabled="loadingA2SInfo">
+                                    <i class="bi bi-arrow-clockwise"></i> <span x-show="!loadingA2SInfo"
+                                        data-i18n="serverDetail.queryNow">Query Now</span>
+                                    <span x-show="loadingA2SInfo"><span class="spinner-border spinner-border-sm"></span>
+                                        <span data-i18n="serverDetail.querying">Querying...</span></span>
+                                </button>
+                                <button @click="showA2SEdit = !showA2SEdit" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil"></i> <span
+                                        x-text="showA2SEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.configure') || 'Configure')"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- Configuration Edit Mode -->
+                            <div x-show="showA2SEdit" x-cloak>
+                                <form @submit.prevent="saveA2SConfig()">
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <div class="alert alert-info" role="alert">
+                                                <i class="bi bi-info-circle"></i> A2S (Address to Server) queries
+                                                provide real-time server information. Configure custom query
+                                                address/port if different from server host/game port.
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">A2S Query Host</label>
+                                            <input type="text" class="form-control"
+                                                x-model="a2sConfigForm.a2s_query_host"
+                                                placeholder="Leave empty to use server host">
+                                            <small class="text-muted">Leave empty to use server host (<span
+                                                    x-text="server.host"></span>)</small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">A2S Query Port</label>
+                                            <input type="number" class="form-control"
+                                                x-model.number="a2sConfigForm.a2s_query_port" min="1" max="65535"
+                                                placeholder="Leave empty to use game port">
+                                            <small class="text-muted">Leave empty to use game port (<span
+                                                    x-text="server.game_port"></span>)</small>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <hr>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="enableA2SMonitoring"
+                                                    x-model="a2sConfigForm.enable_a2s_monitoring">
+                                                <label class="form-check-label" for="enableA2SMonitoring">
+                                                    <strong>Enable A2S Monitoring for Auto-Restart</strong>
+                                                    <small class="d-block text-muted">Use A2S queries instead of SSH
+                                                        process checks for server monitoring</small>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-6" x-show="a2sConfigForm.enable_a2s_monitoring">
+                                            <label class="form-label">
+                                                A2S Check Interval
+                                                <span class="badge bg-secondary"
+                                                    x-text="a2sConfigForm.a2s_check_interval_seconds + 's'"></span>
+                                            </label>
+                                            <input type="range" class="form-range"
+                                                x-model.number="a2sConfigForm.a2s_check_interval_seconds" min="15"
+                                                max="600" step="5">
+                                            <small class="text-muted">How often to perform A2S queries (15-600
+                                                seconds)</small>
+                                        </div>
+
+                                        <div class="col-md-6" x-show="a2sConfigForm.enable_a2s_monitoring">
+                                            <label class="form-label">
+                                                A2S Failure Threshold
+                                                <span class="badge bg-secondary"
+                                                    x-text="a2sConfigForm.a2s_failure_threshold"></span>
+                                            </label>
+                                            <input type="range" class="form-range"
+                                                x-model.number="a2sConfigForm.a2s_failure_threshold" min="1" max="10"
+                                                step="1">
+                                            <small class="text-muted">Consecutive A2S query failures before triggering
+                                                restart (1-10)</small>
+                                        </div>
+
+                                        <div class="col-md-6" x-show="a2sConfigForm.enable_a2s_monitoring">
+                                            <div class="alert alert-warning mb-0" role="alert">
+                                                <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong>
+                                                <small class="d-block">A2S monitoring requires Panel Monitoring to be
+                                                    enabled. It provides more accurate server health status than SSH
+                                                    process checks.</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingA2SConfig">
+                                            <span x-show="!savingA2SConfig"><i class="bi bi-save"></i> Save A2S
+                                                Configuration</span>
+                                            <span x-show="savingA2SConfig"><span
+                                                    class="spinner-border spinner-border-sm"></span> Saving...</span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" @click="showA2SEdit = false">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <!-- A2S Query Results -->
+                            <div x-show="!showA2SEdit" x-cloak>
+                                <template x-if="loadingA2SInfo">
+                                    <div class="text-center p-4">
+                                        <span class="spinner-border"></span>
+                                        <p class="mt-2 text-muted">Querying server via A2S protocol...</p>
+                                    </div>
+                                </template>
+
+                                <template x-if="!loadingA2SInfo && a2sInfo">
+                                    <div>
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <h6 class="text-muted" data-i18n="serverDetail.querySettings">Query
+                                                    Settings</h6>
+                                                <ul class="list-unstyled">
+                                                    <li><i class="bi bi-diagram-3"></i> <strong
+                                                            data-i18n="serverDetail.queryHost">Query Host:</strong>
+                                                        <span x-text="a2sInfo.query_host"></span></li>
+                                                    <li><i class="bi bi-plugin"></i> <strong
+                                                            data-i18n="serverDetail.queryPort">Query Port:</strong>
+                                                        <span x-text="a2sInfo.query_port"></span></li>
+                                                    <li>
+                                                        <i
+                                                            :class="server.enable_a2s_monitoring ? 'bi bi-check-circle text-success' : 'bi bi-x-circle text-secondary'"></i>
+                                                        <strong data-i18n="serverDetail.a2sMonitoring">A2S
+                                                            Monitoring:</strong>
+                                                        <span
+                                                            x-text="server.enable_a2s_monitoring ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') : (window.i18n?.t('serverDetail.disabled') || 'Disabled')"
+                                                            :class="server.enable_a2s_monitoring ? 'text-success fw-bold' : 'text-secondary'"></span>
+                                                    </li>
+                                                    <li x-show="server.enable_a2s_monitoring">
+                                                        <i class="bi bi-clock"></i> <strong
+                                                            data-i18n="serverDetail.checkInterval">Check
+                                                            Interval:</strong> <span
+                                                            x-text="server.a2s_check_interval_seconds || 60"></span>
+                                                        <span data-i18n="serverDetail.seconds">seconds</span>
+                                                    </li>
+                                                    <li x-show="server.enable_a2s_monitoring">
+                                                        <i class="bi bi-exclamation-triangle"></i> <strong>Failure
+                                                            Threshold:</strong> <span
+                                                            x-text="server.a2s_failure_threshold || 3"></span>
+                                                        consecutive failures
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <h6 class="text-muted" data-i18n="serverDetail.queryStatus">Query Status
+                                                </h6>
+                                                <ul class="list-unstyled">
+                                                    <li>
+                                                        <i
+                                                            :class="a2sInfo.success ? 'bi bi-check-circle text-success' : 'bi bi-x-circle text-danger'"></i>
+                                                        <strong data-i18n="serverDetail.status">Status:</strong>
+                                                        <span
+                                                            x-text="a2sInfo.success ? (window.i18n?.t('serverDetail.success') || 'Success') : (window.i18n?.t('serverDetail.failed') || 'Failed')"
+                                                            :class="a2sInfo.success ? 'text-success fw-bold' : 'text-danger fw-bold'"></span>
+                                                    </li>
+                                                    <li><i class="bi bi-clock"></i> <strong
+                                                            data-i18n="serverDetail.lastQuery">Last Query:</strong>
+                                                        <span
+                                                            x-text="a2sInfo.timestamp ? new Date(a2sInfo.timestamp).toLocaleString() : (window.i18n?.t('serverDetail.never') || 'Never')"></span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        <template x-if="a2sInfo.success && a2sInfo.server_info">
+                                            <div>
+                                                <hr>
+                                                <h6 class="text-muted" data-i18n="serverDetail.serverInformation">Server
+                                                    Information</h6>
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <ul class="list-unstyled">
+                                                            <li><i class="bi bi-server"></i> <strong
+                                                                    data-i18n="serverDetail.serverName">Server
+                                                                    Name:</strong> <span
+                                                                    x-text="a2sInfo.server_info.server_name"></span>
+                                                            </li>
+                                                            <li><i class="bi bi-map"></i> <strong
+                                                                    data-i18n="serverDetail.currentMap">Current
+                                                                    Map:</strong> <span
+                                                                    x-text="a2sInfo.server_info.map_name"></span></li>
+                                                            <li><i class="bi bi-folder"></i> <strong
+                                                                    data-i18n="serverDetail.game">Game:</strong> <span
+                                                                    x-text="a2sInfo.server_info.game"></span></li>
+                                                            <li><i class="bi bi-people"></i> <strong
+                                                                    data-i18n="serverDetail.players">Players:</strong>
+                                                                <span
+                                                                    x-text="a2sInfo.server_info.player_count + ' / ' + a2sInfo.server_info.max_players + ' (Bots: ' + a2sInfo.server_info.bot_count + ')'"></span>
+                                                            </li>
+                                                        </ul>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <ul class="list-unstyled">
+                                                            <li><i class="bi bi-lock"></i> <strong
+                                                                    data-i18n="serverDetail.passwordProtected">Password:</strong>
+                                                                <span
+                                                                    x-text="a2sInfo.server_info.password_protected ? (window.i18n?.t('serverDetail.yes') || 'Yes') : (window.i18n?.t('serverDetail.no') || 'No')"></span>
+                                                            </li>
+                                                            <li><i class="bi bi-shield-check"></i> <strong
+                                                                    data-i18n="serverDetail.vac">VAC:</strong> <span
+                                                                    x-text="a2sInfo.server_info.vac_enabled ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') : (window.i18n?.t('serverDetail.disabled') || 'Disabled')"></span>
+                                                            </li>
+                                                            <li><i class="bi bi-code-square"></i> <strong
+                                                                    data-i18n="serverDetail.version">Version:</strong>
+                                                                <span x-text="a2sInfo.server_info.version"></span></li>
+                                                            <li><i class="bi bi-pc-display"></i> <strong
+                                                                    data-i18n="serverDetail.platform">Platform:</strong>
+                                                                <span x-text="a2sInfo.server_info.platform"></span></li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Player List -->
+                                                <template x-if="a2sInfo.players && a2sInfo.players.length > 0">
+                                                    <div class="mt-3">
+                                                        <hr>
+                                                        <h6 class="text-muted">
+                                                            <i class="bi bi-people-fill"></i> <span
+                                                                data-i18n="serverDetail.playersOnline">Players
+                                                                Online</span> (<span
+                                                                x-text="a2sInfo.players.length"></span>)
+                                                        </h6>
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm table-striped">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th data-i18n="serverDetail.name">Name</th>
+                                                                        <th data-i18n="serverDetail.score">Score</th>
+                                                                        <th data-i18n="serverDetail.duration">Duration
+                                                                        </th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <template x-for="player in a2sInfo.players"
+                                                                        :key="player.name">
+                                                                        <tr>
+                                                                            <td x-text="player.name"></td>
+                                                                            <td x-text="player.score"></td>
+                                                                            <td
+                                                                                x-text="formatDuration(player.duration)">
+                                                                            </td>
+                                                                        </tr>
+                                                                    </template>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+
+                                        <template x-if="!a2sInfo.success">
+                                            <div class="alert alert-warning" role="alert">
+                                                <i class="bi bi-exclamation-triangle"></i> <strong>A2S Query
+                                                    Failed</strong>
+                                                <p class="mb-0">Unable to query server. This could mean the server is
+                                                    offline, A2S queries are blocked, or the host/port is incorrect.</p>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+
+                                <template x-if="!loadingA2SInfo && !a2sInfo">
+                                    <div class="text-center p-4 text-muted">
+                                        <i class="bi bi-search display-4"></i>
+                                        <p class="mt-2">Click "Query Now" to fetch server information via A2S protocol
+                                        </p>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- A2S Check Logs (show when A2S monitoring is enabled) -->
+                    <div class="card mb-4" x-show="server.enable_a2s_monitoring" x-cloak>
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="bi bi-search"></i> <span data-i18n="serverDetail.a2sCheckLogs">A2S Check Logs
+                                    (Last 50)</span>
+                                <button @click="loadA2SCheckLogs()" class="btn btn-sm btn-outline-secondary ms-2">
+                                    <i class="bi bi-arrow-clockwise"></i> <span
+                                        data-i18n="serverDetail.refresh">Refresh</span>
+                                </button>
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <template x-if="loadingA2SCheckLogs">
+                                <div class="text-center p-3">
+                                    <span class="spinner-border spinner-border-sm"></span> Loading...
+                                </div>
+                            </template>
+                            <template x-if="!loadingA2SCheckLogs && a2sCheckLogs.length === 0">
+                                <div class="text-muted p-3 text-center">
+                                    No A2S check logs recorded yet
+                                </div>
+                            </template>
+                            <template x-if="!loadingA2SCheckLogs && a2sCheckLogs.length > 0">
+                                <div class="monitoring-logs-container">
+                                    <div class="log-list">
+                                        <template x-for="log in a2sCheckLogs" :key="log.id">
+                                            <div class="log-entry" :class="'log-' + log.status">
+                                                <div class="log-icon">
+                                                    <i :class="{
+                                        'bi bi-check-circle text-success': log.status === 'success',
+                                        'bi bi-exclamation-circle text-warning': log.status === 'warning',
+                                        'bi bi-x-circle text-danger': log.status === 'failed',
+                                        'bi bi-info-circle text-info': log.status === 'info'
+                                    }"></i>
+                                                </div>
+                                                <div class="log-content">
+                                                    <div class="log-message" x-text="log.message"></div>
+                                                    <div class="log-time text-muted"
+                                                        x-text="new Date(log.created_at).toLocaleString()"></div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                </div>

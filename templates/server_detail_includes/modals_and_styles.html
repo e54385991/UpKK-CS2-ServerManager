@@ -1,0 +1,469 @@
+    <!-- Operation Status Modal -->
+    <div class="modal fade" id="operationStatusModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-terminal"></i>
+                        <span data-i18n="serverDetail.operationStatus">Operation Status</span>: 
+                        <span x-text="currentOperationName"></span>
+                    </h5>
+                    <button type="button" class="btn-close" @click="closeOperationModal()" :disabled="operationInProgress"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <!-- Terminal output container -->
+                    <div id="operationTerminal" style="height: 500px; background-color: #1e1e1e; color: #d4d4d4; padding: 15px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 14px; line-height: 1.4;">
+                        <template x-for="msg in operationMessages" :key="msg.id">
+                            <div :class="{
+                                'text-info': msg.type === 'status',
+                                'text-success': msg.type === 'complete',
+                                'text-danger': msg.type === 'error',
+                                'text-warning': msg.type === 'warning',
+                                'text-light': msg.type === 'output' || msg.type === 'info'
+                            }">
+                                <span class="text-muted" x-text="msg.timestamp"></span>
+                                <span x-text="msg.message"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="flex-grow-1 d-flex align-items-center">
+                        <template x-if="operationInProgress">
+                            <div class="text-muted">
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span data-i18n="serverDetail.operationInProgress">Operation in progress...</span>
+                            </div>
+                        </template>
+                        <template x-if="!operationInProgress && operationCompleted">
+                            <div class="text-success">
+                                <i class="bi bi-check-circle me-2"></i>
+                                <span data-i18n="serverDetail.operationCompleted">Operation completed</span>
+                            </div>
+                        </template>
+                        <template x-if="!operationInProgress && operationFailed">
+                            <div class="text-danger">
+                                <i class="bi bi-x-circle me-2"></i>
+                                <span data-i18n="serverDetail.operationFailed">Operation failed</span>
+                            </div>
+                        </template>
+                    </div>
+                    <button type="button" class="btn btn-secondary" @click="closeOperationModal()" :disabled="operationInProgress">
+                        <span data-i18n="common.close">Close</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WebSocket Status -->
+    <div class="ws-indicator" :class="wsConnected ? 'ws-connected' : 'ws-disconnected'">
+        <i :class="wsConnected ? 'bi bi-wifi' : 'bi bi-wifi-off'"></i>
+        <span x-text="wsConnected ? 'Connected' : 'Disconnected'"></span>
+    </div>
+
+    <style>
+        .monitoring-logs-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            background-color: #f8f9fa;
+        }
+
+        .log-list {
+            padding: 0.5rem;
+        }
+
+        .log-entry {
+            display: flex;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            background-color: white;
+            border-radius: 0.25rem;
+            border-left: 3px solid #6c757d;
+        }
+
+        .log-entry.log-success {
+            border-left-color: #28a745;
+        }
+
+        .log-entry.log-warning {
+            border-left-color: #ffc107;
+        }
+
+        .log-entry.log-failed {
+            border-left-color: #dc3545;
+        }
+
+        .log-entry.log-info {
+            border-left-color: #17a2b8;
+        }
+
+        .log-icon {
+            margin-right: 0.75rem;
+            font-size: 1.25rem;
+        }
+
+        .log-content {
+            flex: 1;
+        }
+
+        .log-message {
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .log-time {
+            font-size: 0.75rem;
+        }
+
+        /* File Manager Styles */
+        .file-browser {
+            min-height: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .file-row {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .file-row:hover {
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+
+        .parent-dir-row {
+            cursor: pointer;
+            background-color: #f8f9fa;
+            font-weight: 500;
+        }
+
+        .parent-dir-row:hover {
+            background-color: #e9ecef;
+        }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .breadcrumb-item a {
+            text-decoration: none;
+            color: #0d6efd;
+        }
+
+        .breadcrumb-item a:hover {
+            text-decoration: underline;
+        }
+
+        .modal-xl .modal-body textarea {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+    </style>
+
+    <!-- Scheduled Tasks Modal (Outside tab-pane to prevent flickering when switching tabs) -->
+    <div class="modal fade" id="scheduledTaskModal" tabindex="-1" aria-labelledby="scheduledTaskModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="scheduledTaskModalLabel">
+                        <span id="scheduledTaskModalTitle"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" data-i18n="scheduledTasks.taskName">Task Name</label>
+                        <input type="text" class="form-control" id="taskName" placeholder="">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" data-i18n="scheduledTasks.action">Action</label>
+                        <select class="form-select" id="taskAction">
+                            <option value="restart" data-i18n="scheduledTasks.actions.restart">Restart Server</option>
+                            <option value="start" data-i18n="scheduledTasks.actions.start">Start Server</option>
+                            <option value="stop" data-i18n="scheduledTasks.actions.stop">Stop Server</option>
+                            <option value="update" data-i18n="scheduledTasks.actions.update">Update Server</option>
+                            <option value="validate" data-i18n="scheduledTasks.actions.validate">Validate Files</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" data-i18n="scheduledTasks.scheduleType">Schedule Type</label>
+                        <select class="form-select" id="taskScheduleType">
+                            <option value="daily" data-i18n="scheduledTasks.scheduleTypes.daily">Daily</option>
+                            <option value="weekly" data-i18n="scheduledTasks.scheduleTypes.weekly">Weekly</option>
+                            <option value="interval" data-i18n="scheduledTasks.scheduleTypes.interval">Interval</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" data-i18n="scheduledTasks.scheduleValue">Schedule Value</label>
+                        <input type="text" class="form-control" id="taskScheduleValue" placeholder="">
+                        <small class="form-text text-muted" id="taskScheduleHelp"></small>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="taskEnabled">
+                        <label class="form-check-label" for="taskEnabled" data-i18n="scheduledTasks.enabled">
+                            Enabled
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="scheduledTasks.cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveTaskBtn">
+                        <span class="save-text" data-i18n="scheduledTasks.save">Save</span>
+                        <span class="saving-text" style="display: none;">
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                            <span data-i18n="common.saving">Saving...</span>
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Manager Modals (Outside tab-pane to prevent flickering when switching tabs) -->
+    <!-- Rename Modal -->
+    <div class="modal fade" id="renameModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-i18n="fileManager.rename">Rename</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" data-i18n="fileManager.newName">New Name</label>
+                    <input type="text" class="form-control" id="renameNewName">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                        data-i18n="common.cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="renameFileBtn"
+                        data-i18n="common.rename">Rename</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Extract Archive Modal -->
+    <div class="modal fade" id="extractModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-i18n="fileManager.extractArchive">Extract Archive</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" data-i18n="fileManager.archivePath">Archive Path</label>
+                        <input type="text" class="form-control" id="extractArchivePath" disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" data-i18n="fileManager.destinationPath">Destination Path</label>
+                        <input type="text" class="form-control" id="extractDestinationPath" data-i18n-placeholder="fileManager.destinationPathHint">
+                        <small class="form-text text-muted" data-i18n="fileManager.destinationPathHint">Leave empty to extract to current directory</small>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="extractOverwrite">
+                        <label class="form-check-label" for="extractOverwrite" data-i18n="fileManager.overwriteExisting">
+                            Overwrite existing files
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                        data-i18n="common.cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="extractArchiveBtn"
+                        data-i18n="fileManager.extract">Extract</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Operation Status Modal -->
+    <div class="modal fade" id="operationStatusModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-terminal"></i>
+                        <span data-i18n="serverDetail.operationStatus">Operation Status</span>: 
+                        <span x-text="currentOperationName"></span>
+                    </h5>
+                    <button type="button" class="btn-close" @click="closeOperationModal()" :disabled="operationInProgress"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <!-- Terminal output container -->
+                    <div id="operationTerminal" style="height: 500px; background-color: #1e1e1e; color: #d4d4d4; padding: 15px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 14px; line-height: 1.4;">
+                        <template x-for="msg in operationMessages" :key="msg.id">
+                            <div :class="{
+                                'text-info': msg.type === 'status',
+                                'text-success': msg.type === 'complete',
+                                'text-danger': msg.type === 'error',
+                                'text-warning': msg.type === 'warning',
+                                'text-light': msg.type === 'output' || msg.type === 'info'
+                            }">
+                                <span class="text-muted" x-text="msg.timestamp"></span>
+                                <span x-text="msg.message"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="flex-grow-1 d-flex align-items-center">
+                        <template x-if="operationInProgress">
+                            <div class="text-muted">
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span data-i18n="serverDetail.operationInProgress">Operation in progress...</span>
+                            </div>
+                        </template>
+                        <template x-if="!operationInProgress && operationCompleted">
+                            <div class="text-success">
+                                <i class="bi bi-check-circle me-2"></i>
+                                <span data-i18n="serverDetail.operationCompleted">Operation completed</span>
+                            </div>
+                        </template>
+                        <template x-if="!operationInProgress && operationFailed">
+                            <div class="text-danger">
+                                <i class="bi bi-x-circle me-2"></i>
+                                <span data-i18n="serverDetail.operationFailed">Operation failed</span>
+                            </div>
+                        </template>
+                    </div>
+                    <button type="button" class="btn btn-secondary" @click="closeOperationModal()" :disabled="operationInProgress">
+                        <span data-i18n="common.close">Close</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WebSocket Status -->
+    <div class="ws-indicator" :class="wsConnected ? 'ws-connected' : 'ws-disconnected'">
+        <i :class="wsConnected ? 'bi bi-wifi' : 'bi bi-wifi-off'"></i>
+        <span x-text="wsConnected ? 'Connected' : 'Disconnected'"></span>
+    </div>
+
+    <style>
+        .monitoring-logs-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            background-color: #f8f9fa;
+        }
+
+        .log-list {
+            padding: 0.5rem;
+        }
+
+        .log-entry {
+            display: flex;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            background-color: white;
+            border-radius: 0.25rem;
+            border-left: 3px solid #6c757d;
+        }
+
+        .log-entry.log-success {
+            border-left-color: #28a745;
+        }
+
+        .log-entry.log-warning {
+            border-left-color: #ffc107;
+        }
+
+        .log-entry.log-failed {
+            border-left-color: #dc3545;
+        }
+
+        .log-entry.log-info {
+            border-left-color: #17a2b8;
+        }
+
+        .log-icon {
+            margin-right: 0.75rem;
+            font-size: 1.25rem;
+        }
+
+        .log-content {
+            flex: 1;
+        }
+
+        .log-message {
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .log-time {
+            font-size: 0.75rem;
+        }
+
+        /* File Manager Styles */
+        .file-browser {
+            min-height: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .file-row {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .file-row:hover {
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+
+        .parent-dir-row {
+            cursor: pointer;
+            background-color: #f8f9fa;
+            font-weight: 500;
+        }
+
+        .parent-dir-row:hover {
+            background-color: #e9ecef;
+        }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .breadcrumb-item a {
+            text-decoration: none;
+            color: #0d6efd;
+        }
+
+        .breadcrumb-item a:hover {
+            text-decoration: underline;
+        }
+
+        .modal-xl .modal-body textarea {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+    </style>
+

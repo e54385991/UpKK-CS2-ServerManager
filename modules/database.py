@@ -324,6 +324,54 @@ async def migrate_db():
         else:
             print("✓ api_key column exists in users table")
         
+        # Check if steam_api_key column exists in users table
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'users' 
+                AND COLUMN_NAME = 'steam_api_key'
+            """)
+        )
+        steam_api_key_exists = result.fetchone() is not None
+        
+        if not steam_api_key_exists:
+            print("Adding steam_api_key column to users table...")
+            await conn.execute(
+                text("""
+                    ALTER TABLE users 
+                    ADD COLUMN steam_api_key VARCHAR(64) NULL
+                """)
+            )
+            print("✓ Migration completed: steam_api_key column added to users table")
+        else:
+            print("✓ steam_api_key column exists in users table")
+        
+        # Check if steam_account_token column exists in servers table
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'servers' 
+                AND COLUMN_NAME = 'steam_account_token'
+            """)
+        )
+        steam_account_token_exists = result.fetchone() is not None
+        
+        if not steam_account_token_exists:
+            print("Adding steam_account_token column to servers table...")
+            await conn.execute(
+                text("""
+                    ALTER TABLE servers 
+                    ADD COLUMN steam_account_token VARCHAR(255) NULL
+                """)
+            )
+            print("✓ Migration completed: steam_account_token column added to servers table")
+        else:
+            print("✓ steam_account_token column exists in servers table")
+        
         print("✓ Database schema migration completed")
 
 

@@ -16,6 +16,12 @@ ALLOWED_SERVER_ACTIONS = [
 ]
 SERVER_ACTION_PATTERN = f"^({'|'.join(ALLOWED_SERVER_ACTIONS)})$"
 
+# Scheduled task action constants (subset of server actions that can be automated)
+ALLOWED_SCHEDULED_TASK_ACTIONS = [
+    "start", "stop", "restart", "update", "validate"
+]
+SCHEDULED_TASK_ACTION_PATTERN = f"^({'|'.join(ALLOWED_SCHEDULED_TASK_ACTIONS)})$"
+
 
 # User schemas
 class UserCreate(BaseModel):
@@ -72,8 +78,43 @@ class PasswordReset(BaseModel):
 class UserProfileUpdate(BaseModel):
     """Schema for updating user profile"""
     email: Optional[EmailStr] = None
+    steam_api_key: Optional[str] = Field(None, max_length=64, description="Steam Web API key for game server management")
     captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
     captcha_code: str = Field(..., min_length=4, max_length=4, description="User-entered CAPTCHA code")
+    
+    @field_validator('steam_api_key')
+    @classmethod
+    def validate_steam_api_key(cls, v):
+        """Validate Steam API key format"""
+        if v is None or v.strip() == '':
+            return v
+        # Steam API keys are 32-character hexadecimal strings
+        v = v.strip()
+        if not re.match(r'^[A-Fa-f0-9]{32}$', v):
+            raise ValueError('Steam API key must be a 32-character hexadecimal string')
+        return v
+
+
+class SteamApiKeyResponse(BaseModel):
+    """Schema for Steam API key response"""
+    steam_api_key: Optional[str]
+    
+    class Config:
+        from_attributes = True
+
+
+class GenerateServerTokenRequest(BaseModel):
+    """Schema for generating game server login token"""
+    server_name: Optional[str] = Field(None, max_length=255, description="Optional memo/description for the server")
+    captcha_token: str = Field(..., description="CAPTCHA token (required for security)")
+    captcha_code: str = Field(..., min_length=4, max_length=4, description="CAPTCHA code (required for security)")
+
+
+class GenerateServerTokenResponse(BaseModel):
+    """Schema for game server login token response"""
+    success: bool
+    login_token: Optional[str] = None
+    error: Optional[str] = None
 
 
 class ApiKeyResponse(BaseModel):
@@ -113,6 +154,7 @@ class ServerCreate(BaseModel):
     server_name: str = Field(default="CS2 Server", max_length=255)
     server_password: Optional[str] = None
     rcon_password: Optional[str] = None
+    steam_account_token: Optional[str] = Field(None, max_length=255, description="Steam game server login token (GSLT)")
     default_map: str = Field(default="de_dust2", max_length=100)
     max_players: int = Field(default=32, ge=1, le=64)
     tickrate: int = Field(default=128, ge=64, le=128)
@@ -162,6 +204,18 @@ class ServerCreate(BaseModel):
         if not re.match(r'^[\d,\-\s]+$', v):
             raise ValueError('CPU affinity must only contain digits, commas, and hyphens')
         return v.strip()
+    
+    @field_validator('steam_account_token')
+    @classmethod
+    def validate_steam_account_token(cls, v):
+        """Validate Steam account token format to prevent command injection"""
+        if v is None or v.strip() == '':
+            return v
+        # Steam GSLT tokens are alphanumeric with no special characters that could cause shell injection
+        v = v.strip()
+        if not re.match(r'^[A-Za-z0-9]+$', v):
+            raise ValueError('Steam account token must only contain alphanumeric characters')
+        return v
 
 
 class ServerUpdate(BaseModel):
@@ -180,6 +234,7 @@ class ServerUpdate(BaseModel):
     server_name: Optional[str] = Field(None, max_length=255)
     server_password: Optional[str] = None
     rcon_password: Optional[str] = None
+    steam_account_token: Optional[str] = Field(None, max_length=255, description="Steam game server login token (GSLT)")
     default_map: Optional[str] = Field(None, max_length=100)
     max_players: Optional[int] = Field(None, ge=1, le=64)
     tickrate: Optional[int] = Field(None, ge=64, le=128)
@@ -229,7 +284,18 @@ class ServerUpdate(BaseModel):
         if not re.match(r'^[\d,\-\s]+$', v):
             raise ValueError('CPU affinity must only contain digits, commas, and hyphens')
         return v.strip()
-
+    
+    @field_validator('steam_account_token')
+    @classmethod
+    def validate_steam_account_token(cls, v):
+        """Validate Steam account token format to prevent command injection"""
+        if v is None or v.strip() == '':
+            return v
+        # Steam GSLT tokens are alphanumeric with no special characters that could cause shell injection
+        v = v.strip()
+        if not re.match(r'^[A-Za-z0-9]+$', v):
+            raise ValueError('Steam account token must only contain alphanumeric characters')
+        return v
 
 
 class ServerResponse(BaseModel):
@@ -252,6 +318,7 @@ class ServerResponse(BaseModel):
     server_name: str
     server_password: Optional[str]
     rcon_password: Optional[str]
+    steam_account_token: Optional[str]
     default_map: str
     max_players: int
     tickrate: int
@@ -408,6 +475,133 @@ class InitializedServerResponse(BaseModel):
     ssh_user: str
     ssh_password: str
     game_directory: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# Scheduled Task schemas
+class ScheduledTaskCreate(BaseModel):
+    """Schema for creating a scheduled task"""
+    name: str = Field(..., min_length=1, max_length=255, description="Task name/description")
+    action: str = Field(..., pattern=SCHEDULED_TASK_ACTION_PATTERN, description="Action to perform (restart, start, stop, update, validate)")
+    enabled: bool = Field(default=True, description="Whether the task is active")
+    schedule_type: str = Field(..., description="Schedule type: daily, weekly, interval, cron")
+    schedule_value: str = Field(..., min_length=1, max_length=255, description="Time (HH:MM), day+time (MON:14:30), interval (3600), or cron expression")
+    
+    @field_validator('schedule_type')
+    @classmethod
+    def validate_schedule_type(cls, v):
+        """Validate schedule type"""
+        allowed_types = ['daily', 'weekly', 'interval', 'cron']
+        if v not in allowed_types:
+            raise ValueError(f'Schedule type must be one of: {", ".join(allowed_types)}')
+        return v
+    
+    @field_validator('schedule_value')
+    @classmethod
+    def validate_schedule_value(cls, v, info):
+        """Validate schedule value format based on schedule type"""
+        if not v or len(v.strip()) == 0:
+            raise ValueError('Schedule value cannot be empty')
+        
+        # Prevent command injection
+        if any(char in v for char in [';', '&', '|', '$', '`', '\n', '\r']):
+            raise ValueError('Schedule value contains invalid characters')
+        
+        v_stripped = v.strip()
+        
+        # Get schedule_type from context if available
+        schedule_type = info.data.get('schedule_type') if hasattr(info, 'data') else None
+        
+        if schedule_type == 'daily':
+            # Validate HH:MM format
+            if not re.match(r'^\d{1,2}:\d{2}$', v_stripped):
+                raise ValueError('Daily schedule must be in HH:MM format (e.g., 14:30)')
+            parts = v_stripped.split(':')
+            hour, minute = int(parts[0]), int(parts[1])
+            if hour < 0 or hour > 23:
+                raise ValueError('Hour must be between 0 and 23')
+            if minute < 0 or minute > 59:
+                raise ValueError('Minute must be between 0 and 59')
+                
+        elif schedule_type == 'weekly':
+            # Validate DAY:HH:MM format
+            if not re.match(r'^[A-Z]{3}:\d{1,2}:\d{2}$', v_stripped.upper()):
+                raise ValueError('Weekly schedule must be in DAY:HH:MM format (e.g., MON:14:30)')
+            parts = v_stripped.upper().split(':')
+            day, hour, minute = parts[0], int(parts[1]), int(parts[2])
+            valid_days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+            if day not in valid_days:
+                raise ValueError(f'Day must be one of: {", ".join(valid_days)}')
+            if hour < 0 or hour > 23:
+                raise ValueError('Hour must be between 0 and 23')
+            if minute < 0 or minute > 59:
+                raise ValueError('Minute must be between 0 and 59')
+                
+        elif schedule_type == 'interval':
+            # Validate positive integer
+            try:
+                interval = int(v_stripped)
+                if interval <= 0:
+                    raise ValueError('Interval must be a positive number')
+                if interval < 60:
+                    raise ValueError('Interval must be at least 60 seconds')
+            except ValueError as e:
+                if 'positive' in str(e) or 'at least' in str(e):
+                    raise
+                raise ValueError('Interval must be a valid integer (seconds)')
+        
+        return v_stripped
+
+
+class ScheduledTaskUpdate(BaseModel):
+    """Schema for updating a scheduled task"""
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Task name/description")
+    action: Optional[str] = Field(None, pattern=SCHEDULED_TASK_ACTION_PATTERN, description="Action to perform")
+    enabled: Optional[bool] = Field(None, description="Whether the task is active")
+    schedule_type: Optional[str] = Field(None, description="Schedule type: daily, weekly, interval, cron")
+    schedule_value: Optional[str] = Field(None, min_length=1, max_length=255, description="Time or cron expression")
+    
+    @field_validator('schedule_type')
+    @classmethod
+    def validate_schedule_type(cls, v):
+        """Validate schedule type"""
+        if v is not None:
+            allowed_types = ['daily', 'weekly', 'interval', 'cron']
+            if v not in allowed_types:
+                raise ValueError(f'Schedule type must be one of: {", ".join(allowed_types)}')
+        return v
+    
+    @field_validator('schedule_value')
+    @classmethod
+    def validate_schedule_value(cls, v):
+        """Validate schedule value format"""
+        if v is not None:
+            if len(v.strip()) == 0:
+                raise ValueError('Schedule value cannot be empty')
+            # Prevent command injection
+            if any(char in v for char in [';', '&', '|', '$', '`', '\n', '\r']):
+                raise ValueError('Schedule value contains invalid characters')
+        return v.strip() if v else v
+
+
+class ScheduledTaskResponse(BaseModel):
+    """Schema for scheduled task response"""
+    id: int
+    server_id: int
+    name: str
+    action: str
+    enabled: bool
+    schedule_type: str
+    schedule_value: str
+    last_run: Optional[datetime]
+    next_run: Optional[datetime]
+    run_count: int
+    last_status: Optional[str]
+    last_error: Optional[str]
     created_at: datetime
     updated_at: datetime
     

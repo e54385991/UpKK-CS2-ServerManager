@@ -29,7 +29,6 @@
                             <th data-i18n="setupWizard.serverName">名称</th>
                             <th data-i18n="setupWizard.host">主机</th>
                             <th data-i18n="setupWizard.sshUser">SSH 用户</th>
-                            <th data-i18n="setupWizard.gameDirectory">游戏目录</th>
                             <th data-i18n="setupWizard.createdAt">创建时间</th>
                             <th data-i18n="setupWizard.actions">操作</th>
                         </tr>
@@ -40,7 +39,6 @@
                                 <td x-text="server.name"></td>
                                 <td><span x-text="server.host"></span>:<span x-text="server.ssh_port"></span></td>
                                 <td x-text="server.ssh_user"></td>
-                                <td x-text="server.game_directory"></td>
                                 <td x-text="new Date(server.created_at * 1000).toLocaleString()"></td>
                                 <td>
                                     <button @click="deleteInitializedServer(server.key)"
@@ -367,12 +365,12 @@
                     <h5 data-i18n="setupWizard.manualStep3">步骤 3: 添加服务器</h5>
                     <p data-i18n="setupWizard.manualUseInfo">使用以下信息：</p>
                     <ul>
-                        <li><span data-i18n="setupWizard.manualUsername">用户名:</span> <code x-text="formData.cs2_username"></code></li>
+                        <li><span data-i18n="setupWizard.manualUsername">用户名:</span> <code x-text="autoSetupForm.cs2_username"></code></li>
                         <li><span data-i18n="setupWizard.manualPassword">密码:</span> <code x-text="password"></code></li>
                         <li>
                             <span data-i18n="setupWizard.manualGameDir">游戏目录:</span> 
-                            <code x-text="`/home/${formData.cs2_username}/*`"></code>
-                            <small class="text-muted" x-text="window.i18n?.t('setupWizard.manualGameDirNote', {username: formData.cs2_username}) || `/home/${formData.cs2_username}/ 下任何目录`"></small>
+                            <code x-text="`/home/${autoSetupForm.cs2_username}/*`"></code>
+                            <small class="text-muted" x-text="window.i18n?.t('setupWizard.manualGameDirNote', {username: autoSetupForm.cs2_username}) || `/home/${autoSetupForm.cs2_username}/ 下任何目录`"></small>
                         </li>
                     </ul>
                     <a href="/servers-ui" class="btn btn-primary">

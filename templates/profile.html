@@ -53,6 +53,20 @@
                     </div>
                     
                     <div class="mb-3">
+                        <label for="profile-steam-api-key" class="form-label">Steam Web API Key</label>
+                        <input type="text" class="form-control" id="profile-steam-api-key" name="steam_api_key" maxlength="32" placeholder="Enter your Steam Web API key">
+                        <div class="form-text">
+                            <small>
+                                Get your Steam Web API key from 
+                                <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener">
+                                    Steam Web API Key page <i class="bi bi-box-arrow-up-right"></i>
+                                </a>
+                                <br>Required for one-click game server token generation. Leave blank to remove.
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
                         <label for="profile-captcha" class="form-label" data-i18n="profile.captcha">Verification Code</label>
                         <div class="d-flex gap-2 align-items-center">
                             <img id="profile-captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" title="Click to refresh">
@@ -219,6 +233,29 @@ async function loadUserInfo() {
     }
 }
 
+// Load Steam API key
+async function loadSteamApiKey() {
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/auth/steam-api-key', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.steam_api_key) {
+                document.getElementById('profile-steam-api-key').value = data.steam_api_key;
+            }
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Failed to load Steam API key:', error);
+    }
+}
+
 // Load CAPTCHA for profile form
 async function loadProfileCaptcha() {
     try {
@@ -272,6 +309,7 @@ document.getElementById('profile-form').addEventListener('submit', async (e) => 
     try {
         const token = localStorage.getItem('access_token');
         const email = document.getElementById('profile-email').value.trim();
+        const steamApiKey = document.getElementById('profile-steam-api-key').value.trim();
         
         const requestBody = {
             captcha_token: document.getElementById('profile-captcha-token').value,
@@ -281,6 +319,9 @@ document.getElementById('profile-form').addEventListener('submit', async (e) => 
         if (email) {
             requestBody.email = email;
         }
+        
+        // Always include steam_api_key (even if empty, to allow clearing)
+        requestBody.steam_api_key = steamApiKey;
         
         const response = await fetch('/api/auth/profile', {
             method: 'PUT',
@@ -299,6 +340,7 @@ document.getElementById('profile-form').addEventListener('submit', async (e) => 
             successDiv.classList.remove('d-none');
             document.getElementById('profile-email').value = '';
             loadUserInfo();
+            loadSteamApiKey(); // Reload Steam API key to reflect changes
         } else {
             errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.updateFailed') : 'Failed to update profile');
             errorDiv.classList.remove('d-none');
@@ -594,6 +636,7 @@ document.getElementById('regenerate-apikey-btn').addEventListener('click', gener
 
 // Load user info and CAPTCHAs on page load
 loadUserInfo();
+loadSteamApiKey();
 loadProfileCaptcha();
 loadPasswordCaptcha();
 loadApiKeyCaptcha();

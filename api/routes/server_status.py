@@ -170,3 +170,20 @@ async def get_server_config(
         "game_mode": server.game_mode,
         "game_type": server.game_type
     }
+
+
+@router.get("/pool/stats")
+async def get_ssh_pool_stats():
+    """
+    Get SSH connection pool statistics (admin endpoint for monitoring)
+    
+    Returns connection pool health and usage metrics.
+    """
+    from services.ssh_connection_pool import ssh_connection_pool
+    
+    stats = await ssh_connection_pool.get_pool_stats()
+    return {
+        "success": True,
+        "pool_stats": stats
+    }
+

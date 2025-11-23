@@ -49,6 +49,19 @@ class DeleteRequest(BaseModel):
     path: str
 
 
+class RenameRequest(BaseModel):
+    """Rename file/directory request"""
+    old_name: str
+    new_name: str
+
+
+class ExtractArchiveRequest(BaseModel):
+    """Extract archive request"""
+    archive_path: str
+    destination_path: Optional[str] = None
+    overwrite: bool = False
+
+
 async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
     """Helper to get server and verify ownership"""
     result = await db.execute(select(Server).filter(Server.id == server_id))
@@ -356,3 +369,96 @@ async def delete_path(
         )
     
     return {"success": True, "message": "Deleted successfully"}
+
+
+@router.post("/rename")
+async def rename_file_or_directory(
+    server_id: int,
+    path: str,
+    request: RenameRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Rename file or directory"""
+    server = await get_server_for_user(server_id, db, current_user)
+    
+    # Construct full paths
+    old_path = os.path.join(path, request.old_name)
+    new_path = os.path.join(path, request.new_name)
+    
+    # Security check - both paths must be within server directory
+    if not is_path_safe(server.game_directory, old_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: source path is outside server directory"
+        )
+    
+    if not is_path_safe(server.game_directory, new_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: destination path is outside server directory"
+        )
+    
+    # Don't allow renaming the root game directory
+    if os.path.normpath(old_path) == os.path.normpath(server.game_directory):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot rename server root directory"
+        )
+    
+    # Rename using SSH
+    ssh_manager = SSHManager()
+    success, error = await ssh_manager.rename_path(old_path, new_path, server)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error
+        )
+    
+    return {"success": True, "message": "Renamed successfully", "new_path": new_path}
+
+
+@router.post("/extract")
+async def extract_archive(
+    server_id: int,
+    request: ExtractArchiveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Extract archive file (zip, tar, tar.gz, etc.)"""
+    server = await get_server_for_user(server_id, db, current_user)
+    
+    archive_path = request.archive_path
+    # If no destination specified or empty string, extract to the same directory as the archive
+    if not request.destination_path or request.destination_path.strip() == '':
+        destination_path = os.path.dirname(archive_path)
+    else:
+        destination_path = request.destination_path
+    
+    # Security check
+    if not is_path_safe(server.game_directory, archive_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: archive path is outside server directory"
+        )
+    
+    if not is_path_safe(server.game_directory, destination_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: destination path is outside server directory"
+        )
+    
+    # Extract using SSH
+    ssh_manager = SSHManager()
+    success, error = await ssh_manager.extract_archive(
+        archive_path, destination_path, server, request.overwrite
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error
+        )
+    
+    return {"success": True, "message": "Archive extracted successfully", "destination": destination_path}

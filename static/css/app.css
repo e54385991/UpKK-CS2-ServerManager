@@ -314,3 +314,8 @@ body {
     padding: 2rem 0;
     box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
 }
+
+/* Alpine.js x-cloak - prevents flash of unstyled content */
+[x-cloak] {
+    display: none !important;
+}

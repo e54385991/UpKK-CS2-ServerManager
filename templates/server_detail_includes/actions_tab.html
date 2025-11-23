@@ -1,0 +1,191 @@
+                <div class="tab-pane fade" id="actions" role="tabpanel">
+                    <!-- Actions Card -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-gear"></i> <span
+                                    data-i18n="serverDetail.serverActions">Server Actions</span></h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="action-buttons">
+                                <button @click="executeAction('deploy')" :disabled="isActionRunning"
+                                    class="btn btn-primary">
+                                    <i class="bi bi-cloud-download"></i> <span
+                                        data-i18n="serverDetail.deployServer">Deploy Server</span>
+                                </button>
+                                <button @click="executeAction('start')" :disabled="isActionRunning"
+                                    class="btn btn-success">
+                                    <i class="bi bi-play-circle"></i> <span data-i18n="serverDetail.start">Start</span>
+                                </button>
+                                <button @click="executeAction('stop')" :disabled="isActionRunning"
+                                    class="btn btn-danger">
+                                    <i class="bi bi-stop-circle"></i> <span data-i18n="serverDetail.stop">Stop</span>
+                                </button>
+                                <button @click="executeAction('restart')" :disabled="isActionRunning"
+                                    class="btn btn-warning">
+                                    <i class="bi bi-arrow-clockwise"></i> <span
+                                        data-i18n="serverDetail.restart">Restart</span>
+                                </button>
+                                <button @click="executeAction('update')" :disabled="isActionRunning"
+                                    class="btn btn-secondary">
+                                    <i class="bi bi-arrow-up-circle"></i> <span
+                                        data-i18n="serverDetail.update">Update</span>
+                                </button>
+                                <button @click="executeAction('validate')" :disabled="isActionRunning"
+                                    class="btn btn-outline-secondary">
+                                    <i class="bi bi-shield-check"></i> <span
+                                        data-i18n="serverDetail.updateValidate">Update + Validate</span>
+                                </button>
+                                <button @click="executeAction('status')" :disabled="isActionRunning"
+                                    class="btn btn-info">
+                                    <i class="bi bi-question-circle"></i> <span
+                                        data-i18n="serverDetail.checkStatus">Check Status</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Plugin Management Card -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-plugin"></i> <span
+                                    data-i18n="serverDetail.pluginFrameworkManagement">Plugin Framework
+                                    Management</span></h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">
+                                <i class="bi bi-info-circle"></i> Install plugin frameworks to enable server
+                                modifications and custom plugins.
+                            </p>
+
+                            <!-- Multi-select Installation -->
+                            <div class="card bg-light mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title mb-3"><i class="bi bi-ui-checks"></i> <span
+                                            data-i18n="serverDetail.batchInstallation">Batch Installation</span></h6>
+                                    <div class="row mb-3">
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox"
+                                                    x-model="pluginSelection.metamod" id="selectMetamod">
+                                                <label class="form-check-label" for="selectMetamod">
+                                                    <strong>Metamod:Source</strong>
+                                                    <small class="d-block text-muted">Plugin loader for Source 2
+                                                        engine</small>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox"
+                                                    x-model="pluginSelection.counterstrikesharp" id="selectCSS">
+                                                <label class="form-check-label" for="selectCSS">
+                                                    <strong>CounterStrikeSharp</strong>
+                                                    <small class="d-block text-muted">Write CS2 plugins in C#</small>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox"
+                                                    x-model="pluginSelection.cs2fixes" id="selectCS2Fixes">
+                                                <label class="form-check-label" for="selectCS2Fixes">
+                                                    <strong>CS2Fixes</strong>
+                                                    <small class="d-block text-muted">Essential fixes and features</small>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="d-grid">
+                                        <button @click="installSelectedPlugins()"
+                                            :disabled="isActionRunning || (!pluginSelection.metamod && !pluginSelection.counterstrikesharp && !pluginSelection.cs2fixes)"
+                                            class="btn btn-success">
+                                            <i class="bi bi-cloud-download"></i> <span
+                                                data-i18n="serverDetail.installSelectedFrameworks">Install Selected
+                                                Frameworks</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Individual Plugin Cards -->
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <div class="card h-100 border">
+                                        <div class="card-body">
+                                            <h6 class="card-title"><i class="bi bi-box-seam"></i> Metamod:Source</h6>
+                                            <p class="card-text small text-muted">
+                                                Plugin loader for Source 2 engine. Required for most CS2 plugins.
+                                            </p>
+                                            <div class="d-grid gap-2">
+                                                <button @click="executeAction('install_metamod')"
+                                                    :disabled="isActionRunning" class="btn btn-primary btn-sm">
+                                                    <i class="bi bi-download"></i> <span
+                                                        data-i18n="serverDetail.install">Install</span>
+                                                </button>
+                                                <button @click="executeAction('update_metamod')"
+                                                    :disabled="isActionRunning" class="btn btn-outline-primary btn-sm">
+                                                    <i class="bi bi-arrow-repeat"></i> <span
+                                                        data-i18n="serverDetail.update">Update</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card h-100 border">
+                                        <div class="card-body">
+                                            <h6 class="card-title"><i class="bi bi-box-seam"></i> CounterStrikeSharp
+                                            </h6>
+                                            <p class="card-text small text-muted">
+                                                Write CS2 server plugins in C#. Requires Metamod:Source.
+                                            </p>
+                                            <div class="d-grid gap-2">
+                                                <button @click="executeAction('install_counterstrikesharp')"
+                                                    :disabled="isActionRunning" class="btn btn-primary btn-sm">
+                                                    <i class="bi bi-download"></i> <span
+                                                        data-i18n="serverDetail.install">Install</span>
+                                                </button>
+                                                <button @click="executeAction('update_counterstrikesharp')"
+                                                    :disabled="isActionRunning" class="btn btn-outline-primary btn-sm">
+                                                    <i class="bi bi-arrow-repeat"></i> <span
+                                                        data-i18n="serverDetail.update">Update</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card h-100 border">
+                                        <div class="card-body">
+                                            <h6 class="card-title"><i class="bi bi-box-seam"></i> CS2Fixes</h6>
+                                            <p class="card-text small text-muted">
+                                                Essential bug fixes and features for CS2. Requires Metamod:Source.
+                                            </p>
+                                            <div class="d-grid gap-2">
+                                                <button @click="executeAction('install_cs2fixes')"
+                                                    :disabled="isActionRunning" class="btn btn-primary btn-sm">
+                                                    <i class="bi bi-download"></i> <span
+                                                        data-i18n="serverDetail.install">Install</span>
+                                                </button>
+                                                <button @click="executeAction('update_cs2fixes')"
+                                                    :disabled="isActionRunning" class="btn btn-outline-primary btn-sm">
+                                                    <i class="bi bi-arrow-repeat"></i> <span
+                                                        data-i18n="serverDetail.update">Update</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <small class="text-muted">
+                                    <i class="bi bi-lightbulb"></i> <strong>Tip:</strong> After installing plugins,
+                                    restart your server for changes to take effect.
+                                    Use console commands <code>meta list</code> and <code>css_plugins list</code> to
+                                    verify installation.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>

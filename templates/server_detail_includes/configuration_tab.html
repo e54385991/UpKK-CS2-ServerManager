@@ -1,0 +1,721 @@
+                <div class="tab-pane fade" id="configuration" role="tabpanel">
+                    <!-- Server Configuration Card (LGSM Settings) -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-sliders"></i> <span
+                                    data-i18n="serverDetail.serverConfiguration">Server Configuration
+                                    (LGSM-Style)</span></h5>
+                            <button @click="showConfigEdit = !showConfigEdit" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> <span
+                                    x-text="showConfigEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div x-show="!showConfigEdit" x-cloak>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.basicSettings">Basic Settings
+                                        </h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-server"></i> <strong
+                                                    data-i18n="serverDetail.serverName">Server Name:</strong> <span
+                                                    x-text="server.server_name || 'CS2 Server'"></span></li>
+                                            <li><i class="bi bi-map"></i> <strong
+                                                    data-i18n="serverDetail.defaultMap">Default Map:</strong> <span
+                                                    x-text="server.default_map || 'de_dust2'"></span></li>
+                                            <li><i class="bi bi-people"></i> <strong
+                                                    data-i18n="serverDetail.maxPlayers">Max Players:</strong> <span
+                                                    x-text="server.max_players || 32"></span></li>
+                                            <li><i class="bi bi-speedometer"></i> <strong
+                                                    data-i18n="serverDetail.tickrate">Tickrate:</strong> <span
+                                                    x-text="server.tickrate || 128"></span></li>
+                                            <li><i class="bi bi-joystick"></i> <strong
+                                                    data-i18n="serverDetail.gameMode">Game Mode:</strong> <span
+                                                    x-text="server.game_mode || 'competitive'"
+                                                    class="text-capitalize"></span></li>
+                                            <li><i class="bi bi-controller"></i> <strong
+                                                    data-i18n="serverDetail.gameType">Game Type:</strong> <span
+                                                    x-text="server.game_type || '0'"></span></li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.advancedSettings">Advanced
+                                            Settings</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-lock"></i> <strong
+                                                    data-i18n="serverDetail.serverPassword">Server Password:</strong>
+                                                <span
+                                                    x-text="server.server_password ? '••••••' : (window.i18n?.t('serverDetail.none') || 'None')"></span>
+                                            </li>
+                                            <li><i class="bi bi-shield-lock"></i> <strong
+                                                    data-i18n="serverDetail.rconPassword">RCON Password:</strong> <span
+                                                    x-text="server.rcon_password ? '••••••' : (window.i18n?.t('serverDetail.none') || 'None')"></span>
+                                            </li>
+                                            <li><i class="bi bi-steam"></i> <strong>Steam Account Token:</strong> <span
+                                                    x-text="server.steam_account_token ? server.steam_account_token.substring(0, 8) + '...' : (window.i18n?.t('serverDetail.none') || 'None')"></span>
+                                            </li>
+                                            <li><i class="bi bi-camera-video"></i> <strong
+                                                    data-i18n="serverDetail.sourceTV">SourceTV:</strong> <span
+                                                    x-text="server.tv_enable ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') + ' (Port: ' + server.tv_port + ')' : (window.i18n?.t('serverDetail.disabled') || 'Disabled')"></span>
+                                            </li>
+                                            <li><i class="bi bi-gear"></i> <strong
+                                                    data-i18n="serverDetail.additionalParameters">Additional
+                                                    Parameters:</strong> <span
+                                                    x-text="server.additional_parameters || (window.i18n?.t('serverDetail.none') || 'None')"></span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div x-show="showConfigEdit" x-cloak>
+                                <form @submit.prevent="saveConfiguration()">
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Server Name</label>
+                                            <input type="text" class="form-control" x-model="configForm.server_name"
+                                                placeholder="My CS2 Server">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Default Map</label>
+                                            <select class="form-select" x-model="configForm.default_map">
+                                                <option value="de_dust2">de_dust2</option>
+                                                <option value="de_mirage">de_mirage</option>
+                                                <option value="de_inferno">de_inferno</option>
+                                                <option value="de_nuke">de_nuke</option>
+                                                <option value="de_ancient">de_ancient</option>
+                                                <option value="de_anubis">de_anubis</option>
+                                                <option value="de_vertigo">de_vertigo</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Max Players</label>
+                                            <input type="number" class="form-control" x-model="configForm.max_players"
+                                                min="1" max="64">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Tickrate</label>
+                                            <select class="form-select" x-model="configForm.tickrate">
+                                                <option value="64">64</option>
+                                                <option value="128">128</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Game Mode</label>
+                                            <select class="form-select" x-model="configForm.game_mode"
+                                                @change="updateGameTypeFromMode()">
+                                                <optgroup label="Classic">
+                                                    <option value="competitive">Competitive</option>
+                                                    <option value="casual">Casual</option>
+                                                    <option value="deathmatch">Deathmatch</option>
+                                                </optgroup>
+                                                <optgroup label="Arms Race & Demolition">
+                                                    <option value="armsrace">Arms Race</option>
+                                                    <option value="demolition">Demolition</option>
+                                                </optgroup>
+                                                <optgroup label="Training & Custom">
+                                                    <option value="training">Training</option>
+                                                    <option value="custom">Custom</option>
+                                                </optgroup>
+                                                <optgroup label="Cooperative">
+                                                    <option value="cooperative">Cooperative Strike</option>
+                                                    <option value="coopmission">Cooperative Mission</option>
+                                                </optgroup>
+                                                <optgroup label="Skirmish">
+                                                    <option value="scrimcomp2v2">Flying Scoutsman</option>
+                                                    <option value="skirmish">Trigger Discipline</option>
+                                                </optgroup>
+                                                <optgroup label="Danger Zone">
+                                                    <option value="survival">Danger Zone</option>
+                                                </optgroup>
+                                            </select>
+                                            <small class="text-muted">Game mode determines gameplay rules and
+                                                objectives</small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Game Type (auto-set)</label>
+                                            <input type="text" class="form-control" x-model="configForm.game_type"
+                                                readonly>
+                                            <small class="text-muted">Game type is automatically set based on game
+                                                mode</small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Server Password (optional)</label>
+                                            <input type="password" class="form-control"
+                                                x-model="configForm.server_password"
+                                                placeholder="Leave empty for public server">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">RCON Password</label>
+                                            <input type="password" class="form-control"
+                                                x-model="configForm.rcon_password" placeholder="Admin password">
+                                        </div>
+                                        <div class="col-md-12">
+                                            <label class="form-label">Steam Game Server Login Token (GSLT)</label>
+                                            <div class="input-group mb-2">
+                                                <input type="text" class="form-control"
+                                                    x-model="configForm.steam_account_token"
+                                                    placeholder="Optional - Required for public servers"
+                                                    id="steam-token-input">
+                                                <button type="button" class="btn btn-outline-secondary" 
+                                                    @click="showTokenGeneratorModal = true"
+                                                    :disabled="generatingToken">
+                                                    <i class="bi bi-magic"></i> Generate
+                                                </button>
+                                            </div>
+                                            <small class="text-muted">
+                                                Get your token from 
+                                                <a href="https://steamcommunity.com/dev/managegameservers" target="_blank" rel="noopener">
+                                                    Steam Game Server Management <i class="bi bi-box-arrow-up-right"></i>
+                                                </a> or generate with one click if you've set your Steam API key in profile settings.
+                                            </small>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Enable SourceTV</label>
+                                            <select class="form-select" x-model="configForm.tv_enable">
+                                                <option :value="false">Disabled</option>
+                                                <option :value="true">Enabled</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4" x-show="configForm.tv_enable">
+                                            <label class="form-label">SourceTV Port</label>
+                                            <input type="number" class="form-control" x-model="configForm.tv_port"
+                                                placeholder="27020">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label">Additional Parameters (Advanced)</label>
+                                            <input type="text" class="form-control"
+                                                x-model="configForm.additional_parameters"
+                                                placeholder="+sv_hibernate_when_empty 1 +mp_autoteambalance 1">
+                                            <small class="text-muted">Custom command-line parameters (e.g., +sv_cheats 0
+                                                +mp_limitteams 1)</small>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingConfig">
+                                            <span x-show="!savingConfig"><i class="bi bi-save"></i> <span
+                                                    data-i18n="serverDetail.saveConfiguration">Save
+                                                    Configuration</span></span>
+                                            <span x-show="savingConfig"><span
+                                                    class="spinner-border spinner-border-sm"></span> <span
+                                                    data-i18n="serverDetail.saving">Saving...</span></span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" @click="showConfigEdit = false"
+                                            data-i18n="serverDetail.cancel">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CPU Affinity Configuration Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-cpu"></i> <span
+                                    data-i18n="serverDetail.cpuAffinity">CPU Affinity (Thread Binding)</span></h5>
+                            <button @click="showCpuAffinityEdit = !showCpuAffinityEdit"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> <span
+                                    x-text="showCpuAffinityEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div x-show="!showCpuAffinityEdit" x-cloak>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.cpuAffinitySettings">CPU Affinity Settings</h6>
+                                        <ul class="list-unstyled">
+                                            <li>
+                                                <i class="bi bi-cpu"></i>
+                                                <strong data-i18n="serverDetail.cpuCores">CPU Cores:</strong>
+                                                <span x-text="server.cpu_affinity || (window.i18n?.t('serverDetail.noneAllCores') || 'None (All cores available)')"></span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="alert alert-info" role="alert">
+                                            <i class="bi bi-info-circle"></i> <strong data-i18n="serverDetail.cpuAffinityInfo">Info:</strong> 
+                                            <span data-i18n="serverDetail.cpuAffinityDescription">Bind the screen process to specific CPU cores to avoid interference. Useful for high-performance servers.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div x-show="showCpuAffinityEdit" x-cloak>
+                                <form @submit.prevent="saveCpuAffinity()">
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label class="form-label">
+                                                <i class="bi bi-cpu"></i> <span data-i18n="serverDetail.selectCpuCores">Select CPU Cores</span>
+                                            </label>
+                                            <div class="form-text mb-2" data-i18n="serverDetail.cpuCoresHelp">
+                                                Select which CPU cores the server process should be bound to. Leave all unchecked to use all available cores.
+                                            </div>
+                                            <div class="row g-2">
+                                                <template x-for="core in Array.from({length: cpuCoreCount}, (_, i) => i)" :key="core">
+                                                    <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" 
+                                                                   :id="'cpu-core-' + core"
+                                                                   :value="core"
+                                                                   @change="toggleCore(core)"
+                                                                   :checked="parseCpuAffinity(cpuAffinityForm.cpu_affinity).includes(core)">
+                                                            <label class="form-check-label" :for="'cpu-core-' + core">
+                                                                <span data-i18n="serverDetail.core">Core</span> <span x-text="core"></span>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                            <div class="mt-2">
+                                                <small class="text-muted">
+                                                    <strong data-i18n="serverDetail.selected">Selected:</strong> 
+                                                    <span x-text="cpuAffinityForm.cpu_affinity || (window.i18n?.t('serverDetail.none') || 'None')"></span>
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingCpuAffinity">
+                                            <span x-show="!savingCpuAffinity"><i class="bi bi-save"></i> <span
+                                                    data-i18n="serverDetail.saveCpuAffinity">Save CPU Affinity</span></span>
+                                            <span x-show="savingCpuAffinity"><span
+                                                    class="spinner-border spinner-border-sm"></span> <span
+                                                    data-i18n="serverDetail.saving">Saving...</span></span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" @click="showCpuAffinityEdit = false"
+                                            data-i18n="serverDetail.cancel">
+                                            Cancel
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" @click="clearCpuAffinity()"
+                                            data-i18n="serverDetail.clearSelection">
+                                            Clear Selection
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Auto-Update Configuration Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-cloud-arrow-down"></i> <span
+                                    data-i18n="serverDetail.autoUpdate">Server Auto-Update</span></h5>
+                            <button @click="showAutoUpdateEdit = !showAutoUpdateEdit"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> <span
+                                    x-text="showAutoUpdateEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div x-show="!showAutoUpdateEdit" x-cloak>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.autoUpdateSettings">Auto-Update Settings</h6>
+                                        <ul class="list-unstyled">
+                                            <li>
+                                                <i
+                                                    :class="server.enable_auto_update ? 'bi bi-check-circle text-success' : 'bi bi-x-circle text-secondary'"></i>
+                                                <strong data-i18n="serverDetail.autoUpdateLabel">Auto-Update:</strong>
+                                                <span
+                                                    x-text="server.enable_auto_update ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') : (window.i18n?.t('serverDetail.disabled') || 'Disabled')"
+                                                    :class="server.enable_auto_update ? 'text-success fw-bold' : 'text-secondary'"></span>
+                                            </li>
+                                            <li><i class="bi bi-clock-history"></i> <strong
+                                                    data-i18n="serverDetail.updateCheckInterval">Update Check Interval:</strong>
+                                                <span x-text="server.update_check_interval_hours || 1"></span> <span
+                                                    data-i18n="serverDetail.hours">hour(s)</span></li>
+                                            <li><i class="bi bi-code-square"></i> <strong
+                                                    data-i18n="serverDetail.currentVersion">Current Version:</strong>
+                                                <span x-text="server.current_game_version || 'Unknown'"></span></li>
+                                            <li>
+                                                <i class="bi bi-calendar-check"></i>
+                                                <strong data-i18n="serverDetail.lastUpdateCheck">Last Update Check:</strong>
+                                                <span
+                                                    x-text="server.last_update_check ? new Date(server.last_update_check).toLocaleString() : (window.i18n?.t('serverDetail.never') || 'Never')"></span>
+                                            </li>
+                                            <li>
+                                                <i class="bi bi-calendar-check"></i>
+                                                <strong data-i18n="serverDetail.lastUpdated">Last Updated:</strong>
+                                                <span
+                                                    x-text="server.last_update_time ? new Date(server.last_update_time).toLocaleString() : (window.i18n?.t('serverDetail.never') || 'Never')"></span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="alert alert-info" role="alert">
+                                            <i class="bi bi-info-circle"></i> <strong data-i18n="serverDetail.autoUpdate">Auto-Update:</strong> <span data-i18n="serverDetail.autoUpdateInfo">The system automatically checks for CS2 updates based on Steam API version data and updates the server when a new version is available.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div x-show="showAutoUpdateEdit" x-cloak>
+                                <form @submit.prevent="saveAutoUpdate()">
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox"
+                                                    id="enableAutoUpdate"
+                                                    x-model="autoUpdateForm.enable_auto_update">
+                                                <label class="form-check-label" for="enableAutoUpdate">
+                                                    <strong data-i18n="serverDetail.enableAutoUpdate">Enable Auto-Update</strong>
+                                                    <small class="d-block text-muted" data-i18n="serverDetail.autoUpdateHint">Automatically update server when new CS2 version is available</small>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-6" x-show="autoUpdateForm.enable_auto_update">
+                                            <label class="form-label">
+                                                <span data-i18n="serverDetail.updateCheckInterval">Update Check Interval</span>
+                                                <span class="badge bg-secondary"
+                                                    x-text="autoUpdateForm.update_check_interval_hours + 'h'"></span>
+                                            </label>
+                                            <input type="range" class="form-range"
+                                                x-model.number="autoUpdateForm.update_check_interval_hours" min="1"
+                                                max="24" step="1">
+                                            <small class="text-muted" data-i18n="serverDetail.updateCheckIntervalHint">How often to check for updates (1-24 hours)</small>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <div class="alert alert-warning mb-0" role="alert">
+                                                <i class="bi bi-exclamation-triangle"></i> <strong data-i18n="common.note">Note:</strong>
+                                                <small class="d-block" data-i18n="serverDetail.autoUpdateWarning">Auto-updates will only occur when a new Steam version is detected. The server will be restarted after the update.</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingAutoUpdate">
+                                            <span x-show="!savingAutoUpdate"><i class="bi bi-save"></i> <span data-i18n="serverDetail.saveAutoUpdateSettings">Save Auto-Update Settings</span></span>
+                                            <span x-show="savingAutoUpdate"><span
+                                                    class="spinner-border spinner-border-sm"></span> <span data-i18n="serverDetail.saving">Saving...</span></span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary"
+                                            @click="showAutoUpdateEdit = false" data-i18n="serverDetail.cancel">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Monitoring & Auto-Restart Configuration Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-activity"></i> <span
+                                    data-i18n="serverDetail.panelMonitoring">Panel Monitoring & Auto-Restart</span></h5>
+                            <button @click="showMonitoringEdit = !showMonitoringEdit"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> <span
+                                    x-text="showMonitoringEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div x-show="!showMonitoringEdit" x-cloak>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.monitoringSettings">Monitoring
+                                            Settings</h6>
+                                        <ul class="list-unstyled">
+                                            <li>
+                                                <i
+                                                    :class="server.enable_panel_monitoring ? 'bi bi-check-circle text-success' : 'bi bi-x-circle text-secondary'"></i>
+                                                <strong data-i18n="serverDetail.panelMonitoringLabel">Panel
+                                                    Monitoring:</strong>
+                                                <span
+                                                    x-text="server.enable_panel_monitoring ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') : (window.i18n?.t('serverDetail.disabled') || 'Disabled')"
+                                                    :class="server.enable_panel_monitoring ? 'text-success fw-bold' : 'text-secondary'"></span>
+                                            </li>
+                                            <li><i class="bi bi-clock-history"></i> <strong
+                                                    data-i18n="serverDetail.checkInterval">Check Interval:</strong>
+                                                <span x-text="server.monitor_interval_seconds || 60"></span> <span
+                                                    data-i18n="serverDetail.seconds">seconds</span></li>
+                                            <li>
+                                                <i class="bi bi-arrow-repeat"></i>
+                                                <strong data-i18n="serverDetail.autoRestartOnCrash">Auto-Restart on
+                                                    Crash:</strong>
+                                                <span
+                                                    x-text="server.auto_restart_on_crash ? (window.i18n?.t('serverDetail.yes') || 'Yes') : (window.i18n?.t('serverDetail.no') || 'No')"></span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted" data-i18n="serverDetail.crashHistorySettings">Crash
+                                            History Settings</h6>
+                                        <ul class="list-unstyled">
+                                            <li>
+                                                <i class="bi bi-trash"></i>
+                                                <strong>Auto-Clear After:</strong>
+                                                <span
+                                                    x-text="server.auto_clear_crash_hours ? server.auto_clear_crash_hours + ' hours offline' : 'Always clear on restart'"></span>
+                                            </li>
+                                            <li>
+                                                <i class="bi bi-calendar-check"></i>
+                                                <strong>Last Status Check:</strong>
+                                                <span
+                                                    x-text="server.last_status_check ? new Date(server.last_status_check).toLocaleString() : 'Never'"></span>
+                                            </li>
+                                        </ul>
+                                        <div class="alert alert-info mt-2" role="alert">
+                                            <i class="bi bi-info-circle"></i> <strong>Panel Monitoring:</strong> Web
+                                            backend monitors via SSH and auto-restarts if process not found. Independent
+                                            of local autorestart script.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div x-show="showMonitoringEdit" x-cloak>
+                                <form @submit.prevent="saveMonitoring()">
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox"
+                                                    id="enablePanelMonitoring"
+                                                    x-model="monitoringForm.enable_panel_monitoring">
+                                                <label class="form-check-label" for="enablePanelMonitoring">
+                                                    <strong>Enable Panel Monitoring</strong>
+                                                    <small class="d-block text-muted">Backend will monitor server status
+                                                        via SSH and auto-restart if down</small>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-6" x-show="monitoringForm.enable_panel_monitoring">
+                                            <label class="form-label">
+                                                Monitor Interval
+                                                <span class="badge bg-secondary"
+                                                    x-text="monitoringForm.monitor_interval_seconds + 's'"></span>
+                                            </label>
+                                            <input type="range" class="form-range"
+                                                x-model.number="monitoringForm.monitor_interval_seconds" min="10"
+                                                max="600" step="10">
+                                            <small class="text-muted">How often to check server status (10-600
+                                                seconds)</small>
+                                        </div>
+
+                                        <div class="col-md-6" x-show="monitoringForm.enable_panel_monitoring">
+                                            <label class="form-label">Auto-Restart on Crash</label>
+                                            <select class="form-select" x-model="monitoringForm.auto_restart_on_crash">
+                                                <option :value="true">Yes - Auto-restart if process not found</option>
+                                                <option :value="false">No - Only monitor, don't restart</option>
+                                            </select>
+                                            <small class="text-muted">Respects 5 restarts per 10 minutes limit</small>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <hr>
+                                            <h6 class="text-muted">Crash History Auto-Clear</h6>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label class="form-label">Auto-Clear After Offline Duration</label>
+                                            <input type="number" class="form-control"
+                                                x-model.number="monitoringForm.auto_clear_crash_hours" min="0" max="168"
+                                                placeholder="0 = always clear">
+                                            <small class="text-muted">Hours offline before clearing crash_history.log (0
+                                                = always clear on restart)</small>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <div class="alert alert-warning mb-0" role="alert">
+                                                <i class="bi bi-exclamation-triangle"></i> <strong>Recommended:</strong>
+                                                2 hours
+                                                <small class="d-block">Short downtimes retain history for debugging,
+                                                    long downtimes get fresh start</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingMonitoring">
+                                            <span x-show="!savingMonitoring"><i class="bi bi-save"></i> Save Monitoring
+                                                Settings</span>
+                                            <span x-show="savingMonitoring"><span
+                                                    class="spinner-border spinner-border-sm"></span> Saving...</span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary"
+                                            @click="showMonitoringEdit = false">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <!-- Monitoring Logs Section -->
+                            <div x-show="!showMonitoringEdit && server.enable_panel_monitoring" x-cloak class="mt-4">
+                                <hr>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted">
+                                            <i class="bi bi-clipboard-check"></i> <span
+                                                data-i18n="serverDetail.recentStatusChecks">Recent Status Checks (Last
+                                                50)</span>
+                                            <button @click="loadMonitoringLogs('status_check')"
+                                                class="btn btn-sm btn-outline-secondary ms-2">
+                                                <i class="bi bi-arrow-clockwise"></i> <span
+                                                    data-i18n="serverDetail.refresh">Refresh</span>
+                                            </button>
+                                        </h6>
+                                        <div class="monitoring-logs-container">
+                                            <template x-if="loadingStatusLogs">
+                                                <div class="text-center p-3">
+                                                    <span class="spinner-border spinner-border-sm"></span> <span
+                                                        data-i18n="serverDetail.loading">Loading...</span>
+                                                </div>
+                                            </template>
+                                            <template x-if="!loadingStatusLogs && statusCheckLogs.length === 0">
+                                                <div class="text-muted p-3 text-center"
+                                                    data-i18n="serverDetail.noStatusChecks">
+                                                    No status checks recorded yet
+                                                </div>
+                                            </template>
+                                            <template x-if="!loadingStatusLogs && statusCheckLogs.length > 0">
+                                                <div class="log-list">
+                                                    <template x-for="log in statusCheckLogs" :key="log.id">
+                                                        <div class="log-entry" :class="'log-' + log.status">
+                                                            <div class="log-icon">
+                                                                <i :class="{
+                                                    'bi bi-check-circle text-success': log.status === 'success',
+                                                    'bi bi-exclamation-circle text-warning': log.status === 'warning',
+                                                    'bi bi-x-circle text-danger': log.status === 'failed',
+                                                    'bi bi-info-circle text-info': log.status === 'info'
+                                                }"></i>
+                                                            </div>
+                                                            <div class="log-content">
+                                                                <div class="log-message" x-text="log.message"></div>
+                                                                <div class="log-time text-muted"
+                                                                    x-text="new Date(log.created_at).toLocaleString()">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6 class="text-muted">
+                                            <i class="bi bi-arrow-repeat"></i> <span
+                                                data-i18n="serverDetail.recentAutoRestartOps">Recent Auto-Restart
+                                                Operations (Last 50)</span>
+                                            <button @click="loadMonitoringLogs('auto_restart')"
+                                                class="btn btn-sm btn-outline-secondary ms-2">
+                                                <i class="bi bi-arrow-clockwise"></i> <span
+                                                    data-i18n="serverDetail.refresh">Refresh</span>
+                                            </button>
+                                        </h6>
+                                        <div class="monitoring-logs-container">
+                                            <template x-if="loadingRestartLogs">
+                                                <div class="text-center p-3">
+                                                    <span class="spinner-border spinner-border-sm"></span> <span
+                                                        data-i18n="serverDetail.loading">Loading...</span>
+                                                </div>
+                                            </template>
+                                            <template x-if="!loadingRestartLogs && autoRestartLogs.length === 0">
+                                                <div class="text-muted p-3 text-center"
+                                                    data-i18n="serverDetail.noAutoRestartOps">
+                                                    No auto-restart operations recorded yet
+                                                </div>
+                                            </template>
+                                            <template x-if="!loadingRestartLogs && autoRestartLogs.length > 0">
+                                                <div class="log-list">
+                                                    <template x-for="log in autoRestartLogs" :key="log.id">
+                                                        <div class="log-entry" :class="'log-' + log.status">
+                                                            <div class="log-icon">
+                                                                <i :class="{
+                                                    'bi bi-check-circle text-success': log.status === 'success',
+                                                    'bi bi-exclamation-circle text-warning': log.status === 'warning',
+                                                    'bi bi-x-circle text-danger': log.status === 'failed',
+                                                    'bi bi-info-circle text-info': log.status === 'info'
+                                                }"></i>
+                                                            </div>
+                                                            <div class="log-content">
+                                                                <div class="log-message" x-text="log.message"></div>
+                                                                <div class="log-time text-muted"
+                                                                    x-text="new Date(log.created_at).toLocaleString()">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                
+                <!-- Steam Token Generator Modal -->
+                <div class="modal fade" id="tokenGeneratorModal" tabindex="-1" 
+                     x-show="showTokenGeneratorModal" 
+                     x-cloak
+                     :class="{'show d-block': showTokenGeneratorModal}"
+                     @click.self="showTokenGeneratorModal = false"
+                     style="background-color: rgba(0,0,0,0.5);">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title"><i class="bi bi-magic"></i> Generate Steam Server Token</h5>
+                                <button type="button" class="btn-close" @click="showTokenGeneratorModal = false"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div id="token-gen-error" class="alert alert-danger d-none"></div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Verification Code</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <img id="token-captcha-image" src="" alt="CAPTCHA" class="border" 
+                                             style="height: 80px; cursor: pointer;" 
+                                             title="Click to refresh"
+                                             @click="loadTokenCaptcha()">
+                                        <input type="text" class="form-control" 
+                                               id="token-captcha-code" 
+                                               maxlength="4" 
+                                               required
+                                               placeholder="Enter code" 
+                                               style="max-width: 120px;"
+                                               x-model="tokenCaptchaCode"
+                                               @keyup.escape="showTokenGeneratorModal = false">
+                                        <button type="button" class="btn btn-outline-secondary" 
+                                                @click="loadTokenCaptcha()" 
+                                                title="Refresh CAPTCHA">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </button>
+                                    </div>
+                                    <input type="hidden" id="token-captcha-token">
+                                    <small class="text-muted">CAPTCHA verification required for security</small>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" @click="showTokenGeneratorModal = false">Cancel</button>
+                                <button type="button" class="btn btn-primary" 
+                                        @click="generateSteamToken()"
+                                        :disabled="generatingToken || !tokenCaptchaCode">
+                                    <span x-show="!generatingToken">
+                                        <i class="bi bi-magic"></i> Generate Token
+                                    </span>
+                                    <span x-show="generatingToken">
+                                        <span class="spinner-border spinner-border-sm"></span> Generating...
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
