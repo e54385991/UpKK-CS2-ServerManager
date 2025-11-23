@@ -72,7 +72,6 @@
 
 #### 步骤 1: 准备服务器 一台 Web管理端(通常1核1G也够用了) + 一台游戏服务器 (推荐,当然你也可以部署到一起)
 
-
 #### 步骤 2: 克隆仓库 或 下载整个源码
 
 ```bash
@@ -80,7 +79,8 @@ git clone https://github.com/e54385991/CS2-ServerManager.git
 cd CS2-ServerManager
 ```
 
-#### 步骤 3: 安装依赖
+
+#### 步骤 3: 方案手动部署 安装依赖
 
 ```bash
 pip install -r requirements.txt
@@ -97,7 +97,7 @@ pip install -r requirements.txt
 
 ```python
 REDIS_PASSWORD: Optional[str] = None   # 没有密码就写 None，不要写空字符串 "" 
-
+```
 
 ##### 使用 1Panel 部署示例
 
@@ -223,6 +223,8 @@ If your Redis server has **no password set**, you **must** configure it like thi
 
 ```python
 REDIS_PASSWORD: Optional[str] = None   # No password → use None, NOT an empty string ""
+```
+
 
 **⚠️ Important**: Database and Redis configuration are required and cannot be omitted!
 
