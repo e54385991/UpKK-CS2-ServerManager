@@ -101,6 +101,7 @@ REDIS_PASSWORD: Optional[str] = None   # 没有密码就写 None，不要写空�
 ![1Panel 部署示例](images/1panel.png)
 
 ```python
+# 文件位置:modules/config.py
 # MySQL Configuration
 MYSQL_HOST: str = "1Panel-mysql-KZBC"  # 您的 MySQL 容器名或地址
 MYSQL_PORT: int = 3306
