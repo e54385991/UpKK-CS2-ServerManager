@@ -366,7 +366,7 @@ async def auto_setup_server(
     except asyncssh.PermissionDenied:
         logs.append("✗ SSH 认证失败")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="SSH 认证失败，请检查用户名和密码/密钥"
         )
     except asyncssh.Error as e:
