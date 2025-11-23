@@ -92,6 +92,13 @@ pip install -r requirements.txt
 
 **⚠️ 重要提示**: 数据库和 Redis 配置是必需的，不可省略！
 
+**🔥 Redis 无密码特别说明**  
+如果你的 Redis 服务器**没有设置密码**，请务必这样配置（否则会报错）：
+
+```python
+REDIS_PASSWORD: Optional[str] = None   # 没有密码就写 None，不要写空字符串 "" 
+
+
 ##### 使用 1Panel 部署示例
 
 如果您使用 1Panel 部署 MySQL 和 Redis，参考配置如下：
@@ -209,6 +216,13 @@ pip install -r requirements.txt
 #### Step 4: Configure Database and Redis
 
 Edit the `modules/config.py` file to configure the necessary database and Redis server connection information.
+
+
+**🔥 Special Note for Redis WITHOUT Password**  
+If your Redis server has **no password set**, you **must** configure it like this (otherwise it will error):
+
+```python
+REDIS_PASSWORD: Optional[str] = None   # No password → use None, NOT an empty string ""
 
 **⚠️ Important**: Database and Redis configuration are required and cannot be omitted!
 
