@@ -58,7 +58,7 @@
 
 ### 📋 系统要求
 
-#### 管理端环境要求 (运行 Web 界面 您可使用1panel来快捷部署)
+#### 管理端环境要求 (运行 Web 界面 您可使用[1Panel](https://github.com/1Panel-dev/1Panel)来快捷部署)
 - **Python**: 3.13+ (推荐 3.13 或更高版本，支持 Python 3.14)
 - **MySQL**: 8.0+
 - **Redis**: 7.0+
@@ -70,8 +70,7 @@
 
 ### 🚀 快速开始
 
-#### 步骤 1: 准备服务器
-
+#### 步骤 1: 准备服务器 一台 Web管理端(通常1核1G也够用了) + 一台游戏服务器 (推荐,当然你也可以部署到一起)
 
 #### 步骤 2: 克隆仓库 或 下载整个源码
 
@@ -80,13 +79,9 @@ git clone https://github.com/e54385991/CS2-ServerManager.git
 cd CS2-ServerManager
 ```
 
-#### 步骤 3: 安装依赖
 
-```bash
-pip install -r requirements.txt
-```
 
-#### 步骤 4: 配置数据库和 Redis
+#### 步骤 3: 配置数据库和 Redis
 
 编辑 `modules/config.py` 文件，配置必要的数据库和 Redis 服务器连接信息。
 
@@ -97,15 +92,16 @@ pip install -r requirements.txt
 
 ```python
 REDIS_PASSWORD: Optional[str] = None   # 没有密码就写 None，不要写空字符串 "" 
+```
 
-
-##### 使用 1Panel 部署示例
+##### 使用 [1Panel](https://github.com/1Panel-dev/1Panel) 部署示例 (推荐使用 1Panel 运行环境-Python 3.14 来部署更容易)
 
 如果您使用 1Panel 部署 MySQL 和 Redis，参考配置如下：
 
 ![1Panel 部署示例](images/1panel.png)
 
 ```python
+# 文件位置: modules/config.py
 # MySQL Configuration
 MYSQL_HOST: str = "1Panel-mysql-KZBC"  # 您的 MySQL 容器名或地址
 MYSQL_PORT: int = 3306
@@ -124,15 +120,15 @@ SECRET_KEY: str = "your-secret-key-change-this-in-production"  # 至少 32 位�
 JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"  # 至少 32 位，建议随机生成
 ```
 
-#### 步骤 5: 启动服务
+#### 步骤 4: 启动服务
 
-使用 uvicorn 启动应用：
+使用 uvicorn 启动应用([1Panel](https://github.com/1Panel-dev/1Panel) 启动命令相同)：
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-#### 步骤 6: 访问应用
+#### 步骤 5: 访问应用
 
 打开浏览器访问以下地址：
 
@@ -145,7 +141,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
   - Swagger UI: http://localhost:8000/docs
   - ReDoc: http://localhost:8000/redoc
 
-#### 步骤 7: 首次登录
+#### 步骤 6: 首次登录
 
 首次启动应用时，系统会自动创建默认管理员账户：
 
@@ -169,6 +165,7 @@ A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + My
 
 - ✅ **Async Architecture**: High-performance async operations using async/await
 - 🚀 **Multi-Server Management**: Manage multiple CS2 servers simultaneously
+- 🔗 **SSH Connection Pool**: Connection reuse for same servers, significantly reducing SSH overhead (up to 90% performance improvement) ([View Docs](docs/SSH_CONNECTION_POOLING.md))
 - 👥 **User Authentication**: JWT token authentication, users can only manage their own servers
 - 🔑 **API Key Authentication**: Support API key authentication for controlling servers without password exchange ([View Docs](docs/API_KEY_USAGE.md))
 - 🔐 **SSH Connection**: Supports both password and key file authentication
@@ -186,7 +183,7 @@ A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + My
 
 ### 📋 System Requirements
 
-#### Manager Host (Running Web Interface)
+#### Manager Host (Running Web Interface - You can use [1Panel](https://github.com/1Panel-dev/1Panel) for quick deployment)
 - **Python**: 3.13+ (Recommended 3.13 or higher, supports Python 3.14)
 - **MySQL**: 8.0+
 - **Redis**: 7.0+
@@ -223,10 +220,12 @@ If your Redis server has **no password set**, you **must** configure it like thi
 
 ```python
 REDIS_PASSWORD: Optional[str] = None   # No password → use None, NOT an empty string ""
+```
+
 
 **⚠️ Important**: Database and Redis configuration are required and cannot be omitted!
 
-##### Example Deployment with 1Panel
+##### Example Deployment with [1Panel](https://github.com/1Panel-dev/1Panel) (Recommended: Use 1Panel Runtime Environment - Python 3.14 for easier deployment)
 
 If you're using 1Panel to deploy MySQL and Redis, refer to the configuration below:
 
@@ -253,10 +252,10 @@ JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"  # At leas
 
 #### Step 5: Start Service
 
-Start the application using uvicorn:
+Start the application using uvicorn (same command for 1Panel startup):
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 #### Step 6: Access Application
