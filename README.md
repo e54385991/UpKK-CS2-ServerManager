@@ -1,5 +1,12 @@
 # CS2 Server Manager | CS2 服务器管理器
 
+
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg?style=flat&logo=FastAPI)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg?style=flat&logo=python)](https://www.python.org)
+[![SQLModel](https://img.shields.io/badge/SQLModel-Latest-red.svg?style=flat)](https://sqlmodel.tiangolo.com)
+[![Redis](https://img.shields.io/badge/Redis-Async-DC382D.svg?style=flat&logo=redis)](https://redis.io)
+
+
 [English](#english) | [中文](#chinese)
 
 ---
