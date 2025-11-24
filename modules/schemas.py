@@ -12,7 +12,8 @@ import re
 ALLOWED_SERVER_ACTIONS = [
     "deploy", "start", "stop", "restart", "status", "update", "validate",
     "install_metamod", "install_counterstrikesharp", "install_cs2fixes",
-    "update_metamod", "update_counterstrikesharp", "update_cs2fixes"
+    "update_metamod", "update_counterstrikesharp", "update_cs2fixes",
+    "backup_plugins"
 ]
 SERVER_ACTION_PATTERN = f"^({'|'.join(ALLOWED_SERVER_ACTIONS)})$"
 

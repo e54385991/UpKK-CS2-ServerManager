@@ -1,0 +1,120 @@
+                <div class="tab-pane fade" id="help" role="tabpanel">
+                    <!-- Help Information Card -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-question-circle"></i> <span
+                                    data-i18n="serverDetail.helpAndTroubleshooting">Help & Troubleshooting</span></h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted" data-i18n="serverDetail.helpDescription">
+                                This section provides common troubleshooting guides and fixes for CS2 server issues.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- KZ Server Environment Fix Card -->
+                    <div class="card mb-4 border-warning">
+                        <div class="card-header bg-warning bg-opacity-10">
+                            <h5 class="mb-0">
+                                <i class="bi bi-wrench-adjustable"></i> 
+                                <span data-i18n="serverDetail.kzServerFix">KZ Server Environment Fix (Ubuntu 24.04+)</span>
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Important Notice -->
+                            <div class="alert alert-info mb-4" role="alert">
+                                <h6 class="alert-heading">
+                                    <i class="bi bi-info-circle-fill"></i> 
+                                    <span data-i18n="serverDetail.importantNotice">Important Notice</span>
+                                </h6>
+                                <hr>
+                                <p class="mb-2" data-i18n="serverDetail.rootLoginRequired">
+                                    <strong>Please log in to your server as root user to perform this operation.</strong>
+                                </p>
+                                <p class="mb-0" data-i18n="serverDetail.highPrivilegeWarning">
+                                    Due to requiring high system privileges, the system will not complete this operation for you using the server user account.
+                                </p>
+                            </div>
+
+                            <!-- Problem Description -->
+                            <div class="mb-4">
+                                <h6 class="fw-bold">
+                                    <i class="bi bi-exclamation-triangle"></i> 
+                                    <span data-i18n="serverDetail.problemDescription">Problem Description</span>
+                                </h6>
+                                <p data-i18n="serverDetail.kzPluginIssue">
+                                    On Ubuntu 24.04+ systems, KZ server plugins may fail to load due to missing <code>libssl1.1</code> library.
+                                </p>
+                            </div>
+
+                            <!-- Solution Steps -->
+                            <div class="mb-4">
+                                <h6 class="fw-bold">
+                                    <i class="bi bi-tools"></i> 
+                                    <span data-i18n="serverDetail.solutionSteps">Solution Steps</span>
+                                </h6>
+                                <p data-i18n="serverDetail.followSteps">
+                                    Follow these steps to fix the plugin loading issue:
+                                </p>
+                                
+                                <ol class="mb-3">
+                                    <li class="mb-2">
+                                        <strong data-i18n="serverDetail.step1Title">Download the libssl1.1 package:</strong>
+                                        <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
+                                            <code class="text-light" id="cmd-wget">wget https://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb</code>
+                                            <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('cmd-wget').textContent); 
+                                                             const btn = this; 
+                                                             const originalText = btn.innerHTML; 
+                                                             btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
+                                                             setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                                <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
+                                            </button>
+                                        </div>
+                                    </li>
+                                    
+                                    <li class="mb-2">
+                                        <strong data-i18n="serverDetail.step2Title">Install the package:</strong>
+                                        <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
+                                            <code class="text-light" id="cmd-dpkg">sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb</code>
+                                            <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('cmd-dpkg').textContent); 
+                                                             const btn = this; 
+                                                             const originalText = btn.innerHTML; 
+                                                             btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
+                                                             setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                                <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
+                                            </button>
+                                        </div>
+                                    </li>
+                                    
+                                    <li class="mb-2">
+                                        <strong data-i18n="serverDetail.step3Title">Restart your CS2 server</strong>
+                                        <p class="text-muted mb-0" data-i18n="serverDetail.step3Description">
+                                            After installing the package, restart your CS2 server to apply the changes.
+                                        </p>
+                                    </li>
+                                </ol>
+                            </div>
+
+                            <!-- Warning Box -->
+                            <div class="alert alert-warning" role="alert">
+                                <h6 class="alert-heading">
+                                    <i class="bi bi-shield-exclamation"></i> 
+                                    <span data-i18n="serverDetail.securityWarning">Security Warning</span>
+                                </h6>
+                                <p class="mb-0" data-i18n="serverDetail.manualOperationWarning">
+                                    These commands must be executed manually on your server. The server manager will not automatically execute these commands for security reasons and due to the need for elevated privileges.
+                                </p>
+                            </div>
+
+                            <!-- Quick Reference Button -->
+                            <div class="mt-4 text-center">
+                                <button class="btn btn-outline-primary" onclick="window.open('https://github.com/e54385991/CS2-ServerManager', '_blank')">
+                                    <i class="bi bi-github"></i> 
+                                    <span data-i18n="serverDetail.viewDocumentation">View Full Documentation</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>

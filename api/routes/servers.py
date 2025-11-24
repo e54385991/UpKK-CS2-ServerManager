@@ -14,6 +14,7 @@ from modules import (
 )
 from services import redis_manager
 from services.captcha_service import captcha_service
+from services.ssh_manager import SSHManager
 
 router = APIRouter(prefix="/servers", tags=["servers"])
 
@@ -597,3 +598,70 @@ async def get_all_servers_disk_space(
         "servers": response,
         "timestamp": get_current_time().isoformat()
     }
+
+
+@router.get("/{server_id}/check-deployment")
+async def check_server_deployment(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Check if server is actually deployed by verifying cs2 binary file exists
+    
+    Returns:
+        {
+            "is_deployed": bool,
+            "binary_path": str,
+            "message": str
+        }
+    """
+    result = await db.execute(select(Server).filter(Server.id == server_id))
+    server = result.scalar_one_or_none()
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server with ID {server_id} not found"
+        )
+    
+    # Check ownership
+    if server.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to check this server"
+        )
+    
+    # Check if cs2 binary exists
+    ssh_manager = SSHManager()
+    
+    binary_path = f"{server.game_directory}/cs2/game/bin/linuxsteamrt64/cs2"
+    verify_cmd = f"test -f {binary_path} && echo 'exists' || echo 'missing'"
+    
+    try:
+        success, msg = await ssh_manager.connect(server)
+        if not success:
+            return {
+                "is_deployed": False,
+                "binary_path": binary_path,
+                "message": f"Could not connect to server: {msg}",
+                "error": True
+            }
+        
+        verify_success, verify_stdout, _ = await ssh_manager.execute_command(verify_cmd)
+        await ssh_manager.disconnect()
+        
+        is_deployed = verify_success and 'exists' in verify_stdout
+        
+        return {
+            "is_deployed": is_deployed,
+            "binary_path": binary_path,
+            "message": "Server is deployed" if is_deployed else "Server is not deployed",
+            "error": False
+        }
+    except Exception as e:
+        return {
+            "is_deployed": False,
+            "binary_path": binary_path,
+            "message": f"Error checking deployment: {str(e)}",
+            "error": True
+        }

@@ -63,8 +63,7 @@
                                 </div>
                                 
                                 <!-- Deploy Alert for Undeployed Servers -->
-                                {% if not server.last_deployed %}
-                                <div class="alert alert-warning mt-3" role="alert">
+                                <div x-show="!deploymentStatus.isDeployed && !deploymentStatus.checking" x-cloak class="alert alert-warning mt-3" role="alert">
                                     <div class="d-flex align-items-center">
                                         <i class="bi bi-exclamation-triangle-fill me-2" style="font-size: 1.5rem;"></i>
                                         <div class="flex-grow-1">
@@ -85,7 +84,6 @@
                                         </button>
                                     </div>
                                 </div>
-                                {% endif %}
                             </div>
 
                             <!-- Edit Mode -->

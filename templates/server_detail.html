@@ -93,6 +93,12 @@
                         <i class="bi bi-clock-history"></i> <span data-i18n="serverDetail.scheduledTasks">Scheduled Tasks</span>
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="help-tab" data-bs-toggle="tab" data-bs-target="#help" type="button"
+                        role="tab">
+                        <i class="bi bi-question-circle"></i> <span data-i18n="serverDetail.help">Help</span>
+                    </button>
+                </li>
             </ul>
         </div>
         <div class="card-body">
@@ -117,6 +123,9 @@
 
                 <!-- Scheduled Tasks Tab -->
                 {% include 'server_detail_includes/scheduled_tasks_tab.html' %}
+
+                <!-- Help Tab -->
+                {% include 'server_detail_includes/help_tab.html' %}
             </div>
         </div>
     </div>

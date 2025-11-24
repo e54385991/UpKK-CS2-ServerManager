@@ -188,4 +188,34 @@
                         </div>
                     </div>
 
+                    <!-- Plugin Backup Card -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-archive"></i> <span
+                                    data-i18n="serverDetail.pluginBackup">Plugin Backup</span></h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">
+                                <i class="bi bi-info-circle"></i> Backup your plugin files for disaster recovery and rollback.
+                            </p>
+                            <div class="alert alert-info">
+                                <small>
+                                    <strong><i class="bi bi-box-seam"></i> What will be backed up:</strong><br>
+                                    • <code>addons/</code> folder - All installed plugins<br>
+                                    • <code>cfg/</code> folder - Configuration files<br>
+                                    • <code>gameinfo.gi</code> file - Game configuration<br>
+                                    <br>
+                                    <strong><i class="bi bi-folder"></i> Backup location:</strong><br>
+                                    <code x-text="getBackupPath()"></code>
+                                </small>
+                            </div>
+                            <div class="d-grid">
+                                <button @click="executeBackupPlugins()" :disabled="isActionRunning"
+                                    class="btn btn-warning">
+                                    <i class="bi bi-archive"></i> <span data-i18n="serverDetail.backupPlugins">Backup Plugins</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>

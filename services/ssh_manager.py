@@ -2234,6 +2234,213 @@ class SSHManager:
         # Just reinstall - this will update to the latest version
         return await self.install_cs2fixes(server, progress_callback)
     
+    async def backup_plugins(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
+        """
+        Backup plugins (addons, cfg folders and gameinfo.gi file) to a timestamped tar.gz archive
+        
+        Creates backup at: {game_directory}/backups/YYYY-MM-DD-HHMMSS.tar.gz
+        Backs up from: {game_directory}/cs2/game/csgo/
+        - addons/ folder
+        - cfg/ folder
+        - gameinfo.gi file
+        
+        Args:
+            server: Server instance
+            progress_callback: Optional async callback for progress updates
+        Returns: (success: bool, message: str)
+        """
+        async def send_progress(message: str):
+            """Helper to send progress updates"""
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(message)
+                else:
+                    progress_callback(message)
+        
+        success, msg = await self.connect(server)
+        if not success:
+            return False, f"Connection failed: {msg}"
+        
+        try:
+            await send_progress("=" * 60)
+            await send_progress("Starting plugin backup...")
+            await send_progress("=" * 60)
+            
+            # Use game_directory as the base for backups
+            # For example: if game_directory is /home/cs2server/cs2kz, backups go to /home/cs2server/cs2kz/backups
+            game_dir = server.game_directory.rstrip('/')
+            
+            # Check if CS2 is installed
+            csgo_dir = f"{game_dir}/cs2/game/csgo"
+            check_cmd = f"test -d {csgo_dir} && echo 'exists'"
+            check_success, check_stdout, _ = await self.execute_command(check_cmd)
+            
+            if not check_success or 'exists' not in check_stdout:
+                return False, "CS2 server not found. Please deploy the server first."
+            
+            await send_progress(f"✓ CS2 server directory found: {csgo_dir}")
+            
+            # Create backups directory if it doesn't exist
+            backups_dir = f"{game_dir}/backups"
+            await send_progress(f"Creating backups directory: {backups_dir}")
+            mkdir_cmd = f"mkdir -p {shlex.quote(backups_dir)}"
+            mkdir_success, _, mkdir_stderr = await self.execute_command(mkdir_cmd)
+            
+            if not mkdir_success:
+                error_msg = mkdir_stderr.strip() if mkdir_stderr and mkdir_stderr.strip() else "Failed to create backups directory"
+                await send_progress(f"✗ {error_msg}")
+                return False, f"Failed to create backups directory: {error_msg}"
+            
+            await send_progress(f"✓ Backups directory ready: {backups_dir}")
+            
+            # Generate timestamp for backup filename
+            # Get current time from server
+            timestamp_cmd = "date '+%Y-%m-%d-%H%M%S'"
+            ts_success, timestamp, _ = await self.execute_command(timestamp_cmd)
+            
+            if not ts_success or not timestamp.strip():
+                # Fallback to local time if server time command fails
+                timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            else:
+                timestamp = timestamp.strip()
+            
+            backup_filename = f"{timestamp}.tar.gz"
+            backup_path = f"{backups_dir}/{backup_filename}"
+            
+            await send_progress(f"Backup will be saved to: {backup_path}")
+            
+            # Check which items exist before backing up
+            items_to_backup = []
+            
+            # Check addons folder
+            check_addons = f"test -d {csgo_dir}/addons && echo 'exists'"
+            addons_success, addons_stdout, _ = await self.execute_command(check_addons)
+            if addons_success and 'exists' in addons_stdout:
+                items_to_backup.append("addons")
+                await send_progress("✓ Found: addons/")
+            else:
+                await send_progress("⚠ Warning: addons/ folder not found, skipping")
+            
+            # Check cfg folder
+            check_cfg = f"test -d {csgo_dir}/cfg && echo 'exists'"
+            cfg_success, cfg_stdout, _ = await self.execute_command(check_cfg)
+            if cfg_success and 'exists' in cfg_stdout:
+                items_to_backup.append("cfg")
+                await send_progress("✓ Found: cfg/")
+            else:
+                await send_progress("⚠ Warning: cfg/ folder not found, skipping")
+            
+            # Check gameinfo.gi file
+            check_gameinfo = f"test -f {csgo_dir}/gameinfo.gi && echo 'exists'"
+            gameinfo_success, gameinfo_stdout, _ = await self.execute_command(check_gameinfo)
+            if gameinfo_success and 'exists' in gameinfo_stdout:
+                items_to_backup.append("gameinfo.gi")
+                await send_progress("✓ Found: gameinfo.gi")
+            else:
+                await send_progress("⚠ Warning: gameinfo.gi file not found, skipping")
+            
+            if not items_to_backup:
+                return False, "No items found to backup. Please ensure the server is deployed and has plugins installed."
+            
+            # Create backup archive with the items that exist
+            await send_progress(f"Creating backup archive with {len(items_to_backup)} item(s)...")
+            
+            # Create tar.gz directly in the backup directory
+            # This is simpler and avoids issues with /tmp/ or moving files between directories
+            tar_items = " ".join(items_to_backup)
+            
+            await send_progress(f"Creating compressed backup: {backup_path}")
+            tar_cmd = f"cd {shlex.quote(csgo_dir)} && tar -czf {shlex.quote(backup_path)} {tar_items}"
+            
+            # Show the actual command for debugging
+            await send_progress(f"[DEBUG] Executing command: {tar_cmd}")
+            
+            tar_success, tar_stdout, tar_stderr = await self.execute_command_streaming(
+                tar_cmd,
+                output_callback=send_progress,
+                timeout=600  # 10 minutes timeout for large backups
+            )
+            
+            # Check if backup file was actually created (more reliable than exit code)
+            # Tar can return non-zero exit codes for warnings (e.g., "file changed as we read it")
+            # while still creating a valid backup. File existence is the true indicator of success.
+            check_backup_exists = f"test -f {shlex.quote(backup_path)} && echo 'exists'"
+            backup_exists_success, backup_exists_out, _ = await self.execute_command(check_backup_exists)
+            backup_file_created = backup_exists_success and 'exists' in backup_exists_out
+            
+            await send_progress(f"[DEBUG] Backup file created: {backup_file_created}")
+            await send_progress(f"[DEBUG] Tar exit code successful: {tar_success}")
+            
+            # Prioritize file creation over exit code - if file exists, backup succeeded
+            # This handles cases where tar returns warnings but still creates valid archives
+            if not backup_file_created:
+                # Provide detailed error message with command and all output
+                error_detail = f"Command: {tar_cmd}\n"
+                error_detail += f"Exit successful: {tar_success}\n"
+                error_detail += f"File created: {backup_file_created}\n"
+                error_detail += f"Stderr: {tar_stderr.strip() if tar_stderr and tar_stderr.strip() else '(empty)'}\n"
+                error_detail += f"Stdout: {tar_stdout.strip() if tar_stdout and tar_stdout.strip() else '(empty)'}"
+                
+                await send_progress(f"✗ Backup creation failed - file not created")
+                await send_progress(f"Command: {tar_cmd}")
+                await send_progress(f"Exit successful: {tar_success}")
+                await send_progress(f"File created: {backup_file_created}")
+                await send_progress(f"Stderr: {tar_stderr.strip() if tar_stderr and tar_stderr.strip() else '(empty)'}")
+                await send_progress(f"Stdout: {tar_stdout.strip() if tar_stdout and tar_stdout.strip() else '(empty)'}")
+                
+                # Try to check if tar exists and what version
+                check_tar_cmd = "which tar && tar --version | head -1"
+                check_success, check_out, _ = await self.execute_command(check_tar_cmd)
+                if check_success:
+                    await send_progress(f"[INFO] Tar location and version: {check_out.strip()}")
+                
+                # Check backup directory permissions
+                backup_dir_check = f"ls -ld {shlex.quote(backups_dir)}"
+                dir_success, dir_out, _ = await self.execute_command(backup_dir_check)
+                if dir_success:
+                    await send_progress(f"[INFO] Backup directory permissions: {dir_out.strip()}")
+                
+                return False, f"Backup creation failed:\n{error_detail}"
+            
+            # File was created - backup succeeded even if tar returned non-zero exit code
+            # This is common and usually indicates warnings rather than actual failures
+            if not tar_success:
+                stderr_info = f" (stderr: {tar_stderr.strip()})" if tar_stderr and tar_stderr.strip() else ""
+                await send_progress(f"[WARN] Tar returned non-zero exit code but file was created successfully{stderr_info}")
+            
+            await send_progress(f"✓ Backup archive created successfully")
+            
+            # Get backup file size
+            size_cmd = f"stat -f%z {shlex.quote(backup_path)} 2>/dev/null || stat -c%s {shlex.quote(backup_path)} 2>/dev/null"
+            size_success, size_out, _ = await self.execute_command(size_cmd)
+            
+            if size_success and size_out.strip():
+                file_size = int(size_out.strip())
+                # Convert to human-readable format
+                if file_size < 1024:
+                    size_str = f"{file_size} bytes"
+                elif file_size < 1024 * 1024:
+                    size_str = f"{file_size / 1024:.2f} KB"
+                elif file_size < 1024 * 1024 * 1024:
+                    size_str = f"{file_size / (1024 * 1024):.2f} MB"
+                else:
+                    size_str = f"{file_size / (1024 * 1024 * 1024):.2f} GB"
+                
+                await send_progress(f"✓ Backup file size: {size_str}")
+            
+            await send_progress("=" * 60)
+            await send_progress("✓ Plugin backup completed successfully!")
+            await send_progress(f"Backup saved to: {backup_path}")
+            await send_progress("=" * 60)
+            
+            return True, f"Plugin backup completed successfully. Saved to: {backup_path}"
+        
+        except Exception as e:
+            await send_progress(f"Backup error: {str(e)}")
+            return False, f"Backup error: {str(e)}"
+        finally:
+            await self.disconnect()
+    
     async def list_directory(self, path: str, server: Server) -> Tuple[bool, List[Dict[str, Any]], str]:
         """
         List directory contents with file metadata

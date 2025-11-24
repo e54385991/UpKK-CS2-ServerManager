@@ -1,4 +1,8 @@
     <script>
+        // Constants
+        const DEPLOYMENT_RECHECK_DELAY_MS = 2000;  // Delay before rechecking deployment status after completion
+        const FALLBACK_CONFIRM_REDEPLOY_MSG = 'This server has already been deployed. Are you sure you want to redeploy?\n\nRedeploying will reinstall CS2 server files.';
+        
         function serverDetail(serverId) {
             return {
                 serverId: serverId,
@@ -28,9 +32,17 @@
                 counterstrikesharp: false,
                 cs2fixes: false
         },
+        // Deployment status tracking
+        deploymentStatus: {
+            checking: true,  // Start with true to avoid flash of warning
+            isDeployed: false,
+            message: '',
+            error: false
+        },
         // Operation status modal
         operationMessages: [],
         currentOperationName: '',
+        currentOperationAction: '',  // Track the actual action type (deploy, start, etc)
         operationInProgress: false,
         operationCompleted: false,
         operationFailed: false,
@@ -134,6 +146,9 @@
             this.connectWebSocket();
             await this.loadHistory();
             
+            // Check actual deployment status
+            await this.checkDeploymentStatus();
+            
             // Fetch remote server CPU count
             await this.fetchCpuCount();
 
@@ -179,6 +194,30 @@
                 }
             } catch (err) {
                 console.warn('Error fetching CPU count:', err.message);
+            }
+        },
+        
+        async checkDeploymentStatus() {
+            // Check if the server is actually deployed by verifying cs2 binary exists
+            try {
+                this.deploymentStatus.checking = true;
+                const response = await authFetch(`/servers/${this.serverId}/check-deployment`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.deploymentStatus.isDeployed = data.is_deployed;
+                    this.deploymentStatus.message = data.message;
+                    this.deploymentStatus.error = data.error || false;
+                } else {
+                    // If check fails, assume not deployed
+                    this.deploymentStatus.isDeployed = false;
+                    this.deploymentStatus.error = true;
+                }
+            } catch (err) {
+                console.warn('Error checking deployment status:', err.message);
+                this.deploymentStatus.isDeployed = false;
+                this.deploymentStatus.error = true;
+            } finally {
+                this.deploymentStatus.checking = false;
             }
         },
         
@@ -793,6 +832,31 @@
         async executeAction(action) {
             if (this.isActionRunning) return;
 
+            // Check if deploying and server is already deployed - show confirmation
+            if (action === 'deploy' && this.deploymentStatus.isDeployed) {
+                const confirmMsg = window.i18n?.t('serverDetail.confirmRedeploy') || 
+                    FALLBACK_CONFIRM_REDEPLOY_MSG;
+                
+                if (!confirm(confirmMsg)) {
+                    return; // User cancelled
+                }
+            }
+
+            // Check if backing up plugins - show confirmation
+            if (action === 'backup_plugins') {
+                const backupPath = this.getBackupPath();
+                const confirmMsg = window.i18n?.t('serverDetail.confirmBackupPlugins', { path: backupPath }) || 
+                    `This will backup the following to ${backupPath}:\n\n` +
+                    `• addons/ folder\n` +
+                    `• cfg/ folder\n` +
+                    `• gameinfo.gi file\n\n` +
+                    `Do you want to continue?`;
+                
+                if (!confirm(confirmMsg)) {
+                    return; // User cancelled
+                }
+            }
+
             this.isActionRunning = true;
             
             // Open operation status modal
@@ -831,6 +895,7 @@
                     if (result.data && result.data.status) {
                         this.server.status = result.data.status.toUpperCase();
                     }
+                    
                     await this.loadHistory();
                 } else {
                     // Handle error response - extract meaningful message
@@ -897,10 +962,12 @@
                 'install_counterstrikesharp': 'Install CounterStrikeSharp',
                 'update_counterstrikesharp': 'Update CounterStrikeSharp',
                 'install_cs2fixes': 'Install CS2Fixes',
-                'update_cs2fixes': 'Update CS2Fixes'
+                'update_cs2fixes': 'Update CS2Fixes',
+                'backup_plugins': window.i18n?.t('serverDetail.backupPlugins') || 'Backup Plugins'
             };
             
             this.currentOperationName = operationNames[action] || action;
+            this.currentOperationAction = action;  // Store the actual action type
             
             // If modal is already open, just update the operation name and continue
             // This allows batch operations to reuse the same modal
@@ -968,6 +1035,13 @@
                             this.operationInProgress = false;
                             this.operationCompleted = true;
                             this.isActionRunning = false;
+                            
+                            // If deployment completed successfully, recheck deployment status
+                            if (this.currentOperationAction === 'deploy') {
+                                setTimeout(async () => {
+                                    await this.checkDeploymentStatus();
+                                }, DEPLOYMENT_RECHECK_DELAY_MS);
+                            }
                         } else if (data.type === 'error') {
                             this.operationInProgress = false;
                             this.operationFailed = true;
@@ -1085,6 +1159,24 @@
             this.pluginSelection.metamod = false;
             this.pluginSelection.counterstrikesharp = false;
             this.pluginSelection.cs2fixes = false;
+        },
+
+        // Get the backup path based on server's game directory
+        getBackupPath() {
+            if (!this.server || !this.server.game_directory) {
+                return '/home/cs2server/backups/<timestamp>.tar.gz';
+            }
+            
+            // Backups are stored in {game_directory}/backups/
+            // e.g., if game_directory is /home/cs2server/cs2kz, backups go to /home/cs2server/cs2kz/backups/
+            const gameDir = this.server.game_directory.replace(/\/$/, ''); // Remove trailing slash
+            
+            return `${gameDir}/backups/<timestamp>.tar.gz`;
+        },
+
+        // Execute backup plugins with confirmation
+        async executeBackupPlugins() {
+            await this.executeAction('backup_plugins');
         },
         
         async loadHistory() {

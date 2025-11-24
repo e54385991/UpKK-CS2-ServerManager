@@ -496,6 +496,22 @@ async def server_action(
                 log.error_message = message
                 await send_deployment_update(server_id, "error", f"CS2Fixes update failed: {message}")
         
+        elif action == "backup_plugins":
+            await send_deployment_update(server_id, "status", "Backing up plugins...")
+            success, message = await ssh_manager.backup_plugins(server,
+                                                               lambda msg: asyncio.create_task(
+                                                                   send_deployment_update(server_id, "output", msg)
+                                                               ))
+            
+            if success:
+                log.status = "success"
+                log.output = message
+                await send_deployment_update(server_id, "complete", "Plugins backed up successfully")
+            else:
+                log.status = "failed"
+                log.error_message = message
+                await send_deployment_update(server_id, "error", f"Plugin backup failed: {message}")
+        
         await db.commit()
         await db.refresh(server)
         await db.refresh(log)
