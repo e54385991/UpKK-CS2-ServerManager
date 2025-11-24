@@ -6,11 +6,14 @@ import asyncio
 import os
 import re
 import shlex
+import logging
 from typing import Optional, Tuple, List, Dict, Any
 from datetime import datetime
 from modules.models import Server, AuthType
 from services.server_monitor import server_monitor
 from services.ssh_connection_pool import ssh_connection_pool
+
+logger = logging.getLogger(__name__)
 
 
 class SSHManager:
@@ -29,6 +32,40 @@ class SSHManager:
         self.conn: Optional[asyncssh.SSHClientConnection] = None
         self.use_pool = use_pool
         self.current_server: Optional[Server] = None
+    
+    async def _handle_sftp_error_with_reconnect(self, error: Exception, server: Server, operation_name: str, retry_func):
+        """
+        Handle SFTP errors with automatic reconnection and retry
+        
+        Args:
+            error: The exception that occurred
+            server: Server instance
+            operation_name: Name of the operation for logging
+            retry_func: Async function to retry after reconnection
+        
+        Returns:
+            Result from retry_func if successful, or raises the error
+        """
+        error_msg = str(error)
+        # Check if this is a connection error that might be fixed by reconnection
+        if any(keyword in error_msg.lower() for keyword in ['open failed', 'connection', 'broken pipe', 'reset']):
+            logger.warning(f"[SSH Manager] SFTP error detected in {operation_name}, attempting reconnection: {error_msg}")
+            # Try to reconnect - use server parameter for consistency
+            if self.use_pool:
+                success, conn, reconnect_msg = await ssh_connection_pool.reconnect(server)
+                if success:
+                    self.conn = conn
+                    logger.info(f"[SSH Manager] Reconnection successful, retrying {operation_name}")
+                    # Retry the operation once after reconnection
+                    try:
+                        return await retry_func()
+                    except Exception as retry_e:
+                        logger.error(f"[SSH Manager] Retry {operation_name} after reconnection failed: {str(retry_e)}")
+                        raise Exception(f"操作失败（重连后重试仍失败）| Operation failed after reconnection: {str(retry_e)}")
+                else:
+                    logger.error(f"[SSH Manager] Reconnection failed: {reconnect_msg}")
+                    raise Exception(f"连接失败 | Connection failed: {reconnect_msg}")
+        raise error
     
     async def _fetch_github_release_url(self, repo: str, pattern: str, progress_callback=None) -> Tuple[bool, str]:
         """
@@ -146,7 +183,7 @@ class SSHManager:
         if not self.conn:
             return False, "", "Not connected"
         
-        try:
+        async def _do_execute():
             result = await asyncio.wait_for(
                 self.conn.run(command, check=False),
                 timeout=timeout
@@ -157,8 +194,30 @@ class SSHManager:
             exit_status = result.exit_status
             
             return exit_status == 0, stdout_text, stderr_text
+        
+        try:
+            return await _do_execute()
         except asyncio.TimeoutError:
             return False, "", "Command timeout"
+        except (asyncssh.ConnectionLost, asyncssh.DisconnectError, asyncssh.ChannelOpenError) as e:
+            # SSH connection errors that can be fixed by reconnection
+            error_msg = str(e)
+            logger.warning(f"[SSH Manager] SSH connection error in execute_command: {error_msg}")
+            if self.use_pool and self.current_server:
+                try:
+                    success, conn, reconnect_msg = await ssh_connection_pool.reconnect(self.current_server)
+                    if success:
+                        self.conn = conn
+                        logger.info(f"[SSH Manager] Reconnection successful, retrying execute_command")
+                        # Retry once after reconnection
+                        return await _do_execute()
+                    else:
+                        logger.error(f"[SSH Manager] Reconnection failed: {reconnect_msg}")
+                        return False, "", f"连接失败 | Connection failed: {reconnect_msg}"
+                except Exception as retry_e:
+                    logger.error(f"[SSH Manager] Retry execute_command after reconnection failed: {str(retry_e)}")
+                    return False, "", f"操作失败（重连后重试仍失败）| Operation failed after reconnection: {str(retry_e)}"
+            return False, "", str(e)
         except Exception as e:
             return False, "", str(e)
     
@@ -223,6 +282,27 @@ class SSHManager:
             return await asyncio.wait_for(_execute(), timeout=timeout)
         except asyncio.TimeoutError:
             return False, '\n'.join(stdout_lines), "Command timeout"
+        except (asyncssh.ConnectionLost, asyncssh.DisconnectError, asyncssh.ChannelOpenError) as e:
+            # SSH connection errors that can be fixed by reconnection
+            error_msg = str(e)
+            logger.warning(f"[SSH Manager] SSH connection error in execute_command_streaming: {error_msg}")
+            if self.use_pool and self.current_server:
+                try:
+                    success, conn, reconnect_msg = await ssh_connection_pool.reconnect(self.current_server)
+                    if success:
+                        self.conn = conn
+                        logger.info(f"[SSH Manager] Reconnection successful, retrying execute_command_streaming")
+                        # Retry once after reconnection (clear accumulated output)
+                        stdout_lines.clear()
+                        stderr_lines.clear()
+                        return await asyncio.wait_for(_execute(), timeout=timeout)
+                    else:
+                        logger.error(f"[SSH Manager] Reconnection failed: {reconnect_msg}")
+                        return False, '\n'.join(stdout_lines), f"连接失败 | Connection failed: {reconnect_msg}"
+                except Exception as retry_e:
+                    logger.error(f"[SSH Manager] Retry execute_command_streaming after reconnection failed: {str(retry_e)}")
+                    return False, '\n'.join(stdout_lines), f"操作失败（重连后重试仍失败）| Operation failed after reconnection: {str(retry_e)}"
+            return False, '\n'.join(stdout_lines), str(e)
         except Exception as e:
             return False, '\n'.join(stdout_lines), f"Execution error: {str(e)}"
     
@@ -2458,10 +2538,8 @@ class SSHManager:
             if not success:
                 return False, [], f"Connection failed: {msg}"
         
-        try:
-            # Use SFTP to list directory
+        async def _do_list():
             async with self.conn.start_sftp_client() as sftp:
-                # Get directory listing
                 files = []
                 async for entry in sftp.scandir(path):
                     attrs = entry.attrs
@@ -2475,13 +2553,18 @@ class SSHManager:
                         'is_symlink': attrs.type == asyncssh.FILEXFER_TYPE_SYMLINK
                     }
                     files.append(file_info)
-                
-                # Sort: directories first, then by name
                 files.sort(key=lambda x: (x['type'] != 'directory', x['name'].lower()))
-                
-                return True, files, ""
+                return files
+        
+        try:
+            files = await _do_list()
+            return True, files, ""
         except asyncssh.SFTPError as e:
-            return False, [], f"SFTP error: {str(e)}"
+            try:
+                files = await self._handle_sftp_error_with_reconnect(e, server, "list_directory", _do_list)
+                return True, files, ""
+            except Exception as final_e:
+                return False, [], str(final_e)
         except Exception as e:
             return False, [], f"Error listing directory: {str(e)}"
     
@@ -2502,17 +2585,13 @@ class SSHManager:
             if not success:
                 return False, "", f"Connection failed: {msg}"
         
-        try:
+        async def _do_read():
             async with self.conn.start_sftp_client() as sftp:
-                # Check file size first
                 attrs = await sftp.stat(file_path)
                 if attrs.size > max_size:
-                    return False, "", f"File too large ({attrs.size} bytes). Maximum size is {max_size} bytes."
-                
-                # Read file content
+                    raise Exception(f"File too large ({attrs.size} bytes). Maximum size is {max_size} bytes.")
                 async with sftp.open(file_path, 'r') as f:
                     content = await f.read()
-                    # Try to decode as UTF-8, fallback to latin-1 if fails
                     try:
                         if isinstance(content, bytes):
                             text_content = content.decode('utf-8')
@@ -2523,10 +2602,17 @@ class SSHManager:
                             text_content = content.decode('latin-1')
                         else:
                             text_content = content
-                    
-                    return True, text_content, ""
+                    return text_content
+        
+        try:
+            content = await _do_read()
+            return True, content, ""
         except asyncssh.SFTPError as e:
-            return False, "", f"SFTP error: {str(e)}"
+            try:
+                content = await self._handle_sftp_error_with_reconnect(e, server, "read_file", _do_read)
+                return True, content, ""
+            except Exception as final_e:
+                return False, "", str(final_e)
         except Exception as e:
             return False, "", f"Error reading file: {str(e)}"
     
@@ -2547,24 +2633,26 @@ class SSHManager:
             if not success:
                 return False, f"Connection failed: {msg}"
         
-        try:
+        async def _do_write():
             async with self.conn.start_sftp_client() as sftp:
-                # Ensure parent directory exists
                 parent_dir = os.path.dirname(file_path)
                 if parent_dir:
                     try:
                         await sftp.stat(parent_dir)
                     except:
-                        # Parent directory doesn't exist, create it
                         await sftp.makedirs(parent_dir)
-                
-                # Write file - use text mode and write string directly
                 async with sftp.open(file_path, 'w', encoding='utf-8') as f:
                     await f.write(content)
-                
-                return True, ""
+        
+        try:
+            await _do_write()
+            return True, ""
         except asyncssh.SFTPError as e:
-            return False, f"SFTP error: {str(e)}"
+            try:
+                await self._handle_sftp_error_with_reconnect(e, server, "write_file", _do_write)
+                return True, ""
+            except Exception as final_e:
+                return False, str(final_e)
         except Exception as e:
             return False, f"Error writing file: {str(e)}"
     

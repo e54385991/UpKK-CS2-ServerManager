@@ -734,5 +734,21 @@
     "installCSS": "安装 CounterStrikeSharp？\n\n（用 C# 编写服务器插件。需要 Metamod）",
     "file": "文件",
     "folder": "文件夹"
+  },
+  "ssh": {
+    "connectionStatus": "SSH 连接状态",
+    "status": "状态",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "connectionAge": "连接时长",
+    "reconnections": "重连次数",
+    "pooling": "连接复用",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "reconnect": "重新连接",
+    "reconnecting": "重连中...",
+    "reconnectSuccess": "手动重连成功，计数已重置",
+    "reconnectFailed": "手动重连失败",
+    "reconnectError": "重连过程出错"
   }
 }

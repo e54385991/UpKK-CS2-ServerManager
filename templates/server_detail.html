@@ -46,6 +46,57 @@
         </div>
     </div>
 
+    <!-- SSH Connection Status -->
+    <div class="card mb-4" x-data="sshConnectionStatus()">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-3">
+                    <div>
+                        <h6 class="mb-1">
+                            <i class="bi bi-hdd-network"></i> 
+                            <span data-i18n="ssh.connectionStatus">SSH Connection Status</span>
+                        </h6>
+                    </div>
+                    <div class="d-flex gap-3">
+                        <div>
+                            <small class="text-muted d-block" data-i18n="ssh.status">Status</small>
+                            <span class="badge" :class="connectionInfo.connected ? 'bg-success' : 'bg-secondary'">
+                                <i class="bi" :class="connectionInfo.connected ? 'bi-check-circle' : 'bi-x-circle'"></i>
+                                <span x-text="connectionInfo.connected ? (window.i18n?.t('ssh.connected') || 'Connected') : (window.i18n?.t('ssh.disconnected') || 'Disconnected')"></span>
+                            </span>
+                        </div>
+                        <div x-show="connectionInfo.connected">
+                            <small class="text-muted d-block" data-i18n="ssh.connectionAge">Connection Age</small>
+                            <span x-text="formatDuration(connectionInfo.connection_age)"></span>
+                        </div>
+                        <div>
+                            <small class="text-muted d-block" data-i18n="ssh.reconnections">Reconnections</small>
+                            <span x-text="`${connectionInfo.reconnection_count}/${connectionInfo.max_reconnections}`"></span>
+                        </div>
+                        <div>
+                            <small class="text-muted d-block" data-i18n="ssh.pooling">Pooling</small>
+                            <span class="badge bg-info">
+                                <i class="bi bi-diagram-3"></i>
+                                <span x-text="connectionInfo.pooling_enabled ? (window.i18n?.t('ssh.enabled') || 'Enabled') : (window.i18n?.t('ssh.disabled') || 'Disabled')"></span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <button @click="refreshStatus()" class="btn btn-sm btn-outline-secondary me-2" :disabled="loading">
+                        <i class="bi" :class="loading ? 'bi-arrow-repeat spin' : 'bi-arrow-clockwise'"></i>
+                        <span data-i18n="common.refresh">Refresh</span>
+                    </button>
+                    <button @click="reconnectSSH()" class="btn btn-sm btn-warning" :disabled="reconnecting">
+                        <i class="bi" :class="reconnecting ? 'bi-arrow-repeat spin' : 'bi-arrow-repeat'"></i>
+                        <span x-show="!reconnecting" data-i18n="ssh.reconnect">Reconnect</span>
+                        <span x-show="reconnecting" data-i18n="ssh.reconnecting">Reconnecting...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Tabbed Interface -->
     <div class="card">
         <div class="card-header p-0">

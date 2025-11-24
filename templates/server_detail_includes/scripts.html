@@ -2220,4 +2220,101 @@
                 }
             };
         }
+
+        // SSH Connection Status Component
+        function sshConnectionStatus() {
+            return {
+                connectionInfo: {
+                    connected: false,
+                    created_at: null,
+                    last_used: null,
+                    connection_age: null,
+                    idle_time: null,
+                    in_use: false,
+                    reconnection_count: 0,
+                    max_reconnections: 5,
+                    pooling_enabled: true,
+                    connection_key: ''
+                },
+                loading: false,
+                reconnecting: false,
+
+                async init() {
+                    await this.refreshStatus();
+                    // Auto-refresh every 10 seconds
+                    setInterval(() => this.refreshStatus(), 10000);
+                },
+
+                async refreshStatus() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/ssh-connection-info`, {
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            }
+                        });
+
+                        if (response.ok) {
+                            this.connectionInfo = await response.json();
+                        } else {
+                            console.error('Failed to fetch SSH connection info');
+                        }
+                    } catch (error) {
+                        console.error('Error fetching SSH connection info:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async reconnectSSH() {
+                    this.reconnecting = true;
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/reconnect-ssh`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            showSuccess(
+                                result.message || (window.i18n?.t('ssh.reconnectSuccess') || '手动重连成功，计数已重置\nManual reconnection successful, counter reset')
+                            );
+                            // Refresh status after reconnection
+                            await this.refreshStatus();
+                        } else {
+                            const error = await response.json();
+                            showError(
+                                error.detail || (window.i18n?.t('ssh.reconnectFailed') || '手动重连失败\nManual reconnection failed')
+                            );
+                        }
+                    } catch (error) {
+                        console.error('Error during manual reconnection:', error);
+                        showError(
+                            window.i18n?.t('ssh.reconnectError') || '重连过程出错\nError during reconnection: ' + error.message
+                        );
+                    } finally {
+                        this.reconnecting = false;
+                    }
+                },
+
+                formatDuration(seconds) {
+                    if (!seconds) return '-';
+                    
+                    const hours = Math.floor(seconds / 3600);
+                    const minutes = Math.floor((seconds % 3600) / 60);
+                    const secs = Math.floor(seconds % 60);
+                    
+                    if (hours > 0) {
+                        return `${hours}h ${minutes}m`;
+                    } else if (minutes > 0) {
+                        return `${minutes}m ${secs}s`;
+                    } else {
+                        return `${secs}s`;
+                    }
+                }
+            };
+        }
     </script>

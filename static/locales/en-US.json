@@ -734,5 +734,21 @@
     "installCSS": "Install CounterStrikeSharp?\n\n(Write server plugins in C#. Requires Metamod)",
     "file": "file",
     "folder": "folder"
+  },
+  "ssh": {
+    "connectionStatus": "SSH Connection Status",
+    "status": "Status",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connectionAge": "Connection Age",
+    "reconnections": "Reconnections",
+    "pooling": "Pooling",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "reconnect": "Reconnect",
+    "reconnecting": "Reconnecting...",
+    "reconnectSuccess": "Manual reconnection successful, counter reset",
+    "reconnectFailed": "Manual reconnection failed",
+    "reconnectError": "Error during reconnection"
   }
 }

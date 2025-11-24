@@ -5,7 +5,7 @@ Optimizes SSH operations by sharing connections for the same host
 import asyncssh
 import asyncio
 import time
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List
 from datetime import datetime, timedelta
 from modules.models import Server, AuthType
 import logging
@@ -46,6 +46,7 @@ class PooledConnection:
         self.created_at = time.time()
         self.last_used = time.time()
         self.in_use_count = 0
+        self.reconnection_attempts: List[float] = []  # Timestamps of reconnection attempts
     
     def is_alive(self) -> bool:
         """Check if connection is still alive"""
@@ -93,6 +94,7 @@ class SSHConnectionPool:
     - Automatic connection health checking
     - Configurable idle timeout and max lifetime
     - Thread-safe connection management
+    - Automatic reconnection with rate limiting
     """
     
     # Singleton instance
@@ -109,7 +111,8 @@ class SSHConnectionPool:
     def __init__(self, 
                  idle_timeout: int = 300,  # 5 minutes
                  max_lifetime: int = 3600,  # 1 hour
-                 cleanup_interval: int = 60):  # 1 minute
+                 cleanup_interval: int = 60,  # 1 minute
+                 max_reconnections_per_hour: int = 3):  # Max reconnections per hour
         """
         Initialize connection pool
         
@@ -117,6 +120,7 @@ class SSHConnectionPool:
             idle_timeout: Close connections idle for this many seconds
             max_lifetime: Close connections older than this many seconds
             cleanup_interval: Run cleanup every N seconds
+            max_reconnections_per_hour: Maximum reconnection attempts per hour per connection
         """
         if self._initialized:
             return
@@ -125,6 +129,7 @@ class SSHConnectionPool:
         self.idle_timeout = idle_timeout
         self.max_lifetime = max_lifetime
         self.cleanup_interval = cleanup_interval
+        self.max_reconnections_per_hour = max_reconnections_per_hour
         
         # Connection storage: ConnectionKey -> PooledConnection
         self.connections: Dict[ConnectionKey, PooledConnection] = {}
@@ -135,7 +140,8 @@ class SSHConnectionPool:
         
         logger.info(
             f"SSH Connection Pool initialized: "
-            f"idle_timeout={idle_timeout}s, max_lifetime={max_lifetime}s"
+            f"idle_timeout={idle_timeout}s, max_lifetime={max_lifetime}s, "
+            f"max_reconnections_per_hour={max_reconnections_per_hour}"
         )
     
     async def start_cleanup(self):
@@ -221,6 +227,52 @@ class SSHConnectionPool:
             auth_type=server.auth_type
         )
     
+    def _can_reconnect(self, pooled_conn: PooledConnection) -> Tuple[bool, str]:
+        """
+        Check if reconnection is allowed based on rate limiting
+        
+        The time window is based on the connection pool's max_lifetime setting,
+        not a fixed 1 hour period.
+        
+        Args:
+            pooled_conn: The pooled connection to check
+        
+        Returns:
+            Tuple[bool, str]: (can_reconnect, message)
+        """
+        now = time.time()
+        window_start = now - self.max_lifetime
+        
+        # Clean up old reconnection attempts (older than max_lifetime window)
+        pooled_conn.reconnection_attempts = [
+            ts for ts in pooled_conn.reconnection_attempts if ts > window_start
+        ]
+        
+        # Check if we've exceeded the limit
+        if len(pooled_conn.reconnection_attempts) >= self.max_reconnections_per_hour:
+            oldest_attempt = min(pooled_conn.reconnection_attempts)
+            time_until_reset = int(oldest_attempt + self.max_lifetime - now)
+            window_minutes = int(self.max_lifetime / 60)
+            return False, (
+                f"已达到重连次数上限 ({self.max_reconnections_per_hour}次/{window_minutes}分钟)，"
+                f"请等待 {time_until_reset} 秒后重试 | "
+                f"Reconnection limit reached ({self.max_reconnections_per_hour}/{window_minutes} minutes), "
+                f"please wait {time_until_reset} seconds"
+            )
+        
+        return True, ""
+    
+    def _record_reconnection(self, pooled_conn: PooledConnection):
+        """Record a reconnection attempt"""
+        now = time.time()
+        pooled_conn.reconnection_attempts.append(now)
+        
+        window_minutes = int(self.max_lifetime / 60)
+        logger.info(
+            f"[SSH Pool] Reconnection recorded for {pooled_conn.key}. "
+            f"Total attempts in last {window_minutes} minutes: {len(pooled_conn.reconnection_attempts)}/{self.max_reconnections_per_hour}"
+        )
+    
     async def get_connection(self, server: Server) -> Tuple[bool, Optional[asyncssh.SSHClientConnection], str]:
         """
         Get or create a connection for the server
@@ -293,6 +345,189 @@ class SSHConnectionPool:
             except Exception as e:
                 return False, None, f"Connection error: {str(e)}"
     
+    async def reconnect(self, server: Server) -> Tuple[bool, Optional[asyncssh.SSHClientConnection], str]:
+        """
+        Force reconnection for a server (close existing and create new)
+        
+        This method is used when SSH operations fail due to stale connections.
+        It includes rate limiting to prevent infinite reconnection loops.
+        
+        Args:
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, Optional[connection], str]: (success, connection, message)
+        """
+        key = self._create_connection_key(server)
+        
+        async with self.pool_lock:
+            # Check if we have an existing connection
+            pooled_conn = self.connections.get(key)
+            
+            # Preserve reconnection history for rate limiting
+            reconnection_attempts = []
+            if pooled_conn:
+                reconnection_attempts = pooled_conn.reconnection_attempts.copy()
+                
+                # Check rate limiting using existing history
+                can_reconnect, limit_msg = self._can_reconnect(pooled_conn)
+                if not can_reconnect:
+                    logger.warning(f"[SSH Pool] Reconnection rate limit exceeded for {key}")
+                    return False, None, limit_msg
+                
+                # Close the existing connection
+                logger.info(f"[SSH Pool] Closing stale connection for reconnection: {key}")
+                await pooled_conn.close()
+                del self.connections[key]
+            else:
+                # No existing connection, check if we should create new tracking
+                logger.info(f"[SSH Pool] No existing connection to close, creating new one: {key}")
+            
+            # Create new connection
+            try:
+                logger.info(f"[SSH Pool] Creating new SSH connection after reconnect: {key}")
+                
+                if server.auth_type == AuthType.PASSWORD:
+                    conn = await asyncssh.connect(
+                        host=server.host,
+                        port=server.ssh_port,
+                        username=server.ssh_user,
+                        password=server.ssh_password,
+                        known_hosts=None
+                    )
+                elif server.auth_type == AuthType.KEY_FILE:
+                    conn = await asyncssh.connect(
+                        host=server.host,
+                        port=server.ssh_port,
+                        username=server.ssh_user,
+                        client_keys=[server.ssh_key_path],
+                        known_hosts=None
+                    )
+                else:
+                    return False, None, f"Unsupported auth type: {server.auth_type}"
+                
+                # Store in pool with preserved reconnection history
+                new_pooled_conn = PooledConnection(conn, key)
+                new_pooled_conn.reconnection_attempts = reconnection_attempts
+                # Record this reconnection attempt AFTER creating the connection
+                self._record_reconnection(new_pooled_conn)
+                new_pooled_conn.acquire()
+                self.connections[key] = new_pooled_conn
+                
+                logger.info(
+                    f"[SSH Pool] ✓ Reconnection successful: {key}. "
+                    f"Total connections: {len(self.connections)}"
+                )
+                
+                return True, conn, "Reconnected successfully"
+                
+            except asyncssh.PermissionDenied:
+                logger.error(f"[SSH Pool] ✗ Reconnection failed: Authentication failed for {key}")
+                return False, None, "Authentication failed"
+            except asyncssh.Error as e:
+                logger.error(f"[SSH Pool] ✗ Reconnection failed: SSH error for {key}: {str(e)}")
+                return False, None, f"SSH error: {str(e)}"
+            except Exception as e:
+                logger.error(f"[SSH Pool] ✗ Reconnection failed: Connection error for {key}: {str(e)}")
+                return False, None, f"Connection error: {str(e)}"
+    
+    async def manual_reconnect(self, server: Server) -> Tuple[bool, Optional[asyncssh.SSHClientConnection], str]:
+        """
+        Manually force reconnection for a server without rate limiting.
+        This is used for user-initiated reconnection from WebUI.
+        Resets the reconnection counter after successful connection.
+        
+        Args:
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, Optional[connection], str]: (success, connection, message)
+        """
+        key = self._create_connection_key(server)
+        
+        async with self.pool_lock:
+            # Check if we have an existing connection
+            pooled_conn = self.connections.get(key)
+            
+            if pooled_conn:
+                # Close the existing connection
+                logger.info(f"[SSH Pool] Manual reconnection: Closing existing connection for {key}")
+                await pooled_conn.close()
+                del self.connections[key]
+            else:
+                logger.info(f"[SSH Pool] Manual reconnection: No existing connection to close for {key}")
+            
+            # Create new connection
+            try:
+                logger.info(f"[SSH Pool] Manual reconnection: Creating new SSH connection: {key}")
+                
+                if server.auth_type == AuthType.PASSWORD:
+                    conn = await asyncssh.connect(
+                        host=server.host,
+                        port=server.ssh_port,
+                        username=server.ssh_user,
+                        password=server.ssh_password,
+                        known_hosts=None
+                    )
+                elif server.auth_type == AuthType.KEY_FILE:
+                    conn = await asyncssh.connect(
+                        host=server.host,
+                        port=server.ssh_port,
+                        username=server.ssh_user,
+                        client_keys=[server.ssh_key_path],
+                        known_hosts=None
+                    )
+                else:
+                    return False, None, f"Unsupported auth type: {server.auth_type}"
+                
+                # Store in pool with EMPTY reconnection history (reset counter)
+                new_pooled_conn = PooledConnection(conn, key)
+                new_pooled_conn.reconnection_attempts = []  # Reset to zero
+                new_pooled_conn.acquire()
+                self.connections[key] = new_pooled_conn
+                
+                logger.info(
+                    f"[SSH Pool] ✓ Manual reconnection successful: {key}. "
+                    f"Reconnection counter reset to 0. "
+                    f"Total connections: {len(self.connections)}"
+                )
+                
+                return True, conn, "手动重连成功，计数已重置 | Manual reconnection successful, counter reset"
+                
+            except asyncssh.PermissionDenied:
+                logger.error(f"[SSH Pool] ✗ Manual reconnection failed: Authentication failed for {key}")
+                return False, None, "认证失败 | Authentication failed"
+            except asyncssh.Error as e:
+                logger.error(f"[SSH Pool] ✗ Manual reconnection failed: SSH error for {key}: {str(e)}")
+                return False, None, f"SSH错误 | SSH error: {str(e)}"
+            except Exception as e:
+                logger.error(f"[SSH Pool] ✗ Manual reconnection failed: Connection error for {key}: {str(e)}")
+                return False, None, f"连接错误 | Connection error: {str(e)}"
+    
+    async def reset_reconnection_counter(self, server: Server) -> Tuple[bool, str]:
+        """
+        Reset the reconnection counter for a server without reconnecting.
+        
+        Args:
+            server: Server instance
+        
+        Returns:
+            Tuple[bool, str]: (success, message)
+        """
+        key = self._create_connection_key(server)
+        
+        async with self.pool_lock:
+            pooled_conn = self.connections.get(key)
+            
+            if pooled_conn:
+                old_count = len(pooled_conn.reconnection_attempts)
+                pooled_conn.reconnection_attempts = []
+                logger.info(f"[SSH Pool] Reset reconnection counter for {key}: {old_count} -> 0")
+                return True, f"重连计数已重置 (从 {old_count} 重置为 0) | Reconnection counter reset (from {old_count} to 0)"
+            else:
+                logger.info(f"[SSH Pool] No connection found for {key}, nothing to reset")
+                return True, "无活动连接，无需重置 | No active connection, nothing to reset"
+    
     async def release_connection(self, server: Server):
         """
         Release a connection back to the pool
@@ -349,6 +584,55 @@ class SSHConnectionPool:
                 'idle_timeout': self.idle_timeout,
                 'max_lifetime': self.max_lifetime
             }
+    
+    async def get_connection_info(self, server: Server) -> dict:
+        """
+        Get connection information for a specific server
+        
+        Args:
+            server: Server instance
+        
+        Returns:
+            dict: Connection information including status, time, reconnection count
+        """
+        key = self._create_connection_key(server)
+        
+        async with self.pool_lock:
+            if key in self.connections:
+                pooled_conn = self.connections[key]
+                now = time.time()
+                window_start = now - self.max_lifetime
+                
+                # Count recent reconnection attempts
+                recent_reconnections = [
+                    ts for ts in pooled_conn.reconnection_attempts if ts > window_start
+                ]
+                
+                return {
+                    'connected': pooled_conn.is_alive(),
+                    'created_at': pooled_conn.created_at,
+                    'last_used': pooled_conn.last_used,
+                    'connection_age': now - pooled_conn.created_at,
+                    'idle_time': now - pooled_conn.last_used,
+                    'in_use': pooled_conn.in_use_count > 0,
+                    'reconnection_count': len(recent_reconnections),
+                    'max_reconnections': self.max_reconnections_per_hour,
+                    'pooling_enabled': True,
+                    'connection_key': str(key)
+                }
+            else:
+                return {
+                    'connected': False,
+                    'created_at': None,
+                    'last_used': None,
+                    'connection_age': None,
+                    'idle_time': None,
+                    'in_use': False,
+                    'reconnection_count': 0,
+                    'max_reconnections': self.max_reconnections_per_hour,
+                    'pooling_enabled': True,
+                    'connection_key': str(key)
+                }
 
 
 # Global connection pool instance

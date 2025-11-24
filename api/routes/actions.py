@@ -941,3 +941,120 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
     except WebSocketDisconnect:
         pass
 
+
+
+@router.get("/servers/{server_id}/ssh-connection-info")
+async def get_ssh_connection_info(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get SSH connection information for a server.
+    Returns connection status, age, reconnection count, and pooling status.
+    """
+    # Get server and verify ownership
+    result = await db.execute(select(Server).filter(Server.id == server_id))
+    server = result.scalar_one_or_none()
+    
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server with ID {server_id} not found"
+        )
+    
+    if server.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this server"
+        )
+    
+    # Get connection info from pool
+    from services.ssh_connection_pool import ssh_connection_pool
+    
+    connection_info = await ssh_connection_pool.get_connection_info(server)
+    
+    return connection_info
+
+
+@router.post("/servers/{server_id}/reconnect-ssh")
+async def reconnect_ssh(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Manually reconnect SSH connection for a server.
+    This bypasses rate limiting and resets the reconnection counter.
+    """
+    # Get server and verify ownership
+    result = await db.execute(select(Server).filter(Server.id == server_id))
+    server = result.scalar_one_or_none()
+    
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server with ID {server_id} not found"
+        )
+    
+    if server.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this server"
+        )
+    
+    # Perform manual reconnection through pool
+    from services.ssh_connection_pool import ssh_connection_pool
+    
+    try:
+        await ssh_connection_pool.manual_reconnect(server)
+        return {
+            "success": True,
+            "message": "手动重连成功，计数已重置 | Manual reconnection successful, counter reset"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reconnect: {str(e)}"
+        )
+
+
+@router.post("/servers/{server_id}/reset-reconnect-counter")
+async def reset_reconnect_counter(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Reset the reconnection counter for a server without reconnecting.
+    """
+    # Get server and verify ownership
+    result = await db.execute(select(Server).filter(Server.id == server_id))
+    server = result.scalar_one_or_none()
+    
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server with ID {server_id} not found"
+        )
+    
+    if server.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this server"
+        )
+    
+    # Reset counter through pool
+    from services.ssh_connection_pool import ssh_connection_pool
+    
+    try:
+        await ssh_connection_pool.reset_reconnection_counter(server)
+        return {
+            "success": True,
+            "message": "重连计数已重置 | Reconnection counter reset"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset counter: {str(e)}"
+        )
