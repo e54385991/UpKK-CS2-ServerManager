@@ -6,6 +6,7 @@ from .models import Base, Server, DeploymentLog, MonitoringLog, ServerStatus, Au
 from .schemas import (
     ServerCreate, ServerUpdate, ServerResponse,
     ServerAction, ActionResponse, DeploymentLogResponse,
+    BatchActionRequest, BatchActionResponse, BatchInstallPluginsRequest,
     UserCreate, UserLogin, UserResponse, Token, TokenData,
     PasswordReset, UserProfileUpdate,
     ApiKeyResponse, ApiKeyGenerate,
@@ -40,6 +41,9 @@ __all__ = [
     'ServerAction',
     'ActionResponse',
     'DeploymentLogResponse',
+    'BatchActionRequest',
+    'BatchActionResponse',
+    'BatchInstallPluginsRequest',
     'UserCreate',
     'UserLogin',
     'UserResponse',

@@ -146,6 +146,38 @@ async def list_servers(
     return servers
 
 
+@router.get("/disk-space-all")
+async def get_all_servers_disk_space(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get cached disk space information for all servers owned by current user.
+    Returns cached data only - does not trigger new SSH connections.
+    
+    NOTE: This route MUST be defined before /{server_id} routes
+    to avoid path parameter matching conflicts.
+    """
+    from services.system_info_helper import system_info_helper
+    
+    # Get all servers for current user
+    result = await db.execute(
+        select(Server).filter(Server.user_id == current_user.id)
+    )
+    servers = result.scalars().all()
+    
+    # Get disk space for all servers (from cache only)
+    disk_space_map = await system_info_helper.get_all_servers_disk_space(servers, force_refresh=False)
+    
+    # Convert to string keys for JSON
+    response = {str(k): v for k, v in disk_space_map.items()}
+    
+    return {
+        "servers": response,
+        "timestamp": get_current_time().isoformat()
+    }
+
+
 @router.get("/{server_id}", response_model=ServerResponse)
 async def get_server(
     server_id: int,
@@ -569,35 +601,6 @@ async def get_server_disk_space(
             "message": "Failed to retrieve disk space information",
             "server_directory": server.game_directory
         }
-
-
-@router.get("/disk-space-all", dependencies=[])
-async def get_all_servers_disk_space(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """
-    Get cached disk space information for all servers owned by current user.
-    Returns cached data only - does not trigger new SSH connections.
-    """
-    from services.system_info_helper import system_info_helper
-    
-    # Get all servers for current user
-    result = await db.execute(
-        select(Server).filter(Server.user_id == current_user.id)
-    )
-    servers = result.scalars().all()
-    
-    # Get disk space for all servers (from cache only)
-    disk_space_map = await system_info_helper.get_all_servers_disk_space(servers, force_refresh=False)
-    
-    # Convert to string keys for JSON
-    response = {str(k): v for k, v in disk_space_map.items()}
-    
-    return {
-        "servers": response,
-        "timestamp": get_current_time().isoformat()
-    }
 
 
 @router.get("/{server_id}/check-deployment")

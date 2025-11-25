@@ -139,7 +139,13 @@
       "restart": "重启",
       "stop": "停止",
       "update": "更新",
-      "installPlugins": "安装插件"
+      "installPlugins": "安装插件",
+      "started": "正在对 {count} 个服务器执行 {action} 操作，后台处理中...",
+      "pluginInstallStarted": "正在 {count} 个服务器上安装 {plugins}，后台处理中...",
+      "selectServer": "请至少选择一个服务器",
+      "completed": "{action} 完成: 成功 {succeeded} 个, 失败 {failed} 个",
+      "failedServersList": "失败服务器",
+      "dispatched": "命令已下发到 {count} 个服务器"
     },
     "loading": "加载服务器中...",
     "error": "加载服务器时出错",
@@ -188,6 +194,13 @@
     "ping": "延迟",
     "upToDate": "已是最新",
     "updateAvailable": "有可用更新",
+    "diskSpace": {
+      "title": "磁盘空间",
+      "directory": "目录占用",
+      "total": "磁盘总量",
+      "usage": "占用率",
+      "note": "占用率仅代表服务器目录，非磁盘实际使用"
+    },
     "addNewServer": "添加CS2服务器（确保已完成新服务器初始化）",
     "serverNameLabel": "服务器名称 *",
     "hostIP": "主机 IP *",
@@ -744,7 +757,11 @@
     "errorRenaming": "重命名错误",
     "errorDeleting": "删除错误",
     "errorCreatingServer": "创建服务器错误",
-    "deploymentInProgress": "服务器正在部署中，请查看控制台了解进度。"
+    "deploymentInProgress": "服务器正在部署中，请查看控制台了解进度。",
+    "startingBatchAction": "启动批量操作失败",
+    "installingPlugins": "安装插件失败",
+    "deletingServer": "删除服务器失败",
+    "loadingServerDetails": "加载服务器详情失败"
   },
   "confirmMessages": {
     "deleteServer": "确定要删除服务器 \"{serverName}\" 吗？",

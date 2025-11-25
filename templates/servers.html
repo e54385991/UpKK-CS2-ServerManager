@@ -205,19 +205,19 @@
                             <div class="mt-2 p-2 bg-light rounded">
                                 <div class="d-flex align-items-center mb-1">
                                     <i class="bi bi-hdd text-info me-2"></i>
-                                    <strong class="small">Disk Space</strong>
+                                    <strong class="small" data-i18n="servers.diskSpace.title">Disk Space</strong>
                                 </div>
                                 <ul class="list-unstyled small mb-0">
                                     <li>
-                                        <i class="bi bi-folder"></i> Directory: 
+                                        <i class="bi bi-folder"></i> <span data-i18n="servers.diskSpace.directory">Directory</span>: 
                                         <strong x-text="formatDiskSpace(getDiskSpace(server.id).used_gb)"></strong>
                                     </li>
                                     <li>
-                                        <i class="bi bi-device-hdd"></i> Total: 
+                                        <i class="bi bi-device-hdd"></i> <span data-i18n="servers.diskSpace.total">Total</span>: 
                                         <strong x-text="formatDiskSpace(getDiskSpace(server.id).total_gb)"></strong>
                                     </li>
                                     <li>
-                                        <i class="bi bi-pie-chart"></i> Usage: 
+                                        <i class="bi bi-pie-chart"></i> <span data-i18n="servers.diskSpace.usage">Usage</span>: 
                                         <strong>
                                             <span x-text="getDiskSpace(server.id).used_percent + '%'"></span>
                                         </strong>
@@ -233,6 +233,7 @@
                                         </div>
                                     </li>
                                 </ul>
+                                <small class="text-muted" style="font-size: 0.75em;" data-i18n="servers.diskSpace.note">Usage represents server directory only, not total disk</small>
                             </div>
                         </template>
                         
@@ -375,12 +376,65 @@
         </div>
     </div>
 </div>
+
+<!-- Toast Notification Container -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+    <div id="batchActionToast" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="bi bi-check-circle me-2"></i>
+                <span id="batchActionToastMessage"></span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// Toast notification helper function
+function showBatchActionToast(message, type = 'success') {
+    const toastEl = document.getElementById('batchActionToast');
+    const toastMessage = document.getElementById('batchActionToastMessage');
+    
+    if (!toastEl || !toastMessage) return;
+    
+    // Set message
+    toastMessage.textContent = message;
+    
+    // Set color based on type
+    toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-info');
+    const bgClass = type === 'error' ? 'bg-danger' : 
+                   type === 'warning' ? 'bg-warning' : 
+                   type === 'info' ? 'bg-info' : 'bg-success';
+    toastEl.classList.add(bgClass);
+    
+    // Update icon
+    const iconEl = toastEl.querySelector('.bi');
+    if (iconEl) {
+        iconEl.classList.remove('bi-check-circle', 'bi-x-circle', 'bi-exclamation-triangle', 'bi-info-circle');
+        const iconClass = type === 'error' ? 'bi-x-circle' : 
+                         type === 'warning' ? 'bi-exclamation-triangle' : 
+                         type === 'info' ? 'bi-info-circle' : 'bi-check-circle';
+        iconEl.classList.add(iconClass);
+    }
+    
+    // Get or create Bootstrap Toast instance
+    let toast = bootstrap.Toast.getInstance(toastEl);
+    if (!toast) {
+        toast = new bootstrap.Toast(toastEl, {
+            autohide: true,
+            delay: 3000
+        });
+    }
+    
+    // Show toast
+    toast.show();
+}
+
 function serverManager() {
-    // Constants
+    // Constants for A2S polling
     const AGGRESSIVE_POLL_INTERVAL_MS = 3000;  // 3 seconds
     const NORMAL_POLL_INTERVAL_MS = 30000;  // 30 seconds
     const DISK_SPACE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;  // 6 hours
@@ -606,7 +660,8 @@ function serverManager() {
         
         async bulkAction(action) {
             if (this.selectedServers.length === 0) {
-                showWarning('Please select at least one server');
+                const selectServerMsg = window.i18n?.t('servers.bulkActions.selectServer') || 'Please select at least one server';
+                showWarning(selectServerMsg);
                 return;
             }
             
@@ -630,46 +685,109 @@ function serverManager() {
             this.bulkProgress = 0;
             
             const total = this.selectedServers.length;
-            let completed = 0;
-            let succeeded = 0;
-            let failed = 0;
             
-            for (const serverId of this.selectedServers) {
-                try {
-                    const response = await authFetch(`/servers/${serverId}/actions`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ action: action })
-                    });
-                    
-                    if (response.ok) {
-                        succeeded++;
-                    } else {
-                        failed++;
-                    }
-                } catch (err) {
-                    failed++;
+            try {
+                // Use the new async batch-actions endpoint - returns immediately
+                const response = await authFetch('/servers/batch-actions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        server_ids: this.selectedServers,
+                        action: action
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to start batch action');
                 }
                 
-                completed++;
-                this.bulkProgress = Math.round((completed / total) * 100);
+                const result = await response.json();
+                const batchId = result.batch_id;
+                
+                // Show dispatch notification as toast - command has been sent
+                const dispatchMsg = window.i18n?.t('servers.batchActions.dispatched', {
+                    count: total
+                }) || `Command dispatched to ${total} server(s)`;
+                showBatchActionToast(dispatchMsg, 'success');
+                
+                // Clear selection immediately - UI is not blocked
+                this.clearSelection();
+                
+                // Poll for completion and show final result
+                this.pollBatchActionResult(batchId, actionName);
+                
+            } catch (err) {
+                const errorPrefix = window.i18n?.t('errors.startingBatchAction') || 'Error starting batch action';
+                showError(errorPrefix + ': ' + err.message);
+            } finally {
+                this.bulkActionRunning = false;
+                this.bulkProgress = 0;
             }
+        },
+        
+        async pollBatchActionResult(batchId, actionName) {
+            const maxPolls = 60; // Max 2 minutes (60 * 2s)
+            const pollInterval = 2000; // 2 seconds
+            let pollCount = 0;
             
-            this.bulkActionRunning = false;
-            this.bulkProgress = 0;
+            const poll = async () => {
+                try {
+                    const response = await authFetch(`/servers/batch-actions/${batchId}`);
+                    if (!response.ok) {
+                        console.error('Failed to fetch batch action status');
+                        return;
+                    }
+                    
+                    const status = await response.json();
+                    const summary = status.summary;
+                    
+                    if (!summary.is_complete && pollCount < maxPolls) {
+                        pollCount++;
+                        setTimeout(poll, pollInterval);
+                    } else {
+                        // Show final result as toast
+                        const failedServers = Object.entries(status.servers)
+                            .filter(([_, s]) => s.status === 'failed')
+                            .map(([id, s]) => {
+                                const server = this.servers.find(srv => srv.id == id);
+                                return server ? server.name : `Server ${id}`;
+                            });
+                        
+                        let resultMsg = window.i18n?.t('servers.batchActions.completed', {
+                            action: actionName,
+                            succeeded: summary.succeeded,
+                            failed: summary.failed
+                        }) || `${actionName} completed: ${summary.succeeded} succeeded, ${summary.failed} failed`;
+                        
+                        if (failedServers.length > 0) {
+                            const failedListLabel = window.i18n?.t('servers.batchActions.failedServersList') || 'Failed servers';
+                            resultMsg += ` | ${failedListLabel}: ${failedServers.join(', ')}`;
+                        }
+                        
+                        if (summary.failed > 0) {
+                            showBatchActionToast(resultMsg, 'warning');
+                        } else {
+                            showBatchActionToast(resultMsg, 'success');
+                        }
+                        
+                        // Reload servers to get updated status
+                        await this.loadServers();
+                    }
+                } catch (err) {
+                    console.error('Error polling batch action status:', err);
+                }
+            };
             
-            showInfo(`Bulk ${actionName} completed:\n✓ ${succeeded} succeeded\n✗ ${failed} failed`);
-            
-            // Reload servers to get updated status
-            await this.loadServers();
-            this.clearSelection();
+            setTimeout(poll, pollInterval);
         },
         
         async bulkInstallPlugins() {
             if (this.selectedServers.length === 0) {
-                showWarning('Please select at least one server');
+                const selectServerMsg = window.i18n?.t('servers.bulkActions.selectServer') || 'Please select at least one server';
+                showWarning(selectServerMsg);
                 return;
             }
             
@@ -680,8 +798,12 @@ function serverManager() {
             }
             
             // Confirm installation
+            const confirmMsg = window.i18n?.t('confirmMessages.install', {
+                plugins: pluginSelection.join(', '),
+                count: this.selectedServers.length
+            }) || `Install ${pluginSelection.join(', ')} on ${this.selectedServers.length} server(s)?`;
             showConfirm(
-                `Install ${pluginSelection.join(', ')} on ${this.selectedServers.length} server(s)?`,
+                confirmMsg,
                 () => { this.executeBulkInstallPlugins(pluginSelection); },
                 null
             );
@@ -691,12 +813,10 @@ function serverManager() {
             this.bulkActionRunning = true;
             this.bulkProgress = 0;
             
-            // Show progress modal or notification
-            const totalSteps = this.selectedServers.length * pluginSelection.length;
-            let completedSteps = 0;
-            let progressLog = `Starting installation of ${pluginSelection.join(', ')} on ${this.selectedServers.length} server(s)...\n\n`;
+            const total = this.selectedServers.length;
             
             try {
+                // Use the new async batch-install-plugins endpoint - returns immediately
                 const response = await authFetch('/servers/batch-install-plugins', {
                     method: 'POST',
                     headers: {
@@ -708,51 +828,25 @@ function serverManager() {
                     })
                 });
                 
-                const result = await response.json();
-                
-                // Build detailed progress log
-                progressLog += 'Installation completed!\n\n';
-                progressLog += '='.repeat(60) + '\n';
-                progressLog += 'RESULTS:\n';
-                progressLog += '='.repeat(60) + '\n\n';
-                
-                let totalSuccess = 0;
-                let totalFailed = 0;
-                
-                for (const [serverId, serverResult] of Object.entries(result.servers)) {
-                    const server = this.servers.find(s => s.id == serverId);
-                    const serverName = server ? server.name : `Server ${serverId}`;
-                    
-                    progressLog += `📦 ${serverName}\n`;
-                    progressLog += '-'.repeat(60) + '\n';
-                    
-                    if (serverResult.results) {
-                        serverResult.results.forEach(r => {
-                            const status = r.success ? '✓ SUCCESS' : '✗ FAILED';
-                            const icon = r.success ? '✓' : '✗';
-                            progressLog += `  ${icon} ${r.plugin}: ${status}\n`;
-                            if (r.message) {
-                                progressLog += `     ${r.message}\n`;
-                            }
-                            if (r.success) {
-                                totalSuccess++;
-                            } else {
-                                totalFailed++;
-                            }
-                        });
-                    } else {
-                        const status = serverResult.success ? '✓ SUCCESS' : '✗ FAILED';
-                        progressLog += `  ${status}: ${serverResult.message || 'No details'}\n`;
-                    }
-                    progressLog += '\n';
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to start plugin installation');
                 }
                 
-                progressLog += '='.repeat(60) + '\n';
-                progressLog += `SUMMARY: ${totalSuccess} succeeded, ${totalFailed} failed\n`;
-                progressLog += '='.repeat(60) + '\n';
+                const result = await response.json();
+                const batchId = result.batch_id;
                 
-                // Show results as plain text (will be safely converted to HTML in dialog manager)
-                showInfo(progressLog);
+                // Show dispatch notification as toast - command has been sent
+                const dispatchMsg = window.i18n?.t('servers.batchActions.dispatched', {
+                    count: total
+                }) || `Command dispatched to ${total} server(s)`;
+                showBatchActionToast(dispatchMsg, 'success');
+                
+                // Clear selection immediately - UI is not blocked
+                this.clearSelection();
+                
+                // Poll for completion and show final result
+                this.pollBatchActionResult(batchId, window.i18n?.t('servers.batchActions.installPlugins') || 'Install Plugins');
                 
             } catch (err) {
                 let errorMsg = 'Unknown error';
@@ -763,12 +857,11 @@ function serverManager() {
                 } else {
                     errorMsg = String(err);
                 }
-                showError('Error installing plugins: ' + errorMsg);
+                const errorPrefix = window.i18n?.t('errors.installingPlugins') || 'Error installing plugins';
+                showError(errorPrefix + ': ' + errorMsg);
             } finally {
                 this.bulkActionRunning = false;
                 this.bulkProgress = 0;
-                await this.loadServers();
-                this.clearSelection();
             }
         },
         
@@ -828,7 +921,8 @@ function serverManager() {
                         if (!response.ok) throw new Error('Failed to delete server');
                         await this.loadServers();
                     } catch (err) {
-                        showError('Error deleting server: ' + err.message);
+                        const errorPrefix = window.i18n?.t('errors.deletingServer') || 'Error deleting server';
+                        showError(errorPrefix + ': ' + err.message);
                     }
                 },
                 null
@@ -1015,7 +1109,8 @@ async function fillFromInitializedServer(serverKey) {
         document.getElementById('gameDirectory').value = server.game_directory;
     } catch (error) {
         console.error('Error filling server details:', error);
-        showError('Error loading server details: ' + error.message);
+        const errorPrefix = window.i18n?.t('errors.loadingServerDetails') || 'Error loading server details';
+        showError(errorPrefix + ': ' + error.message);
     }
 }
 </script>

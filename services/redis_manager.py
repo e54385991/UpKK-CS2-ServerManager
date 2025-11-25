@@ -209,6 +209,63 @@ class RedisManager:
         """
         key = f"deployment_progress:{server_id}"
         return await self.delete(key)
+    
+    # Batch action methods
+    async def set_batch_action_status(self, batch_id: str, server_id: int, status: str, message: str = "", expire: int = 3600) -> bool:
+        """
+        Set status for a server in a batch action
+        
+        Args:
+            batch_id: Unique batch action identifier
+            server_id: Server ID
+            status: Status (pending, in_progress, success, failed)
+            message: Optional status message
+            expire: TTL in seconds (default 1 hour)
+        
+        Returns:
+            bool: Success status
+        """
+        key = f"batch_action:{batch_id}:{server_id}"
+        try:
+            data = json.dumps({
+                "status": status,
+                "message": message,
+                "timestamp": time.time()
+            })
+            return await self.client.setex(key, expire, data)
+        except Exception as e:
+            print(f"Redis set batch action status error: {e}")
+            return False
+    
+    async def get_batch_action_status(self, batch_id: str) -> dict:
+        """
+        Get status for all servers in a batch action
+        
+        Uses SCAN instead of KEYS to avoid blocking Redis on large datasets.
+        
+        Args:
+            batch_id: Unique batch action identifier
+        
+        Returns:
+            dict: Dictionary of server_id -> status data
+        """
+        pattern = f"batch_action:{batch_id}:*"
+        try:
+            results = {}
+            cursor = 0
+            while True:
+                cursor, keys = await self.client.scan(cursor, match=pattern, count=100)
+                for key in keys:
+                    server_id = key.split(":")[-1]
+                    data = await self.get(key)
+                    if data:
+                        results[server_id] = data
+                if cursor == 0:
+                    break
+            return results
+        except Exception as e:
+            print(f"Redis get batch action status error: {e}")
+            return {}
 
 
 # Global Redis manager instance

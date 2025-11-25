@@ -2,23 +2,38 @@
 Server actions routes with WebSocket support for real-time deployment status
 """
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
+from typing import List, Set
 import asyncio
 import json
+import uuid
+import secrets
 
 from modules import (
     Server, DeploymentLog, ServerStatus,
     ServerAction, ActionResponse, DeploymentLogResponse,
+    BatchActionRequest, BatchActionResponse, BatchInstallPluginsRequest,
     get_db, User, get_current_active_user, get_current_time
 )
+from modules.database import async_session_maker
 from services import SSHManager, redis_manager
 
 router = APIRouter(tags=["actions"])
 
 # Constants
 DEPLOYMENT_PROGRESS_CLEANUP_DELAY = 300  # 5 minutes - allows clients to fetch final messages before cleanup
+
+# Store for background tasks to prevent garbage collection
+# Tasks are automatically removed when completed via callback
+_background_tasks: Set[asyncio.Task] = set()
+
+
+def _store_task(task: asyncio.Task) -> None:
+    """Store a task to prevent garbage collection and remove when done."""
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 class DeploymentWebSocket:
@@ -613,103 +628,355 @@ async def get_server_logs(
     return logs
 
 
-@router.post("/servers/batch-install-plugins")
-async def batch_install_plugins(
-    server_ids: List[int],
-    plugins: List[str],  # List of plugins: ["metamod", "counterstrikesharp"]
+async def execute_single_server_action(server_id: int, action: str, user_id: int, batch_id: str):
+    """
+    Execute an action on a single server in the background.
+    This function is designed to run as a background task.
+    
+    Args:
+        server_id: Server ID
+        action: Action to perform (restart, stop, update)
+        user_id: User ID for ownership verification
+        batch_id: Batch ID for tracking progress
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Update status to in_progress
+        await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Starting...")
+        
+        # Use a new database session for this background task
+        async with async_session_maker() as db:
+            # Get server
+            result = await db.execute(select(Server).filter(Server.id == server_id))
+            server = result.scalar_one_or_none()
+            
+            if not server:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
+                return
+            
+            # Check ownership
+            if server.user_id != user_id:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Not authorized")
+                return
+            
+            ssh_manager = SSHManager()
+            success = False
+            message = ""
+            
+            try:
+                if action == "restart":
+                    # Stop then start
+                    await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Stopping server...")
+                    stop_success, stop_msg = await ssh_manager.stop_server(server)
+                    
+                    # Add small delay
+                    await asyncio.sleep(0.5)
+                    
+                    await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Starting server...")
+                    success, message = await ssh_manager.start_server(server)
+                    
+                    if success:
+                        server.status = ServerStatus.RUNNING
+                    else:
+                        server.status = ServerStatus.ERROR
+                        
+                elif action == "stop":
+                    success, message = await ssh_manager.stop_server(server)
+                    if success:
+                        server.status = ServerStatus.STOPPED
+                    else:
+                        server.status = ServerStatus.ERROR
+                        
+                elif action == "update":
+                    await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Updating server...")
+                    success, message = await ssh_manager.update_server(server)
+                    if not success:
+                        server.status = ServerStatus.ERROR
+                
+                await db.commit()
+                
+                # Create deployment log
+                log = DeploymentLog(
+                    server_id=server_id,
+                    action=action,
+                    status="success" if success else "failed",
+                    output=message if success else None,
+                    error_message=message if not success else None
+                )
+                db.add(log)
+                await db.commit()
+                
+                # Update final status
+                if success:
+                    await redis_manager.set_batch_action_status(batch_id, server_id, "success", message)
+                else:
+                    await redis_manager.set_batch_action_status(batch_id, server_id, "failed", message)
+                    
+            except Exception as e:
+                logger.error(f"Error executing action {action} on server {server_id}: {e}")
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(e))
+                
+    except Exception as e:
+        logger.error(f"Background task error for server {server_id}: {e}")
+        await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(e))
+
+
+@router.post("/servers/batch-actions", response_model=BatchActionResponse)
+async def batch_server_actions(
+    request: BatchActionRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Install plugins on multiple servers in batch
+    Execute an action on multiple servers asynchronously (non-blocking).
+    
+    This endpoint immediately returns after validating the request and spawning
+    background tasks for each server. The web UI will not block while waiting
+    for operations to complete.
+    
+    Use the batch_id returned to check progress via GET /servers/batch-actions/{batch_id}
     
     Args:
-        server_ids: List of server IDs to install plugins on
-        plugins: List of plugins to install (e.g., ["metamod", "counterstrikesharp"])
+        request: BatchActionRequest with server_ids and action
     
     Returns:
-        Results for each server
+        BatchActionResponse with batch_id for tracking progress
     """
-    results = {}
+    # Generate cryptographically secure batch ID (16 bytes = 32 hex chars)
+    batch_id = secrets.token_hex(16)
     
-    for server_id in server_ids:
-        # Get server
+    # Validate all servers exist and belong to current user
+    valid_server_ids = []
+    for server_id in request.server_ids:
         result = await db.execute(select(Server).filter(Server.id == server_id))
         server = result.scalar_one_or_none()
         
-        if not server:
-            results[server_id] = {
-                "success": False,
-                "message": f"Server with ID {server_id} not found"
-            }
-            continue
-        
-        # Check ownership
-        if server.user_id != current_user.id:
-            results[server_id] = {
-                "success": False,
-                "message": "Not authorized to perform actions on this server"
-            }
-            continue
-        
-        # Install each plugin
-        server_results = []
-        ssh_manager = SSHManager()
-        
-        for plugin in plugins:
-            # Create deployment log
-            log = DeploymentLog(
-                server_id=server_id,
-                action=f"install_{plugin}",
-                status="in_progress"
-            )
-            db.add(log)
-            await db.commit()
-            
-            try:
-                if plugin == "metamod":
-                    success, message = await ssh_manager.install_metamod(server)
-                elif plugin == "counterstrikesharp":
-                    success, message = await ssh_manager.install_counterstrikesharp(server)
-                elif plugin == "cs2fixes":
-                    success, message = await ssh_manager.install_cs2fixes(server)
-                else:
-                    success = False
-                    message = f"Unknown plugin: {plugin}"
-                
-                log.status = "success" if success else "failed"
-                if success:
-                    log.output = message
-                else:
-                    log.error_message = message
-                
-                await db.commit()
-                
-                server_results.append({
-                    "plugin": plugin,
-                    "success": success,
-                    "message": message
-                })
-            except Exception as e:
-                log.status = "failed"
-                log.error_message = str(e)
-                await db.commit()
-                
-                server_results.append({
-                    "plugin": plugin,
-                    "success": False,
-                    "message": str(e)
-                })
-        
-        results[server_id] = {
-            "success": all(r["success"] for r in server_results),
-            "results": server_results
-        }
+        if server and server.user_id == current_user.id:
+            valid_server_ids.append(server_id)
+            # Set initial status as pending
+            await redis_manager.set_batch_action_status(batch_id, server_id, "pending", "Queued for processing")
+    
+    if not valid_server_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid servers found in the request"
+        )
+    
+    # Spawn background tasks for each server - these run in parallel
+    # Tasks are stored to prevent garbage collection
+    for server_id in valid_server_ids:
+        task = asyncio.create_task(
+            execute_single_server_action(server_id, request.action, current_user.id, batch_id)
+        )
+        _store_task(task)
+    
+    return BatchActionResponse(
+        success=True,
+        message=f"Batch action '{request.action}' started for {len(valid_server_ids)} server(s)",
+        batch_id=batch_id,
+        server_count=len(valid_server_ids)
+    )
+
+
+@router.get("/servers/batch-actions/{batch_id}")
+async def get_batch_action_status(
+    batch_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get the status of a batch action.
+    
+    Args:
+        batch_id: The batch ID returned from the batch-actions endpoint
+    
+    Returns:
+        Status of each server in the batch
+    """
+    statuses = await redis_manager.get_batch_action_status(batch_id)
+    
+    if not statuses:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Batch action not found or expired"
+        )
+    
+    # Calculate summary
+    total = len(statuses)
+    completed = sum(1 for s in statuses.values() if s.get("status") in ["success", "failed"])
+    succeeded = sum(1 for s in statuses.values() if s.get("status") == "success")
+    failed = sum(1 for s in statuses.values() if s.get("status") == "failed")
+    in_progress = sum(1 for s in statuses.values() if s.get("status") in ["pending", "in_progress"])
     
     return {
-        "success": all(r["success"] for r in results.values()),
-        "servers": results
+        "batch_id": batch_id,
+        "servers": statuses,
+        "summary": {
+            "total": total,
+            "completed": completed,
+            "succeeded": succeeded,
+            "failed": failed,
+            "in_progress": in_progress,
+            "is_complete": completed == total
+        }
     }
+
+
+async def execute_single_server_plugins(server_id: int, plugins: List[str], user_id: int, batch_id: str):
+    """
+    Install plugins on a single server in the background.
+    This function is designed to run as a background task.
+    
+    Args:
+        server_id: Server ID
+        plugins: List of plugins to install
+        user_id: User ID for ownership verification
+        batch_id: Batch ID for tracking progress
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Update status to in_progress
+        await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Starting plugin installation...")
+        
+        # Use a new database session for this background task
+        async with async_session_maker() as db:
+            # Get server
+            result = await db.execute(select(Server).filter(Server.id == server_id))
+            server = result.scalar_one_or_none()
+            
+            if not server:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
+                return
+            
+            # Check ownership
+            if server.user_id != user_id:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Not authorized")
+                return
+            
+            ssh_manager = SSHManager()
+            plugin_results = []
+            
+            for plugin in plugins:
+                try:
+                    await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", f"Installing {plugin}...")
+                    
+                    # Create deployment log
+                    log = DeploymentLog(
+                        server_id=server_id,
+                        action=f"install_{plugin}",
+                        status="in_progress"
+                    )
+                    db.add(log)
+                    await db.commit()
+                    
+                    success = False
+                    message = ""
+                    
+                    if plugin == "metamod":
+                        success, message = await ssh_manager.install_metamod(server)
+                    elif plugin == "counterstrikesharp":
+                        success, message = await ssh_manager.install_counterstrikesharp(server)
+                    elif plugin == "cs2fixes":
+                        success, message = await ssh_manager.install_cs2fixes(server)
+                    else:
+                        success = False
+                        message = f"Unknown plugin: {plugin}"
+                    
+                    log.status = "success" if success else "failed"
+                    if success:
+                        log.output = message
+                    else:
+                        log.error_message = message
+                    
+                    await db.commit()
+                    
+                    plugin_results.append({
+                        "plugin": plugin,
+                        "success": success,
+                        "message": message
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error installing {plugin} on server {server_id}: {e}")
+                    plugin_results.append({
+                        "plugin": plugin,
+                        "success": False,
+                        "message": str(e)
+                    })
+            
+            # Determine overall success
+            overall_success = all(r["success"] for r in plugin_results)
+            summary = ", ".join([f"{r['plugin']}: {'✓' if r['success'] else '✗'}" for r in plugin_results])
+            
+            if overall_success:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "success", summary)
+            else:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", summary)
+                
+    except Exception as e:
+        logger.error(f"Background task error for server {server_id}: {e}")
+        await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(e))
+
+
+@router.post("/servers/batch-install-plugins", response_model=BatchActionResponse)
+async def batch_install_plugins(
+    request: BatchInstallPluginsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Install plugins on multiple servers asynchronously (non-blocking).
+    
+    This endpoint immediately returns after validating the request and spawning
+    background tasks for each server. The web UI will not block while waiting
+    for operations to complete.
+    
+    Use the batch_id returned to check progress via GET /servers/batch-actions/{batch_id}
+    
+    Args:
+        request: BatchInstallPluginsRequest with server_ids and plugins
+    
+    Returns:
+        BatchActionResponse with batch_id for tracking progress
+    """
+    # Generate cryptographically secure batch ID (16 bytes = 32 hex chars)
+    batch_id = secrets.token_hex(16)
+    
+    # Validate all servers exist and belong to current user
+    valid_server_ids = []
+    for server_id in request.server_ids:
+        result = await db.execute(select(Server).filter(Server.id == server_id))
+        server = result.scalar_one_or_none()
+        
+        if server and server.user_id == current_user.id:
+            valid_server_ids.append(server_id)
+            # Set initial status as pending
+            await redis_manager.set_batch_action_status(batch_id, server_id, "pending", "Queued for plugin installation")
+    
+    if not valid_server_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid servers found in the request"
+        )
+    
+    # Spawn background tasks for each server - these run in parallel
+    # Tasks are stored to prevent garbage collection
+    for server_id in valid_server_ids:
+        task = asyncio.create_task(
+            execute_single_server_plugins(server_id, request.plugins, current_user.id, batch_id)
+        )
+        _store_task(task)
+    
+    plugins_str = ", ".join(request.plugins)
+    return BatchActionResponse(
+        success=True,
+        message=f"Installing {plugins_str} on {len(valid_server_ids)} server(s) in background",
+        batch_id=batch_id,
+        server_count=len(valid_server_ids)
+    )
 
 
 @router.websocket("/servers/{server_id}/ssh-console")

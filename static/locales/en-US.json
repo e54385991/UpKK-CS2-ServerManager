@@ -139,7 +139,13 @@
       "restart": "Restart",
       "stop": "Stop",
       "update": "Update",
-      "installPlugins": "Install Plugins"
+      "installPlugins": "Install Plugins",
+      "started": "{action} started for {count} server(s). Processing in background...",
+      "pluginInstallStarted": "Installing {plugins} on {count} server(s). Processing in background...",
+      "selectServer": "Please select at least one server",
+      "completed": "{action} completed: {succeeded} succeeded, {failed} failed",
+      "failedServersList": "Failed servers",
+      "dispatched": "Command dispatched to {count} server(s)"
     },
     "loading": "Loading servers...",
     "error": "Error loading servers",
@@ -188,6 +194,13 @@
     "ping": "Ping",
     "upToDate": "Up to date",
     "updateAvailable": "Update available",
+    "diskSpace": {
+      "title": "Disk Space",
+      "directory": "Directory",
+      "total": "Total",
+      "usage": "Usage",
+      "note": "Usage represents server directory only, not total disk"
+    },
     "addNewServer": "Add CS2 Server (Ensure New Server Initialization Complete)",
     "serverNameLabel": "Server Name *",
     "hostIP": "Host IP *",
@@ -744,7 +757,11 @@
     "errorRenaming": "Error renaming",
     "errorDeleting": "Error deleting",
     "errorCreatingServer": "Error creating server",
-    "deploymentInProgress": "Server is currently being deployed. Please check the console for progress."
+    "deploymentInProgress": "Server is currently being deployed. Please check the console for progress.",
+    "startingBatchAction": "Error starting batch action",
+    "installingPlugins": "Error installing plugins",
+    "deletingServer": "Error deleting server",
+    "loadingServerDetails": "Error loading server details"
   },
   "confirmMessages": {
     "deleteServer": "Are you sure you want to delete server \"{serverName}\"?",

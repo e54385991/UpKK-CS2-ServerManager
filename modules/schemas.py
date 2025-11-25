@@ -372,6 +372,43 @@ class ServerAction(BaseModel):
     action: str = Field(..., pattern=SERVER_ACTION_PATTERN)
 
 
+# Batch actions constants - only allow safe batch actions
+ALLOWED_BATCH_ACTIONS = ["restart", "stop", "update"]
+BATCH_ACTION_PATTERN = f"^({'|'.join(ALLOWED_BATCH_ACTIONS)})$"
+
+# Allowed plugins for batch installation
+ALLOWED_PLUGINS = ["metamod", "counterstrikesharp", "cs2fixes"]
+
+
+class BatchActionRequest(BaseModel):
+    """Schema for batch server actions"""
+    server_ids: List[int] = Field(..., min_length=1, description="List of server IDs to perform action on")
+    action: str = Field(..., pattern=BATCH_ACTION_PATTERN, description="Action to perform on all servers")
+
+
+class BatchInstallPluginsRequest(BaseModel):
+    """Schema for batch plugin installation"""
+    server_ids: List[int] = Field(..., min_length=1, description="List of server IDs to install plugins on")
+    plugins: List[str] = Field(..., min_length=1, description="List of plugins to install")
+    
+    @field_validator('plugins')
+    @classmethod
+    def validate_plugins(cls, v):
+        """Validate plugin names"""
+        for plugin in v:
+            if plugin not in ALLOWED_PLUGINS:
+                raise ValueError(f'Invalid plugin: {plugin}. Allowed plugins: {", ".join(ALLOWED_PLUGINS)}')
+        return v
+
+
+class BatchActionResponse(BaseModel):
+    """Schema for batch action response"""
+    success: bool
+    message: str
+    batch_id: str = Field(..., description="Unique batch ID for tracking progress")
+    server_count: int = Field(..., description="Number of servers in batch")
+
+
 class ActionResponse(BaseModel):
     """Schema for action response"""
     success: bool
