@@ -112,7 +112,7 @@ class SSHConnectionPool:
                  idle_timeout: int = 300,  # 5 minutes
                  max_lifetime: int = 3600,  # 1 hour
                  cleanup_interval: int = 60,  # 1 minute
-                 max_reconnections_per_hour: int = 3):  # Max reconnections per hour
+                 max_reconnections_per_hour: int = 10):  # Max reconnections per hour
         """
         Initialize connection pool
         
@@ -290,8 +290,22 @@ class SSHConnectionPool:
             if key in self.connections:
                 pooled_conn = self.connections[key]
                 
-                # Verify connection is still alive
-                if pooled_conn.is_alive():
+                # Check if connection has exceeded max lifetime
+                # This is critical for avoiding long-running connection bugs
+                now = time.time()
+                connection_age = now - pooled_conn.created_at
+                
+                if connection_age > self.max_lifetime:
+                    # Connection is too old, proactively reconnect
+                    logger.info(
+                        f"[SSH Pool] Connection exceeded max lifetime ({connection_age:.1f}s > {self.max_lifetime}s), "
+                        f"reconnecting: {key}"
+                    )
+                    await pooled_conn.close()
+                    del self.connections[key]
+                    # Fall through to create new connection below
+                elif pooled_conn.is_alive():
+                    # Connection is still alive and within max lifetime
                     # Mark as in-use (simple counter update, already holding pool lock)
                     pooled_conn.acquire()
                     logger.debug(f"Reusing existing connection: {key}")
