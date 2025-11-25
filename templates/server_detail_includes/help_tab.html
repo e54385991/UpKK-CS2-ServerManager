@@ -12,14 +12,23 @@
                         </div>
                     </div>
 
-                    <!-- KZ Server Environment Fix Card -->
+                    <!-- KZ Server Environment Fix Card - Collapsible -->
                     <div class="card mb-4 border-warning">
-                        <div class="card-header bg-warning bg-opacity-10">
-                            <h5 class="mb-0">
-                                <i class="bi bi-wrench-adjustable"></i> 
-                                <span data-i18n="serverDetail.kzServerFix">KZ Server Environment Fix (Ubuntu 24.04+)</span>
+                        <div class="card-header bg-warning bg-opacity-10" 
+                             style="cursor: pointer;" 
+                             data-bs-toggle="collapse" 
+                             data-bs-target="#kzServerFixContent"
+                             aria-expanded="false"
+                             aria-controls="kzServerFixContent">
+                            <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                <span>
+                                    <i class="bi bi-wrench-adjustable"></i> 
+                                    <span data-i18n="serverDetail.kzServerFix">KZ Server Environment Fix (Ubuntu 24.04+)</span>
+                                </span>
+                                <i class="bi bi-chevron-down collapse-icon"></i>
                             </h5>
                         </div>
+                        <div class="collapse" id="kzServerFixContent">
                         <div class="card-body">
                             <!-- Important Notice -->
                             <div class="alert alert-info mb-4" role="alert">
@@ -116,5 +125,148 @@
                                 </button>
                             </div>
                         </div>
+                        </div>
+                    </div>
+
+                    <!-- Server Cannot Join Fix Card - Collapsible -->
+                    <div class="card mb-4 border-info">
+                        <div class="card-header bg-info bg-opacity-10" 
+                             style="cursor: pointer;" 
+                             data-bs-toggle="collapse" 
+                             data-bs-target="#cannotJoinServerContent"
+                             aria-expanded="false"
+                             aria-controls="cannotJoinServerContent">
+                            <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                <span>
+                                    <i class="bi bi-wifi-off"></i> 
+                                    <span data-i18n="serverDetail.cannotJoinServerTitle">Server Started OK But Cannot Join?</span>
+                                </span>
+                                <i class="bi bi-chevron-down collapse-icon"></i>
+                            </h5>
+                        </div>
+                        <div class="collapse" id="cannotJoinServerContent">
+                        <div class="card-body">
+                            <!-- Problem Description -->
+                            <div class="alert alert-info mb-4" role="alert">
+                                <h6 class="alert-heading">
+                                    <i class="bi bi-info-circle-fill"></i> 
+                                    <span data-i18n="serverDetail.cannotJoinServerDesc">Console shows server started successfully, but you cannot join? Check these common issues step by step.</span>
+                                </h6>
+                            </div>
+
+                            <!-- Case 1: Cloud Server -->
+                            <div class="mb-4">
+                                <h6 class="fw-bold text-primary">
+                                    <i class="bi bi-cloud"></i> 
+                                    <span data-i18n="serverDetail.case1CloudServer">Case 1: Cloud Server (Alibaba/Tencent/Vultr, Most Common)</span>
+                                </h6>
+                                
+                                <div class="ms-3">
+                                    <p class="mb-2">
+                                        <strong data-i18n="serverDetail.securityGroupLabel">Security Group:</strong>
+                                        <span data-i18n="serverDetail.securityGroupHint">Allow TCP+UDP port 27015 (Source: 0.0.0.0/0 for all IPs)</span>
+                                    </p>
+                                    
+                                    <p class="mb-2">
+                                        <strong data-i18n="serverDetail.systemFirewallLabel">System Firewall:</strong>
+                                        <span data-i18n="serverDetail.systemFirewallHint">Open UDP port 27015</span>
+                                    </p>
+                                    <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
+                                        <code class="text-light" id="cmd-ufw-allow">ufw allow 27015/udp</code>
+                                        <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
+                                                onclick="navigator.clipboard.writeText(document.getElementById('cmd-ufw-allow').textContent); 
+                                                         const btn = this; 
+                                                         const originalText = btn.innerHTML; 
+                                                         btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
+                                                         setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                            <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
+                                        </button>
+                                    </div>
+                                    
+                                    <p class="mb-2 mt-3">
+                                        <strong data-i18n="serverDetail.checkListeningLabel">Check Listening:</strong>
+                                        <span data-i18n="serverDetail.checkListeningHint">Verify srcds is running on port 27015</span>
+                                    </p>
+                                    <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
+                                        <code class="text-light" id="cmd-netstat">netstat -tuln | grep 27015</code>
+                                        <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
+                                                onclick="navigator.clipboard.writeText(document.getElementById('cmd-netstat').textContent); 
+                                                         const btn = this; 
+                                                         const originalText = btn.innerHTML; 
+                                                         btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
+                                                         setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                            <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Case 2: Home Broadband -->
+                            <div class="mb-4">
+                                <h6 class="fw-bold text-success">
+                                    <i class="bi bi-house"></i> 
+                                    <span data-i18n="serverDetail.case2HomeBroadband">Case 2: Home Broadband</span>
+                                </h6>
+                                
+                                <div class="ms-3">
+                                    <p class="mb-2">
+                                        <strong data-i18n="serverDetail.confirmPublicIPLabel">Confirm Public IP:</strong>
+                                        <span data-i18n="serverDetail.confirmPublicIPHint">Make sure you have a public IP address</span>
+                                    </p>
+                                    
+                                    <p class="mb-2">
+                                        <strong data-i18n="serverDetail.routerPortForwardLabel">Router Port Forwarding:</strong>
+                                        <span data-i18n="serverDetail.routerPortForwardHint">Forward TCP+UDP 27015 to your computer's local IP</span>
+                                    </p>
+                                    
+                                    <div class="alert alert-warning mb-0 mt-2">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                        <span data-i18n="serverDetail.noPublicIPHint">No public IP? Use FRP/ZeroTier for NAT traversal</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Case 3: UDP Blocked -->
+                            <div class="mb-4">
+                                <h6 class="fw-bold text-warning">
+                                    <i class="bi bi-shield-x"></i> 
+                                    <span data-i18n="serverDetail.case3UDPBlocked">Case 3: UDP Blocked by Datacenter (Common on Cheap VPS)</span>
+                                </h6>
+                                
+                                <div class="ms-3">
+                                    <p class="mb-2" data-i18n="serverDetail.udpBlockedHint">Test UDP connectivity from your local computer:</p>
+                                    <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
+                                        <code class="text-light" id="cmd-nc-test">nc -vzu YOUR_SERVER_IP 27015</code>
+                                        <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
+                                                onclick="navigator.clipboard.writeText(document.getElementById('cmd-nc-test').textContent); 
+                                                         const btn = this; 
+                                                         const originalText = btn.innerHTML; 
+                                                         btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
+                                                         setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                            <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
+                                        </button>
+                                    </div>
+                                    <small class="text-muted" data-i18n="serverDetail.ncTestNote">Replace YOUR_SERVER_IP with your actual server IP. Run this on your local machine.</small>
+                                </div>
+                            </div>
+
+                            <!-- Note -->
+                            <div class="alert alert-secondary" role="alert">
+                                <i class="bi bi-lightbulb"></i>
+                                <strong data-i18n="serverDetail.portNoteLabel">Note:</strong>
+                                <span data-i18n="serverDetail.portNoteHint">The examples use port 27015. Replace with your actual game port if different.</span>
+                            </div>
+                        </div>
+                        </div>
                     </div>
                 </div>
+                
+<style>
+/* Collapse icon rotation for help tab */
+.card-header[data-bs-toggle="collapse"] .collapse-icon {
+    transition: transform 0.3s ease;
+}
+.card-header[data-bs-toggle="collapse"][aria-expanded="true"] .collapse-icon {
+    transform: rotate(180deg);
+}
+</style>

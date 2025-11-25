@@ -222,6 +222,21 @@
                         </div>
                     </div>
 
+                    <div class="row g-3 mt-2">
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" x-model="autoSetupForm.open_game_ports"
+                                    id="openGamePorts" checked>
+                                <label class="form-check-label" for="openGamePorts">
+                                    <span data-i18n="setupWizard.openGamePorts">开放 UDP 端口 20000~40000（游戏服务器端口，仅在 UFW 启用时生效）</span>
+                                </label>
+                            </div>
+                            <small class="text-muted ms-4" data-i18n="setupWizard.openGamePortsHint">
+                                如果服务器启用了 UFW 防火墙，将自动放行 UDP 20000~40000 端口供游戏服务器使用
+                            </small>
+                        </div>
+                    </div>
+
                     <div class="mt-4">
                         <button type="submit" class="btn btn-primary btn-lg" :disabled="isProcessing">
                             <span x-show="!isProcessing">
@@ -419,6 +434,7 @@
                 different_sudo_password: false,
                 cs2_username: 'cs2server',
                 save_config: true,
+                open_game_ports: true,
                 captcha_token: '',
                 captcha_code: ''
             },
@@ -519,6 +535,7 @@ echo "密码: ${this.password}"`;
                         ssh_password: this.autoSetupForm.ssh_password,
                         cs2_username: this.autoSetupForm.cs2_username,
                         save_config: this.autoSetupForm.save_config,
+                        open_game_ports: this.autoSetupForm.open_game_ports,
                         captcha_token: this.autoSetupForm.captcha_token,
                         captcha_code: this.autoSetupForm.captcha_code
                     };

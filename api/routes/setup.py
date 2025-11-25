@@ -58,6 +58,7 @@ class ServerSetupRequest(BaseModel):
     captcha_token: str  # CAPTCHA token from /api/captcha/generate
     captcha_code: str  # User-entered CAPTCHA code
     save_config: bool = True  # Whether to save the initialized server config
+    open_game_ports: bool = True  # Whether to open UDP ports 20000-40000 if UFW is enabled
 
 
 class ServerSetupResponse(BaseModel):
@@ -321,6 +322,41 @@ async def auto_setup_server(
         
         if exit_code == 0:
             logs.append("✓ 权限设置完成")
+        
+        # Configure UFW firewall if requested
+        if setup_req.open_game_ports:
+            logs.append("检查 UFW 防火墙状态...")
+            
+            # Check if UFW is installed and active
+            ufw_check_cmd = "ufw status"
+            if needs_sudo:
+                stdout, stderr, exit_code = await run_sudo_command(conn, ufw_check_cmd, sudo_pass)
+            else:
+                result = await conn.run(ufw_check_cmd, check=False)
+                stdout = result.stdout
+                stderr = result.stderr
+                exit_code = result.exit_status
+            
+            if exit_code == 0 and "Status: active" in stdout:
+                logs.append("UFW 防火墙已启用，正在开放 UDP 20000~40000 端口...")
+                
+                # Open UDP ports 20000-40000 for game servers
+                ufw_allow_cmd = "ufw allow 20000:40000/udp"
+                if needs_sudo:
+                    stdout, stderr, exit_code = await run_sudo_command(conn, ufw_allow_cmd, sudo_pass)
+                else:
+                    result = await conn.run(ufw_allow_cmd, check=False)
+                    exit_code = result.exit_status
+                    stderr = result.stderr
+                
+                if exit_code == 0:
+                    logs.append("✓ UDP 端口 20000~40000 已开放")
+                else:
+                    logs.append(f"⚠ 开放端口失败: {stderr[:100]}")
+            elif exit_code != 0:
+                logs.append("⚠ UFW 未安装或无法获取状态，跳过端口配置")
+            else:
+                logs.append("ℹ UFW 未启用，跳过端口配置")
         
         logs.append("=" * 50)
         logs.append("✓ 服务器环境设置完成！")
