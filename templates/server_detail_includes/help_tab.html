@@ -72,11 +72,7 @@
                                         <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
                                             <code class="text-light" id="cmd-wget">wget https://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb</code>
                                             <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
-                                                    onclick="navigator.clipboard.writeText(document.getElementById('cmd-wget').textContent); 
-                                                             const btn = this; 
-                                                             const originalText = btn.innerHTML; 
-                                                             btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
-                                                             setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                                    onclick="copyToClipboard('cmd-wget', this)">
                                                 <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
                                             </button>
                                         </div>
@@ -87,11 +83,7 @@
                                         <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
                                             <code class="text-light" id="cmd-dpkg">sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb</code>
                                             <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
-                                                    onclick="navigator.clipboard.writeText(document.getElementById('cmd-dpkg').textContent); 
-                                                             const btn = this; 
-                                                             const originalText = btn.innerHTML; 
-                                                             btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
-                                                             setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                                    onclick="copyToClipboard('cmd-dpkg', this)">
                                                 <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
                                             </button>
                                         </div>
@@ -174,11 +166,7 @@
                                     <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
                                         <code class="text-light" id="cmd-ufw-allow">ufw allow 27015/udp</code>
                                         <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
-                                                onclick="navigator.clipboard.writeText(document.getElementById('cmd-ufw-allow').textContent); 
-                                                         const btn = this; 
-                                                         const originalText = btn.innerHTML; 
-                                                         btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
-                                                         setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                                onclick="copyToClipboard('cmd-ufw-allow', this)">
                                             <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
                                         </button>
                                     </div>
@@ -190,11 +178,7 @@
                                     <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
                                         <code class="text-light" id="cmd-netstat">netstat -tuln | grep 27015</code>
                                         <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
-                                                onclick="navigator.clipboard.writeText(document.getElementById('cmd-netstat').textContent); 
-                                                         const btn = this; 
-                                                         const originalText = btn.innerHTML; 
-                                                         btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
-                                                         setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                                onclick="copyToClipboard('cmd-netstat', this)">
                                             <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
                                         </button>
                                     </div>
@@ -238,11 +222,7 @@
                                     <div class="bg-dark text-light p-3 rounded mt-2 position-relative">
                                         <code class="text-light" id="cmd-nc-test">nc -vzu YOUR_SERVER_IP 27015</code>
                                         <button class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" 
-                                                onclick="navigator.clipboard.writeText(document.getElementById('cmd-nc-test').textContent); 
-                                                         const btn = this; 
-                                                         const originalText = btn.innerHTML; 
-                                                         btn.innerHTML = '<i class=\'bi bi-check\'></i> Copied!'; 
-                                                         setTimeout(() => btn.innerHTML = originalText, 2000);">
+                                                onclick="copyToClipboard('cmd-nc-test', this)">
                                             <i class="bi bi-clipboard"></i> <span data-i18n="serverDetail.copy">Copy</span>
                                         </button>
                                     </div>
@@ -270,3 +250,59 @@
     transform: rotate(180deg);
 }
 </style>
+
+<script>
+// Copy to clipboard helper function with fallback for older browsers or non-HTTPS contexts
+function copyToClipboard(elementId, btn) {
+    const text = document.getElementById(elementId).textContent;
+    const originalText = btn.innerHTML;
+    
+    function showSuccess() {
+        btn.innerHTML = '<i class="bi bi-check"></i> Copied!';
+        setTimeout(() => btn.innerHTML = originalText, 2000);
+    }
+    
+    function showError() {
+        btn.innerHTML = '<i class="bi bi-x"></i> Failed';
+        setTimeout(() => btn.innerHTML = originalText, 2000);
+    }
+    
+    // Try modern Clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(showSuccess).catch(() => {
+            // Fallback to old method
+            fallbackCopy(text, showSuccess, showError);
+        });
+    } else {
+        // Use fallback for older browsers or non-HTTPS contexts
+        fallbackCopy(text, showSuccess, showError);
+    }
+}
+
+// Fallback clipboard copy function
+function fallbackCopy(text, onSuccess, onError) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'absolute';
+    textArea.style.left = '-9999px';
+    textArea.style.opacity = '0';
+    textArea.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            onSuccess();
+        } else {
+            onError();
+        }
+    } catch (err) {
+        console.error('Fallback copy failed:', err);
+        onError();
+    } finally {
+        document.body.removeChild(textArea);
+    }
+}
+</script>
