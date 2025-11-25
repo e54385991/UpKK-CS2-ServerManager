@@ -158,6 +158,46 @@ pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 -
 
 **⚠️ 安全提示**: 请在首次登录后立即修改默认密码！
 
+### 🔧 关于自动初始化
+
+在通过管理端初始化目标服务器时，系统会自动创建一个名为 `cs2server` 的用户来运行 CS2 服务器。该用户使用**普通用户级权限**，不具有 root 权限，这样可以：
+
+- 🛡️ 提高安全性，防止 CS2 进程以 root 权限运行
+- 📦 隔离游戏服务器与系统其他部分
+- 🔒 限制潜在安全风险的影响范围
+
+### ⚠️ 安全配置（可选但强烈建议）
+
+如果您的管理后台允许公共访问（即可通过公网 IP 访问），请务必采取以下安全措施：
+
+1. **使用 Nginx 反向代理并配置 TLS 证书**
+   - 配置 HTTPS 加密传输，保护登录凭据和 API 通信
+   - 推荐使用 Let's Encrypt 免费证书
+
+2. **⚠️ 重要警告：在未配置 TLS 前，请勿输入任何敏感信息！**
+   - 这包括：SSH 密码、API 密钥、数据库凭据等
+   - 未加密的 HTTP 连接可能导致敏感信息被窃取
+
+示例 Nginx 配置片段：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
 ---
 
 <a name="english"></a>
@@ -287,6 +327,46 @@ Password: admin123
 ```
 
 **⚠️ Security Notice**: Please change the default password immediately after first login!
+
+### 🔧 About Auto-Initialization
+
+When initializing target servers through the management interface, the system automatically creates a user named `cs2server` to run the CS2 server. This user operates with **regular user-level privileges** (non-root), which provides:
+
+- 🛡️ Enhanced security by preventing CS2 processes from running with root privileges
+- 📦 Isolation of the game server from other system components
+- 🔒 Limited impact scope for potential security risks
+
+### ⚠️ Security Configuration (Optional but Highly Recommended)
+
+If your management console is publicly accessible (i.e., accessible via public IP), please implement the following security measures:
+
+1. **Use Nginx Reverse Proxy with TLS Certificate**
+   - Configure HTTPS encrypted transmission to protect login credentials and API communications
+   - Recommended: Use Let's Encrypt free certificates
+
+2. **⚠️ Important Warning: Do NOT enter any sensitive information before TLS is configured!**
+   - This includes: SSH passwords, API keys, database credentials, etc.
+   - Unencrypted HTTP connections may result in sensitive information being intercepted
+
+Example Nginx configuration snippet:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
 ---
 
