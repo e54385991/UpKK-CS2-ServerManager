@@ -296,9 +296,10 @@ async def get_monitoring_logs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get monitoring logs for a server"""
-    from modules.models import MonitoringLog
-    from sqlalchemy import desc
+    """Get monitoring logs for a server from Redis"""
+    from services.redis_manager import redis_manager
+    import logging
+    logger = logging.getLogger(__name__)
     
     # Verify server exists and user has access
     result = await db.execute(select(Server).filter(Server.id == server_id))
@@ -316,31 +317,18 @@ async def get_monitoring_logs(
             detail="Not authorized to view this server's logs"
         )
     
-    # Build query
-    query = select(MonitoringLog).filter(MonitoringLog.server_id == server_id)
-    
-    # Filter by event type if specified
-    if event_type:
-        query = query.filter(MonitoringLog.event_type == event_type)
-    
-    # Order by most recent first and limit
-    query = query.order_by(desc(MonitoringLog.created_at)).limit(limit)
-    
-    result = await db.execute(query)
-    logs = result.scalars().all()
-    
-    # Convert to dict format for JSON response
-    return [
-        {
-            "id": log.id,
-            "server_id": log.server_id,
-            "event_type": log.event_type,
-            "status": log.status,
-            "message": log.message,
-            "created_at": log.created_at.isoformat() if log.created_at else None
-        }
-        for log in logs
-    ]
+    # Get logs from Redis
+    try:
+        logs = await redis_manager.get_monitoring_logs(
+            server_id=server_id,
+            event_type=event_type,
+            limit=limit
+        )
+        logger.info(f"Retrieved {len(logs)} monitoring logs from Redis for server {server_id}")
+        return logs
+    except Exception as e:
+        logger.error(f"Failed to get monitoring logs from Redis: {e}")
+        return []
 
 
 @router.get("/ping", dependencies=[])

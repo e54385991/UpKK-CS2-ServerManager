@@ -138,3 +138,6 @@ ssh_keys/
 .DS_Store
 Thumbs.db
 i18n_demo.html
+
+# Application logs
+logs/

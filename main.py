@@ -9,10 +9,15 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import os
+import logging
 
-from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse, get_optional_current_user, User
+from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse, get_optional_current_user, User, setup_logging
 from services import redis_manager
 from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks
+
+# Initialize logging first (before anything else logs)
+setup_logging(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(

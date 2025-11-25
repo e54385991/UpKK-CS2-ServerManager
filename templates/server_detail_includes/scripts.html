@@ -154,7 +154,9 @@
 
             // Load monitoring logs if monitoring is enabled
             if (this.server.enable_panel_monitoring) {
-                await this.loadMonitoringLogs('status_check');
+                // Use a2s_check if A2S monitoring is enabled, otherwise use status_check
+                const statusEventType = this.server.enable_a2s_monitoring ? 'a2s_check' : 'status_check';
+                await this.loadMonitoringLogs(statusEventType);
                 await this.loadMonitoringLogs('auto_restart');
             }
 
@@ -479,7 +481,9 @@
                     if (updated.enable_panel_monitoring) {
                         this.addLog('complete', 'Panel monitoring enabled and configured successfully');
                         // Load monitoring logs when enabled
-                        await this.loadMonitoringLogs('status_check');
+                        // Use a2s_check if A2S monitoring is enabled, otherwise use status_check
+                        const statusEventType = updated.enable_a2s_monitoring ? 'a2s_check' : 'status_check';
+                        await this.loadMonitoringLogs(statusEventType);
                         await this.loadMonitoringLogs('auto_restart');
                     } else {
                         this.addLog('complete', 'Panel monitoring disabled successfully');
@@ -536,7 +540,10 @@
         },
         
         async loadMonitoringLogs(eventType) {
-            if (eventType === 'status_check') {
+            // Both status_check and a2s_check are treated as status checks for the UI
+            const isStatusCheck = eventType === 'status_check' || eventType === 'a2s_check';
+            
+            if (isStatusCheck) {
                 this.loadingStatusLogs = true;
             } else if (eventType === 'auto_restart') {
                 this.loadingRestartLogs = true;
@@ -547,7 +554,7 @@
 
                 if (response.ok) {
                     const logs = await response.json();
-                    if (eventType === 'status_check') {
+                    if (isStatusCheck) {
                         this.statusCheckLogs = logs;
                     } else if (eventType === 'auto_restart') {
                         this.autoRestartLogs = logs;
@@ -558,7 +565,7 @@
             } catch (err) {
                 console.error(`Error loading monitoring logs: ${err.message}`);
             } finally {
-                if (eventType === 'status_check') {
+                if (isStatusCheck) {
                     this.loadingStatusLogs = false;
                 } else if (eventType === 'auto_restart') {
                     this.loadingRestartLogs = false;
@@ -1559,10 +1566,27 @@
                 extractArchivePath: '',
                 extractDestinationPath: '',
                 extractOverwrite: false,
+                // Extraction progress tracking
+                extracting: false,
+                extractTaskId: null,
+                extractProgress: {
+                    status: null,  // pending, running, completed, failed
+                    archiveName: '',
+                    elapsed: 0
+                },
+                extractPollInterval: null,
+                extractPollFailures: 0,
+                extractPollMaxFailures: 5,
+                extractPollIntervalMs: 1500,  // Configurable polling interval
 
                 init() {
                     this.currentPath = this.serverGameDirectory;
                     this.loadFiles();
+                    
+                    // Clean up polling when page is unloaded to prevent memory leaks
+                    window.addEventListener('beforeunload', () => {
+                        this.stopExtractionPolling();
+                    });
                 },
 
                 get pathParts() {
@@ -1987,6 +2011,21 @@
                     const destinationPath = document.getElementById('extractDestinationPath').value;
                     const overwrite = document.getElementById('extractOverwrite').checked;
 
+                    // Disable the extract button and show loading state
+                    const extractBtn = document.getElementById('extractArchiveBtn');
+                    const originalBtnText = extractBtn?.textContent;
+                    if (extractBtn) {
+                        extractBtn.disabled = true;
+                        // Use textContent for the label to prevent any XSS
+                        const spinner = document.createElement('span');
+                        spinner.className = 'spinner-border spinner-border-sm me-1';
+                        extractBtn.textContent = '';
+                        extractBtn.appendChild(spinner);
+                        extractBtn.appendChild(document.createTextNode(
+                            window.i18n?.t('fileManager.startingExtraction') || 'Starting...'
+                        ));
+                    }
+
                     try {
                         const response = await fetch(`/servers/{{ server.id }}/files/extract`, {
                             method: 'POST',
@@ -2006,24 +2045,141 @@
                             throw new Error(errorData.detail || 'Extraction failed');
                         }
 
+                        const result = await response.json();
+                        
                         // Hide modal
                         const modal = bootstrap.Modal.getInstance(document.getElementById('extractModal'));
                         if (modal) modal.hide();
 
-                        // Reset state
+                        // Store archive name for display (with i18n fallback)
+                        const archiveName = this.extractingFile?.name || 
+                            (window.i18n?.t('fileManager.archive') || 'Archive');
+
+                        // Reset modal state
                         this.extractingFile = null;
                         this.extractArchivePath = '';
                         this.extractDestinationPath = '';
                         this.extractOverwrite = false;
-
-                        // Refresh file list
-                        this.refreshFiles();
                         
-                        showSuccess(window.i18n?.t('fileManager.extractSuccess') || 'Archive extracted successfully');
+                        // Start tracking extraction progress
+                        if (result.task_id) {
+                            this.extracting = true;
+                            this.extractTaskId = result.task_id;
+                            this.extractProgress = {
+                                status: 'pending',
+                                archiveName: archiveName,
+                                elapsed: 0
+                            };
+                            
+                            // Start polling for status
+                            this.startExtractionPolling();
+                        } else {
+                            // Fallback for sync response (shouldn't happen with new API)
+                            this.refreshFiles();
+                            showSuccess(window.i18n?.t('fileManager.extractSuccess') || 'Archive extracted successfully');
+                        }
                     } catch (error) {
                         console.error('Error extracting:', error);
                         showError(this.formatSSHError(error.message, 'errors.errorExtracting'));
+                    } finally {
+                        // Re-enable button with safe text content
+                        if (extractBtn) {
+                            extractBtn.disabled = false;
+                            extractBtn.textContent = originalBtnText || 
+                                (window.i18n?.t('fileManager.extract') || 'Extract');
+                        }
                     }
+                },
+                
+                startExtractionPolling() {
+                    // Clear any existing interval
+                    if (this.extractPollInterval) {
+                        clearInterval(this.extractPollInterval);
+                    }
+                    
+                    // Reset failure counter
+                    this.extractPollFailures = 0;
+                    
+                    // Poll using configurable interval
+                    this.extractPollInterval = setInterval(
+                        () => this.pollExtractionStatus(), 
+                        this.extractPollIntervalMs
+                    );
+                    
+                    // Also poll immediately
+                    this.pollExtractionStatus();
+                },
+                
+                async pollExtractionStatus() {
+                    if (!this.extractTaskId) {
+                        this.stopExtractionPolling();
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/files/extract/status/${this.extractTaskId}`, {
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            this.extractPollFailures++;
+                            console.error(`Failed to get extraction status (attempt ${this.extractPollFailures}/${this.extractPollMaxFailures})`);
+                            
+                            // Stop polling after max failures
+                            if (this.extractPollFailures >= this.extractPollMaxFailures) {
+                                this.stopExtractionPolling();
+                                this.extracting = false;
+                                this.extractTaskId = null;
+                                showError(window.i18n?.t('fileManager.statusCheckFailed') || 
+                                    'Failed to check extraction status. The extraction may still complete in the background.');
+                            }
+                            return;
+                        }
+                        
+                        // Reset failure counter on success
+                        this.extractPollFailures = 0;
+                        
+                        const status = await response.json();
+                        
+                        this.extractProgress.status = status.status;
+                        this.extractProgress.elapsed = status.elapsed_seconds || 0;
+                        
+                        // Check if extraction is complete
+                        if (status.status === 'completed') {
+                            this.stopExtractionPolling();
+                            this.extracting = false;
+                            this.extractTaskId = null;
+                            this.refreshFiles();
+                            showSuccess(window.i18n?.t('fileManager.extractSuccess') || 'Archive extracted successfully');
+                        } else if (status.status === 'failed') {
+                            this.stopExtractionPolling();
+                            this.extracting = false;
+                            this.extractTaskId = null;
+                            showError(this.formatSSHError(status.error || 'Extraction failed', 'errors.errorExtracting'));
+                        }
+                    } catch (error) {
+                        this.extractPollFailures++;
+                        console.error(`Error polling extraction status (attempt ${this.extractPollFailures}/${this.extractPollMaxFailures}):`, error);
+                        
+                        // Stop polling after max failures
+                        if (this.extractPollFailures >= this.extractPollMaxFailures) {
+                            this.stopExtractionPolling();
+                            this.extracting = false;
+                            this.extractTaskId = null;
+                            showError(window.i18n?.t('fileManager.statusCheckFailed') || 
+                                'Failed to check extraction status. The extraction may still complete in the background.');
+                        }
+                    }
+                },
+                
+                stopExtractionPolling() {
+                    if (this.extractPollInterval) {
+                        clearInterval(this.extractPollInterval);
+                        this.extractPollInterval = null;
+                    }
+                    this.extractPollFailures = 0;
                 },
 
                 isTextFile(filename) {
@@ -2317,4 +2473,30 @@
                 }
             };
         }
+
+        // Tab persistence across page refreshes
+        document.addEventListener('DOMContentLoaded', function() {
+            const serverId = {{ server.id }};
+            const storageKey = `serverDetail_activeTab_${serverId}`;
+            
+            // Restore active tab from localStorage
+            const savedTab = localStorage.getItem(storageKey);
+            if (savedTab) {
+                const tabButton = document.querySelector(`button[data-bs-target="${savedTab}"]`);
+                if (tabButton) {
+                    // Use Bootstrap's tab API to show the saved tab
+                    const tab = new bootstrap.Tab(tabButton);
+                    tab.show();
+                }
+            }
+            
+            // Save active tab to localStorage when tab is shown
+            const tabButtons = document.querySelectorAll('button[data-bs-toggle="tab"]');
+            tabButtons.forEach(button => {
+                button.addEventListener('shown.bs.tab', function(event) {
+                    const tabTarget = event.target.getAttribute('data-bs-target');
+                    localStorage.setItem(storageKey, tabTarget);
+                });
+            });
+        });
     </script>

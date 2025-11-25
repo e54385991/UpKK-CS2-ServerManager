@@ -5,14 +5,37 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 import os
 import tempfile
 import shutil
+import asyncio
+import uuid
+import time
+import logging
 
 from modules import Server, get_db, User, get_current_active_user
 from services import SSHManager
+
+logger = logging.getLogger(__name__)
+
+# Constants for extraction task cleanup
+EXTRACTION_TASK_COMPLETED_CLEANUP_SECONDS = 3600  # 1 hour
+EXTRACTION_TASK_ABANDONED_CLEANUP_SECONDS = 7200  # 2 hours
+
+# In-memory storage for extraction task status
+# Key: task_id, Value: dict with status, archive_path, destination_path, 
+# server_id, user_id, timestamps, message, and error
+# Protected by extraction_tasks_lock for thread-safe access
+extraction_tasks: Dict[str, Dict[str, Any]] = {}
+
+# Store task references for proper cleanup
+# Also protected by extraction_tasks_lock
+_extraction_task_refs: Dict[str, asyncio.Task] = {}
+
+# Lock for thread-safe access to extraction_tasks and _extraction_task_refs
+extraction_tasks_lock = asyncio.Lock()
 
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 
@@ -419,6 +442,75 @@ async def rename_file_or_directory(
     return {"success": True, "message": "Renamed successfully", "new_path": new_path}
 
 
+async def _run_extraction_task(
+    task_id: str,
+    archive_path: str,
+    destination_path: str,
+    server: Server,
+    overwrite: bool
+):
+    """Background task to perform archive extraction"""
+    try:
+        async with extraction_tasks_lock:
+            extraction_tasks[task_id]["status"] = "running"
+            extraction_tasks[task_id]["started_at"] = time.time()
+        
+        logger.info(f"[Extraction] Starting extraction task {task_id}: {archive_path} -> {destination_path}")
+        
+        # Extract using SSH
+        ssh_manager = SSHManager()
+        success, error = await ssh_manager.extract_archive(
+            archive_path, destination_path, server, overwrite
+        )
+        
+        async with extraction_tasks_lock:
+            if success:
+                extraction_tasks[task_id]["status"] = "completed"
+                extraction_tasks[task_id]["message"] = "Archive extracted successfully"
+                logger.info(f"[Extraction] Task {task_id} completed successfully")
+            else:
+                extraction_tasks[task_id]["status"] = "failed"
+                extraction_tasks[task_id]["error"] = error
+                logger.error(f"[Extraction] Task {task_id} failed: {error}")
+            
+            extraction_tasks[task_id]["completed_at"] = time.time()
+        
+    except Exception as e:
+        logger.exception(f"[Extraction] Task {task_id} encountered an exception")
+        async with extraction_tasks_lock:
+            extraction_tasks[task_id]["status"] = "failed"
+            extraction_tasks[task_id]["error"] = str(e)
+            extraction_tasks[task_id]["completed_at"] = time.time()
+    finally:
+        # Clean up task reference
+        async with extraction_tasks_lock:
+            if task_id in _extraction_task_refs:
+                del _extraction_task_refs[task_id]
+
+
+async def _cleanup_old_extraction_tasks():
+    """Clean up extraction tasks older than configured thresholds"""
+    current_time = time.time()
+    tasks_to_remove = []
+    
+    async with extraction_tasks_lock:
+        for task_id, task_info in extraction_tasks.items():
+            # Remove completed/failed tasks older than threshold
+            if task_info.get("completed_at"):
+                if current_time - task_info["completed_at"] > EXTRACTION_TASK_COMPLETED_CLEANUP_SECONDS:
+                    tasks_to_remove.append(task_id)
+            # Remove pending tasks older than threshold (likely abandoned)
+            elif task_info.get("created_at"):
+                if current_time - task_info["created_at"] > EXTRACTION_TASK_ABANDONED_CLEANUP_SECONDS:
+                    tasks_to_remove.append(task_id)
+        
+        for task_id in tasks_to_remove:
+            del extraction_tasks[task_id]
+            # Also clean up task reference if it exists
+            if task_id in _extraction_task_refs:
+                del _extraction_task_refs[task_id]
+
+
 @router.post("/extract")
 async def extract_archive(
     server_id: int,
@@ -426,7 +518,12 @@ async def extract_archive(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Extract archive file (zip, tar, tar.gz, etc.)"""
+    """
+    Extract archive file (zip, tar, tar.gz, etc.) asynchronously.
+    
+    Returns immediately with a task_id that can be used to poll for status.
+    The extraction runs in the background so the web UI doesn't block.
+    """
     server = await get_server_for_user(server_id, db, current_user)
     
     archive_path = request.archive_path
@@ -449,16 +546,96 @@ async def extract_archive(
             detail="Access denied: destination path is outside server directory"
         )
     
-    # Extract using SSH
-    ssh_manager = SSHManager()
-    success, error = await ssh_manager.extract_archive(
-        archive_path, destination_path, server, request.overwrite
-    )
+    # Clean up old extraction tasks periodically
+    await _cleanup_old_extraction_tasks()
     
-    if not success:
+    # Generate unique task ID
+    task_id = str(uuid.uuid4())
+    
+    # Initialize task status with lock
+    async with extraction_tasks_lock:
+        extraction_tasks[task_id] = {
+            "status": "pending",
+            "archive_path": archive_path,
+            "destination_path": destination_path,
+            "server_id": server_id,
+            "user_id": current_user.id,
+            "created_at": time.time(),
+            "started_at": None,
+            "completed_at": None,
+            "message": None,
+            "error": None
+        }
+    
+    # Start extraction task in background and store reference
+    task = asyncio.create_task(_run_extraction_task(
+        task_id, archive_path, destination_path, server, request.overwrite
+    ))
+    
+    # Store task reference for proper cleanup/tracking
+    async with extraction_tasks_lock:
+        _extraction_task_refs[task_id] = task
+    
+    logger.info(f"[Extraction] Created task {task_id} for archive {archive_path}")
+    
+    return {
+        "success": True,
+        "task_id": task_id,
+        "message": "Extraction started",
+        "status": "pending",
+        "destination": destination_path
+    }
+
+
+@router.get("/extract/status/{task_id}")
+async def get_extraction_status(
+    server_id: int,
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get the status of an extraction task.
+    
+    Returns the current status (pending, running, completed, failed) and any error message.
+    """
+    # Verify user has access to this server
+    await get_server_for_user(server_id, db, current_user)
+    
+    async with extraction_tasks_lock:
+        if task_id not in extraction_tasks:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Extraction task not found or has expired"
+            )
+        
+        task_info = extraction_tasks[task_id].copy()  # Copy to avoid holding lock during response
+    
+    # Verify the task belongs to this server and user
+    if task_info.get("server_id") != server_id:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=error
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Task does not belong to this server"
         )
     
-    return {"success": True, "message": "Archive extracted successfully", "destination": destination_path}
+    if task_info.get("user_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Task does not belong to this user"
+        )
+    
+    # Calculate elapsed time
+    elapsed = None
+    if task_info.get("started_at"):
+        end_time = task_info.get("completed_at") or time.time()
+        elapsed = round(end_time - task_info["started_at"], 1)
+    
+    return {
+        "task_id": task_id,
+        "status": task_info["status"],
+        "archive_path": task_info["archive_path"],
+        "destination_path": task_info["destination_path"],
+        "message": task_info.get("message"),
+        "error": task_info.get("error"),
+        "elapsed_seconds": elapsed
+    }

@@ -22,6 +22,7 @@ from .auth import (
     get_optional_current_user, get_user_from_api_key, get_current_user_flexible
 )
 from .utils import generate_api_key, verify_api_key_format, get_current_time
+from .logging_config import setup_logging
 
 __all__ = [
     'settings',
@@ -83,4 +84,5 @@ __all__ = [
     'generate_api_key',
     'verify_api_key_format',
     'get_current_time',
+    'setup_logging',
 ]
