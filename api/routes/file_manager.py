@@ -4,9 +4,8 @@ File manager routes for server file operations
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlmodel import select, SQLModel
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
 import os
 import tempfile
 import shutil
@@ -40,7 +39,7 @@ extraction_tasks_lock = asyncio.Lock()
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 
 
-class FileInfo(BaseModel):
+class FileInfo(SQLModel):
     """File information model"""
     name: str
     path: str
@@ -51,34 +50,34 @@ class FileInfo(BaseModel):
     is_symlink: bool
 
 
-class DirectoryListResponse(BaseModel):
+class DirectoryListResponse(SQLModel):
     """Directory listing response"""
     path: str
     files: List[FileInfo]
 
 
-class FileContentRequest(BaseModel):
+class FileContentRequest(SQLModel):
     """File content update request"""
     content: str
 
 
-class CreateDirectoryRequest(BaseModel):
+class CreateDirectoryRequest(SQLModel):
     """Create directory request"""
     name: str
 
 
-class DeleteRequest(BaseModel):
+class DeleteRequest(SQLModel):
     """Delete file/directory request"""
     path: str
 
 
-class RenameRequest(BaseModel):
+class RenameRequest(SQLModel):
     """Rename file/directory request"""
     old_name: str
     new_name: str
 
 
-class ExtractArchiveRequest(BaseModel):
+class ExtractArchiveRequest(SQLModel):
     """Extract archive request"""
     archive_path: str
     destination_path: Optional[str] = None
@@ -87,21 +86,12 @@ class ExtractArchiveRequest(BaseModel):
 
 async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
     """Helper to get server and verify ownership"""
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
-    
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
+            detail=f"Server not found"
         )
-    
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this server"
-        )
-    
     return server
 
 

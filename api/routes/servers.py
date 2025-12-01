@@ -3,7 +3,7 @@ Server management routes
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlmodel import select
 from typing import List, Dict, Any
 import asyncssh
 
@@ -35,13 +35,7 @@ async def create_server(
         )
     
     # Check if server name already exists for this user
-    result = await db.execute(
-        select(Server).filter(
-            Server.name == server_data.name,
-            Server.user_id == current_user.id
-        )
-    )
-    existing = result.scalar_one_or_none()
+    existing = await Server.get_by_name_and_user(db, server_data.name, current_user.id)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -49,14 +43,9 @@ async def create_server(
         )
     
     # Check if server with same host and game_directory already exists for this user
-    result = await db.execute(
-        select(Server).filter(
-            Server.host == server_data.host,
-            Server.game_directory == server_data.game_directory,
-            Server.user_id == current_user.id
-        )
+    duplicate_server = await Server.get_by_host_directory_and_user(
+        db, server_data.host, server_data.game_directory, current_user.id
     )
-    duplicate_server = result.scalar_one_or_none()
     if duplicate_server:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -136,13 +125,7 @@ async def list_servers(
     current_user: User = Depends(get_current_active_user)
 ):
     """List all servers owned by current user"""
-    result = await db.execute(
-        select(Server)
-        .filter(Server.user_id == current_user.id)
-        .offset(skip)
-        .limit(limit)
-    )
-    servers = result.scalars().all()
+    servers = await Server.get_all_by_user(db, current_user.id, skip, limit)
     return servers
 
 
@@ -161,10 +144,7 @@ async def get_all_servers_disk_space(
     from services.system_info_helper import system_info_helper
     
     # Get all servers for current user
-    result = await db.execute(
-        select(Server).filter(Server.user_id == current_user.id)
-    )
-    servers = result.scalars().all()
+    servers = await Server.get_all_by_user(db, current_user.id)
     
     # Get disk space for all servers (from cache only)
     disk_space_map = await system_info_helper.get_all_servers_disk_space(servers, force_refresh=False)
@@ -185,19 +165,11 @@ async def get_server(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get server by ID"""
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this server"
+            detail=f"Server not found"
         )
     
     return server
@@ -211,28 +183,20 @@ async def update_server(
     current_user: User = Depends(get_current_active_user)
 ):
     """Update server"""
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to modify this server"
+            detail=f"Server not found"
         )
     
     # Track if monitoring status changed
     old_monitoring_enabled = server.enable_panel_monitoring
     
-    # Update fields
+    # Update fields using SQLModel's sqlmodel_update method
     update_data = server_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(server, field, value)
+    for key, value in update_data.items():
+        setattr(server, key, value)
     
     await db.commit()
     await db.refresh(server)
@@ -264,19 +228,11 @@ async def delete_server(
     current_user: User = Depends(get_current_active_user)
 ):
     """Delete server"""
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this server"
+            detail=f"Server not found"
         )
     
     await db.delete(server)
@@ -302,19 +258,11 @@ async def get_monitoring_logs(
     logger = logging.getLogger(__name__)
     
     # Verify server exists and user has access
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view this server's logs"
+            detail=f"Server not found"
         )
     
     # Get logs from Redis
@@ -390,7 +338,7 @@ async def get_all_servers_a2s_cache():
         from services.a2s_cache_service import a2s_cache_service
         from modules.database import async_session_maker
         from modules.models import Server
-        from sqlalchemy import select
+        from sqlmodel import select
         
         logger.info("Starting database query...")
         # Use a separate session to avoid dependency injection issues
@@ -436,19 +384,11 @@ async def get_server_a2s_info(
     from services.a2s_query import a2s_service
     
     # Verify server exists and user has access
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to query this server"
+            detail=f"Server not found"
         )
     
     # Use configured A2S host/port or fall back to server host/game_port
@@ -486,19 +426,11 @@ async def get_server_cpu_count(
     from services.ssh_manager import SSHManager
     
     # Verify server exists and user has access
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this server"
+            detail=f"Server not found"
         )
     
     ssh_manager = SSHManager()
@@ -559,19 +491,11 @@ async def get_server_disk_space(
     from services.system_info_helper import system_info_helper
     
     # Verify server exists and user has access
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this server"
+            detail=f"Server not found"
         )
     
     # Get disk space info from system info helper
@@ -607,19 +531,11 @@ async def check_server_deployment(
             "message": str
         }
     """
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to check this server"
+            detail=f"Server not found"
         )
     
     # Check if cs2 binary exists

@@ -320,7 +320,7 @@ class SSHConnectionPool:
             try:
                 logger.debug(f"Creating new SSH connection: {key}")
                 
-                if server.auth_type == AuthType.PASSWORD:
+                if server.is_password_auth:
                     conn = await asyncssh.connect(
                         host=server.host,
                         port=server.ssh_port,
@@ -328,7 +328,7 @@ class SSHConnectionPool:
                         password=server.ssh_password,
                         known_hosts=None
                     )
-                elif server.auth_type == AuthType.KEY_FILE:
+                elif server.is_key_auth:
                     conn = await asyncssh.connect(
                         host=server.host,
                         port=server.ssh_port,
@@ -401,7 +401,7 @@ class SSHConnectionPool:
             try:
                 logger.info(f"[SSH Pool] Creating new SSH connection after reconnect: {key}")
                 
-                if server.auth_type == AuthType.PASSWORD:
+                if server.is_password_auth:
                     conn = await asyncssh.connect(
                         host=server.host,
                         port=server.ssh_port,
@@ -409,7 +409,7 @@ class SSHConnectionPool:
                         password=server.ssh_password,
                         known_hosts=None
                     )
-                elif server.auth_type == AuthType.KEY_FILE:
+                elif server.is_key_auth:
                     conn = await asyncssh.connect(
                         host=server.host,
                         port=server.ssh_port,
@@ -475,7 +475,7 @@ class SSHConnectionPool:
             try:
                 logger.info(f"[SSH Pool] Manual reconnection: Creating new SSH connection: {key}")
                 
-                if server.auth_type == AuthType.PASSWORD:
+                if server.is_password_auth:
                     conn = await asyncssh.connect(
                         host=server.host,
                         port=server.ssh_port,
@@ -483,7 +483,7 @@ class SSHConnectionPool:
                         password=server.ssh_password,
                         known_hosts=None
                     )
-                elif server.auth_type == AuthType.KEY_FILE:
+                elif server.is_key_auth:
                     conn = await asyncssh.connect(
                         host=server.host,
                         port=server.ssh_port,

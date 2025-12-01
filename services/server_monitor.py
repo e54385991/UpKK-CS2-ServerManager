@@ -127,7 +127,7 @@ class ServerMonitor:
         """
         from modules.database import async_session_maker
         from modules.models import Server, ServerStatus
-        from sqlalchemy import select
+        from sqlmodel import select
         from services.redis_manager import redis_manager
         
         logger.info(f"Starting panel-based monitoring for server {server_id}")
@@ -151,8 +151,7 @@ class ServerMonitor:
             while True:
                 # Get fresh server data from database
                 async with async_session_maker() as db:
-                    result = await db.execute(select(Server).filter(Server.id == server_id))
-                    server = result.scalar_one_or_none()
+                    server = await db.get(Server, server_id)
                     
                     if not server:
                         logger.warning(f"Server {server_id} not found in database, stopping monitoring")

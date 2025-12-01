@@ -53,15 +53,12 @@ class AutoUpdateService:
         """Check all servers with auto-update enabled and update if needed"""
         from modules.database import async_session_maker
         from modules.models import Server
-        from sqlalchemy import select, update
+        from sqlmodel import select, update
         
         try:
             async with async_session_maker() as db:
                 # Get all servers with auto-update enabled
-                result = await db.execute(
-                    select(Server).filter(Server.enable_auto_update == True)
-                )
-                servers = result.scalars().all()
+                servers = await Server.get_all_with_auto_update(db)
                 
                 logger.info(f"Checking {len(servers)} servers with auto-update enabled")
                 
@@ -162,8 +159,8 @@ class AutoUpdateService:
                 host=server.host,
                 port=server.ssh_port,
                 username=server.ssh_user,
-                password=server.ssh_password if server.auth_type.value == 'password' else None,
-                key_path=server.ssh_key_path if server.auth_type.value == 'key_file' else None
+                password=server.ssh_password if server.is_password_auth else None,
+                key_path=server.ssh_key_path if server.is_key_auth else None
             )
             
             # Define progress callback

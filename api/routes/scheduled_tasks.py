@@ -3,7 +3,7 @@ API routes for scheduled tasks
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlmodel import select, delete
 from typing import List
 
 from modules import (
@@ -25,11 +25,7 @@ async def create_scheduled_task(
 ):
     """Create a new scheduled task for a server"""
     # Verify server exists and belongs to user
-    result = await db.execute(
-        select(Server).filter(Server.id == server_id, Server.user_id == current_user.id)
-    )
-    server = result.scalar_one_or_none()
-    
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     
@@ -64,22 +60,12 @@ async def list_scheduled_tasks(
 ):
     """List all scheduled tasks for a server"""
     # Verify server exists and belongs to user
-    result = await db.execute(
-        select(Server).filter(Server.id == server_id, Server.user_id == current_user.id)
-    )
-    server = result.scalar_one_or_none()
-    
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     
     # Get tasks
-    result = await db.execute(
-        select(ScheduledTask)
-        .filter(ScheduledTask.server_id == server_id)
-        .order_by(ScheduledTask.id.desc())
-    )
-    tasks = result.scalars().all()
-    
+    tasks = await ScheduledTask.get_all_by_server(db, server_id)
     return tasks
 
 
@@ -92,23 +78,12 @@ async def get_scheduled_task(
 ):
     """Get a specific scheduled task"""
     # Verify server exists and belongs to user
-    result = await db.execute(
-        select(Server).filter(Server.id == server_id, Server.user_id == current_user.id)
-    )
-    server = result.scalar_one_or_none()
-    
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     
     # Get task
-    result = await db.execute(
-        select(ScheduledTask).filter(
-            ScheduledTask.id == task_id,
-            ScheduledTask.server_id == server_id
-        )
-    )
-    task = result.scalar_one_or_none()
-    
+    task = await ScheduledTask.get_by_id_and_server(db, task_id, server_id)
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
     
@@ -125,23 +100,12 @@ async def update_scheduled_task(
 ):
     """Update a scheduled task"""
     # Verify server exists and belongs to user
-    result = await db.execute(
-        select(Server).filter(Server.id == server_id, Server.user_id == current_user.id)
-    )
-    server = result.scalar_one_or_none()
-    
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     
     # Get task
-    result = await db.execute(
-        select(ScheduledTask).filter(
-            ScheduledTask.id == task_id,
-            ScheduledTask.server_id == server_id
-        )
-    )
-    task = result.scalar_one_or_none()
-    
+    task = await ScheduledTask.get_by_id_and_server(db, task_id, server_id)
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
     
@@ -192,17 +156,13 @@ async def delete_scheduled_task(
 ):
     """Delete a scheduled task"""
     # Verify server exists and belongs to user
-    result = await db.execute(
-        select(Server).filter(Server.id == server_id, Server.user_id == current_user.id)
-    )
-    server = result.scalar_one_or_none()
-    
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     
     # Delete task
     result = await db.execute(
-        delete(ScheduledTask).filter(
+        delete(ScheduledTask).where(
             ScheduledTask.id == task_id,
             ScheduledTask.server_id == server_id
         )
@@ -225,23 +185,12 @@ async def toggle_scheduled_task(
 ):
     """Toggle a scheduled task enabled/disabled"""
     # Verify server exists and belongs to user
-    result = await db.execute(
-        select(Server).filter(Server.id == server_id, Server.user_id == current_user.id)
-    )
-    server = result.scalar_one_or_none()
-    
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
     
     # Get task
-    result = await db.execute(
-        select(ScheduledTask).filter(
-            ScheduledTask.id == task_id,
-            ScheduledTask.server_id == server_id
-        )
-    )
-    task = result.scalar_one_or_none()
-    
+    task = await ScheduledTask.get_by_id_and_server(db, task_id, server_id)
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
     

@@ -4,7 +4,7 @@ Server actions routes with WebSocket support for real-time deployment status
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlmodel import select
 from typing import List, Set
 import asyncio
 import json
@@ -28,6 +28,23 @@ DEPLOYMENT_PROGRESS_CLEANUP_DELAY = 300  # 5 minutes - allows clients to fetch f
 # Store for background tasks to prevent garbage collection
 # Tasks are automatically removed when completed via callback
 _background_tasks: Set[asyncio.Task] = set()
+
+
+async def get_server_and_verify_ownership(
+    db: AsyncSession, server_id: int, user_id: int
+) -> Server:
+    """
+    Get server by ID and verify user ownership.
+    Raises HTTPException if server not found or user doesn't own it.
+    """
+    server = await Server.get_by_id_and_user(db, server_id, user_id)
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Server not found"
+        )
+    
+    return server
 
 
 def _store_task(task: asyncio.Task) -> None:
@@ -157,20 +174,7 @@ async def server_action(
     current_user: User = Depends(get_current_active_user)
 ):
     """Execute action on server (deploy, start, stop, restart, status)"""
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to perform actions on this server"
-        )
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
     
     # Check if server is already being deployed (prevent concurrent operations during deployment)
     action = action_data.action
@@ -567,20 +571,7 @@ async def get_deployment_progress(
     or if the WebSocket connection was lost. Useful for recovering progress after
     program restart or SSH disconnect.
     """
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view deployment progress for this server"
-        )
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
     
     # Get accumulated progress from Redis
     progress = await redis_manager.get_deployment_progress(server_id)
@@ -601,29 +592,9 @@ async def get_server_logs(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get deployment logs for a server"""
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
     
-    # Check ownership
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view logs for this server"
-        )
-    
-    result = await db.execute(
-        select(DeploymentLog)
-        .filter(DeploymentLog.server_id == server_id)
-        .order_by(DeploymentLog.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-    )
-    logs = result.scalars().all()
+    logs = await DeploymentLog.get_logs_by_server(db, server_id, skip, limit)
     
     return logs
 
@@ -648,17 +619,11 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
         
         # Use a new database session for this background task
         async with async_session_maker() as db:
-            # Get server
-            result = await db.execute(select(Server).filter(Server.id == server_id))
-            server = result.scalar_one_or_none()
+            # Get server and verify ownership
+            server = await Server.get_by_id_and_user(db, server_id, user_id)
             
             if not server:
                 await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
-                return
-            
-            # Check ownership
-            if server.user_id != user_id:
-                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Not authorized")
                 return
             
             ssh_manager = SSHManager()
@@ -750,8 +715,7 @@ async def batch_server_actions(
     # Validate all servers exist and belong to current user
     valid_server_ids = []
     for server_id in request.server_ids:
-        result = await db.execute(select(Server).filter(Server.id == server_id))
-        server = result.scalar_one_or_none()
+        server = await db.get(Server, server_id)
         
         if server and server.user_id == current_user.id:
             valid_server_ids.append(server_id)
@@ -843,17 +807,11 @@ async def execute_single_server_plugins(server_id: int, plugins: List[str], user
         
         # Use a new database session for this background task
         async with async_session_maker() as db:
-            # Get server
-            result = await db.execute(select(Server).filter(Server.id == server_id))
-            server = result.scalar_one_or_none()
+            # Get server and verify ownership
+            server = await Server.get_by_id_and_user(db, server_id, user_id)
             
             if not server:
                 await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
-                return
-            
-            # Check ownership
-            if server.user_id != user_id:
-                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Not authorized")
                 return
             
             ssh_manager = SSHManager()
@@ -948,8 +906,7 @@ async def batch_install_plugins(
     # Validate all servers exist and belong to current user
     valid_server_ids = []
     for server_id in request.server_ids:
-        result = await db.execute(select(Server).filter(Server.id == server_id))
-        server = result.scalar_one_or_none()
+        server = await db.get(Server, server_id)
         
         if server and server.user_id == current_user.id:
             valid_server_ids.append(server_id)
@@ -991,8 +948,7 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
         # Get server details from database
         from modules.database import async_session_maker
         async with async_session_maker() as db:
-            result = await db.execute(select(Server).filter(Server.id == server_id))
-            server = result.scalar_one_or_none()
+            server = await db.get(Server, server_id)
             
             if not server:
                 await websocket.send_json({
@@ -1090,8 +1046,7 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
         # Get server details from database
         from modules.database import async_session_maker
         async with async_session_maker() as db:
-            result = await db.execute(select(Server).filter(Server.id == server_id))
-            server = result.scalar_one_or_none()
+            server = await db.get(Server, server_id)
             
             if not server:
                 await websocket.send_json({
@@ -1221,20 +1176,7 @@ async def get_ssh_connection_info(
     Returns connection status, age, reconnection count, and pooling status.
     """
     # Get server and verify ownership
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
-    
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this server"
-        )
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
     
     # Get connection info from pool
     from services.ssh_connection_pool import ssh_connection_pool
@@ -1255,20 +1197,7 @@ async def reconnect_ssh(
     This bypasses rate limiting and resets the reconnection counter.
     """
     # Get server and verify ownership
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
-    
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this server"
-        )
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
     
     # Perform manual reconnection through pool
     from services.ssh_connection_pool import ssh_connection_pool
@@ -1296,20 +1225,7 @@ async def reset_reconnect_counter(
     Reset the reconnection counter for a server without reconnecting.
     """
     # Get server and verify ownership
-    result = await db.execute(select(Server).filter(Server.id == server_id))
-    server = result.scalar_one_or_none()
-    
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server with ID {server_id} not found"
-        )
-    
-    if server.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this server"
-        )
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
     
     # Reset counter through pool
     from services.ssh_connection_pool import ssh_connection_pool

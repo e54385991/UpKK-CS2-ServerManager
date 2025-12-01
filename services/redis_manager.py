@@ -12,17 +12,24 @@ logger = logging.getLogger(__name__)
 
 
 class RedisManager:
-    """Async Redis connection manager for caching"""
+    """Async Redis connection manager for caching with connection pooling"""
     
     # Cache duration constants
     INITIALIZED_SERVER_CACHE_TTL = 2592000  # 30 days in seconds
     
     def __init__(self):
+        # Create Redis client with connection pool settings from config
+        # The Redis class manages its own connection pool internally
         self.client = aioredis.Redis(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
             password=settings.REDIS_PASSWORD if settings.REDIS_PASSWORD else None,
             db=settings.REDIS_DB,
+            max_connections=settings.REDIS_POOL_SIZE,
+            retry_on_timeout=settings.REDIS_RETRY_ON_TIMEOUT,
+            health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+            socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
+            socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
             decode_responses=True
         )
     
@@ -89,8 +96,8 @@ class RedisManager:
             return False
     
     async def close(self):
-        """Close Redis connection"""
-        await self.client.close()
+        """Close Redis connection and connection pool"""
+        await self.client.aclose()
     
     # Initialized server methods
     async def set_initialized_server(self, user_id: int, server_data: dict, expire: int = None) -> str:

@@ -47,7 +47,7 @@ async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_ac
     from modules.models import Server
     from modules.database import async_session_maker
     from services.a2s_cache_service import a2s_cache_service
-    from sqlalchemy import select
+    from sqlmodel import select
     
     logger = logging.getLogger(__name__)
     logger.info(f"=== A2S-CACHE ENDPOINT CALLED for user {current_user.id} ===")
@@ -69,11 +69,8 @@ async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_ac
         # Use a separate session
         async with async_session_maker() as session:
             # Get servers for current user only
-            result = await session.execute(
-                select(Server).filter(Server.user_id == current_user.id)
-            )
+            servers = await Server.get_all_by_user(session, current_user.id)
             
-            servers = result.scalars().all()
             logger.info(f"Found {len(servers)} servers for user {current_user.id}")
             
             # Get cached data for each server

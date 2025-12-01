@@ -4,7 +4,7 @@ Authentication routes for user registration and login
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlmodel import select
 from datetime import timedelta
 
 from modules import (
@@ -32,8 +32,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         )
     
     # Check if username already exists
-    result = await db.execute(select(User).filter(User.username == user_data.username))
-    existing_user = result.scalar_one_or_none()
+    existing_user = await User.get_by_username(db, user_data.username)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -41,8 +40,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         )
     
     # Check if email already exists
-    result = await db.execute(select(User).filter(User.email == user_data.email))
-    existing_email = result.scalar_one_or_none()
+    existing_email = await User.get_by_email(db, user_data.email)
     if existing_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -78,8 +76,7 @@ async def login(
         )
     
     # Find user by username
-    result = await db.execute(select(User).filter(User.username == user_data.username))
-    user = result.scalar_one_or_none()
+    user = await User.get_by_username(db, user_data.username)
     
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
@@ -165,7 +162,7 @@ async def update_profile(
     if profile_data.email:
         # Check if email already exists for another user
         result = await db.execute(
-            select(User).filter(User.email == profile_data.email, User.id != current_user.id)
+            select(User).where(User.email == profile_data.email, User.id != current_user.id)
         )
         existing_email = result.scalar_one_or_none()
         if existing_email:
@@ -231,8 +228,7 @@ async def generate_user_api_key(
     # Check if the generated key already exists (very unlikely but possible)
     max_retries = 5
     for _ in range(max_retries):
-        result = await db.execute(select(User).filter(User.api_key == new_api_key))
-        existing_user = result.scalar_one_or_none()
+        existing_user = await User.get_by_api_key(db, new_api_key)
         if not existing_user:
             break
         new_api_key = generate_api_key()

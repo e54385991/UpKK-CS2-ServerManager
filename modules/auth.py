@@ -8,7 +8,7 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlmodel import select
 
 from .config import settings
 from .models import User
@@ -82,7 +82,7 @@ async def get_current_user(
     except (JWTError, ValueError):
         raise credentials_exception
     
-    result = await db.execute(select(User).filter(User.id == token_data.user_id))
+    result = await db.execute(select(User).where(User.id == token_data.user_id))
     user = result.scalar_one_or_none()
     
     if user is None:
@@ -116,7 +116,7 @@ async def get_optional_current_user(
     except (JWTError, ValueError):
         return None
     
-    result = await db.execute(select(User).filter(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     
     if user is None or not user.is_active:
@@ -152,10 +152,7 @@ async def get_user_from_api_key(
     if not x_api_key:
         return None
     
-    result = await db.execute(
-        select(User).filter(User.api_key == x_api_key)
-    )
-    user = result.scalar_one_or_none()
+    user = await User.get_by_api_key(db, x_api_key)
     
     if user and user.is_active:
         return user
@@ -190,8 +187,7 @@ async def get_current_user_flexible(
             user_id_str: str = payload.get("sub")
             if user_id_str:
                 user_id = int(user_id_str)
-                result = await db.execute(select(User).filter(User.id == user_id))
-                user = result.scalar_one_or_none()
+                user = await db.get(User, user_id)
                 if user and user.is_active:
                     return user
         except (JWTError, ValueError):
@@ -199,8 +195,7 @@ async def get_current_user_flexible(
     
     # Try API key authentication
     if x_api_key:
-        result = await db.execute(select(User).filter(User.api_key == x_api_key))
-        user = result.scalar_one_or_none()
+        user = await User.get_by_api_key(db, x_api_key)
         if user and user.is_active:
             return user
     

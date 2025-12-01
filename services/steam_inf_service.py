@@ -59,7 +59,7 @@ class SteamInfService:
     async def _periodic_refresh_all(self):
         """Periodically refresh all servers' version cache"""
         from modules.database import async_session_maker
-        from sqlalchemy import select
+        from sqlmodel import select
         
         try:
             async with async_session_maker() as db:

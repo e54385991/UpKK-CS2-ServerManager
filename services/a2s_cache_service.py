@@ -113,7 +113,7 @@ class A2SCacheService:
         """Query all servers and cache results"""
         from modules.database import async_session_maker
         from modules.models import Server
-        from sqlalchemy import select
+        from sqlmodel import select
         
         try:
             async with async_session_maker() as db:
@@ -184,7 +184,7 @@ class A2SCacheService:
                     from modules.database import async_session_maker
                     try:
                         async with async_session_maker() as db:
-                            from sqlalchemy import select, update
+                            from sqlmodel import select, update
                             from modules.models import Server
                             await db.execute(
                                 update(Server)

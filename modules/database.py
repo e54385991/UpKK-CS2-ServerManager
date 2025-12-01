@@ -1,17 +1,23 @@
 """
 Database connection and session management (Async)
+Using SQLModel for seamless FastAPI integration
 """
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import text
+from sqlmodel import SQLModel
 from .config import settings
-from .models import Base
+from typing import AsyncGenerator
 
-# Create async database engine
+# Create async database engine with connection pool configuration
+# Using settings from config.py for optimal performance
 engine = create_async_engine(
     settings.mysql_url,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    echo=settings.DEBUG
+    pool_size=settings.MYSQL_POOL_SIZE,  # Number of connections to keep open
+    max_overflow=settings.MYSQL_MAX_OVERFLOW,  # Max overflow connections
+    pool_timeout=settings.MYSQL_POOL_TIMEOUT,  # Wait time for connection
+    pool_recycle=settings.MYSQL_POOL_RECYCLE,  # Connection recycle time
+    pool_pre_ping=settings.MYSQL_POOL_PRE_PING,  # Health check before use
+    echo=settings.MYSQL_ECHO  # Enable/disable SQL query logging
 )
 
 # Create async session factory
@@ -26,13 +32,13 @@ async_session_maker = AsyncSessionLocal
 
 
 async def init_db():
-    """Initialize database tables"""
+    """Initialize database tables using SQLModel"""
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(SQLModel.metadata.create_all)
     print("Database initialized successfully!")
     
     # Create default admin user if no users exist
-    from sqlalchemy import select
+    from sqlmodel import select
     from .models import User
     from .auth import get_password_hash
     
@@ -112,7 +118,7 @@ async def migrate_db():
             
             if not users_table_exists:
                 print("Creating users table first...")
-                await conn.run_sync(Base.metadata.create_all)
+                await conn.run_sync(SQLModel.metadata.create_all)
             
             # Add user_id column with a default user (will be updated later)
             await conn.execute(
@@ -289,7 +295,7 @@ async def migrate_db():
         
         if not users_table_exists:
             print("Creating users table first...")
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(SQLModel.metadata.create_all)
         
         # Now check if api_key column exists
         result = await conn.execute(
@@ -375,8 +381,11 @@ async def migrate_db():
         print("✓ Database schema migration completed")
 
 
-async def get_db() -> AsyncSession:
-    """Get async database session"""
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Dependency for FastAPI routes to get async database session.
+    Uses SQLModel with async SQLAlchemy session.
+    """
     async with AsyncSessionLocal() as session:
         try:
             yield session

@@ -109,6 +109,18 @@
                         a2s_failure_threshold: 3,
                             a2s_check_interval_seconds: 60
         },
+        // GitHub Plugin Install
+        githubRepoUrl: '',
+        githubReleases: [],
+        githubFetching: false,
+        githubInstalling: false,
+        githubAnalyzing: false,
+        githubError: '',
+        githubNoReleases: false,
+        selectedReleaseIndex: '',
+        selectedAssetIndex: '',
+        githubExcludeDirs: [],
+        githubArchiveDirs: [],
 
         // Helper function to format SSH error messages with i18n support
         formatSSHError(errorMessage, defaultPrefixKey) {
@@ -970,7 +982,8 @@
                 'update_counterstrikesharp': 'Update CounterStrikeSharp',
                 'install_cs2fixes': 'Install CS2Fixes',
                 'update_cs2fixes': 'Update CS2Fixes',
-                'backup_plugins': window.i18n?.t('serverDetail.backupPlugins') || 'Backup Plugins'
+                'backup_plugins': window.i18n?.t('serverDetail.backupPlugins') || 'Backup Plugins',
+                'install_github_plugin': window.i18n?.t('serverDetail.installFromGitHub') || 'Install from GitHub'
             };
             
             this.currentOperationName = operationNames[action] || action;
@@ -1184,6 +1197,179 @@
         // Execute backup plugins with confirmation
         async executeBackupPlugins() {
             await this.executeAction('backup_plugins');
+        },
+        
+        // GitHub Plugin Installation Methods
+        async fetchGitHubReleases() {
+            if (!this.githubRepoUrl) return;
+            
+            this.githubFetching = true;
+            this.githubError = '';
+            this.githubNoReleases = false;
+            this.githubReleases = [];
+            this.selectedReleaseIndex = '';
+            this.selectedAssetIndex = '';
+            
+            try {
+                const response = await authFetch(`/api/github-plugins/releases?repo_url=${encodeURIComponent(this.githubRepoUrl)}&count=5`);
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to fetch releases');
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    this.githubError = data.error || 'Failed to fetch releases';
+                    return;
+                }
+                
+                if (data.releases.length === 0) {
+                    this.githubNoReleases = true;
+                    return;
+                }
+                
+                this.githubReleases = data.releases;
+                this.addLog('complete', `Fetched ${data.releases.length} releases from ${data.repo_owner}/${data.repo_name}`);
+            } catch (err) {
+                this.githubError = err.message;
+                this.addLog('error', `Failed to fetch GitHub releases: ${err.message}`);
+            } finally {
+                this.githubFetching = false;
+            }
+        },
+        
+        onReleaseSelected() {
+            this.selectedAssetIndex = '';
+            this.githubArchiveDirs = [];
+            this.githubExcludeDirs = [];
+        },
+        
+        toggleExcludeDir(dir) {
+            const index = this.githubExcludeDirs.indexOf(dir);
+            if (index > -1) {
+                this.githubExcludeDirs.splice(index, 1);
+            } else {
+                this.githubExcludeDirs.push(dir);
+            }
+        },
+        
+        removeExcludeDir(index) {
+            this.githubExcludeDirs.splice(index, 1);
+        },
+        
+        async analyzeGitHubArchive() {
+            if (this.selectedReleaseIndex === '' || this.selectedAssetIndex === '') {
+                this.showToast(window.i18n?.t('serverDetail.selectAssetFirst') || 'Please select an asset first', 'error');
+                return;
+            }
+            
+            const release = this.githubReleases[this.selectedReleaseIndex];
+            const asset = release.assets[this.selectedAssetIndex];
+            
+            if (!asset || !asset.browser_download_url) {
+                this.showToast('Invalid asset selected', 'error');
+                return;
+            }
+            
+            this.githubAnalyzing = true;
+            this.githubError = '';
+            
+            try {
+                const response = await authFetch(`/api/github-plugins/servers/${this.serverId}/analyze-archive?download_url=${encodeURIComponent(asset.browser_download_url)}`);
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to analyze archive');
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    this.githubError = data.error || 'Failed to analyze archive';
+                    return;
+                }
+                
+                // Set the available directories for selection
+                this.githubArchiveDirs = data.all_dirs || [];
+                
+                if (this.githubArchiveDirs.length === 0) {
+                    this.showToast(window.i18n?.t('serverDetail.noDirsFound') || 'No directories found in archive', 'info');
+                } else {
+                    this.addLog('complete', `Found ${this.githubArchiveDirs.length} directories in archive`);
+                }
+            } catch (err) {
+                this.githubError = err.message;
+                this.addLog('error', `Failed to analyze archive: ${err.message}`);
+            } finally {
+                this.githubAnalyzing = false;
+            }
+        },
+        
+        formatFileSize(bytes) {
+            if (!bytes || bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+        },
+        
+        async installGitHubPlugin() {
+            if (this.selectedReleaseIndex === '' || this.selectedAssetIndex === '') {
+                this.showToast('Please select a release and asset', 'error');
+                return;
+            }
+            
+            const release = this.githubReleases[this.selectedReleaseIndex];
+            const asset = release.assets[this.selectedAssetIndex];
+            
+            if (!asset || !asset.browser_download_url) {
+                this.showToast('Invalid asset selected', 'error');
+                return;
+            }
+            
+            this.githubInstalling = true;
+            this.githubError = '';
+            
+            // Open operation modal
+            this.openOperationModal('install_github_plugin');
+            
+            try {
+                const response = await authFetch(`/api/github-plugins/servers/${this.serverId}/install`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        download_url: asset.browser_download_url,
+                        exclude_dirs: this.githubExcludeDirs
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.addLog('complete', result.message);
+                    this.showToast(window.i18n?.t('serverDetail.pluginInstallSuccess') || result.message, 'success');
+                    
+                    // Reset selection
+                    this.selectedReleaseIndex = '';
+                    this.selectedAssetIndex = '';
+                    this.githubExcludeDirs = [];
+                    this.githubArchiveDirs = [];
+                } else {
+                    this.githubError = result.message;
+                    this.addLog('error', result.message);
+                    this.showToast(window.i18n?.t('serverDetail.pluginInstallFailed') || result.message, 'error');
+                }
+            } catch (err) {
+                this.githubError = err.message;
+                this.addLog('error', `Failed to install plugin: ${err.message}`);
+                this.showToast(window.i18n?.t('serverDetail.pluginInstallFailed') || err.message, 'error');
+            } finally {
+                this.githubInstalling = false;
+            }
         },
         
         async loadHistory() {

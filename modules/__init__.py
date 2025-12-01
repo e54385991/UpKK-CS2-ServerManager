@@ -13,7 +13,10 @@ from .schemas import (
     SteamApiKeyResponse, GenerateServerTokenRequest, GenerateServerTokenResponse,
     A2SServerInfo, A2SPlayerInfo, A2SCachedData, A2SCacheResponse,
     InitializedServerCreate, InitializedServerResponse, InitializedServerListItem,
-    ScheduledTaskCreate, ScheduledTaskUpdate, ScheduledTaskResponse
+    ScheduledTaskCreate, ScheduledTaskUpdate, ScheduledTaskResponse,
+    GitHubReleaseAsset, GitHubRelease, GitHubReleasesResponse,
+    ArchiveContentItem, ArchiveAnalysisResponse,
+    GitHubPluginInstallRequest, GitHubPluginInstallResponse
 )
 from .database import get_db, init_db, engine, async_session_maker, migrate_db
 from .auth import (
@@ -22,7 +25,7 @@ from .auth import (
     get_optional_current_user, get_user_from_api_key, get_current_user_flexible
 )
 from .utils import generate_api_key, verify_api_key_format, get_current_time
-from .logging_config import setup_logging
+from .logging_config import setup_logging, _get_log_level
 
 __all__ = [
     'settings',
@@ -67,6 +70,13 @@ __all__ = [
     'ScheduledTaskCreate',
     'ScheduledTaskUpdate',
     'ScheduledTaskResponse',
+    'GitHubReleaseAsset',
+    'GitHubRelease',
+    'GitHubReleasesResponse',
+    'ArchiveContentItem',
+    'ArchiveAnalysisResponse',
+    'GitHubPluginInstallRequest',
+    'GitHubPluginInstallResponse',
     'get_db',
     'init_db',
     'migrate_db',
@@ -85,4 +95,5 @@ __all__ = [
     'verify_api_key_format',
     'get_current_time',
     'setup_logging',
+    '_get_log_level',
 ]

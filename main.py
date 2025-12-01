@@ -1,22 +1,25 @@
 """
 FastAPI application for CS2 Server Manager
 Main entry point with organized structure
+Using SQLModel for seamless FastAPI integration
 """
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlmodel import select
 import os
 import logging
 
-from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse, get_optional_current_user, User, setup_logging
+from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse, get_optional_current_user, User, setup_logging, _get_log_level
 from services import redis_manager
-from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks
+from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins
 
 # Initialize logging first (before anything else logs)
-setup_logging(level=logging.INFO)
+# Get log level from settings
+log_level = _get_log_level(settings.LOG_LEVEL)
+setup_logging(level=log_level, asyncssh_level=settings.ASYNCSSH_LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app
@@ -46,6 +49,7 @@ app.include_router(setup.router)
 app.include_router(server_status.router)
 app.include_router(file_manager.router)
 app.include_router(scheduled_tasks.router)
+app.include_router(github_plugins.router)
 
 
 @app.on_event("startup")
@@ -101,8 +105,7 @@ async def startup_event():
     from services.ssh_manager import SSHManager
     
     async with async_session_maker() as db:
-        result = await db.execute(select(Server).filter(Server.enable_panel_monitoring == True))
-        monitored_servers = result.scalars().all()
+        monitored_servers = await Server.get_all_with_panel_monitoring(db)
         
         if monitored_servers:
             print(f"Starting panel monitoring for {len(monitored_servers)} server(s)...")
@@ -183,8 +186,7 @@ async def server_detail_ui(request: Request, server_id: int):
     from modules.database import async_session_maker
     
     async with async_session_maker() as db:
-        result = await db.execute(select(Server).filter(Server.id == server_id))
-        server = result.scalar_one_or_none()
+        server = await db.get(Server, server_id)
         
         if not server:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
@@ -207,8 +209,7 @@ async def console_popup(request: Request, server_id: int, console_type: str):
     from modules.database import async_session_maker
     
     async with async_session_maker() as db:
-        result = await db.execute(select(Server).filter(Server.id == server_id))
-        server = result.scalar_one_or_none()
+        server = await db.get(Server, server_id)
         
         if not server:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
@@ -226,8 +227,7 @@ async def ssh_console(request: Request, server_id: int):
     from modules.database import async_session_maker
     
     async with async_session_maker() as db:
-        result = await db.execute(select(Server).filter(Server.id == server_id))
-        server = result.scalar_one_or_none()
+        server = await db.get(Server, server_id)
         
         if not server:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
@@ -244,8 +244,7 @@ async def game_console(request: Request, server_id: int):
     from modules.database import async_session_maker
     
     async with async_session_maker() as db:
-        result = await db.execute(select(Server).filter(Server.id == server_id))
-        server = result.scalar_one_or_none()
+        server = await db.get(Server, server_id)
         
         if not server:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
@@ -262,8 +261,7 @@ async def file_editor_popup(request: Request, server_id: int, file_path: str, fi
     from modules.database import async_session_maker
     
     async with async_session_maker() as db:
-        result = await db.execute(select(Server).filter(Server.id == server_id))
-        server = result.scalar_one_or_none()
+        server = await db.get(Server, server_id)
         
         if not server:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")

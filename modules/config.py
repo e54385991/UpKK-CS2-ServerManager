@@ -1,6 +1,7 @@
 """
 Configuration module for CS2 Server Manager
 Handles Redis, MySQL connections and other basic settings
+Connection pool configurations are used by SQLAlchemy engine (which powers SQLModel)
 """
 from pydantic_settings import BaseSettings
 from typing import Optional
@@ -16,17 +17,39 @@ class Settings(BaseSettings):
     MYSQL_PASSWORD: str = "7cfJBzXHcja5TeiS"
     MYSQL_DATABASE: str = "cs2_manager"
     
+    # MySQL Connection Pool Configuration
+    # These settings optimize database connection management for better performance
+    MYSQL_POOL_SIZE: int = 5  # Number of connections to keep open in the pool
+    MYSQL_MAX_OVERFLOW: int = 10  # Maximum overflow connections when pool is full
+    MYSQL_POOL_TIMEOUT: int = 30  # Seconds to wait for a connection from the pool
+    MYSQL_POOL_RECYCLE: int = 3600  # Seconds before a connection is recycled (1 hour)
+    MYSQL_POOL_PRE_PING: bool = True  # Enable connection health check before use
+    MYSQL_ECHO: bool = False  # Enable/disable SQLAlchemy SQL query logging (sqlalchemy.engine.Engine)
+    
     # Redis Configuration
     REDIS_HOST: str = "1Panel-redis-oAZc"
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: Optional[str] = "redis_rYpBai"
     REDIS_DB: int = 0
     
+    # Redis Connection Pool Configuration
+    # These settings optimize Redis connection management for better performance
+    REDIS_POOL_SIZE: int = 10  # Maximum number of connections in the pool
+    REDIS_RETRY_ON_TIMEOUT: bool = True  # Retry operation on timeout
+    REDIS_HEALTH_CHECK_INTERVAL: int = 30  # Seconds between health checks
+    REDIS_SOCKET_CONNECT_TIMEOUT: int = 5  # Seconds for socket connection timeout
+    REDIS_SOCKET_TIMEOUT: int = 5  # Seconds for socket read/write timeout
+    
     # Application Configuration
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     DEBUG: bool = True
     BACKEND_URL: str = "http://localhost:8000"  # Backend URL for server status reporting
+    
+    # Logging Configuration
+    # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+    LOG_LEVEL: str = "INFO"  # General application logging level
+    ASYNCSSH_LOG_LEVEL: str = "WARNING"  # AsyncSSH library logging level (reduce verbosity)
     
     # Security
     SECRET_KEY: str = "your-secret-key-change-this-in-production"

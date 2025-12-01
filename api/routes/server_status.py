@@ -5,8 +5,7 @@ Authentication is done via API key rather than JWT
 """
 from fastapi import APIRouter, Header, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from pydantic import BaseModel
+from sqlmodel import select, SQLModel
 from datetime import datetime
 from typing import Optional
 
@@ -15,7 +14,7 @@ from modules import Server, DeploymentLog, ServerStatus, get_db
 router = APIRouter(prefix="/api/server-status", tags=["server-status"])
 
 
-class ServerStatusReport(BaseModel):
+class ServerStatusReport(SQLModel):
     """Schema for server status reports from CS2 servers"""
     event_type: str  # "restart", "crash", "startup", "shutdown", "crash_limit_reached"
     message: Optional[str] = None
@@ -41,10 +40,7 @@ async def verify_server_api_key(
     Raises:
         HTTPException: If API key is invalid
     """
-    result = await db.execute(
-        select(Server).filter(Server.api_key == x_api_key)
-    )
-    server = result.scalar_one_or_none()
+    server = await Server.get_by_api_key(db, x_api_key)
     
     if not server:
         raise HTTPException(

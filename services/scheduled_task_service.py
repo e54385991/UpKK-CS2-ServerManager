@@ -11,7 +11,7 @@ import re
 from modules.utils import get_current_time
 from modules.database import async_session_maker
 from modules.models import ScheduledTask, Server
-from sqlalchemy import select, update as sql_update
+from sqlmodel import select, update as sql_update
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
@@ -68,8 +68,8 @@ class ScheduledTaskService:
                 # Get all enabled tasks that are due for execution
                 result = await db.execute(
                     select(ScheduledTask)
-                    .filter(ScheduledTask.enabled.is_(True))
-                    .filter(
+                    .where(ScheduledTask.enabled.is_(True))
+                    .where(
                         (ScheduledTask.next_run.is_(None)) | 
                         (ScheduledTask.next_run <= now)
                     )
@@ -95,10 +95,7 @@ class ScheduledTaskService:
         try:
             # Get the server
             async with async_session_maker() as db:
-                result = await db.execute(
-                    select(Server).filter(Server.id == task.server_id)
-                )
-                server = result.scalar_one_or_none()
+                server = await db.get(Server, task.server_id)
                 
                 if not server:
                     logger.error(f"Server {task.server_id} not found for task {task.id}")
@@ -193,10 +190,7 @@ class ScheduledTaskService:
         try:
             async with async_session_maker() as db:
                 # Get the task
-                result = await db.execute(
-                    select(ScheduledTask).filter(ScheduledTask.id == task_id)
-                )
-                task = result.scalar_one_or_none()
+                task = await db.get(ScheduledTask, task_id)
                 
                 if not task:
                     return
@@ -349,7 +343,7 @@ class ScheduledTaskService:
             async with async_session_maker() as db:
                 # Get all enabled tasks
                 result = await db.execute(
-                    select(ScheduledTask).filter(ScheduledTask.enabled.is_(True))
+                    select(ScheduledTask).where(ScheduledTask.enabled.is_(True))
                 )
                 tasks = result.scalars().all()
                 
@@ -380,10 +374,7 @@ class ScheduledTaskService:
         """Recalculate next run time for a specific task (used when task is updated)"""
         try:
             async with async_session_maker() as db:
-                result = await db.execute(
-                    select(ScheduledTask).filter(ScheduledTask.id == task_id)
-                )
-                task = result.scalar_one_or_none()
+                task = await db.get(ScheduledTask, task_id)
                 
                 if not task:
                     return

@@ -146,7 +146,7 @@ class SSHManager:
         else:
             # Direct connection (legacy mode)
             try:
-                if server.auth_type == AuthType.PASSWORD:
+                if server.is_password_auth:
                     # Password authentication
                     self.conn = await asyncssh.connect(
                         host=server.host,
@@ -155,7 +155,7 @@ class SSHManager:
                         password=server.ssh_password,
                         known_hosts=None
                     )
-                elif server.auth_type == AuthType.KEY_FILE:
+                elif server.is_key_auth:
                     # Key file authentication
                     self.conn = await asyncssh.connect(
                         host=server.host,

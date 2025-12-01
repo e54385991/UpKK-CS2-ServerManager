@@ -5,6 +5,7 @@ Configures rotating file handler with automatic log rotation
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+from typing import Optional
 
 # Log directory and file settings
 LOG_DIR = "logs"
@@ -15,12 +16,37 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-def setup_logging(level: int = logging.INFO) -> None:
+def _get_log_level(level_str: str) -> int:
+    """
+    Convert string log level to logging constant
+    
+    Args:
+        level_str: Log level as string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    
+    Returns:
+        Logging level constant (defaults to INFO if invalid)
+    """
+    if not level_str or not isinstance(level_str, str):
+        return logging.INFO
+    
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL
+    }
+    return level_map.get(level_str.upper(), logging.INFO)
+
+
+def setup_logging(level: int = logging.INFO, asyncssh_level: Optional[str] = None) -> None:
     """
     Configure logging with rotating file handler.
     
     Args:
         level: Logging level (default: INFO)
+        asyncssh_level: AsyncSSH logging level as string (e.g., "WARNING", "ERROR")
+                       If None, uses the same level as general logging
     """
     # Create logs directory if it doesn't exist
     if not os.path.exists(LOG_DIR):
@@ -56,6 +82,13 @@ def setup_logging(level: int = logging.INFO) -> None:
     # Add handlers
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
+    
+    # Configure asyncssh logging level separately
+    if asyncssh_level:
+        asyncssh_log_level = _get_log_level(asyncssh_level)
+        logging.getLogger('asyncssh').setLevel(asyncssh_log_level)
+        logging.getLogger('asyncssh.sftp').setLevel(asyncssh_log_level)
+        logging.info(f"AsyncSSH logging level set to: {asyncssh_level}")
     
     # Log startup message
     logging.info(f"Logging initialized - file: {log_file_path}, max size: {MAX_LOG_SIZE // (1024*1024)}MB, backups: {BACKUP_COUNT}")
