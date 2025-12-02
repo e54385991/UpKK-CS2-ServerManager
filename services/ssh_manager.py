@@ -1069,6 +1069,24 @@ class SSHManager:
             if progress_callback:
                 await progress_callback(message)
         
+        def sanitize_sensitive_value(cmd: str, value: str, replacement: str) -> str:
+            """
+            Helper to sanitize a sensitive value from a command string.
+            Handles single quotes, double quotes, and unquoted occurrences.
+            Processes quoted occurrences first, then unquoted to avoid partial exposure.
+            Uses regex escaping to handle special characters safely.
+            """
+            if value is None or value == '':
+                return cmd
+            # Escape the value for safe string replacement (handles special characters)
+            escaped_value = re.escape(value)
+            # Replace quoted occurrences first (more specific matches)
+            cmd = re.sub(f'"{escaped_value}"', f'"{replacement}"', cmd)
+            cmd = re.sub(f"'{escaped_value}'", f"'{replacement}'", cmd)
+            # Replace unquoted occurrences last (more general match)
+            cmd = re.sub(escaped_value, replacement, cmd)
+            return cmd
+        
         try:
             # Clean up any dead screen sessions first
             # This prevents false positives when checking for existing sessions
@@ -1131,8 +1149,49 @@ class SSHManager:
             max_players = server.max_players or 32
             tickrate = server.tickrate or 128
             server_name = server.server_name or f"CS2 Server {server.id}"
-            game_mode = server.game_mode or "competitive"
-            game_type = server.game_type or "0"
+            
+            # Game mode mapping: convert string names to numeric values
+            # Reference: https://developer.valvesoftware.com/wiki/Counter-Strike:_Global_Offensive/Game_Modes
+            # Format: (game_type, game_mode)
+            game_mode_str = server.game_mode or "competitive"
+            
+            # Correct mapping from Valve documentation
+            # Each mode maps to (game_type, game_mode) tuple
+            mode_mapping = {
+                "casual": ("0", "0"),
+                "competitive": ("0", "1"),
+                "wingman": ("0", "2"),
+                "arms_race": ("1", "0"),
+                "armsrace": ("1", "0"),  # Alternative spelling
+                "demolition": ("1", "1"),
+                "deathmatch": ("2", "0"),
+                "custom": ("3", "0"),
+            }
+            
+            # Convert game_mode string to numeric values
+            if game_mode_str:
+                game_mode_lower = game_mode_str.lower()
+                # Check if it's in the mapping
+                if game_mode_lower in mode_mapping:
+                    mapped_game_type, mapped_game_mode = mode_mapping[game_mode_lower]
+                    game_mode = mapped_game_mode
+                    # Use mapped game_type if user hasn't explicitly set one
+                    if not server.game_type:
+                        game_type = mapped_game_type
+                    else:
+                        game_type = server.game_type
+                # Check if it's already a numeric string
+                elif game_mode_str.isdigit():
+                    game_mode = game_mode_str
+                    game_type = server.game_type or "0"
+                else:
+                    # Unknown string value, default to competitive and log warning
+                    await send_progress(f"⚠ Warning: Unknown game_mode '{game_mode_str}', defaulting to competitive")
+                    game_mode = "1"
+                    game_type = "0"  # Competitive uses game_type 0
+            else:
+                game_mode = "1"  # Default to competitive
+                game_type = server.game_type or "0"
             
             # Core parameters
             params = [
@@ -1283,7 +1342,16 @@ class SSHManager:
             await send_progress(f"Map: {default_map}")
             await send_progress(f"Max Players: {max_players}")
             await send_progress(f"Tickrate: {tickrate}")
-            await send_progress(f"Game Mode: {game_mode}")
+            await send_progress(f"Game Mode: {game_mode_str} (game_type: {game_type}, game_mode: {game_mode})")
+            await send_progress("=" * 60)
+            await send_progress("Startup Command:")
+            # Sanitize sensitive information before displaying
+            sanitized_cmd = start_cmd
+            sanitized_cmd = sanitize_sensitive_value(sanitized_cmd, api_key, "***API_KEY***")
+            sanitized_cmd = sanitize_sensitive_value(sanitized_cmd, server.server_password, "***PASSWORD***")
+            sanitized_cmd = sanitize_sensitive_value(sanitized_cmd, server.rcon_password, "***RCON_PASSWORD***")
+            sanitized_cmd = sanitize_sensitive_value(sanitized_cmd, server.steam_account_token, "***STEAM_TOKEN***")
+            await send_progress(sanitized_cmd)
             await send_progress("=" * 60)
             
             success, stdout, stderr = await self.execute_command(start_cmd, timeout=10)
