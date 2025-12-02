@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from typing import List, Dict, Any
 import asyncssh
+import shlex
 
 from modules import (
     Server, ServerCreate, ServerUpdate, ServerResponse, AuthType,
@@ -54,6 +55,7 @@ async def create_server(
         )
     
     # Validate SSH connection before creating server (password authentication only)
+    conn = None
     try:
         if not server_data.ssh_password:
             raise HTTPException(
@@ -89,12 +91,32 @@ async def create_server(
         
         # Step 2: Test command execution
         result = await conn.run("echo 'SSH connection successful'", check=False)
-        conn.close()
         
         if result.exit_status != 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"SSH connection succeeded but command execution failed. Please verify that user {server_data.ssh_user} has proper shell access and permissions."
+            )
+        
+        # Step 3: Create game directory with proper permissions
+        # Use shlex.quote to safely escape the directory path
+        game_dir_quoted = shlex.quote(server_data.game_directory)
+        mkdir_cmd = f"mkdir -p {game_dir_quoted}"
+        
+        result = await conn.run(mkdir_cmd, check=False)
+        if result.exit_status != 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to create game directory {server_data.game_directory}. Please check permissions and path."
+            )
+        
+        # Set proper permissions (755 - owner can read/write/execute, others can read/execute)
+        chmod_cmd = f"chmod 755 {game_dir_quoted}"
+        result = await conn.run(chmod_cmd, check=False)
+        if result.exit_status != 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to set permissions on game directory {server_data.game_directory}. Please check user permissions."
             )
             
     except HTTPException:
@@ -104,6 +126,10 @@ async def create_server(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to validate server connection: {str(e)}"
         )
+    finally:
+        # Ensure connection is always closed
+        if conn:
+            conn.close()
     
     # Create server with user_id, auto-generated API key, and password auth
     # Exclude captcha fields from server creation
