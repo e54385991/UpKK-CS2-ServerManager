@@ -54,6 +54,12 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 
 # 不会使用？花费 2 分钟看看视频 ↓
 
+## 📚 新手教程
+
+### 🌐 部署教程
+**从 0 开始部署 CS2 服务器？** 查看我们的详细图文教程：
+- [如何使用本面板部署CS2游戏服务器](docs/ALIYUN_ECS_DEPLOY.md)
+
 ## 🚀 超简单部署（2分钟上手）
 
 [![](https://img.youtube.com/vi/8GksFZHmO0c/maxresdefault.jpg)](https://youtu.be/8GksFZHmO0c)
@@ -302,6 +308,11 @@ For details: [Panel Proxy Documentation](docs/GITHUB_PROXY.md)
 - **Operating System**: Ubuntu 24.04+ OR Debian 13+
 
 ### 🚀 Quick Start
+
+#### 📚 Beginner Tutorial
+
+**Starting from scratch?** Check out our detailed step-by-step guide:
+- [How to Deploy CS2 Game Server Using This Panel](docs/ALIYUN_ECS_DEPLOY.md) (Chinese)
 
 #### Step 1: Prepare Server
 
