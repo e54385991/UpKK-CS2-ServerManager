@@ -715,7 +715,6 @@ class SSHManager:
             autorestart_script_path = f"{server.game_directory}/cs2_autorestart.sh"
             
             # Read the autorestart script content
-            import os
             script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             local_script_path = os.path.join(script_dir, "scripts", "cs2_autorestart.sh")
             
@@ -894,7 +893,6 @@ class SSHManager:
                 await send_progress("✗ Auto-restart script missing - attempting to deploy...")
                 
                 # Deploy the script
-                import os
                 script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 local_script_path = os.path.join(script_dir, "scripts", "cs2_autorestart.sh")
                 
@@ -1096,7 +1094,6 @@ class SSHManager:
                 await send_progress("Auto-restart script not found, deploying now...")
                 
                 # Read the autorestart script content
-                import os
                 script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 local_script_path = os.path.join(script_dir, "scripts", "cs2_autorestart.sh")
                 
