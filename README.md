@@ -49,22 +49,20 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 3. 在服务器配置页面启用"使用面板服务器代理"
 4. 享受无障碍的插件安装体验！
 
-详细说明请查看：[面板代理配置文档](docs/GITHUB_PROXY.md)
-
 
 # 不会使用？花费 2 分钟看看视频 ↓
 
 ## 📚 新手教程
 
 ### 🌐 部署教程
-**从 0 开始部署 CS2 服务器？** 查看我们的详细图文教程：
+**从 0 开始部署 CS2 游戏服务器？** 查看我们的详细图文教程：
 - [如何使用本面板部署CS2游戏服务器](docs/ALIYUN_ECS_DEPLOY.md)
 
-## 🚀 超简单部署（2分钟上手）
+## 🚀 管理面板 超简单部署（2分钟上手）
 
 [![](https://img.youtube.com/vi/8GksFZHmO0c/maxresdefault.jpg)](https://youtu.be/8GksFZHmO0c)
 
-## ⚙️ 操作和管理（完整功能演示）
+## ⚙️ 管理面板 操作和管理（完整功能演示）
 
 [![](https://img.youtube.com/vi/PPzykUZmNy0/maxresdefault.jpg)](https://youtu.be/PPzykUZmNy0)
 

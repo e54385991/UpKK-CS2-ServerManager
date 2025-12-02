@@ -1,5 +1,5 @@
 # 如何使用本面板部署CS2游戏服务器
-# 不管是轻量 腾讯云 阿里云 google cloud amazone cloud 都是类似原理 进行类推即可 这里仅以阿里云为例
+# 不管是轻量 腾讯云 阿里云 google cloud amazon cloud 都是类似原理 进行类推即可 这里仅以阿里云为例
 
 ![步骤 1](../images/aliyun-deploy/1.png)
 
