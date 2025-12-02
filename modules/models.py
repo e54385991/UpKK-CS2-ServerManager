@@ -146,6 +146,12 @@ class Server(SQLModel, table=True):
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(default=None, max_length=500)
     
+    # GitHub proxy configuration
+    github_proxy: Optional[str] = Field(default=None, max_length=500)
+    
+    # Panel proxy mode - download via panel server first (mutually exclusive with github_proxy)
+    use_panel_proxy: bool = Field(default=False)
+    
     # Additional info
     description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     last_deployed: Optional[datetime] = Field(default=None)

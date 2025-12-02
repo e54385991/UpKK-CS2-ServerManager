@@ -8,6 +8,10 @@ from typing import Optional
 import re
 import asyncio
 import logging
+import tempfile
+import os
+import uuid
+import shutil
 
 from modules import (
     Server, get_db, User, get_current_active_user,
@@ -25,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 # Regex to validate GitHub repository URL
 GITHUB_REPO_PATTERN = re.compile(r'^https://github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?:/.*)?$')
+
+# Progress update interval (percent) for panel proxy downloads/uploads
+PROGRESS_UPDATE_INTERVAL = 10  # Update progress every 10%
 
 
 def parse_github_url(url: str) -> tuple[str, str]:
@@ -66,6 +73,8 @@ async def get_server_and_verify_ownership(
 async def get_github_releases(
     repo_url: str,
     count: int = 5,
+    server_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> GitHubReleasesResponse:
     """
@@ -74,6 +83,7 @@ async def get_github_releases(
     Args:
         repo_url: GitHub repository URL (e.g., https://github.com/Source2ZE/CS2Fixes)
         count: Number of releases to fetch (default: 5, max: 10)
+        server_id: Optional server ID to use server's GitHub proxy configuration
     
     Returns:
         List of releases with their assets
@@ -86,6 +96,12 @@ async def get_github_releases(
             error=str(e),
             releases=[]
         )
+    
+    # Get server's GitHub proxy if server_id is provided
+    github_proxy = None
+    if server_id:
+        server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+        github_proxy = server.github_proxy
     
     # Limit count to prevent abuse
     count = min(count, 10)
@@ -101,7 +117,8 @@ async def get_github_releases(
         api_url,
         headers=headers,
         params={"per_page": count},
-        timeout=30
+        timeout=30,
+        proxy=github_proxy
     )
     
     if not success:
@@ -225,8 +242,14 @@ async def analyze_archive(
             archive_type = 'unknown'
             archive_file = f"{temp_dir}/archive"
         
-        # Download archive
-        download_cmd = f"curl -fsSL -o {archive_file} '{download_url}'"
+        # Download archive (use GitHub proxy if configured)
+        actual_download_url = download_url
+        if server.github_proxy and server.github_proxy.strip():
+            # Apply GitHub proxy
+            proxy_base = server.github_proxy.strip().rstrip('/')
+            actual_download_url = f"{proxy_base}/{download_url}"
+        
+        download_cmd = f"curl -fsSL -o {archive_file} '{actual_download_url}'"
         success, _, stderr = await ssh_manager.execute_command(download_cmd, timeout=120)
         
         if not success:
@@ -452,77 +475,216 @@ async def install_github_plugin(
                 message="CS2 server not found. Please deploy the server first."
             )
         
-        # Create temp directory
-        temp_dir = f"/tmp/github_plugin_{server_id}"
-        await ssh_manager.execute_command(f"rm -rf {temp_dir} && mkdir -p {temp_dir}")
-        
         # Detect archive type (support zip, tar.gz, tgz, tar, 7z)
         url_lower = request.download_url.lower()
         if url_lower.endswith('.zip'):
             archive_type = 'zip'
-            archive_file = f"{temp_dir}/plugin.zip"
+            archive_filename = "plugin.zip"
         elif url_lower.endswith('.tar.gz') or url_lower.endswith('.tgz'):
             archive_type = 'tar.gz'
-            archive_file = f"{temp_dir}/plugin.tar.gz"
+            archive_filename = "plugin.tar.gz"
         elif url_lower.endswith('.tar'):
             archive_type = 'tar'
-            archive_file = f"{temp_dir}/plugin.tar"
+            archive_filename = "plugin.tar"
         elif url_lower.endswith('.7z'):
             archive_type = '7z'
-            archive_file = f"{temp_dir}/plugin.7z"
+            archive_filename = "plugin.7z"
         else:
             archive_type = 'zip'  # Default assumption
-            archive_file = f"{temp_dir}/plugin.zip"
+            archive_filename = "plugin.zip"
         
-        # Download archive with progress
-        await progress(f"Downloading plugin archive ({archive_type})...")
-        logger.info(f"Downloading plugin from {request.download_url}")
-        
-        # Use curl with progress output
-        download_cmd = f"curl -fL --progress-bar -o {archive_file} '{request.download_url}' 2>&1"
-        success, download_output, stderr = await ssh_manager.execute_command(download_cmd, timeout=300)
-        
-        if not success:
-            await ssh_manager.execute_command(f"rm -rf {temp_dir}")
-            await progress(f"Failed to download plugin: {stderr}", "error")
-            return GitHubPluginInstallResponse(
-                success=False,
-                message=f"Failed to download plugin: {stderr}"
-            )
-        
-        # Verify download and get file size
-        size_cmd = f"stat -c%s {archive_file} 2>/dev/null || stat -f%z {archive_file} 2>/dev/null"
-        success, size_output, _ = await ssh_manager.execute_command(size_cmd)
-        
-        if not success or not size_output.strip():
-            await ssh_manager.execute_command(f"rm -rf {temp_dir}")
-            await progress("Downloaded file is invalid", "error")
-            return GitHubPluginInstallResponse(
-                success=False,
-                message="Downloaded file is invalid"
-            )
-        
-        file_size = int(size_output.strip())
-        if file_size < 1000:
-            await ssh_manager.execute_command(f"rm -rf {temp_dir}")
-            await progress("Downloaded file is too small or empty", "error")
-            return GitHubPluginInstallResponse(
-                success=False,
-                message="Downloaded file is too small or empty"
-            )
-        
-        # Format file size for display
-        if file_size >= 1024 * 1024:
-            size_str = f"{file_size / (1024 * 1024):.2f} MB"
-        elif file_size >= 1024:
-            size_str = f"{file_size / 1024:.2f} KB"
+        # Check if we should use panel proxy mode (server-level setting)
+        if server.use_panel_proxy:
+            # Panel Proxy Mode: Download to panel server first, then SFTP upload
+            await progress("Using panel server proxy mode (github_proxy setting ignored)...")
+            
+            # Create UID-isolated temp directory on panel server
+            panel_temp_dir = os.path.join(tempfile.gettempdir(), f"cs2_panel_proxy_{current_user.id}")
+            os.makedirs(panel_temp_dir, exist_ok=True)
+            
+            # Create unique subdirectory for this download
+            download_id = str(uuid.uuid4())
+            download_dir = os.path.join(panel_temp_dir, download_id)
+            os.makedirs(download_dir, exist_ok=True)
+            
+            panel_archive_path = os.path.join(download_dir, archive_filename)
+            
+            try:
+                # Download to panel server
+                await progress(f"Downloading {archive_type} archive to panel server...")
+                logger.info(f"Panel proxy: Downloading from {request.download_url} to {panel_archive_path}")
+                
+                from modules.http_helper import http_helper
+                
+                # Progress tracking for download
+                last_progress_percent = 0
+                async def download_progress(bytes_downloaded, total_bytes):
+                    nonlocal last_progress_percent
+                    if total_bytes > 0:
+                        percent = int((bytes_downloaded / total_bytes) * 100)
+                        # Only update at configured interval
+                        if percent >= last_progress_percent + PROGRESS_UPDATE_INTERVAL or percent == 100:
+                            last_progress_percent = percent
+                            size_mb = bytes_downloaded / (1024 * 1024)
+                            total_mb = total_bytes / (1024 * 1024)
+                            await progress(f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)")
+                
+                success, error = await http_helper.download_file(
+                    request.download_url,
+                    panel_archive_path,
+                    timeout=600,
+                    progress_callback=download_progress
+                )
+                
+                if not success:
+                    await progress(f"Failed to download to panel server: {error}", "error")
+                    return GitHubPluginInstallResponse(
+                        success=False,
+                        message=f"Failed to download to panel server: {error}"
+                    )
+                
+                # Verify download
+                if not os.path.exists(panel_archive_path):
+                    await progress("Downloaded file not found", "error")
+                    return GitHubPluginInstallResponse(
+                        success=False,
+                        message="Downloaded file not found"
+                    )
+                
+                file_size = os.path.getsize(panel_archive_path)
+                if file_size < 1000:
+                    await progress("Downloaded file is too small or empty", "error")
+                    return GitHubPluginInstallResponse(
+                        success=False,
+                        message="Downloaded file is too small or empty"
+                    )
+                
+                # Format file size for display
+                if file_size >= 1024 * 1024:
+                    size_str = f"{file_size / (1024 * 1024):.2f} MB"
+                elif file_size >= 1024:
+                    size_str = f"{file_size / 1024:.2f} KB"
+                else:
+                    size_str = f"{file_size} B"
+                
+                await progress(f"Download complete ({size_str}), uploading to server via SFTP...")
+                
+                # Upload to remote server via SFTP
+                remote_temp_dir = f"/tmp/github_plugin_{server_id}"
+                await ssh_manager.execute_command(f"rm -rf {remote_temp_dir} && mkdir -p {remote_temp_dir}")
+                remote_archive_path = f"{remote_temp_dir}/{archive_filename}"
+                
+                # Progress tracking for upload
+                last_upload_percent = 0
+                async def upload_progress(bytes_uploaded, total_bytes):
+                    nonlocal last_upload_percent
+                    if total_bytes > 0:
+                        percent = int((bytes_uploaded / total_bytes) * 100)
+                        # Only update at configured interval
+                        if percent >= last_upload_percent + PROGRESS_UPDATE_INTERVAL or percent == 100:
+                            last_upload_percent = percent
+                            size_mb = bytes_uploaded / (1024 * 1024)
+                            total_mb = total_bytes / (1024 * 1024)
+                            await progress(f"Upload progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)")
+                
+                success, error = await ssh_manager.upload_file_with_progress(
+                    panel_archive_path,
+                    remote_archive_path,
+                    server,
+                    progress_callback=upload_progress
+                )
+                
+                if not success:
+                    await progress(f"Failed to upload to server: {error}", "error")
+                    return GitHubPluginInstallResponse(
+                        success=False,
+                        message=f"Failed to upload to server: {error}"
+                    )
+                
+                await progress("Upload complete, proceeding with extraction...")
+                
+                # Set archive_file for extraction phase
+                archive_file = remote_archive_path
+                
+            finally:
+                # Clean up panel temp directory
+                try:
+                    if os.path.exists(download_dir):
+                        shutil.rmtree(download_dir)
+                        logger.info(f"Cleaned up panel temp directory: {download_dir}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
         else:
-            size_str = f"{file_size} B"
+            # Original Mode: Download directly on remote server
+            # Create temp directory
+            temp_dir = f"/tmp/github_plugin_{server_id}"
+            await ssh_manager.execute_command(f"rm -rf {temp_dir} && mkdir -p {temp_dir}")
+            archive_file = f"{temp_dir}/{archive_filename}"
+            
+            # Download archive with progress (use GitHub proxy if configured)
+            await progress(f"Downloading plugin archive ({archive_type})...")
+            logger.info(f"Downloading plugin from {request.download_url}")
+            
+            # Apply GitHub proxy if configured
+            actual_download_url = request.download_url
+            if server.github_proxy and server.github_proxy.strip():
+                proxy_base = server.github_proxy.strip().rstrip('/')
+                actual_download_url = f"{proxy_base}/{request.download_url}"
+                logger.info(f"Using GitHub proxy: {proxy_base}")
+            
+            # Use curl with progress output
+            download_cmd = f"curl -fL --progress-bar -o {archive_file} '{actual_download_url}' 2>&1"
+            success, download_output, stderr = await ssh_manager.execute_command(download_cmd, timeout=300)
+            
+            if not success:
+                await ssh_manager.execute_command(f"rm -rf {temp_dir}")
+                await progress(f"Failed to download plugin: {stderr}", "error")
+                return GitHubPluginInstallResponse(
+                    success=False,
+                    message=f"Failed to download plugin: {stderr}"
+                )
         
-        await progress(f"Download complete ({size_str})")
+        # Continue with common extraction logic
+        # Get remote temp directory based on mode
+        if server.use_panel_proxy:
+            remote_temp_dir = f"/tmp/github_plugin_{server_id}"
+        else:
+            remote_temp_dir = temp_dir
+        
+        # Verify download and get file size (only needed for non-panel-proxy mode)
+        if not server.use_panel_proxy:
+            size_cmd = f"stat -c%s {archive_file} 2>/dev/null || stat -f%z {archive_file} 2>/dev/null"
+            success, size_output, _ = await ssh_manager.execute_command(size_cmd)
+            
+            if not success or not size_output.strip():
+                await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                await progress("Downloaded file is invalid", "error")
+                return GitHubPluginInstallResponse(
+                    success=False,
+                    message="Downloaded file is invalid"
+                )
+            
+            file_size = int(size_output.strip())
+            if file_size < 1000:
+                await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                await progress("Downloaded file is too small or empty", "error")
+                return GitHubPluginInstallResponse(
+                    success=False,
+                    message="Downloaded file is too small or empty"
+                )
+            
+            # Format file size for display
+            if file_size >= 1024 * 1024:
+                size_str = f"{file_size / (1024 * 1024):.2f} MB"
+            elif file_size >= 1024:
+                size_str = f"{file_size / 1024:.2f} KB"
+            else:
+                size_str = f"{file_size} B"
+            
+            await progress(f"Download complete ({size_str})")
         
         # Create extraction directory
-        extract_dir = f"{temp_dir}/extracted"
+        extract_dir = f"{remote_temp_dir}/extracted"
         await ssh_manager.execute_command(f"mkdir -p {extract_dir}")
         
         # Extract archive (support zip, tar.gz, tar, 7z)
@@ -543,7 +705,7 @@ async def install_github_plugin(
         success, _, stderr = await ssh_manager.execute_command(extract_cmd, timeout=120)
         
         if not success:
-            await ssh_manager.execute_command(f"rm -rf {temp_dir}")
+            await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
             await progress(f"Failed to extract archive: {stderr}", "error")
             return GitHubPluginInstallResponse(
                 success=False,
@@ -574,7 +736,7 @@ async def install_github_plugin(
                 await progress(f"Found addons/ directory in subdirectory")
             else:
                 # No addons directory found - reject installation
-                await ssh_manager.execute_command(f"rm -rf {temp_dir}")
+                await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
                 error_msg = "No addons/ directory found in archive. This does not appear to be a valid CS2 plugin package."
                 await progress(error_msg, "error")
                 return GitHubPluginInstallResponse(
@@ -629,8 +791,8 @@ async def install_github_plugin(
         
         installed_files = count_after - count_before if count_after > count_before else 0
         
-        # Cleanup
-        await ssh_manager.execute_command(f"rm -rf {temp_dir}")
+        # Cleanup - use the correct temp directory
+        await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
         await progress("Cleanup complete")
         
         if not success:

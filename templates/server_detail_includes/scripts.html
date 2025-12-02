@@ -97,6 +97,13 @@
         cpuAffinityForm: {
             cpu_affinity: ''
         },
+        // GitHub Proxy
+        showGithubProxyEdit: false,
+        savingGithubProxy: false,
+        githubProxyForm: {
+            github_proxy: '',
+            use_panel_proxy: false
+        },
         // A2S Query
         showA2SEdit: false,
             savingA2SConfig: false,
@@ -155,6 +162,7 @@
             this.loadAutoUpdateForm();
             this.loadA2SConfigForm();
             this.loadCpuAffinityForm();
+            this.loadGithubProxyForm();
             this.connectWebSocket();
             await this.loadHistory();
             
@@ -740,6 +748,14 @@
             };
         },
         
+        loadGithubProxyForm() {
+            // Load current GitHub proxy configuration into edit form
+            this.githubProxyForm = {
+                github_proxy: this.server.github_proxy || '',
+                use_panel_proxy: this.server.use_panel_proxy || false
+            };
+        },
+        
         parseCpuAffinity(cpuAffinity) {
             // Parse CPU affinity string into array of core numbers with validation
             if (!cpuAffinity) return [];
@@ -846,6 +862,41 @@
             } finally {
                 this.savingCpuAffinity = false;
             }
+        },
+        
+        async saveGithubProxy() {
+            this.savingGithubProxy = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.githubProxyForm)
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    this.showGithubProxyEdit = false;
+                    this.addLog('complete', 'GitHub proxy configuration saved successfully');
+                    this.showToast('GitHub proxy configuration saved successfully', 'success');
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to save GitHub proxy configuration: ${error.detail}`);
+                    this.showToast(`Failed to save GitHub proxy configuration: ${error.detail}`, 'error');
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+                this.showToast(`Error: ${err.message}`, 'error');
+            } finally {
+                this.savingGithubProxy = false;
+            }
+        },
+        
+        clearGithubProxy() {
+            this.githubProxyForm.github_proxy = '';
+            this.githubProxyForm.use_panel_proxy = false;
         },
         
         async executeAction(action) {

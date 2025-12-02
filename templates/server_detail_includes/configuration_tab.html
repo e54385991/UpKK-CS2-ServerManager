@@ -303,6 +303,108 @@
                         </div>
                     </div>
 
+                    <!-- GitHub Proxy Configuration Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-cloud-download"></i> <span
+                                    data-i18n="serverDetail.downloadProxyConfig">Download Proxy Configuration</span></h5>
+                            <button @click="showGithubProxyEdit = !showGithubProxyEdit"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> <span
+                                    x-text="showGithubProxyEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div x-show="!showGithubProxyEdit" x-cloak>
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <h6 class="text-muted" data-i18n="serverDetail.proxyMode">Proxy Mode</h6>
+                                        <p class="mb-2">
+                                            <i class="bi bi-gear"></i> <strong data-i18n="serverDetail.currentMode">Current Mode:</strong>
+                                            <span class="badge" :class="server.use_panel_proxy ? 'bg-success' : (server.github_proxy ? 'bg-info' : 'bg-secondary')">
+                                                <span x-show="server.use_panel_proxy" data-i18n="serverDetail.panelProxyMode">Panel Server Proxy</span>
+                                                <span x-show="!server.use_panel_proxy && server.github_proxy" data-i18n="serverDetail.githubProxyMode">GitHub URL Proxy</span>
+                                                <span x-show="!server.use_panel_proxy && !server.github_proxy" data-i18n="serverDetail.directMode">Direct Connection</span>
+                                            </span>
+                                        </p>
+                                        <p class="mb-2" x-show="server.use_panel_proxy">
+                                            <i class="bi bi-cloud-arrow-down"></i> <span data-i18n="serverDetail.panelProxyEnabled">Panel Server Proxy: Enabled (All downloads go through this panel server first)</span>
+                                        </p>
+                                        <p class="mb-2" x-show="!server.use_panel_proxy && server.github_proxy">
+                                            <i class="bi bi-globe"></i> <strong data-i18n="serverDetail.githubProxyUrl">GitHub Proxy URL:</strong>
+                                            <span x-text="server.github_proxy"></span>
+                                        </p>
+                                        <div class="alert alert-info">
+                                            <i class="bi bi-info-circle"></i>
+                                            <span data-i18n="serverDetail.proxyInfo">
+                                                Choose one: Panel Server Proxy (downloads via this panel) or GitHub URL Proxy (game server downloads via proxy URL). Both modes improve access in restricted networks.
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div x-show="showGithubProxyEdit" x-cloak>
+                                <form @submit.prevent="saveGithubProxy()">
+                                    <div class="row g-3">
+                                        <!-- Panel Proxy Mode Toggle -->
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="usePanelProxyServer" 
+                                                    x-model="githubProxyForm.use_panel_proxy"
+                                                    @change="if (githubProxyForm.use_panel_proxy) githubProxyForm.github_proxy = ''">
+                                                <label class="form-check-label" for="usePanelProxyServer">
+                                                    <strong data-i18n="serverDetail.usePanelProxyServer">Use Panel Server Proxy</strong>
+                                                    <i class="bi bi-info-circle text-info ms-1" data-bs-toggle="tooltip" 
+                                                        :title="window.i18n?.t('serverDetail.usePanelProxyTooltipServer') || 'All downloads (SteamCMD, GitHub plugins) go through this panel server first, then upload via SFTP. Recommended when this panel can access foreign sites smoothly. Mutually exclusive with GitHub URL Proxy.'"></i>
+                                                </label>
+                                            </div>
+                                            <small class="text-muted ms-4">
+                                                <i class="bi bi-cloud-arrow-down"></i> 
+                                                <span data-i18n="serverDetail.panelProxyHintServer">When enabled, all downloads (SteamCMD, GitHub plugins) are first downloaded to this panel server, then uploaded to your game server via SFTP with progress tracking.</span>
+                                            </small>
+                                        </div>
+                                        
+                                        <div class="col-12">
+                                            <hr>
+                                        </div>
+                                        
+                                        <!-- GitHub URL Proxy -->
+                                        <div class="col-12" :class="{'opacity-50': githubProxyForm.use_panel_proxy}">
+                                            <label class="form-label" data-i18n="serverDetail.githubProxyUrl">GitHub Proxy URL</label>
+                                            <input type="text" class="form-control" x-model="githubProxyForm.github_proxy"
+                                                placeholder="https://ghfast.top"
+                                                :disabled="githubProxyForm.use_panel_proxy"
+                                                @input="if (githubProxyForm.github_proxy) githubProxyForm.use_panel_proxy = false">
+                                            <small class="text-muted" data-i18n="serverDetail.githubProxyHelp">
+                                                Leave empty to use direct connection. Enter only the base URL like: https://ghfast.top or https://ghproxy.com (do not include the path)
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingGithubProxy">
+                                            <span x-show="!savingGithubProxy"><i class="bi bi-save"></i> <span
+                                                    data-i18n="serverDetail.saveProxyConfig">Save Proxy Configuration</span></span>
+                                            <span x-show="savingGithubProxy"><span
+                                                    class="spinner-border spinner-border-sm"></span> <span
+                                                    data-i18n="serverDetail.saving">Saving...</span></span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" @click="showGithubProxyEdit = false"
+                                            data-i18n="serverDetail.cancel">
+                                            Cancel
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" @click="clearGithubProxy()"
+                                            data-i18n="serverDetail.clearAll">
+                                            Clear All
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Auto-Update Configuration Card -->
                     <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">

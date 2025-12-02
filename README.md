@@ -18,8 +18,38 @@
 | 要求项                 | 说明                                                                 |
 |-----------------------|----------------------------------------------------------------------|
 | Steam 官方服务器      | 必须能正常访问 `steampowered.com` 和 Steam 内容服务器（下载游戏文件用） |
-| GitHub                | 如需要安装插件框架 需要能正常访问 `github.com` 和 `githubusercontent.com`（下载插件框架 CounterStrikeSharp 等） |
-| 当前无中国加速镜像     | 项目暂未提供国内镜像，建议自行解决                        |
+| GitHub                | 如需要安装插件框架 需要能正常访问 `github.com` 和 `githubusercontent.com`（下载插件框架 CounterStrikeSharp 等）<br/>**新功能：** 现已支持服务器级 GitHub 代理配置（如 https://ghfast.top），方便中国大陆用户 |
+| ~~当前无中国加速镜像~~     | ~~项目暂未提供国内镜像，建议自行解决~~ **已支持 GitHub 代理配置，可在服务器配置中设置**                        |
+
+### 🌍 推荐部署方案（中国大陆用户）
+
+**💡 强烈推荐：将 Web 管理端部署到海外服务器（如美国、香港、新加坡等）**
+
+这样可以启用**面板服务器代理模式**，实现插件安装无障碍：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    面板代理模式工作流程                           │
+└─────────────────────────────────────────────────────────────────┘
+
+  ①下载                    ②上传                    ③安装
+GitHub ──────> 海外面板服务器 ──────> 国内游戏服务器 ──────> 完成
+           (顺畅访问GitHub)      (SFTP传输)        (本地安装)
+           
+优势：
+✅ 所有下载(SteamCMD、插件、框架)都通过海外面板中转
+✅ 实时进度显示(下载50% → 上传50%)
+✅ 无需第三方代理服务，完全自主控制
+✅ 与 GitHub URL 代理二选一，面板代理更全面
+```
+
+**配置方法**：
+1. 将 Web 管理端部署到海外服务器（推荐美国、香港、新加坡等地）
+2. 游戏服务器可在任何位置（包括中国大陆）
+3. 在服务器配置页面启用"使用面板服务器代理"
+4. 享受无障碍的插件安装体验！
+
+详细说明请查看：[面板代理配置文档](docs/GITHUB_PROXY.md)
 
 
 # 不会使用？花费 2 分钟看看视频 ↓
@@ -55,6 +85,8 @@
 - 🔄 **自动重启保护**: 服务器崩溃时自动重启，具有崩溃循环保护机制 ([查看文档](docs/AUTO_RESTART_GUIDE.md))
 - 🔔 **实时状态上报**: 服务器通过 API 向管理端上报崩溃、重启等事件
 - 🔌 **插件框架安装**: 一键安装 Metamod:Source 和 CounterStrikeSharp，支持批量安装和更新
+- 🌐 **面板服务器代理**: **推荐将管理端部署到海外**，启用面板代理模式实现所有下载（SteamCMD、GitHub 插件、框架）通过面板中转，完美解决网络限制问题 ([查看文档](docs/GITHUB_PROXY.md))
+- 🔗 **GitHub URL 代理**: 服务器级 GitHub URL 代理支持（如 ghfast.top），与面板代理二选一
 - 📊 **状态监控**: 实时查看服务器状态
 - 🔴 **WebSocket 实时更新**: 部署过程实时查看 SSH 状态和输出
 - 💾 **Redis 缓存**: 使用 Redis 缓存服务器状态
@@ -220,12 +252,44 @@ A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + My
 - 🔄 **Auto-Restart Protection**: Automatic restart on crash with crash loop protection ([View Docs](docs/AUTO_RESTART_GUIDE.md))
 - 🔔 **Real-time Status Reporting**: Servers report crash and restart events to the manager via API
 - 🔌 **Plugin Framework Installation**: One-click install for Metamod:Source and CounterStrikeSharp, supports batch install and update
+- 🌐 **Panel Server Proxy**: **Recommended to deploy manager overseas**, enable panel proxy mode for all downloads (SteamCMD, GitHub plugins, frameworks) to bypass network restrictions ([View Docs](docs/GITHUB_PROXY.md))
+- 🔗 **GitHub URL Proxy**: Server-level GitHub URL proxy support (e.g., ghfast.top), choose one between panel proxy and URL proxy
 - 📊 **Status Monitoring**: Real-time server status monitoring
 - 🔴 **WebSocket Real-time Updates**: Live SSH status and output during deployment
 - 💾 **Redis Caching**: Server status caching with Redis
 - 📝 **Operation Logs**: Records all deployment and operation history
 - 🐳 **Docker Support**: Docker Compose for quick dependency deployment
 - 🎨 **Modern Web Interface**: Responsive UI based on Bootstrap 5 + Alpine.js, all resources fully localized
+
+### 🌍 Recommended Deployment (For Users in China)
+
+**💡 Highly Recommended: Deploy Web Manager to Overseas Servers (US, Hong Kong, Singapore, etc.)**
+
+This enables **Panel Server Proxy Mode** for seamless plugin installation:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                 Panel Proxy Mode Workflow                        │
+└──────────────────────────────────────────────────────────────────┘
+
+  ①Download               ②Upload                 ③Install
+GitHub ──────> Overseas Panel ──────> China Game Server ──────> Done
+           (Smooth GitHub)      (SFTP)           (Local)
+           
+Benefits:
+✅ All downloads (SteamCMD, plugins, frameworks) relay through overseas panel
+✅ Real-time progress (Download 50% → Upload 50%)
+✅ No third-party proxy needed, full control
+✅ Choose between panel proxy or GitHub URL proxy, panel is more comprehensive
+```
+
+**Setup:**
+1. Deploy Web Manager to overseas server (recommend US, Hong Kong, Singapore)
+2. Game server can be anywhere (including China mainland)
+3. Enable "Use Panel Server Proxy" in server configuration
+4. Enjoy seamless plugin installation!
+
+For details: [Panel Proxy Documentation](docs/GITHUB_PROXY.md)
 
 ### 📋 System Requirements
 

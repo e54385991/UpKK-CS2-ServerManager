@@ -7,6 +7,9 @@ import os
 import re
 import shlex
 import logging
+import tempfile
+import uuid
+import shutil
 from typing import Optional, Tuple, List, Dict, Any
 from datetime import datetime
 from modules.models import Server, AuthType
@@ -21,6 +24,9 @@ class SSHManager:
     
     # Constants for file validation
     MIN_EXPECTED_FILE_SIZE = 1000  # Minimum file size in bytes (1KB) for downloaded packages
+    
+    # Upload chunk size for SFTP transfers (32KB)
+    UPLOAD_CHUNK_SIZE = 32768
     
     def __init__(self, use_pool: bool = True):
         """
@@ -67,7 +73,7 @@ class SSHManager:
                     raise Exception(f"连接失败 | Connection failed: {reconnect_msg}")
         raise error
     
-    async def _fetch_github_release_url(self, repo: str, pattern: str, progress_callback=None) -> Tuple[bool, str]:
+    async def _fetch_github_release_url(self, repo: str, pattern: str, progress_callback=None, github_proxy: Optional[str] = None) -> Tuple[bool, str]:
         """
         Helper function to fetch the latest release URL from GitHub
         
@@ -78,6 +84,7 @@ class SSHManager:
                     Example: '\"browser_download_url\": \"[^\"]*CS2Fixes-[^\"]*-linux\\.tar\\.gz\"'
                     NOTE: This pattern is used in shell command - ensure it comes from trusted source
             progress_callback: Optional callback for progress messages
+            github_proxy: Optional GitHub proxy URL (e.g., https://ghfast.top/https://github.com)
         
         Returns:
             Tuple[bool, str]: (success, download_url or error_message)
@@ -98,9 +105,15 @@ class SSHManager:
         # Note: pattern parameter is used in shell command and should be from trusted source only
         # In this codebase, it's called with hardcoded patterns from install_cs2fixes method
         
+        # GitHub API URL - DO NOT use proxy for API requests
+        # Proxy services like ghfast.top only work for file downloads, not API
+        api_url = f"https://api.github.com/repos/{repo}/releases/latest"
+        # Note: github_proxy parameter exists but is NOT used for API requests
+        # because proxy services don't support GitHub API endpoints
+        
         # Primary method: Use grep pattern
         # Use basic grep without -P flag for better portability
-        get_url_cmd = f"curl -sL https://api.github.com/repos/{repo}/releases/latest | grep -o '{pattern}' | grep -o 'https://[^\"]*' | head -1"
+        get_url_cmd = f"curl -sL {api_url} | grep -o '{pattern}' | grep -o 'https://[^\"]*' | head -1"
         success, url, stderr = await self.execute_command(get_url_cmd, timeout=30)
         
         if success and url.strip():
@@ -109,7 +122,7 @@ class SSHManager:
         # Fallback 1: Try to find any download URL from browser_download_url
         # This is a broader search when specific pattern fails
         await send_progress("⚠ Trying alternative API query...")
-        alt_cmd = f"curl -sL https://api.github.com/repos/{repo}/releases/latest | grep '\"browser_download_url\"' | grep -o 'https://[^\"]*' | head -1"
+        alt_cmd = f"curl -sL {api_url} | grep '\"browser_download_url\"' | grep -o 'https://[^\"]*' | head -1"
         success, url, _ = await self.execute_command(alt_cmd, timeout=30)
         
         if success and url.strip():
@@ -123,7 +136,7 @@ class SSHManager:
         # Fallback 2: Get tag with proper semantic version matching
         await send_progress("⚠ Could not fetch from GitHub API, trying tag-based approach...")
         # Match semantic versioning: v1.2.3 or v1.2 format
-        tag_cmd = f"curl -sL https://api.github.com/repos/{repo}/releases/latest | grep '\"tag_name\"' | grep -o 'v[0-9]\\+\\(\\.[0-9]\\+\\)*' | head -1"
+        tag_cmd = f"curl -sL {api_url} | grep '\"tag_name\"' | grep -o 'v[0-9]\\+\\(\\.[0-9]\\+\\)*' | head -1"
         tag_success, tag, _ = await self.execute_command(tag_cmd, timeout=30)
         
         if tag_success and tag.strip():
@@ -493,22 +506,120 @@ class SSHManager:
             
             # Download SteamCMD with streaming output
             await send_progress("Downloading SteamCMD...")
-            download_cmd = f"wget --progress=dot:mega https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -O {steamcmd_dir}/steamcmd_linux.tar.gz"
-            success, stdout, stderr = await self.execute_command_streaming(
-                download_cmd,
-                output_callback=send_progress,
-                timeout=300
-            )
-            if not success:
-                # Check if file was downloaded successfully despite non-zero exit code
-                check_cmd = f"test -f {steamcmd_dir}/steamcmd_linux.tar.gz && echo 'exists'"
-                check_success, check_stdout, _ = await self.execute_command(check_cmd)
-                if not check_success or 'exists' not in check_stdout:
-                    return False, f"SteamCMD download failed: {stderr if stderr else 'Download incomplete'}"
-                # File exists, continue despite wget exit code
-                await send_progress(f"✓ SteamCMD download completed (file verified)")
+            
+            # Check if panel proxy mode is enabled
+            if server.use_panel_proxy:
+                # Panel Proxy Mode: Download to panel server first, then upload via SFTP
+                await send_progress("Using panel server proxy mode for SteamCMD download...")
+                
+                steamcmd_url = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
+                steamcmd_local_path = None
+                
+                try:
+                    # Create temp directory on panel server
+                    panel_temp_dir = os.path.join(tempfile.gettempdir(), f"cs2_panel_proxy_steamcmd_{server.user_id}")
+                    os.makedirs(panel_temp_dir, exist_ok=True)
+                    
+                    # Create unique subdirectory
+                    download_id = str(uuid.uuid4())
+                    download_dir = os.path.join(panel_temp_dir, download_id)
+                    os.makedirs(download_dir, exist_ok=True)
+                    
+                    steamcmd_local_path = os.path.join(download_dir, "steamcmd_linux.tar.gz")
+                    
+                    # Download to panel server
+                    from modules.http_helper import http_helper
+                    
+                    last_progress = 0
+                    async def download_progress_callback(bytes_downloaded, total_bytes):
+                        nonlocal last_progress
+                        if total_bytes > 0:
+                            percent = int((bytes_downloaded / total_bytes) * 100)
+                            if percent >= last_progress + 10 or percent == 100:
+                                last_progress = percent
+                                size_mb = bytes_downloaded / (1024 * 1024)
+                                total_mb = total_bytes / (1024 * 1024)
+                                await send_progress(f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)")
+                    
+                    success_download, error = await http_helper.download_file(
+                        steamcmd_url,
+                        steamcmd_local_path,
+                        timeout=600,
+                        progress_callback=download_progress_callback
+                    )
+                    
+                    if not success_download:
+                        raise Exception(f"Failed to download SteamCMD: {error}")
+                    
+                    # Verify file size
+                    file_size = os.path.getsize(steamcmd_local_path)
+                    if file_size < 1000:
+                        raise Exception("Downloaded SteamCMD file is too small or empty")
+                    
+                    await send_progress(f"Download complete ({file_size / (1024 * 1024):.2f} MB), uploading to server...")
+                    
+                    # Upload to remote server via SFTP
+                    remote_steamcmd_path = f"{steamcmd_dir}/steamcmd_linux.tar.gz"
+                    
+                    last_upload = 0
+                    async def upload_progress_callback(bytes_uploaded, total_bytes):
+                        nonlocal last_upload
+                        if total_bytes > 0:
+                            percent = int((bytes_uploaded / total_bytes) * 100)
+                            if percent >= last_upload + 10 or percent == 100:
+                                last_upload = percent
+                                size_mb = bytes_uploaded / (1024 * 1024)
+                                total_mb = total_bytes / (1024 * 1024)
+                                await send_progress(f"Upload progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)")
+                    
+                    success_upload, error = await self.upload_file_with_progress(
+                        steamcmd_local_path,
+                        remote_steamcmd_path,
+                        server,
+                        progress_callback=upload_progress_callback
+                    )
+                    
+                    if not success_upload:
+                        raise Exception(f"Failed to upload SteamCMD: {error}")
+                    
+                    await send_progress("✓ SteamCMD uploaded successfully")
+                    
+                finally:
+                    # Clean up panel temp directory
+                    if steamcmd_local_path:
+                        try:
+                            if os.path.exists(download_dir):
+                                shutil.rmtree(download_dir)
+                                logger.info(f"Cleaned up panel temp directory: {download_dir}")
+                                
+                                # Also clean up parent directory if empty
+                                try:
+                                    if os.path.exists(panel_temp_dir) and not os.listdir(panel_temp_dir):
+                                        os.rmdir(panel_temp_dir)
+                                        logger.info(f"Cleaned up empty parent directory: {panel_temp_dir}")
+                                except OSError:
+                                    # Directory not empty or other OS error, ignore
+                                    pass
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
             else:
-                await send_progress(f"✓ SteamCMD downloaded successfully")
+                # Original Mode: Download directly on remote server
+                download_cmd = f"wget --progress=dot:mega https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -O {steamcmd_dir}/steamcmd_linux.tar.gz"
+                success, stdout, stderr = await self.execute_command_streaming(
+                    download_cmd,
+                    output_callback=send_progress,
+                    timeout=300
+                )
+                if not success:
+                    # Check if file was downloaded successfully despite non-zero exit code
+                    check_cmd = f"test -f {steamcmd_dir}/steamcmd_linux.tar.gz && echo 'exists'"
+                    check_success, check_stdout, _ = await self.execute_command(check_cmd)
+                    if not check_success or 'exists' not in check_stdout:
+                        return False, f"SteamCMD download failed: {stderr if stderr else 'Download incomplete'}"
+                    # File exists, continue despite wget exit code
+                    await send_progress(f"✓ SteamCMD download completed (file verified)")
+                else:
+                    await send_progress(f"✓ SteamCMD downloaded successfully")
             
             # Extract SteamCMD
             await send_progress("Extracting SteamCMD...")
@@ -1795,36 +1906,130 @@ class SSHManager:
             await send_progress(f"Creating temporary directory: {temp_dir}")
             await self.execute_command(f"mkdir -p {temp_dir}")
             
-            # Download Metamod
-            await send_progress(f"Downloading Metamod from {metamod_url}...")
-            # Use curl as fallback if wget doesn't work well, with better error handling
-            download_cmd = f"curl -L -o {temp_dir}/metamod.tar.gz {metamod_url} || wget --no-check-certificate -O {temp_dir}/metamod.tar.gz {metamod_url}"
-            success, stdout, stderr = await self.execute_command_streaming(
-                download_cmd,
-                output_callback=send_progress,
-                timeout=180
-            )
-            
-            # Always verify the file was downloaded regardless of exit code
-            check_cmd = f"test -f {temp_dir}/metamod.tar.gz && echo 'exists'"
-            check_success, check_stdout, _ = await self.execute_command(check_cmd)
-            
-            if not check_success or 'exists' not in check_stdout:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                error_detail = f"Download failed. stderr: {stderr[:500] if stderr else 'No error output'}"
-                return False, f"Metamod download failed: {error_detail}"
-            
-            # Check file size to ensure it's not empty
-            size_cmd = f"stat -f%z {temp_dir}/metamod.tar.gz 2>/dev/null || stat -c%s {temp_dir}/metamod.tar.gz 2>/dev/null"
-            size_success, size_out, _ = await self.execute_command(size_cmd)
-            if size_success and size_out.strip():
-                file_size = int(size_out.strip())
-                if file_size < 1000:  # Less than 1KB is probably an error
+            # Check if panel proxy mode is enabled
+            if server.use_panel_proxy:
+                # Panel Proxy Mode: Download to panel server first, then upload via SFTP
+                await send_progress("Using panel server proxy mode for Metamod download...")
+                
+                panel_archive_path = None
+                try:
+                    # Create temp directory on panel server
+                    panel_temp_dir = os.path.join(tempfile.gettempdir(), f"cs2_panel_proxy_metamod_{server.user_id}")
+                    os.makedirs(panel_temp_dir, exist_ok=True)
+                    
+                    # Create unique subdirectory
+                    download_id = str(uuid.uuid4())
+                    download_dir = os.path.join(panel_temp_dir, download_id)
+                    os.makedirs(download_dir, exist_ok=True)
+                    
+                    panel_archive_path = os.path.join(download_dir, "metamod.tar.gz")
+                    
+                    # Download to panel server
+                    from modules.http_helper import http_helper
+                    
+                    last_progress = 0
+                    async def download_progress_callback(bytes_downloaded, total_bytes):
+                        nonlocal last_progress
+                        if total_bytes > 0:
+                            percent = int((bytes_downloaded / total_bytes) * 100)
+                            if percent >= last_progress + 10 or percent == 100:
+                                last_progress = percent
+                                size_mb = bytes_downloaded / (1024 * 1024)
+                                total_mb = total_bytes / (1024 * 1024)
+                                await send_progress(f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)")
+                    
+                    success_download, error = await http_helper.download_file(
+                        metamod_url,
+                        panel_archive_path,
+                        timeout=180,
+                        progress_callback=download_progress_callback
+                    )
+                    
+                    if not success_download:
+                        raise Exception(f"Failed to download Metamod: {error}")
+                    
+                    # Verify file size
+                    file_size = os.path.getsize(panel_archive_path)
+                    if file_size < 1000:
+                        raise Exception("Downloaded file is too small or empty")
+                    
+                    await send_progress(f"Download complete ({file_size / (1024 * 1024):.2f} MB), uploading to server...")
+                    
+                    # Upload to remote server via SFTP
+                    remote_archive_path = f"{temp_dir}/metamod.tar.gz"
+                    
+                    last_upload = 0
+                    async def upload_progress_callback(bytes_uploaded, total_bytes):
+                        nonlocal last_upload
+                        if total_bytes > 0:
+                            percent = int((bytes_uploaded / total_bytes) * 100)
+                            if percent >= last_upload + 10 or percent == 100:
+                                last_upload = percent
+                                size_mb = bytes_uploaded / (1024 * 1024)
+                                total_mb = total_bytes / (1024 * 1024)
+                                await send_progress(f"Upload progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)")
+                    
+                    success_upload, error = await self.upload_file_with_progress(
+                        panel_archive_path,
+                        remote_archive_path,
+                        server,
+                        progress_callback=upload_progress_callback
+                    )
+                    
+                    if not success_upload:
+                        raise Exception(f"Failed to upload Metamod: {error}")
+                    
+                    await send_progress("✓ Metamod uploaded successfully")
+                    
+                finally:
+                    # Clean up panel temp directory
+                    if panel_archive_path:
+                        try:
+                            if os.path.exists(download_dir):
+                                shutil.rmtree(download_dir)
+                                logger.info(f"Cleaned up panel temp directory: {download_dir}")
+                                
+                                # Also clean up parent directory if empty
+                                try:
+                                    if os.path.exists(panel_temp_dir) and not os.listdir(panel_temp_dir):
+                                        os.rmdir(panel_temp_dir)
+                                        logger.info(f"Cleaned up empty parent directory: {panel_temp_dir}")
+                                except OSError:
+                                    pass
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
+            else:
+                # Original Mode: Download directly on remote server
+                # Download Metamod
+                await send_progress(f"Downloading Metamod from {metamod_url}...")
+                # Use curl as fallback if wget doesn't work well, with better error handling
+                download_cmd = f"curl -L -o {temp_dir}/metamod.tar.gz {metamod_url} || wget --no-check-certificate -O {temp_dir}/metamod.tar.gz {metamod_url}"
+                success, stdout, stderr = await self.execute_command_streaming(
+                    download_cmd,
+                    output_callback=send_progress,
+                    timeout=180
+                )
+                
+                # Always verify the file was downloaded regardless of exit code
+                check_cmd = f"test -f {temp_dir}/metamod.tar.gz && echo 'exists'"
+                check_success, check_stdout, _ = await self.execute_command(check_cmd)
+                
+                if not check_success or 'exists' not in check_stdout:
                     await self.execute_command(f"rm -rf {temp_dir}")
-                    return False, f"Downloaded file is too small ({file_size} bytes). Download may have failed."
-                await send_progress(f"✓ Downloaded {file_size} bytes")
-            
-            await send_progress("✓ Metamod downloaded successfully")
+                    error_detail = f"Download failed. stderr: {stderr[:500] if stderr else 'No error output'}"
+                    return False, f"Metamod download failed: {error_detail}"
+                
+                # Check file size to ensure it's not empty
+                size_cmd = f"stat -f%z {temp_dir}/metamod.tar.gz 2>/dev/null || stat -c%s {temp_dir}/metamod.tar.gz 2>/dev/null"
+                size_success, size_out, _ = await self.execute_command(size_cmd)
+                if size_success and size_out.strip():
+                    file_size = int(size_out.strip())
+                    if file_size < 1000:  # Less than 1KB is probably an error
+                        await self.execute_command(f"rm -rf {temp_dir}")
+                        return False, f"Downloaded file is too small ({file_size} bytes). Download may have failed."
+                    await send_progress(f"✓ Downloaded {file_size} bytes")
+                
+                await send_progress("✓ Metamod downloaded successfully")
             
             # Extract Metamod to CS2 csgo directory (tar contains addons/metamod structure)
             csgo_dir = f"{cs2_dir}/game/csgo"
@@ -1951,9 +2156,14 @@ class SSHManager:
             # Get latest CounterStrikeSharp release from GitHub
             await send_progress("Fetching latest CounterStrikeSharp release from GitHub...")
             
+            # GitHub API URL - DO NOT use proxy for API requests
+            # Proxy services like ghfast.top only work for file downloads, not API
+            api_url = "https://api.github.com/repos/roflmuffin/CounterStrikeSharp/releases/latest"
+            # Note: server.github_proxy exists but is NOT used for API requests
+            
             # Use GitHub API to get the latest release - specifically look for with-runtime-linux
             api_cmd = (
-                "curl -s https://api.github.com/repos/roflmuffin/CounterStrikeSharp/releases/latest | "
+                f"curl -s {api_url} | "
                 "grep -oP '\"browser_download_url\": \"\\K[^\"]*counterstrikesharp-with-runtime-linux[^\"]*\\.zip' | head -1"
             )
             success, css_url, stderr = await self.execute_command(api_cmd, timeout=30)
@@ -1962,7 +2172,7 @@ class SSHManager:
                 # Fallback: try to get any linux zip and filter
                 await send_progress("⚠ Trying alternative API query...")
                 alt_cmd = (
-                    "curl -s https://api.github.com/repos/roflmuffin/CounterStrikeSharp/releases/latest | "
+                    f"curl -s {api_url} | "
                     "grep '\"browser_download_url\"' | grep 'with-runtime-linux' | grep -oP 'https://[^\"]*\\.zip' | head -1"
                 )
                 success, css_url, _ = await self.execute_command(alt_cmd, timeout=30)
@@ -1971,7 +2181,7 @@ class SSHManager:
                     # Last fallback - construct URL from version tag
                     await send_progress("⚠ Could not fetch from GitHub API, constructing fallback URL...")
                     # Get the latest tag version
-                    tag_cmd = "curl -s https://api.github.com/repos/roflmuffin/CounterStrikeSharp/releases/latest | grep '\"tag_name\"' | grep -oP 'v[0-9.]+' | head -1"
+                    tag_cmd = f"curl -s {api_url} | grep '\"tag_name\"' | grep -oP 'v[0-9.]+' | head -1"
                     tag_success, tag, _ = await self.execute_command(tag_cmd, timeout=30)
                     
                     if tag_success and tag.strip():
@@ -1990,36 +2200,137 @@ class SSHManager:
             await send_progress(f"Creating temporary directory: {temp_dir}")
             await self.execute_command(f"mkdir -p {temp_dir}")
             
-            # Download CounterStrikeSharp
-            await send_progress("Downloading CounterStrikeSharp...")
-            # Use curl as fallback if wget doesn't work well
-            download_cmd = f"curl -L -o {temp_dir}/counterstrikesharp.zip {css_url} || wget --no-check-certificate -O {temp_dir}/counterstrikesharp.zip {css_url}"
-            success, stdout, stderr = await self.execute_command_streaming(
-                download_cmd,
-                output_callback=send_progress,
-                timeout=300  # 5 minutes for larger download
-            )
-            
-            # Always verify the file was downloaded
-            check_cmd = f"test -f {temp_dir}/counterstrikesharp.zip && echo 'exists'"
-            check_success, check_stdout, _ = await self.execute_command(check_cmd)
-            
-            if not check_success or 'exists' not in check_stdout:
-                await self.execute_command(f"rm -rf {temp_dir}")
-                error_detail = f"Download failed. stderr: {stderr[:500] if stderr else 'No error output'}"
-                return False, f"CounterStrikeSharp download failed: {error_detail}"
-            
-            # Check file size
-            size_cmd = f"stat -f%z {temp_dir}/counterstrikesharp.zip 2>/dev/null || stat -c%s {temp_dir}/counterstrikesharp.zip 2>/dev/null"
-            size_success, size_out, _ = await self.execute_command(size_cmd)
-            if size_success and size_out.strip():
-                file_size = int(size_out.strip())
-                if file_size < 10000:  # Less than 10KB is probably an error
+            # Check if panel proxy mode is enabled
+            if server.use_panel_proxy:
+                # Panel Proxy Mode: Download to panel server first, then upload via SFTP
+                await send_progress("Using panel server proxy mode for CounterStrikeSharp download...")
+                
+                panel_archive_path = None
+                try:
+                    # Create temp directory on panel server
+                    panel_temp_dir = os.path.join(tempfile.gettempdir(), f"cs2_panel_proxy_css_{server.user_id}")
+                    os.makedirs(panel_temp_dir, exist_ok=True)
+                    
+                    # Create unique subdirectory
+                    download_id = str(uuid.uuid4())
+                    download_dir = os.path.join(panel_temp_dir, download_id)
+                    os.makedirs(download_dir, exist_ok=True)
+                    
+                    panel_archive_path = os.path.join(download_dir, "counterstrikesharp.zip")
+                    
+                    # Download to panel server
+                    from modules.http_helper import http_helper
+                    
+                    last_progress = 0
+                    async def download_progress_callback(bytes_downloaded, total_bytes):
+                        nonlocal last_progress
+                        if total_bytes > 0:
+                            percent = int((bytes_downloaded / total_bytes) * 100)
+                            if percent >= last_progress + 10 or percent == 100:
+                                last_progress = percent
+                                size_mb = bytes_downloaded / (1024 * 1024)
+                                total_mb = total_bytes / (1024 * 1024)
+                                await send_progress(f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)")
+                    
+                    success_download, error = await http_helper.download_file(
+                        css_url,
+                        panel_archive_path,
+                        timeout=300,
+                        progress_callback=download_progress_callback
+                    )
+                    
+                    if not success_download:
+                        raise Exception(f"Failed to download CounterStrikeSharp: {error}")
+                    
+                    # Verify file size
+                    file_size = os.path.getsize(panel_archive_path)
+                    if file_size < 10000:
+                        raise Exception(f"Downloaded file is too small ({file_size} bytes)")
+                    
+                    await send_progress(f"Download complete ({file_size / (1024 * 1024):.2f} MB), uploading to server...")
+                    
+                    # Upload to remote server via SFTP
+                    remote_archive_path = f"{temp_dir}/counterstrikesharp.zip"
+                    
+                    last_upload = 0
+                    async def upload_progress_callback(bytes_uploaded, total_bytes):
+                        nonlocal last_upload
+                        if total_bytes > 0:
+                            percent = int((bytes_uploaded / total_bytes) * 100)
+                            if percent >= last_upload + 10 or percent == 100:
+                                last_upload = percent
+                                size_mb = bytes_uploaded / (1024 * 1024)
+                                total_mb = total_bytes / (1024 * 1024)
+                                await send_progress(f"Upload progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)")
+                    
+                    success_upload, error = await self.upload_file_with_progress(
+                        panel_archive_path,
+                        remote_archive_path,
+                        server,
+                        progress_callback=upload_progress_callback
+                    )
+                    
+                    if not success_upload:
+                        raise Exception(f"Failed to upload CounterStrikeSharp: {error}")
+                    
+                    await send_progress("✓ CounterStrikeSharp uploaded successfully")
+                    
+                finally:
+                    # Clean up panel temp directory
+                    if panel_archive_path:
+                        try:
+                            if os.path.exists(download_dir):
+                                shutil.rmtree(download_dir)
+                                logger.info(f"Cleaned up panel temp directory: {download_dir}")
+                                
+                                # Also clean up parent directory if empty
+                                try:
+                                    if os.path.exists(panel_temp_dir) and not os.listdir(panel_temp_dir):
+                                        os.rmdir(panel_temp_dir)
+                                        logger.info(f"Cleaned up empty parent directory: {panel_temp_dir}")
+                                except OSError:
+                                    pass
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
+            else:
+                # Original Mode: Download directly on remote server (use GitHub proxy if configured)
+                # Apply GitHub proxy to download URL if configured
+                actual_download_url = css_url
+                if server.github_proxy and server.github_proxy.strip():
+                    proxy_base = server.github_proxy.strip().rstrip('/')
+                    actual_download_url = f"{proxy_base}/{css_url}"
+                    await send_progress(f"Using GitHub proxy for download")
+                
+                # Download CounterStrikeSharp
+                await send_progress("Downloading CounterStrikeSharp...")
+                # Use curl as fallback if wget doesn't work well
+                download_cmd = f"curl -L -o {temp_dir}/counterstrikesharp.zip {actual_download_url} || wget --no-check-certificate -O {temp_dir}/counterstrikesharp.zip {actual_download_url}"
+                success, stdout, stderr = await self.execute_command_streaming(
+                    download_cmd,
+                    output_callback=send_progress,
+                    timeout=300  # 5 minutes for larger download
+                )
+                
+                # Always verify the file was downloaded
+                check_cmd = f"test -f {temp_dir}/counterstrikesharp.zip && echo 'exists'"
+                check_success, check_stdout, _ = await self.execute_command(check_cmd)
+                
+                if not check_success or 'exists' not in check_stdout:
                     await self.execute_command(f"rm -rf {temp_dir}")
-                    return False, f"Downloaded file is too small ({file_size} bytes). Download may have failed."
-                await send_progress(f"✓ Downloaded {file_size} bytes")
-            
-            await send_progress("✓ CounterStrikeSharp downloaded successfully")
+                    error_detail = f"Download failed. stderr: {stderr[:500] if stderr else 'No error output'}"
+                    return False, f"CounterStrikeSharp download failed: {error_detail}"
+                
+                # Check file size
+                size_cmd = f"stat -f%z {temp_dir}/counterstrikesharp.zip 2>/dev/null || stat -c%s {temp_dir}/counterstrikesharp.zip 2>/dev/null"
+                size_success, size_out, _ = await self.execute_command(size_cmd)
+                if size_success and size_out.strip():
+                    file_size = int(size_out.strip())
+                    if file_size < 10000:  # Less than 10KB is probably an error
+                        await self.execute_command(f"rm -rf {temp_dir}")
+                        return False, f"Downloaded file is too small ({file_size} bytes). Download may have failed."
+                    await send_progress(f"✓ Downloaded {file_size} bytes")
+                
+                await send_progress("✓ CounterStrikeSharp downloaded successfully")
             
             # Check if unzip is available and try to install if missing
             check_unzip = "command -v unzip"
@@ -2209,13 +2520,21 @@ class SSHManager:
             fetch_success, cs2fixes_url = await self._fetch_github_release_url(
                 "Source2ZE/CS2Fixes", 
                 pattern, 
-                progress_callback
+                progress_callback,
+                server.github_proxy
             )
             
             if not fetch_success:
                 return False, cs2fixes_url  # cs2fixes_url contains error message
             
             await send_progress(f"✓ Found latest version: {cs2fixes_url}")
+            
+            # Apply GitHub proxy to download URL if configured
+            actual_download_url = cs2fixes_url
+            if server.github_proxy and server.github_proxy.strip():
+                proxy_base = server.github_proxy.strip().rstrip('/')
+                actual_download_url = f"{proxy_base}/{cs2fixes_url}"
+                await send_progress(f"Using GitHub proxy for download")
             
             # Create temp directory for download
             temp_dir = f"/tmp/cs2fixes_install_{server.id}"
@@ -2224,7 +2543,7 @@ class SSHManager:
             
             # Download CS2Fixes
             await send_progress(f"Downloading CS2Fixes from {cs2fixes_url}...")
-            download_cmd = f"curl -L -o {temp_dir}/cs2fixes.tar.gz {cs2fixes_url} || wget -O {temp_dir}/cs2fixes.tar.gz {cs2fixes_url}"
+            download_cmd = f"curl -L -o {temp_dir}/cs2fixes.tar.gz {actual_download_url} || wget -O {temp_dir}/cs2fixes.tar.gz {actual_download_url}"
             success, stdout, stderr = await self.execute_command_streaming(
                 download_cmd,
                 output_callback=send_progress,
@@ -2909,3 +3228,69 @@ class SSHManager:
             return False, f"SFTP error: {str(e)}"
         except Exception as e:
             return False, f"Error downloading file: {str(e)}"
+    
+    async def upload_file_with_progress(
+        self, 
+        local_path: str, 
+        remote_path: str, 
+        server: Server,
+        progress_callback=None
+    ) -> Tuple[bool, str]:
+        """
+        Upload file from local to remote with progress tracking
+        
+        Args:
+            local_path: Local file path
+            remote_path: Remote file path
+            server: Server instance
+            progress_callback: Optional async callback function for progress updates
+                             Called with (bytes_uploaded, total_bytes)
+        
+        Returns:
+            Tuple[bool, str]: (success, error_message)
+        """
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+        
+        try:
+            # Get file size
+            total_bytes = os.path.getsize(local_path)
+            bytes_uploaded = 0
+            
+            async with self.conn.start_sftp_client() as sftp:
+                # Ensure parent directory exists
+                parent_dir = os.path.dirname(remote_path)
+                if parent_dir:
+                    try:
+                        await sftp.stat(parent_dir)
+                    except:
+                        await sftp.makedirs(parent_dir)
+                
+                # Upload file with progress tracking
+                # Read file in chunks and upload
+                chunk_size = self.UPLOAD_CHUNK_SIZE
+                
+                async with await sftp.open(remote_path, 'wb') as remote_file:
+                    with open(local_path, 'rb') as local_file:
+                        while True:
+                            chunk = local_file.read(chunk_size)
+                            if not chunk:
+                                break
+                            
+                            await remote_file.write(chunk)
+                            bytes_uploaded += len(chunk)
+                            
+                            # Send progress update
+                            if progress_callback:
+                                if asyncio.iscoroutinefunction(progress_callback):
+                                    await progress_callback(bytes_uploaded, total_bytes)
+                                else:
+                                    progress_callback(bytes_uploaded, total_bytes)
+                
+                return True, ""
+        except asyncssh.SFTPError as e:
+            return False, f"SFTP error: {str(e)}"
+        except Exception as e:
+            return False, f"Error uploading file: {str(e)}"

@@ -254,6 +254,19 @@
                                 <label class="form-label"><span data-i18n="serverDetail.installOptions">Installation Options</span></label>
                                 <div class="card bg-light">
                                     <div class="card-body">
+                                        <!-- Show current proxy mode -->
+                                        <div class="mb-3">
+                                            <div class="alert" :class="server.use_panel_proxy ? 'alert-success' : (server.github_proxy ? 'alert-info' : 'alert-secondary')">
+                                                <i class="bi bi-info-circle"></i>
+                                                <strong data-i18n="serverDetail.downloadMode">Download Mode:</strong>
+                                                <span x-show="server.use_panel_proxy" data-i18n="serverDetail.usingPanelProxy">Panel Server Proxy (configured in Settings)</span>
+                                                <span x-show="!server.use_panel_proxy && server.github_proxy">
+                                                    <span data-i18n="serverDetail.usingGithubProxy">GitHub URL Proxy:</span> <code x-text="server.github_proxy"></code>
+                                                </span>
+                                                <span x-show="!server.use_panel_proxy && !server.github_proxy" data-i18n="serverDetail.usingDirect">Direct Connection</span>
+                                            </div>
+                                        </div>
+                                        
                                         <!-- Exclude Directories - with Analyze button -->
                                         <div class="mb-2">
                                             <label class="form-label small mb-1">

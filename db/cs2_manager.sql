@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- 主机： 1Panel-mysql-KZBC
--- 生成日期： 2025-11-23 15:57:02
+-- 生成日期： 2025-12-02 04:51:22
 -- 服务器版本： 8.4.7
 -- PHP 版本： 8.3.27
 
@@ -166,6 +166,8 @@ CREATE TABLE `servers` (
   `last_update_time` datetime DEFAULT NULL COMMENT 'Last time server was updated',
   `update_check_interval_hours` int DEFAULT '1' COMMENT 'Hours between version checks (1-24)',
   `cpu_affinity` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `github_proxy` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'GitHub proxy URL for plugin installation (e.g., https://ghfast.top/https://github.com)',
+  `use_panel_proxy` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Use panel server as proxy for all downloads (SteamCMD, GitHub plugins). Mutually exclusive with github_proxy.',
   `steam_account_token` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

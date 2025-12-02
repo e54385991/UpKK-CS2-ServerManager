@@ -3,7 +3,7 @@ Pydantic schemas for request/response validation
 Using SQLModel for seamless FastAPI integration
 """
 from sqlmodel import SQLModel, Field
-from pydantic import EmailStr, field_validator
+from pydantic import EmailStr, field_validator, model_validator
 from typing import Optional, Dict, List
 from datetime import datetime
 from .models import ServerStatus
@@ -194,6 +194,12 @@ class ServerCreate(SQLModel):
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(None, max_length=500, description="Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')")
     
+    # GitHub proxy configuration
+    github_proxy: Optional[str] = Field(None, max_length=500, description="GitHub proxy URL (e.g., https://ghfast.top/https://github.com)")
+    
+    # Panel proxy mode (mutually exclusive with github_proxy)
+    use_panel_proxy: bool = Field(default=False, description="Use panel server as proxy for all downloads (SteamCMD, GitHub). Mutually exclusive with github_proxy.")
+    
     @field_validator('cpu_affinity')
     @classmethod
     def validate_cpu_affinity(cls, v):
@@ -216,6 +222,13 @@ class ServerCreate(SQLModel):
         if not re.match(r'^[A-Za-z0-9]+$', v):
             raise ValueError('Steam account token must only contain alphanumeric characters')
         return v
+    
+    @model_validator(mode='after')
+    def validate_proxy_mutual_exclusivity(self):
+        """Ensure github_proxy and use_panel_proxy are mutually exclusive"""
+        if self.github_proxy and self.use_panel_proxy:
+            raise ValueError('github_proxy and use_panel_proxy are mutually exclusive. Please choose only one.')
+        return self
 
 
 class ServerUpdate(SQLModel):
@@ -274,6 +287,12 @@ class ServerUpdate(SQLModel):
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(None, max_length=500, description="Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')")
     
+    # GitHub proxy configuration
+    github_proxy: Optional[str] = Field(None, max_length=500, description="GitHub proxy URL (e.g., https://ghfast.top/https://github.com)")
+    
+    # Panel proxy mode (mutually exclusive with github_proxy)
+    use_panel_proxy: Optional[bool] = Field(None, description="Use panel server as proxy for all downloads (SteamCMD, GitHub). Mutually exclusive with github_proxy.")
+    
     @field_validator('cpu_affinity')
     @classmethod
     def validate_cpu_affinity(cls, v):
@@ -296,6 +315,13 @@ class ServerUpdate(SQLModel):
         if not re.match(r'^[A-Za-z0-9]+$', v):
             raise ValueError('Steam account token must only contain alphanumeric characters')
         return v
+    
+    @model_validator(mode='after')
+    def validate_proxy_mutual_exclusivity(self):
+        """Ensure github_proxy and use_panel_proxy are mutually exclusive"""
+        if self.github_proxy and self.use_panel_proxy:
+            raise ValueError('github_proxy and use_panel_proxy are mutually exclusive. Please choose only one.')
+        return self
 
 
 class ServerResponse(SQLModel):
@@ -361,6 +387,12 @@ class ServerResponse(SQLModel):
     
     # CPU affinity configuration
     cpu_affinity: Optional[str] = None
+    
+    # GitHub proxy configuration
+    github_proxy: Optional[str] = None
+    
+    # Panel proxy mode
+    use_panel_proxy: bool
     
     model_config = {"from_attributes": True}
 
