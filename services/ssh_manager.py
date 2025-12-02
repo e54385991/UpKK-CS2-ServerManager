@@ -19,6 +19,79 @@ from services.ssh_connection_pool import ssh_connection_pool
 logger = logging.getLogger(__name__)
 
 
+async def update_ssh_connection_status(server_id: int, success: bool):
+    """
+    Update SSH connection status tracking in database
+    
+    Args:
+        server_id: Server ID
+        success: Whether the SSH connection was successful
+    """
+    from modules.database import async_session_maker
+    from modules.utils import get_current_time
+    from sqlalchemy import update as sql_update
+    from modules.models import Server as ServerModel
+    
+    try:
+        async with async_session_maker() as db:
+            server = await db.get(ServerModel, server_id)
+            if not server:
+                logger.warning(f"Cannot update SSH status: server {server_id} not found")
+                return
+            
+            now = get_current_time()
+            
+            if success:
+                # Reset failure tracking on successful connection
+                await db.execute(
+                    sql_update(ServerModel)
+                    .where(ServerModel.id == server_id)
+                    .values(
+                        last_ssh_success=now,
+                        consecutive_ssh_failures=0,
+                        is_ssh_down=False
+                    )
+                )
+                logger.debug(f"SSH connection successful for server {server_id} - reset failure tracking")
+            else:
+                # Increment failure count
+                new_failure_count = server.consecutive_ssh_failures + 1
+                
+                # Determine if we should mark as down (3+ days in failure state)
+                is_down = False
+                
+                # A server is "down" if:
+                # 1. It has never succeeded and has been failing for 3+ days, OR
+                # 2. Last success was more than 3 days ago
+                if server.last_ssh_success:
+                    # Check days since last successful connection
+                    days_since_success = (now - server.last_ssh_success).days
+                    is_down = days_since_success >= 3
+                elif server.consecutive_ssh_failures > 0:
+                    # Never had a success - server has been down since creation
+                    # Only mark as down if we've been tracking failures for a while
+                    # Use created_at or first failure as reference
+                    if hasattr(server, 'created_at') and server.created_at:
+                        days_since_creation = (now - server.created_at).days
+                        is_down = days_since_creation >= 3
+                
+                await db.execute(
+                    sql_update(ServerModel)
+                    .where(ServerModel.id == server_id)
+                    .values(
+                        last_ssh_failure=now,
+                        consecutive_ssh_failures=new_failure_count,
+                        is_ssh_down=is_down
+                    )
+                )
+                if is_down:
+                    logger.warning(f"Server {server_id} marked as SSH down (3+ days since last success)")
+            
+            await db.commit()
+    except Exception as e:
+        logger.error(f"Failed to update SSH connection status for server {server_id}: {e}")
+
+
 class SSHManager:
     """Async SSH manager for remote server operations with connection pooling"""
     
@@ -155,6 +228,10 @@ class SSHManager:
             # Use connection pool
             success, conn, msg = await ssh_connection_pool.get_connection(server)
             self.conn = conn
+            
+            # Track SSH connection status in background (don't block on DB update)
+            asyncio.create_task(update_ssh_connection_status(server.id, success))
+            
             return success, msg
         else:
             # Direct connection (legacy mode)
@@ -180,12 +257,18 @@ class SSHManager:
                 else:
                     return False, f"Unsupported auth type: {server.auth_type}"
                 
+                # Track successful connection
+                asyncio.create_task(update_ssh_connection_status(server.id, True))
+                
                 return True, "Connected successfully"
             except asyncssh.PermissionDenied:
+                asyncio.create_task(update_ssh_connection_status(server.id, False))
                 return False, "Authentication failed"
             except asyncssh.Error as e:
+                asyncio.create_task(update_ssh_connection_status(server.id, False))
                 return False, f"SSH error: {str(e)}"
             except Exception as e:
+                asyncio.create_task(update_ssh_connection_status(server.id, False))
                 return False, f"Connection error: {str(e)}"
     
     async def execute_command(self, command: str, timeout: int = 30) -> Tuple[bool, str, str]:

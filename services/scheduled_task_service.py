@@ -106,6 +106,16 @@ class ScheduledTaskService:
                     )
                     return
             
+            # Skip task if server is marked as down due to SSH failures
+            if server.should_skip_background_checks():
+                logger.info(f"Skipping scheduled task {task.id} for server {server.id} - marked as SSH down for 3+ days")
+                await self._update_task_status(
+                    task.id,
+                    "skipped",
+                    "Server marked as SSH down for 3+ consecutive days"
+                )
+                return
+            
             # Create SSH manager using the pattern from main.py
             ssh_manager = SSHManager()
             

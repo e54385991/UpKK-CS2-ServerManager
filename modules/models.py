@@ -152,6 +152,12 @@ class Server(SQLModel, table=True):
     # Panel proxy mode - download via panel server first (mutually exclusive with github_proxy)
     use_panel_proxy: bool = Field(default=False)
     
+    # SSH connection health tracking
+    last_ssh_success: Optional[datetime] = Field(default=None)
+    last_ssh_failure: Optional[datetime] = Field(default=None)
+    consecutive_ssh_failures: int = Field(default=0)
+    is_ssh_down: bool = Field(default=False)
+    
     # Additional info
     description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     last_deployed: Optional[datetime] = Field(default=None)
@@ -195,6 +201,30 @@ class Server(SQLModel, table=True):
     def set_status(self, status: ServerStatus) -> None:
         """Set server status - convenience method for cleaner code"""
         self.status = status
+    
+    def should_skip_background_checks(self) -> bool:
+        """
+        Check if server should skip background checks due to prolonged SSH failures
+        Returns True if server has been failing SSH for 3+ consecutive days
+        """
+        if not self.is_ssh_down:
+            return False
+        
+        # Server is marked as down - verify it's still in failure state
+        from modules.utils import get_current_time
+        now = get_current_time()
+        
+        # Check days since last successful connection
+        if self.last_ssh_success:
+            days_since_success = (now - self.last_ssh_success).days
+            return days_since_success >= 3
+        elif hasattr(self, 'created_at') and self.created_at:
+            # Never had success - check age of server
+            days_since_creation = (now - self.created_at).days
+            return days_since_creation >= 3
+        
+        # If we don't have enough info, don't skip
+        return False
     
     @classmethod
     async def get_by_id_and_user(cls, session: AsyncSession, server_id: int, user_id: int) -> Optional["Server"]:

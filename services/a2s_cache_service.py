@@ -116,17 +116,23 @@ class A2SCacheService:
         from sqlmodel import select
         
         try:
+            # Fetch server list quickly and close DB connection to avoid pool exhaustion
             async with async_session_maker() as db:
-                # Get all servers
                 result = await db.execute(select(Server))
                 servers = result.scalars().all()
+            
+            logger.debug(f"Querying {len(servers)} servers for A2S info")
+            
+            # Query each server
+            # DB session is already closed, so network operations won't hold DB connections
+            for server in servers:
+                # Skip servers that are marked as down due to SSH failures
+                if server.should_skip_background_checks():
+                    logger.debug(f"Skipping A2S query for server {server.id} - marked as SSH down for 3+ days")
+                    continue
                 
-                logger.debug(f"Querying {len(servers)} servers for A2S info")
+                await self._query_and_cache_server(server)
                 
-                # Query each server
-                for server in servers:
-                    await self._query_and_cache_server(server)
-                    
         except Exception as e:
             logger.error(f"Error querying servers: {e}")
     

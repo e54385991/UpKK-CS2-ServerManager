@@ -378,6 +378,54 @@ async def migrate_db():
         else:
             print("✓ steam_account_token column exists in servers table")
         
+        # Check if SSH health tracking columns exist in servers table
+        ssh_tracking_columns = ['last_ssh_success', 'last_ssh_failure', 'consecutive_ssh_failures', 'is_ssh_down']
+        for column in ssh_tracking_columns:
+            result = await conn.execute(
+                text(f"""
+                    SELECT COLUMN_NAME 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_SCHEMA = DATABASE() 
+                    AND TABLE_NAME = 'servers' 
+                    AND COLUMN_NAME = '{column}'
+                """)
+            )
+            column_exists = result.fetchone() is not None
+            
+            if not column_exists:
+                print(f"Adding {column} column to servers table...")
+                if column == 'last_ssh_success':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE servers 
+                            ADD COLUMN last_ssh_success TIMESTAMP NULL
+                        """)
+                    )
+                elif column == 'last_ssh_failure':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE servers 
+                            ADD COLUMN last_ssh_failure TIMESTAMP NULL
+                        """)
+                    )
+                elif column == 'consecutive_ssh_failures':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE servers 
+                            ADD COLUMN consecutive_ssh_failures INT DEFAULT 0
+                        """)
+                    )
+                elif column == 'is_ssh_down':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE servers 
+                            ADD COLUMN is_ssh_down TINYINT(1) DEFAULT 0
+                        """)
+                    )
+                print(f"✓ Migration completed: {column} column added")
+            else:
+                print(f"✓ {column} column exists")
+        
         print("✓ Database schema migration completed")
 
 

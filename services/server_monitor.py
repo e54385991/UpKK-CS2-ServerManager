@@ -149,7 +149,7 @@ class ServerMonitor:
             check_interval = 60
             
             while True:
-                # Get fresh server data from database
+                # Get fresh server data from database - close session quickly to avoid pool exhaustion
                 async with async_session_maker() as db:
                     server = await db.get(Server, server_id)
                     
@@ -187,201 +187,225 @@ class ServerMonitor:
                     else:
                         # Use general monitoring interval
                         check_interval = server.monitor_interval_seconds or 60
+                
+                # DB session closed here - perform network/SSH operations without holding DB connection
+                
+                # Determine if server is down based on monitoring type
+                is_down = False
+                check_status = 'success'
+                check_message = 'Server is running'
+                event_type = 'status_check'
+                
+                # A2S monitoring (preferred if enabled)
+                if server.enable_a2s_monitoring:
+                    from services.a2s_query import a2s_service
                     
-                    # Update last status check time
-                    server.last_status_check = get_current_time()
+                    # Use configured A2S host/port or fall back to server host/game_port
+                    query_host = server.a2s_query_host or server.host
+                    query_port = server.a2s_query_port or server.game_port
                     
-                    # Determine if server is down based on monitoring type
-                    is_down = False
-                    check_status = 'success'
-                    check_message = 'Server is running'
-                    event_type = 'status_check'
+                    logger.debug(f"Performing A2S query for server {server_id} at {query_host}:{query_port}")
                     
-                    # A2S monitoring (preferred if enabled)
-                    if server.enable_a2s_monitoring:
-                        from services.a2s_query import a2s_service
+                    event_type = 'a2s_check'
+                    
+                    try:
+                        # Perform A2S health check
+                        a2s_success = await a2s_service.check_server_health(query_host, query_port, timeout=5.0)
                         
-                        # Use configured A2S host/port or fall back to server host/game_port
-                        query_host = server.a2s_query_host or server.host
-                        query_port = server.a2s_query_port or server.game_port
-                        
-                        logger.debug(f"Performing A2S query for server {server_id} at {query_host}:{query_port}")
-                        
-                        event_type = 'a2s_check'
-                        
-                        try:
-                            # Perform A2S health check
-                            a2s_success = await a2s_service.check_server_health(query_host, query_port, timeout=5.0)
+                        if a2s_success:
+                            # Reset failure counter on success
+                            if server_id in self.a2s_failure_count:
+                                self.a2s_failure_count[server_id] = 0
                             
-                            if a2s_success:
-                                # Reset failure counter on success
-                                if server_id in self.a2s_failure_count:
-                                    self.a2s_failure_count[server_id] = 0
-                                
-                                check_status = 'success'
-                                check_message = f'A2S query successful at {query_host}:{query_port}'
-                                logger.debug(f"Server {server_id} A2S query successful")
-                            else:
-                                # Increment failure counter
-                                if server_id not in self.a2s_failure_count:
-                                    self.a2s_failure_count[server_id] = 0
-                                self.a2s_failure_count[server_id] += 1
-                                
-                                failure_count = self.a2s_failure_count[server_id]
-                                threshold = server.a2s_failure_threshold or 3
-                                
-                                check_status = 'warning'
-                                check_message = f'A2S query failed at {query_host}:{query_port} ({failure_count}/{threshold} failures)'
-                                logger.warning(f"Server {server_id} A2S query failed: {failure_count}/{threshold}")
-                                
-                                # Mark as down if threshold exceeded
-                                if failure_count >= threshold:
-                                    is_down = True
-                                    check_status = 'failed'
-                                    check_message = f'A2S query failed {failure_count} consecutive times (threshold: {threshold})'
-                        except Exception as e:
-                            is_down = True
-                            check_status = 'failed'
-                            check_message = f'A2S query error: {str(e)}'
-                            logger.error(f"Server {server_id} A2S query exception: {e}")
-                    
-                    # Process-based monitoring (if A2S not enabled)
-                    elif server.enable_panel_monitoring:
-                        # Check server status via SSH
-                        try:
-                            success, status_msg = await ssh_manager.get_server_status(server)
+                            check_status = 'success'
+                            check_message = f'A2S query successful at {query_host}:{query_port}'
+                            logger.debug(f"Server {server_id} A2S query successful")
+                        else:
+                            # Increment failure counter
+                            if server_id not in self.a2s_failure_count:
+                                self.a2s_failure_count[server_id] = 0
+                            self.a2s_failure_count[server_id] += 1
                             
-                            logger.debug(f"Server {server_id} status check: success={success}, status={status_msg}")
+                            failure_count = self.a2s_failure_count[server_id]
+                            threshold = server.a2s_failure_threshold or 3
                             
-                            if not success:
+                            check_status = 'warning'
+                            check_message = f'A2S query failed at {query_host}:{query_port} ({failure_count}/{threshold} failures)'
+                            logger.warning(f"Server {server_id} A2S query failed: {failure_count}/{threshold}")
+                            
+                            # Mark as down if threshold exceeded
+                            if failure_count >= threshold:
                                 is_down = True
                                 check_status = 'failed'
-                                check_message = f'Status check failed: {status_msg}'
-                                logger.warning(f"Server {server_id} status check failed: {status_msg}")
-                            elif status_msg == "stopped":
-                                is_down = True
-                                check_status = 'warning'
-                                check_message = 'Server process not found'
-                                logger.warning(f"Server {server_id} process not found")
-                            else:
-                                check_status = 'success'
-                                check_message = f'Server is {status_msg}'
-                        except Exception as e:
+                                check_message = f'A2S query failed {failure_count} consecutive times (threshold: {threshold})'
+                    except Exception as e:
+                        is_down = True
+                        check_status = 'failed'
+                        check_message = f'A2S query error: {str(e)}'
+                        logger.error(f"Server {server_id} A2S query exception: {e}")
+                
+                # Process-based monitoring (if A2S not enabled)
+                elif server.enable_panel_monitoring:
+                    # Check server status via SSH
+                    try:
+                        success, status_msg = await ssh_manager.get_server_status(server)
+                        
+                        logger.debug(f"Server {server_id} status check: success={success}, status={status_msg}")
+                        
+                        if not success:
                             is_down = True
                             check_status = 'failed'
-                            check_message = f'SSH status check error: {str(e)}'
-                            logger.error(f"Server {server_id} SSH status check exception: {e}")
-                    
-                    # Log status check to Redis
-                    try:
-                        log_success = await redis_manager.append_monitoring_log(
-                            server_id=server_id,
-                            event_type=event_type,
-                            status=check_status,
-                            message=check_message
-                        )
-                        logger.info(f"Status check logged to Redis: server={server_id}, type={event_type}, status={check_status}, success={log_success}")
+                            check_message = f'Status check failed: {status_msg}'
+                            logger.warning(f"Server {server_id} status check failed: {status_msg}")
+                        elif status_msg == "stopped":
+                            is_down = True
+                            check_status = 'warning'
+                            check_message = 'Server process not found'
+                            logger.warning(f"Server {server_id} process not found")
+                        else:
+                            check_status = 'success'
+                            check_message = f'Server is {status_msg}'
                     except Exception as e:
-                        logger.error(f"Exception logging status check to Redis: server={server_id}, error={e}")
+                        is_down = True
+                        check_status = 'failed'
+                        check_message = f'SSH status check error: {str(e)}'
+                        logger.error(f"Server {server_id} SSH status check exception: {e}")
+                
+                # Log status check to Redis
+                try:
+                    log_success = await redis_manager.append_monitoring_log(
+                        server_id=server_id,
+                        event_type=event_type,
+                        status=check_status,
+                        message=check_message
+                    )
+                    logger.info(f"Status check logged to Redis: server={server_id}, type={event_type}, status={check_status}, success={log_success}")
+                except Exception as e:
+                    logger.error(f"Exception logging status check to Redis: server={server_id}, error={e}")
+                
+                # Handle down server
+                if is_down and server.auto_restart_on_crash:
+                    # Check if we can restart (respecting restart limits)
+                    can_restart, reason = self.can_restart(server_id)
                     
-                    # Handle down server
-                    if is_down and server.auto_restart_on_crash:
-                        # Check if we can restart (respecting restart limits)
-                        can_restart, reason = self.can_restart(server_id)
+                    if can_restart:
+                        # Determine restart trigger source
+                        if server.enable_a2s_monitoring:
+                            restart_trigger = f'A2S monitoring ({self.a2s_failure_count.get(server_id, 0)} consecutive failures)'
+                            logger.info(f"Auto-restarting server {server_id} due to A2S failures")
+                        else:
+                            restart_trigger = 'panel monitoring (process check)'
+                            logger.info(f"Auto-restarting server {server_id} via panel monitoring")
                         
-                        if can_restart:
-                            # Determine restart trigger source
-                            if server.enable_a2s_monitoring:
-                                restart_trigger = f'A2S monitoring ({self.a2s_failure_count.get(server_id, 0)} consecutive failures)'
-                                logger.info(f"Auto-restarting server {server_id} due to A2S failures")
+                        # Log restart attempt to Redis
+                        try:
+                            await redis_manager.append_monitoring_log(
+                                server_id=server_id,
+                                event_type='auto_restart',
+                                status='info',
+                                message=f'Auto-restart triggered by {restart_trigger}'
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to log restart trigger to Redis: {e}")
+                        
+                        # Record restart attempt
+                        self.record_restart(server_id)
+                        
+                        try:
+                            # Attempt restart
+                            restart_success, restart_msg = await ssh_manager.start_server(server, progress_callback)
+                            
+                            # Update server status in database in a separate quick session
+                            async with async_session_maker() as db:
+                                server_to_update = await db.get(Server, server_id)
+                                if server_to_update:
+                                    if restart_success:
+                                        logger.info(f"Successfully auto-restarted server {server_id}")
+                                        server_to_update.status = ServerStatus.RUNNING
+                                    else:
+                                        logger.error(f"Failed to auto-restart server {server_id}: {restart_msg}")
+                                        server_to_update.status = ServerStatus.ERROR
+                                    await db.commit()
+                            
+                            if restart_success:
+                                # Log successful restart to Redis
+                                try:
+                                    await redis_manager.append_monitoring_log(
+                                        server_id=server_id,
+                                        event_type='auto_restart',
+                                        status='success',
+                                        message='Auto-restart completed successfully'
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to log restart success to Redis: {e}")
                             else:
-                                restart_trigger = 'panel monitoring (process check)'
-                                logger.info(f"Auto-restarting server {server_id} via panel monitoring")
-                            
-                            # Log restart attempt to Redis
-                            try:
-                                await redis_manager.append_monitoring_log(
-                                    server_id=server_id,
-                                    event_type='auto_restart',
-                                    status='info',
-                                    message=f'Auto-restart triggered by {restart_trigger}'
-                                )
-                            except Exception as e:
-                                logger.error(f"Failed to log restart trigger to Redis: {e}")
-                            
-                            # Record restart attempt
-                            self.record_restart(server_id)
-                            
-                            try:
-                                # Attempt restart
-                                restart_success, restart_msg = await ssh_manager.start_server(server, progress_callback)
-                                
-                                if restart_success:
-                                    logger.info(f"Successfully auto-restarted server {server_id}")
-                                    server.status = ServerStatus.RUNNING
-                                    
-                                    # Log successful restart to Redis
-                                    try:
-                                        await redis_manager.append_monitoring_log(
-                                            server_id=server_id,
-                                            event_type='auto_restart',
-                                            status='success',
-                                            message='Auto-restart completed successfully'
-                                        )
-                                    except Exception as e:
-                                        logger.error(f"Failed to log restart success to Redis: {e}")
-                                else:
-                                    logger.error(f"Failed to auto-restart server {server_id}: {restart_msg}")
-                                    server.status = ServerStatus.ERROR
-                                    
-                                    # Log failed restart to Redis
-                                    try:
-                                        await redis_manager.append_monitoring_log(
-                                            server_id=server_id,
-                                            event_type='auto_restart',
-                                            status='failed',
-                                            message=f'Auto-restart failed: {restart_msg}'
-                                        )
-                                    except Exception as e:
-                                        logger.error(f"Failed to log restart failure to Redis: {e}")
-                            except Exception as e:
-                                logger.error(f"Exception during auto-restart of server {server_id}: {e}")
-                                server.status = ServerStatus.ERROR
-                                
-                                # Log restart exception to Redis
+                                # Log failed restart to Redis
                                 try:
                                     await redis_manager.append_monitoring_log(
                                         server_id=server_id,
                                         event_type='auto_restart',
                                         status='failed',
-                                        message=f'Auto-restart error: {str(e)}'
+                                        message=f'Auto-restart failed: {restart_msg}'
                                     )
-                                except Exception as redis_e:
-                                    logger.error(f"Failed to log restart error to Redis: {redis_e}")
-                        else:
-                            logger.warning(f"Cannot auto-restart server {server_id}: {reason}")
-                            server.status = ServerStatus.ERROR
+                                except Exception as e:
+                                    logger.error(f"Failed to log restart failure to Redis: {e}")
+                        except Exception as e:
+                            logger.error(f"Exception during auto-restart of server {server_id}: {e}")
                             
-                            # Log blocked restart to Redis
+                            # Update server status in database
+                            async with async_session_maker() as db:
+                                server_to_update = await db.get(Server, server_id)
+                                if server_to_update:
+                                    server_to_update.status = ServerStatus.ERROR
+                                    await db.commit()
+                            
+                            # Log restart exception to Redis
                             try:
                                 await redis_manager.append_monitoring_log(
                                     server_id=server_id,
                                     event_type='auto_restart',
-                                    status='warning',
-                                    message=f'Auto-restart blocked: {reason}'
+                                    status='failed',
+                                    message=f'Auto-restart error: {str(e)}'
                                 )
-                            except Exception as e:
-                                logger.error(f"Failed to log blocked restart to Redis: {e}")
-                    elif is_down:
-                        logger.info(f"Server {server_id} is down but auto-restart is disabled")
-                        server.status = ServerStatus.STOPPED
+                            except Exception as redis_e:
+                                logger.error(f"Failed to log restart error to Redis: {redis_e}")
                     else:
-                        # Server is running
-                        if server.status != ServerStatus.RUNNING:
-                            server.status = ServerStatus.RUNNING
-                    
-                    # Commit status updates
-                    await db.commit()
+                        logger.warning(f"Cannot auto-restart server {server_id}: {reason}")
+                        
+                        # Update server status in database
+                        async with async_session_maker() as db:
+                            server_to_update = await db.get(Server, server_id)
+                            if server_to_update:
+                                server_to_update.status = ServerStatus.ERROR
+                                await db.commit()
+                        
+                        # Log blocked restart to Redis
+                        try:
+                            await redis_manager.append_monitoring_log(
+                                server_id=server_id,
+                                event_type='auto_restart',
+                                status='warning',
+                                message=f'Auto-restart blocked: {reason}'
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to log blocked restart to Redis: {e}")
+                elif is_down:
+                    logger.info(f"Server {server_id} is down but auto-restart is disabled")
+                    # Update server status in database
+                    async with async_session_maker() as db:
+                        server_to_update = await db.get(Server, server_id)
+                        if server_to_update:
+                            server_to_update.status = ServerStatus.STOPPED
+                            await db.commit()
+                else:
+                    # Server is running - update status and last check time in database
+                    async with async_session_maker() as db:
+                        server_to_update = await db.get(Server, server_id)
+                        if server_to_update:
+                            if server_to_update.status != ServerStatus.RUNNING:
+                                server_to_update.status = ServerStatus.RUNNING
+                            server_to_update.last_status_check = get_current_time()
+                            await db.commit()
                 
                 # Wait before next check
                 await asyncio.sleep(check_interval)

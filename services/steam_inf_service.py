@@ -62,22 +62,35 @@ class SteamInfService:
         from sqlmodel import select
         
         try:
+            # Fetch server list quickly and close DB connection to avoid pool exhaustion
             async with async_session_maker() as db:
-                # Get all servers
                 result = await db.execute(select(Server))
                 servers = result.scalars().all()
-                
-                logger.info(f"Periodic refresh: Updating steam.inf version for {len(servers)} servers")
-                
-                # Refresh each server's version
-                for server in servers:
-                    try:
+            
+            logger.info(f"Periodic refresh: Updating steam.inf version for {len(servers)} servers")
+            
+            # Refresh each server's version with timeout protection
+            # DB session is already closed, so SSH operations won't hold DB connections
+            for server in servers:
+                try:
+                    # Skip servers that are marked as down due to SSH failures
+                    if server.should_skip_background_checks():
+                        logger.info(f"Skipping steam.inf refresh for server {server.id} - marked as SSH down for 3+ days")
+                        continue
+                    
+                    # Wrap each server refresh in a timeout to prevent one slow server from blocking all others
+                    # Use 35 seconds timeout (slightly more than the _read_version_from_file timeout)
+                    async def _refresh_server():
                         success, version = await self.get_version_from_steam_inf(server, force_refresh=True)
                         if success:
                             logger.debug(f"Refreshed version for server {server.id}: {version}")
-                    except Exception as e:
-                        logger.error(f"Error refreshing version for server {server.id}: {e}")
-                        
+                    
+                    await asyncio.wait_for(_refresh_server(), timeout=35)
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout refreshing version for server {server.id} - skipping to prevent blocking")
+                except Exception as e:
+                    logger.error(f"Error refreshing version for server {server.id}: {e}")
+                    
         except Exception as e:
             logger.error(f"Error in periodic refresh: {e}")
         
@@ -131,46 +144,55 @@ class SteamInfService:
         ssh_manager = SSHManager()
         
         try:
-            # Connect to server
-            success, msg = await ssh_manager.connect(server)
-            if not success:
-                logger.warning(f"Failed to connect to server {server.id} for steam.inf read: {msg}")
-                return False, None
-            
-            # Path to steam.inf file
-            steam_inf_path = f"{server.game_directory}/cs2/game/csgo/steam.inf"
-            
-            # Properly escape the path for shell command
-            escaped_path = shlex.quote(steam_inf_path)
-            
-            # Check if file exists
-            check_cmd = f"test -f {escaped_path} && echo 'exists' || echo 'missing'"
-            success, stdout, stderr = await ssh_manager.execute_command(check_cmd)
-            
-            if not success or 'missing' in stdout:
-                logger.warning(f"steam.inf file not found for server {server.id} at {steam_inf_path}")
-                return False, None
-            
-            # Read the file and extract PatchVersion
-            # Use grep to find the line with PatchVersion
-            read_cmd = f"grep 'PatchVersion=' {escaped_path}"
-            success, stdout, stderr = await ssh_manager.execute_command(read_cmd)
-            
-            if not success or not stdout:
-                logger.warning(f"Failed to read PatchVersion from steam.inf for server {server.id}")
-                return False, None
-            
-            # Parse the version from output
-            # Expected format: PatchVersion=1.41.2.6
-            version = self._parse_patch_version(stdout)
-            
-            if version:
-                logger.info(f"Read version from steam.inf for server {server.id}: {version}")
-                return True, version
-            else:
-                logger.warning(f"Could not parse PatchVersion from steam.inf for server {server.id}: {stdout}")
-                return False, None
+            # Wrap the entire operation in a timeout to prevent blocking
+            # Use 30 seconds timeout to avoid long waits on connection issues
+            async def _do_read():
+                # Connect to server
+                success, msg = await ssh_manager.connect(server)
+                if not success:
+                    logger.warning(f"Failed to connect to server {server.id} for steam.inf read: {msg}")
+                    return False, None
                 
+                # Path to steam.inf file
+                steam_inf_path = f"{server.game_directory}/cs2/game/csgo/steam.inf"
+                
+                # Properly escape the path for shell command
+                escaped_path = shlex.quote(steam_inf_path)
+                
+                # Check if file exists
+                check_cmd = f"test -f {escaped_path} && echo 'exists' || echo 'missing'"
+                success, stdout, stderr = await ssh_manager.execute_command(check_cmd)
+                
+                if not success or 'missing' in stdout:
+                    logger.warning(f"steam.inf file not found for server {server.id} at {steam_inf_path}")
+                    return False, None
+                
+                # Read the file and extract PatchVersion
+                # Use grep to find the line with PatchVersion
+                read_cmd = f"grep 'PatchVersion=' {escaped_path}"
+                success, stdout, stderr = await ssh_manager.execute_command(read_cmd)
+                
+                if not success or not stdout:
+                    logger.warning(f"Failed to read PatchVersion from steam.inf for server {server.id}")
+                    return False, None
+                
+                # Parse the version from output
+                # Expected format: PatchVersion=1.41.2.6
+                version = self._parse_patch_version(stdout)
+                
+                if version:
+                    logger.info(f"Read version from steam.inf for server {server.id}: {version}")
+                    return True, version
+                else:
+                    logger.warning(f"Could not parse PatchVersion from steam.inf for server {server.id}: {stdout}")
+                    return False, None
+            
+            # Apply timeout to prevent blocking the event loop
+            return await asyncio.wait_for(_do_read(), timeout=30)
+                
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout reading steam.inf for server {server.id} - operation took longer than 30 seconds")
+            return False, None
         except Exception as e:
             logger.error(f"Error reading steam.inf for server {server.id}: {e}")
             return False, None

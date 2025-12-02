@@ -56,96 +56,112 @@ class AutoUpdateService:
         from sqlmodel import select, update
         
         try:
+            # Fetch server list quickly and close DB connection to avoid pool exhaustion
             async with async_session_maker() as db:
-                # Get all servers with auto-update enabled
                 servers = await Server.get_all_with_auto_update(db)
+            
+            logger.info(f"Checking {len(servers)} servers with auto-update enabled")
+            
+            # Check and update each server
+            # DB session is already closed, so SSH operations won't hold DB connections
+            for server in servers:
+                # Skip servers that are marked as down due to SSH failures
+                if server.should_skip_background_checks():
+                    logger.info(f"Skipping auto-update check for server {server.id} ({server.name}) - marked as SSH down for 3+ days")
+                    continue
                 
-                logger.info(f"Checking {len(servers)} servers with auto-update enabled")
+                # Check if we should check this server based on its configured interval
+                interval_hours = server.update_check_interval_hours or 1
+                if not steam_api_service.should_check_version(server.last_update_check, interval_hours):
+                    logger.debug(
+                        f"Skipping server {server.id} ({server.name}) - "
+                        f"checked recently (interval: {interval_hours}h)"
+                    )
+                    continue
                 
-                # Check and update each server
-                for server in servers:
-                    # Check if we should check this server based on its configured interval
-                    interval_hours = server.update_check_interval_hours or 1
-                    if not steam_api_service.should_check_version(server.last_update_check, interval_hours):
-                        logger.debug(
-                            f"Skipping server {server.id} ({server.name}) - "
-                            f"checked recently (interval: {interval_hours}h)"
-                        )
-                        continue
-                    
-                    await self._check_and_update_server(server, db)
-                    
+                await self._check_and_update_server(server)
+                
         except Exception as e:
             logger.error(f"Error checking servers for updates: {e}")
     
-    async def _check_and_update_server(self, server, db):
+    async def _check_and_update_server(self, server):
         """Check a single server and update if needed"""
         try:
-            # Update last check time first
-            from sqlalchemy import update as sql_update
-            from modules.models import Server
-            await db.execute(
-                sql_update(Server)
-                .where(Server.id == server.id)
-                .values(last_update_check=get_current_time())
-            )
-            await db.commit()
-            
-            # Try to get version from steam.inf first (more reliable)
-            current_version = None
-            version_source = "unknown"
-            
-            success, version = await steam_inf_service.get_version_from_steam_inf(server)
-            
-            if success and version:
-                current_version = version
-                version_source = "steam.inf"
+            # Wrap the entire check in a timeout to prevent blocking
+            # Use 60 seconds timeout for the entire check process
+            async def _do_check():
+                # Update last check time first - use a separate DB session just for this quick operation
+                from modules.database import async_session_maker
+                from sqlalchemy import update as sql_update
+                from modules.models import Server
+                async with async_session_maker() as db:
+                    await db.execute(
+                        sql_update(Server)
+                        .where(Server.id == server.id)
+                        .values(last_update_check=get_current_time())
+                    )
+                    await db.commit()
+                
+                # Try to get version from steam.inf first (more reliable)
+                current_version = None
+                version_source = "unknown"
+                
+                success, version = await steam_inf_service.get_version_from_steam_inf(server)
+                
+                if success and version:
+                    current_version = version
+                    version_source = "steam.inf"
+                    logger.info(
+                        f"Got version from steam.inf for server {server.id} ({server.name}): "
+                        f"{current_version}"
+                    )
+                else:
+                    # Fallback to database stored version (from A2S or previous reads)
+                    current_version = server.current_game_version
+                    version_source = "database/A2S"
+                    logger.info(
+                        f"steam.inf read failed, using stored version for server {server.id} ({server.name}): "
+                        f"current_version={current_version}"
+                    )
+                
+                if not current_version:
+                    logger.warning(
+                        f"No version available for server {server.id}, skipping update check"
+                    )
+                    return
+                
+                # Check version against Steam API
+                success, result = await steam_api_service.check_version(current_version)
+                
+                if not success:
+                    logger.warning(
+                        f"Failed to check version for server {server.id}: "
+                        f"{result.get('error', 'Unknown error')}"
+                    )
+                    return
+                
+                # Check if update is needed
+                if result.get('up_to_date', True):
+                    logger.info(
+                        f"Server {server.id} ({server.name}) is up-to-date "
+                        f"(version: {current_version} from {version_source})"
+                    )
+                    return
+                
+                required_version = result.get('required_version')
                 logger.info(
-                    f"Got version from steam.inf for server {server.id} ({server.name}): "
-                    f"{current_version}"
+                    f"Server {server.id} ({server.name}) needs update: "
+                    f"current={current_version} (from {version_source}), required={required_version}"
                 )
-            else:
-                # Fallback to database stored version (from A2S or previous reads)
-                current_version = server.current_game_version
-                version_source = "database/A2S"
-                logger.info(
-                    f"steam.inf read failed, using stored version for server {server.id} ({server.name}): "
-                    f"current_version={current_version}"
-                )
+                
+                # Trigger update
+                await self._trigger_server_update(server)
             
-            if not current_version:
-                logger.warning(
-                    f"No version available for server {server.id}, skipping update check"
-                )
-                return
+            # Apply timeout to prevent blocking the event loop
+            await asyncio.wait_for(_do_check(), timeout=60)
             
-            # Check version against Steam API
-            success, result = await steam_api_service.check_version(current_version)
-            
-            if not success:
-                logger.warning(
-                    f"Failed to check version for server {server.id}: "
-                    f"{result.get('error', 'Unknown error')}"
-                )
-                return
-            
-            # Check if update is needed
-            if result.get('up_to_date', True):
-                logger.info(
-                    f"Server {server.id} ({server.name}) is up-to-date "
-                    f"(version: {current_version} from {version_source})"
-                )
-                return
-            
-            required_version = result.get('required_version')
-            logger.info(
-                f"Server {server.id} ({server.name}) needs update: "
-                f"current={current_version} (from {version_source}), required={required_version}"
-            )
-            
-            # Trigger update
-            await self._trigger_server_update(server)
-            
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout checking/updating server {server.id} - operation took longer than 60 seconds, skipping to prevent blocking")
         except Exception as e:
             logger.error(f"Error checking/updating server {server.id}: {e}")
     
