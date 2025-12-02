@@ -10,7 +10,7 @@ class I18n {
         this.fallbackLocale = 'en-US';
         this.supportedLocales = ['en-US', 'zh-CN'];
         // Version for cache busting - update when translations change
-        this.version = '1.0.11';
+        this.version = '1.0.13';
         // Track if translations are loaded
         this.isInitialized = false;
     }

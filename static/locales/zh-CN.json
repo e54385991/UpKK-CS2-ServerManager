@@ -20,6 +20,7 @@
     "title": "CS2 服务器管理器",
     "subtitle": "通过直观的 Web 界面轻松管理多个 Counter-Strike 2 服务器",
     "manageServers": "管理服务器",
+    "deploymentTutorial": "以阿里云为例 图文教程部署你的第一个CS2服务器",
     "apiDocumentation": "API 文档",
     "features": {
       "fastAsync": {
@@ -700,7 +701,8 @@
     "create": "创建",
     "rename": "重命名",
     "note": "备注",
-    "and": "和"
+    "and": "和",
+    "backToHome": "返回首页"
   },
   "dashboard": {
     "title": "CS2 服务器管理器",
@@ -886,5 +888,36 @@
     "reconnectSuccess": "手动重连成功，计数已重置",
     "reconnectFailed": "手动重连失败",
     "reconnectError": "重连过程出错"
+  },
+  "deploymentTutorial": {
+    "title": "如何使用本面板部署CS2游戏服务器",
+    "subtitle": "不管是轻量 腾讯云 阿里云 google cloud amazone cloud 都是类似原理 进行类推即可 这里仅以阿里云为例",
+    "step1": {
+      "title": "步骤 1"
+    },
+    "step2": {
+      "title": "步骤 2"
+    },
+    "step3": {
+      "title": "步骤 3"
+    },
+    "step4": {
+      "title": "步骤 4"
+    },
+    "step5": {
+      "title": "步骤 5"
+    },
+    "step6": {
+      "title": "步骤 6"
+    },
+    "step8": {
+      "title": "步骤 8"
+    },
+    "step9": {
+      "title": "步骤 9"
+    },
+    "step10": {
+      "title": "步骤 10"
+    }
   }
 }

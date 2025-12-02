@@ -20,6 +20,7 @@
     "title": "CS2 Server Manager",
     "subtitle": "Manage multiple Counter-Strike 2 servers with ease through an intuitive web interface",
     "manageServers": "Manage Servers",
+    "deploymentTutorial": "Deploy Your First CS2 Server - Tutorial with Images",
     "apiDocumentation": "API Documentation",
     "features": {
       "fastAsync": {
@@ -700,7 +701,8 @@
     "create": "Create",
     "rename": "Rename",
     "note": "Note",
-    "and": " and "
+    "and": " and ",
+    "backToHome": "Back to Home"
   },
   "dashboard": {
     "title": "CS2 Server Manager",
@@ -886,5 +888,36 @@
     "reconnectSuccess": "Manual reconnection successful, counter reset",
     "reconnectFailed": "Manual reconnection failed",
     "reconnectError": "Error during reconnection"
+  },
+  "deploymentTutorial": {
+    "title": "How to Deploy a CS2 Game Server Using This Panel",
+    "subtitle": "The principles are similar for different cloud providers (Lightweight servers, Tencent Cloud, Aliyun, Google Cloud, Amazon Cloud, etc.). Here we use Aliyun as an example.",
+    "step1": {
+      "title": "Step 1"
+    },
+    "step2": {
+      "title": "Step 2"
+    },
+    "step3": {
+      "title": "Step 3"
+    },
+    "step4": {
+      "title": "Step 4"
+    },
+    "step5": {
+      "title": "Step 5"
+    },
+    "step6": {
+      "title": "Step 6"
+    },
+    "step8": {
+      "title": "Step 8"
+    },
+    "step9": {
+      "title": "Step 9"
+    },
+    "step10": {
+      "title": "Step 10"
+    }
   }
 }

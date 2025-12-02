@@ -162,6 +162,12 @@ async def root(request: Request):
     return templates.TemplateResponse("home.html", {"request": request})
 
 
+@app.get("/deployment-tutorial", response_class=HTMLResponse)
+async def deployment_tutorial_page(request: Request):
+    """Deployment tutorial page"""
+    return templates.TemplateResponse("deployment_tutorial.html", {"request": request})
+
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Login page"""
