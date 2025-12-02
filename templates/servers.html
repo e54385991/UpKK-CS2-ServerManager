@@ -313,7 +313,7 @@
                         </div>
                         <div class="col-md-4">
                             <label for="sshUser" class="form-label" data-i18n="servers.sshUserLabel">SSH User *</label>
-                            <input type="text" class="form-control" id="sshUser" value="cs2server" readonly required>
+                            <input type="text" class="form-control" id="sshUser" value="cs2server" required>
                             <div class="form-text">
                                 <i class="bi bi-info-circle"></i> <span data-i18n="servers.sshUserHint">Must use cs2server user (from /setup-wizard)</span>
                             </div>
@@ -333,9 +333,17 @@
                             <input type="password" class="form-control" id="sshPassword">
                         </div>
                         <div class="col-12">
-                            <label for="gameDirectory" class="form-label" data-i18n="servers.gameDirectoryLabel">Game Directory *</label>
-                            <input type="text" class="form-control" id="gameDirectory" 
-                                   value="/home/cs2server/cs2" required>
+                            <label for="gameDirectoryName" class="form-label" data-i18n="servers.gameDirectoryLabel">Game Directory *</label>
+                            <div class="input-group">
+                                <span class="input-group-text" id="gameDirectoryBase">/home/cs2server/</span>
+                                <input type="text" class="form-control" id="gameDirectoryName" 
+                                       value="cs2" required pattern="^[a-zA-Z0-9][a-zA-Z0-9_-]*[a-zA-Z0-9]$|^[a-zA-Z0-9]$" 
+                                       aria-describedby="gameDirectoryBase gameDirectoryHelp"
+                                       title="Must start and end with a letter or number">
+                            </div>
+                            <div class="form-text" id="gameDirectoryHelp">
+                                <i class="bi bi-info-circle"></i> <span data-i18n="servers.gameDirectoryHint">Only letters, numbers, underscores, and hyphens allowed</span>
+                            </div>
                         </div>
                         <div class="col-12">
                             <label for="serverDescription" class="form-label" data-i18n="servers.descriptionLabel">Description</label>
@@ -969,14 +977,27 @@ async function loadServerCaptcha() {
     }
 }
 
+// Function to update game directory base path based on SSH user
+function updateGameDirectoryBase() {
+    const sshUser = document.getElementById('sshUser').value || 'cs2server';
+    const basePathElement = document.getElementById('gameDirectoryBase');
+    if (basePathElement) {
+        basePathElement.textContent = `/home/${sshUser}/`;
+    }
+}
+
 // Refresh CAPTCHA for server form
 document.getElementById('refresh-server-captcha')?.addEventListener('click', loadServerCaptcha);
 document.getElementById('server-captcha-image')?.addEventListener('click', loadServerCaptcha);
+
+// Update game directory base path when SSH user changes
+document.getElementById('sshUser')?.addEventListener('input', updateGameDirectoryBase);
 
 // Load CAPTCHA and initialized servers when modal is shown
 document.getElementById('addServerModal')?.addEventListener('shown.bs.modal', () => {
     loadServerCaptcha();
     loadInitializedServers();
+    updateGameDirectoryBase(); // Update base path on modal show
 });
 
 async function submitAddServer() {
@@ -998,14 +1019,19 @@ async function submitAddServer() {
         progressText.textContent = message;
     };
     
+    // Combine base path with directory name
+    const sshUser = document.getElementById('sshUser').value;
+    const directoryName = document.getElementById('gameDirectoryName').value;
+    const gameDirectory = `/home/${sshUser}/${directoryName}`;
+    
     const data = {
         name: document.getElementById('serverName').value,
         host: document.getElementById('serverHost').value,
         ssh_port: parseInt(document.getElementById('sshPort').value),
-        ssh_user: document.getElementById('sshUser').value,
+        ssh_user: sshUser,
         ssh_password: document.getElementById('sshPassword').value,
         game_port: parseInt(document.getElementById('gamePort').value),
-        game_directory: document.getElementById('gameDirectory').value,
+        game_directory: gameDirectory,
         description: document.getElementById('serverDescription').value,
         captcha_token: document.getElementById('server-captcha-token').value,
         captcha_code: document.getElementById('serverCaptcha').value
@@ -1106,7 +1132,15 @@ async function fillFromInitializedServer(serverKey) {
         document.getElementById('sshPort').value = server.ssh_port;
         document.getElementById('sshUser').value = server.ssh_user;
         document.getElementById('sshPassword').value = server.ssh_password;
-        document.getElementById('gameDirectory').value = server.game_directory;
+        
+        // Extract directory name from full path (e.g., /home/cs2server/cs2 -> cs2)
+        const gameDir = server.game_directory || '/home/cs2server/cs2';
+        const parts = gameDir.replace(/\/+$/, '').split('/').filter(Boolean); // Remove trailing slashes and empty parts
+        const directoryName = parts.length > 0 ? parts[parts.length - 1] : 'cs2';
+        document.getElementById('gameDirectoryName').value = directoryName;
+        
+        // Update base path display
+        updateGameDirectoryBase();
     } catch (error) {
         console.error('Error filling server details:', error);
         const errorPrefix = window.i18n?.t('errors.loadingServerDetails') || 'Error loading server details';

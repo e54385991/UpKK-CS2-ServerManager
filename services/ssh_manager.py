@@ -101,6 +101,27 @@ class SSHManager:
     # Upload chunk size for SFTP transfers (32KB)
     UPLOAD_CHUNK_SIZE = 32768
     
+    # SteamCMD retry configuration
+    STEAMCMD_MAX_RETRIES = 5  # Maximum number of retry attempts (not counting the initial attempt)
+    STEAMCMD_RETRY_DELAY = 5  # Initial delay in seconds between retries (will use exponential backoff)
+    
+    # SteamCMD retryable error patterns
+    # These error keywords indicate temporary issues that are worth retrying
+    STEAMCMD_RETRYABLE_ERRORS = [
+        "timeout",
+        "timed out", 
+        "connection",
+        "network",
+        "failed to download",
+        "download failed",
+        "corrupt",
+        "error downloading",
+        "unable to download",
+        "http error",
+        "failed to install",
+        "no connection"
+    ]
+    
     def __init__(self, use_pool: bool = True):
         """
         Initialize SSH Manager
@@ -714,10 +735,11 @@ class SSHManager:
                 return False, f"SteamCMD extraction failed: {stderr}"
             await send_progress(f"✓ SteamCMD extracted successfully")
             
-            # Install CS2 server (App ID: 730) with streaming output
+            # Install CS2 server (App ID: 730) with streaming output and automatic retry
             await send_progress("=" * 60)
             await send_progress("Installing CS2 server via SteamCMD...")
             await send_progress("This will download approximately 30GB and may take 15-30 minutes")
+            await send_progress("Auto-retry is enabled: up to 3 automatic retries on network errors")
             await send_progress("Please be patient, you will see real-time progress below:")
             await send_progress("=" * 60)
             
@@ -739,10 +761,12 @@ class SSHManager:
             await send_progress("=" * 60)
             await send_progress("")
             
-            success, stdout, stderr = await self.execute_command_streaming(
+            # Use retry mechanism for SteamCMD installation
+            success, stdout, stderr = await self._execute_steamcmd_with_retry(
                 install_cs2,
-                output_callback=send_progress,
-                timeout=1800  # 30 minutes
+                server,
+                progress_callback=send_progress,
+                timeout=1800  # 30 minutes per attempt
             )
             
             if not success:
@@ -1668,6 +1692,136 @@ class SSHManager:
             # Non-critical error, log but continue
             await self._send_progress_if_callback(progress_callback, f"Note: Error checking for stray CS2 processes: {str(e)}")
     
+    async def _execute_steamcmd_with_retry(
+        self, 
+        command: str, 
+        server: Server,
+        progress_callback=None,
+        timeout: int = 1800,
+        max_retries: int = None
+    ) -> Tuple[bool, str, str]:
+        """
+        Execute SteamCMD command with automatic retry on failure
+        
+        Args:
+            command: SteamCMD command to execute
+            server: Server instance
+            progress_callback: Optional async callback for progress updates
+            timeout: Command timeout in seconds
+            max_retries: Maximum number of retries (default: STEAMCMD_MAX_RETRIES, must be >= 0)
+        
+        Returns:
+            Tuple[bool, str, str]: (success, stdout, stderr)
+        """
+        # Validate and set max_retries
+        if max_retries is None:
+            max_retries = self.STEAMCMD_MAX_RETRIES
+        
+        # Ensure max_retries is a non-negative integer
+        if not isinstance(max_retries, int):
+            logger.warning(f"Invalid max_retries type: {type(max_retries)}. Using default: {self.STEAMCMD_MAX_RETRIES}")
+            max_retries = self.STEAMCMD_MAX_RETRIES
+        elif max_retries < 0:
+            logger.warning(f"Negative max_retries: {max_retries}. Using 0 (no retries)")
+            max_retries = 0
+        
+        async def send_progress(message: str):
+            """Helper to send progress updates"""
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(message)
+                else:
+                    progress_callback(message)
+        
+        # Attempt counter (0 = initial attempt, 1+ = retries)
+        for attempt in range(max_retries + 1):
+            try:
+                # Handle retry attempts (attempt > 0)
+                if attempt > 0:
+                    # Kill any existing steamcmd processes before retry
+                    await self._kill_steamcmd_processes(server, progress_callback)
+                    
+                    # Calculate exponential backoff delay
+                    delay = self.STEAMCMD_RETRY_DELAY * (2 ** (attempt - 1))
+                    await send_progress(f"⏳ Retry attempt {attempt}/{max_retries} - waiting {delay} seconds before retry...")
+                    await asyncio.sleep(delay)
+                    await send_progress(f"🔄 Starting retry attempt {attempt}/{max_retries}...")
+                
+                # Execute the command with streaming output
+                success, stdout, stderr = await self.execute_command_streaming(
+                    command,
+                    output_callback=progress_callback,
+                    timeout=timeout
+                )
+                
+                # Check if the command was successful
+                if success:
+                    if attempt > 0:
+                        await send_progress(f"✓ SteamCMD command succeeded on retry attempt {attempt}/{max_retries}")
+                    return True, stdout, stderr
+                
+                # Command failed - check if we should retry
+                # Common SteamCMD errors that are worth retrying:
+                # - Network errors (timeout, connection failed, etc.)
+                # - Temporary server issues
+                # - Download interruptions
+                stderr_lower = stderr.lower() if stderr else ""
+                stdout_lower = stdout.lower() if stdout else ""
+                
+                # Combine output for error checking
+                output_lower = ' '.join(filter(None, [stderr_lower, stdout_lower]))
+                
+                # Check for errors that suggest a retry would help (using class constant)
+                is_retryable = any(error in output_lower for error in self.STEAMCMD_RETRYABLE_ERRORS)
+                
+                if attempt < max_retries and is_retryable:
+                    # Log the error and prepare for retry
+                    if stderr:
+                        error_snippet = stderr[:200]
+                    elif stdout:
+                        error_snippet = stdout[:200]
+                    else:
+                        error_snippet = "Unknown error"
+                    await send_progress(f"⚠ SteamCMD failed with retryable error: {error_snippet}")
+                    logger.warning(f"SteamCMD attempt {attempt + 1} failed for server {server.id}: {error_snippet}")
+                    # Continue to next iteration to retry
+                    continue
+                else:
+                    # Either we've exhausted retries or the error is not retryable
+                    if attempt >= max_retries:
+                        await send_progress(f"✗ SteamCMD failed after {max_retries} retry attempts")
+                        logger.error(f"SteamCMD failed for server {server.id} after {max_retries} retries")
+                    else:
+                        await send_progress(f"✗ SteamCMD failed with non-retryable error")
+                        logger.error(f"SteamCMD failed for server {server.id} with non-retryable error")
+                    
+                    return False, stdout, stderr
+            
+            except asyncio.TimeoutError:
+                # Timeout is also retryable
+                if attempt < max_retries:
+                    await send_progress(f"⚠ SteamCMD timeout on attempt {attempt + 1}")
+                    logger.warning(f"SteamCMD timeout for server {server.id} on attempt {attempt + 1}")
+                    continue
+                else:
+                    await send_progress(f"✗ SteamCMD timeout after {max_retries} retry attempts")
+                    logger.error(f"SteamCMD timeout for server {server.id} after {max_retries} retries")
+                    return False, "", "Command timeout after retries"
+            
+            except Exception as e:
+                # Unexpected exception
+                error_msg = str(e)
+                if attempt < max_retries:
+                    await send_progress(f"⚠ SteamCMD error on attempt {attempt + 1}: {error_msg}")
+                    logger.warning(f"SteamCMD error for server {server.id} on attempt {attempt + 1}: {error_msg}")
+                    continue
+                else:
+                    await send_progress(f"✗ SteamCMD error after {max_retries} retry attempts: {error_msg}")
+                    logger.error(f"SteamCMD error for server {server.id} after {max_retries} retries: {error_msg}")
+                    return False, "", f"Exception after retries: {error_msg}"
+        
+        # No fallback return needed - loop always executes at least once and all paths return
+    
     async def update_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """Update CS2 server using SteamCMD (without validation)"""
         success, msg = await self.connect(server)
@@ -1726,7 +1880,7 @@ class SSHManager:
             game_dir = server.game_directory
             steamcmd_dir = f"{game_dir}/steamcmd"
             
-            # Run SteamCMD update command (without validate)
+            # Run SteamCMD update command (without validate) with automatic retry
             update_cmd = (
                 f"cd {steamcmd_dir} && "
                 f"./steamcmd.sh "
@@ -1744,11 +1898,14 @@ class SSHManager:
             await send_progress(f"   {update_cmd}")
             await send_progress("=" * 60)
             await send_progress("Updating CS2 server files via SteamCMD...")
+            await send_progress("Auto-retry is enabled: up to 3 automatic retries on network errors")
             
-            success, stdout, stderr = await self.execute_command_streaming(
+            # Use retry mechanism for SteamCMD update
+            success, stdout, stderr = await self._execute_steamcmd_with_retry(
                 update_cmd,
-                output_callback=send_progress,
-                timeout=1800  # 30 minutes timeout for updates
+                server,
+                progress_callback=send_progress,
+                timeout=1800  # 30 minutes per attempt
             )
             
             if not success and stderr and "error" in stderr.lower():
@@ -1844,7 +2001,7 @@ class SSHManager:
             game_dir = server.game_directory
             steamcmd_dir = f"{game_dir}/steamcmd"
             
-            # Run SteamCMD update command with validation
+            # Run SteamCMD update command with validation and automatic retry
             update_cmd = (
                 f"cd {steamcmd_dir} && "
                 f"./steamcmd.sh "
@@ -1863,11 +2020,14 @@ class SSHManager:
             await send_progress("=" * 60)
             await send_progress("Updating and validating CS2 server files via SteamCMD...")
             await send_progress("This may take a while as all files will be validated...")
+            await send_progress("Auto-retry is enabled: up to 3 automatic retries on network errors")
             
-            success, stdout, stderr = await self.execute_command_streaming(
+            # Use retry mechanism for SteamCMD validation
+            success, stdout, stderr = await self._execute_steamcmd_with_retry(
                 update_cmd,
-                output_callback=send_progress,
-                timeout=3600  # 60 minutes timeout for validation
+                server,
+                progress_callback=send_progress,
+                timeout=10800  # 3h per attempt
             )
             
             if not success and stderr and "error" in stderr.lower():

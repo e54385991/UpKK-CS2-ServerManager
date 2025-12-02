@@ -1,4 +1,19 @@
                 <div class="tab-pane fade" id="actions" role="tabpanel">
+                    <!-- Deployment Lock Warning (shown when deployment is stuck) -->
+                    <div x-show="deploymentLockExists" class="alert alert-info alert-dismissible fade show" role="alert">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <strong data-i18n="serverDetail.deploymentLockDetected">检测到 SteamCMD 正在运行</strong>
+                        <p class="mb-2" data-i18n="serverDetail.deploymentLockMessage">服务器可能正在更新或部署。如果长时间卡住，您可以尝试清除锁定并重新开始。通常无需操作。</p>
+                        <button @click="cancelDeployment()" :disabled="cancellingDeployment" class="btn btn-sm btn-outline-danger">
+                            <span x-show="!cancellingDeployment">
+                                <i class="bi bi-x-circle"></i> <span data-i18n="serverDetail.clearDeploymentLock">清除部署锁定</span>
+                            </span>
+                            <span x-show="cancellingDeployment">
+                                <i class="bi bi-arrow-repeat spin"></i> <span data-i18n="serverDetail.clearing">清除中...</span>
+                            </span>
+                        </button>
+                    </div>
+                    
                     <!-- Actions Card -->
                     <div class="card mb-4">
                         <div class="card-header">

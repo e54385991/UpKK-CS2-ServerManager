@@ -166,6 +166,91 @@ async def clear_deployment_progress_after_delay(server_id: int, delay: int = DEP
     await redis_manager.clear_deployment_progress(server_id)
 
 
+@router.get("/servers/{server_id}/deployment-lock")
+async def check_deployment_lock(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Check deployment lock status for a server.
+    
+    Returns information about whether a deployment lock exists for the specified server,
+    which can be used to determine if a deployment operation is in progress or stuck.
+    
+    Args:
+        server_id: ID of the server to check
+        db: Database session (injected)
+        current_user: Current authenticated user (injected)
+    
+    Returns:
+        JSONResponse with:
+            - lock_exists (bool): Whether a deployment lock is active
+            - server_status (str): Current server status
+    
+    Raises:
+        HTTPException 404: Server not found or user doesn't own it
+    """
+    # Verify user owns this server
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    
+    deployment_lock_key = f"deployment_lock:{server_id}"
+    lock_exists = await redis_manager.get(deployment_lock_key)
+    
+    return JSONResponse(
+        content={
+            "lock_exists": bool(lock_exists),
+            "server_status": server.status
+        }
+    )
+
+
+@router.delete("/servers/{server_id}/deployment-lock")
+async def cancel_deployment(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Cancel an in-progress or stuck deployment by clearing the deployment lock.
+    
+    This endpoint allows users to clear a deployment lock that may be stuck
+    due to interruptions, crashes, or other issues. Use with caution as clearing
+    the lock while a deployment is actually running may cause issues.
+    """
+    # Verify user owns this server
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    
+    deployment_lock_key = f"deployment_lock:{server_id}"
+    lock_exists = await redis_manager.get(deployment_lock_key)
+    
+    if not lock_exists:
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "No deployment lock found for this server"
+            }
+        )
+    
+    # Clear the deployment lock
+    await redis_manager.delete(deployment_lock_key)
+    
+    # Also clear deployment progress
+    await redis_manager.clear_deployment_progress(server_id)
+    
+    # Update server status if it's stuck in DEPLOYING
+    if server.status == ServerStatus.DEPLOYING:
+        server.status = ServerStatus.ERROR
+        await db.commit()
+    
+    return JSONResponse(
+        content={
+            "success": True,
+            "message": "Deployment lock cleared successfully. You can now start a new operation."
+        }
+    )
+
+
 @router.post("/servers/{server_id}/actions", response_model=ActionResponse)
 async def server_action(
     server_id: int,
@@ -185,7 +270,7 @@ async def server_action(
         # If deployment is in progress, reject all operations
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Server is currently being deployed. Please check the console for progress."
+            detail="Server is currently being deployed or has a stuck deployment lock. Please check the console for progress. If the deployment is stuck, you can cancel it from the Actions tab."
         )
     
     # Set deployment lock only for deploy action (with 2 hour expiration in case of crashes)
@@ -530,6 +615,19 @@ async def server_action(
                 log.status = "failed"
                 log.error_message = message
                 await send_deployment_update(server_id, "error", f"Plugin backup failed: {message}")
+        
+        else:
+            # Handle unknown action
+            error_msg = f"Unknown action: {action}"
+            log.status = "failed"
+            log.error_message = error_msg
+            await db.commit()
+            await send_deployment_update(server_id, "error", error_msg)
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
         
         await db.commit()
         await db.refresh(server)
