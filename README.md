@@ -8,6 +8,22 @@
 
 [English](#english) | [中文](#chinese)
 
+演示地址（请自行注册账号）：https://build-cs2-server.upkk.com/setup-wizard
+
+主要内容：
+- 功能概述
+- 快速安装与运行
+- 如何访问 Demo（需要自行注册账号）
+- 常见问题与支持
+
+---
+
+## Overview (English)
+This is a sample project's README with Chinese and English instructions, including installation, running steps, and demo access. The demo site requires you to register an account — please sign up at the demo URL to experience the full functionality.
+
+Demo URL (please register an account): https://build-cs2-server.upkk.com/setup-wizard
+
+
 ---
 ## ⚠️ 重要网络要求（部署前必读）
 
