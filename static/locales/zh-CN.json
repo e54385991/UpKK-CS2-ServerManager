@@ -15,7 +15,8 @@
     "profile": "个人中心",
     "logout": "退出",
     "language": "语言",
-    "pluginMarket": "插件市场"
+    "pluginMarket": "插件市场",
+    "pluginCenter": "插件中心"
   },
   "home": {
     "title": "CS2 服务器管理器",
@@ -456,8 +457,8 @@
     "panelProxyEnabled": "面板服务器代理：已启用（所有下载都先通过本面板服务器）",
     "proxyInfo": "二选一：面板服务器代理（通过本面板下载）或 GitHub URL 代理（游戏服务器通过代理URL下载）。两种模式都能改善受限网络的访问。",
     "usePanelProxyServer": "使用面板服务器代理",
-    "usePanelProxyTooltipServer": "所有下载（SteamCMD、GitHub插件）都先通过本面板服务器，然后通过本面板自动(SFTP)上传。当本面板可顺畅访问国外网站时推荐使用。与 GitHub URL 代理互斥。",
-    "panelProxyHintServer": "启用后，所有下载（SteamCMD、GitHub插件）都将先下载到本面板服务器，然后本面板自动(SFTP) 上传到您的游戏服务器，并显示进度。",
+    "usePanelProxyTooltipServer": "所有下载（SteamCMD、GitHub插件）都先通过本面板服务器，然后通过 SFTP 上传。当本面板可顺畅访问国外网站时推荐使用。与 GitHub URL 代理互斥。",
+    "panelProxyHintServer": "启用后，所有下载（SteamCMD、GitHub插件）都将先下载到本面板服务器，然后通过 SFTP 上传到您的游戏服务器，并显示进度。",
     "saveProxyConfig": "保存代理配置",
     "clearAll": "全部清除",
     "downloadMode": "下载模式",
@@ -933,7 +934,7 @@
     }
   },
   "pluginMarket": {
-    "title": "插件市场",
+    "title": "插件中心",
     "adminPanel": "管理员面板",
     "addPlugin": "添加插件",
     "editPlugin": "编辑插件",
@@ -989,7 +990,19 @@
       "serverPlaceholder": "选择服务器...",
       "installing": "正在安装插件...",
       "cancel": "取消",
-      "installButton": "安装"
+      "installButton": "安装",
+      "selectVersion": "选择版本",
+      "loadingVersions": "加载版本中...",
+      "versionHelp": "默认选择最新版本",
+      "advancedOptions": "高级选项（用于更新/升级）",
+      "advancedWarning": "警告：",
+      "advancedWarningText": "使用选择性解压时，将先分析插件包。然后您可以选择不解压的目录。使用此模式时，依赖项将不会自动安装。",
+      "analyzePlugin": "分析插件包",
+      "analyzing": "正在分析插件包...",
+      "selectExclude": "选择要排除安装的目录：",
+      "excludeHelp": "勾选您想要排除的目录（在更新时保留配置文件很有用）",
+      "installDependencies": "自动安装依赖",
+      "installDependenciesHelp": "取消勾选后，插件依赖不会自动安装。使用选择性解压时此选项会自动禁用。"
     },
     "messages": {
       "deleteConfirm": "确定要删除此插件吗？",
@@ -1022,6 +1035,13 @@
       "success": "安装成功完成！",
       "failed": "安装失败",
       "progress": "进度：{percent}%"
+    },
+    "description": {
+      "feature1": "1. 插件中心可添加Github中插件，支持自动获取标题描述，自动识别发布版本，无需任何维护",
+      "feature2": "2. 支持文件分析，解压忽略目录设置，插件升级无忧",
+      "deploymentTitle": "⚠️ 部署建议",
+      "deploymentText": "强烈建议将此面板部署到境外，避免中国大陆网络GitHub连接困难问题。如果您的服务器位于中国大陆，可在 服务器管理 - 配置 - 下载代理配置 中启用\"使用面板服务器代理\"。启用后，所有下载（SteamCMD、GitHub插件）都将先下载到本面板服务器，然后通过SFTP上传到您的游戏服务器，并显示进度。",
+      "proxyFlow": "代理下载流程"
     }
   }
 }
