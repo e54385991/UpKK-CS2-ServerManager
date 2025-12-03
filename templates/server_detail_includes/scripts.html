@@ -2,6 +2,7 @@
         // Constants
         const DEPLOYMENT_RECHECK_DELAY_MS = 2000;  // Delay before rechecking deployment status after completion
         const FALLBACK_CONFIRM_REDEPLOY_MSG = 'This server has already been deployed. Are you sure you want to redeploy?\n\nRedeploying will reinstall CS2 server files.';
+        const MIN_DISK_SPACE_GB = 80;  // Minimum recommended disk space for deployment (in GB)
         
         function serverDetail(serverId) {
             return {
@@ -915,6 +916,45 @@
                 
                 if (!confirm(confirmMsg)) {
                     return; // User cancelled
+                }
+            }
+
+            // Check disk space before deploying
+            if (action === 'deploy') {
+                try {
+                    const diskSpaceResponse = await authFetch(`/servers/${this.serverId}/disk-space`);
+                    if (diskSpaceResponse.ok) {
+                        const diskSpaceData = await diskSpaceResponse.json();
+                        if (diskSpaceData.success && diskSpaceData.disk_space) {
+                            const availableGB = diskSpaceData.disk_space.available_gb;
+                            if (availableGB < MIN_DISK_SPACE_GB) {
+                                // Get translated warning message
+                                let warningMsg;
+                                if (window.i18n && window.i18n.isInitialized) {
+                                    warningMsg = window.i18n.t('serverDetail.lowDiskSpaceWarning', { 
+                                        available: availableGB.toFixed(2),
+                                        recommended: MIN_DISK_SPACE_GB 
+                                    });
+                                } else {
+                                    // Fallback for when i18n is not ready
+                                    warningMsg = `WARNING: Low disk space detected!\n\n` +
+                                        `Available space: ${availableGB.toFixed(2)} GB\n` +
+                                        `Recommended: ${MIN_DISK_SPACE_GB} GB or more\n\n` +
+                                        `Deploying with low disk space may cause installation failures or server issues.\n\n` +
+                                        `Do you want to continue anyway?`;
+                                }
+                                
+                                if (!confirm(warningMsg)) {
+                                    return; // User cancelled due to low disk space
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Failed to check disk space before deployment:', err);
+                    // Continue with deployment even if disk space check fails
+                    // This prevents blocking deployments when the disk space service is temporarily unavailable
+                    // or when SSH connection issues occur during the check
                 }
             }
 

@@ -26,6 +26,19 @@
         </div>
     </div>
 
+    <!-- Disk Space Refresh Button -->
+    <div class="mb-3">
+        <button @click="manualRefreshDiskSpace()" 
+                :disabled="diskSpaceRefreshing"
+                class="btn btn-outline-secondary btn-sm">
+            <i class="bi" :class="diskSpaceRefreshing ? 'bi-arrow-clockwise spin' : 'bi-arrow-clockwise'"></i>
+            <span data-i18n="servers.diskSpace.refresh">Refresh Disk Space</span>
+        </button>
+        <span x-show="diskSpaceRefreshing" class="text-muted ms-2">
+            <span data-i18n="servers.diskSpace.refreshing">Refreshing...</span>
+        </span>
+    </div>
+
     <!-- Bulk Actions Bar -->
     <div x-show="selectedServers.length > 0" x-cloak class="card mb-3 border-primary">
         <div class="card-body py-2">
@@ -203,9 +216,17 @@
                         <!-- Disk Space Info -->
                         <template x-if="getDiskSpace(server.id)">
                             <div class="mt-2 p-2 bg-light rounded">
-                                <div class="d-flex align-items-center mb-1">
-                                    <i class="bi bi-hdd text-info me-2"></i>
-                                    <strong class="small" data-i18n="servers.diskSpace.title">Disk Space</strong>
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-hdd text-info me-2"></i>
+                                        <strong class="small" data-i18n="servers.diskSpace.title">Disk Space</strong>
+                                    </div>
+                                    <button @click="refreshSingleServerDiskSpace(server.id)" 
+                                            :disabled="diskSpaceRefreshingServers.includes(server.id)"
+                                            class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                            style="font-size: 0.75rem; line-height: 1.2;">
+                                        <i class="bi" :class="diskSpaceRefreshingServers.includes(server.id) ? 'bi-arrow-clockwise spin' : 'bi-arrow-clockwise'"></i>
+                                    </button>
                                 </div>
                                 <ul class="list-unstyled small mb-0">
                                     <li>
@@ -445,7 +466,7 @@ function serverManager() {
     // Constants for A2S polling
     const AGGRESSIVE_POLL_INTERVAL_MS = 3000;  // 3 seconds
     const NORMAL_POLL_INTERVAL_MS = 30000;  // 30 seconds
-    const DISK_SPACE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;  // 6 hours
+    const DISK_SPACE_POLL_INTERVAL_MS = 1 * 60 * 60 * 1000;  // 1 hour
     
     return {
         servers: [],
@@ -457,6 +478,8 @@ function serverManager() {
         a2sData: {},  // Store A2S data keyed by server ID
         a2sLoading: false,  // Track if A2S data is being loaded
         diskSpaceData: {},  // Store disk space data keyed by server ID
+        diskSpaceRefreshing: false,  // Track if disk space is being manually refreshed
+        diskSpaceRefreshingServers: [],  // Track which individual servers are being refreshed
         steamLatestVersion: null,  // Store Steam latest version info
         refreshInterval: null,
         diskSpaceInterval: null,
@@ -549,9 +572,9 @@ function serverManager() {
         },
         
         startDiskSpacePolling() {
-            // Poll disk space every 6 hours
+            // Poll disk space every 1 hour
             this.diskSpaceInterval = setInterval(() => this.refreshDiskSpaceData(), DISK_SPACE_POLL_INTERVAL_MS);
-            console.log('Disk space polling started (every 6 hours)');
+            console.log('Disk space polling started (every 1 hour)');
         },
         
         async refreshDiskSpaceData() {
@@ -566,6 +589,59 @@ function serverManager() {
                 }
             } catch (err) {
                 console.error('Error fetching disk space data:', err);
+            }
+        },
+        
+        async manualRefreshDiskSpace() {
+            this.diskSpaceRefreshing = true;
+            try {
+                const response = await authFetch('/servers/disk-space-all?force_refresh=true');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.diskSpaceData = data.servers || {};
+                    console.log('Disk space data manually refreshed:', Object.keys(this.diskSpaceData).length, 'servers');
+                    showToast('success', 'Disk space refreshed successfully');
+                } else {
+                    console.warn('Failed to manually refresh disk space data:', response.status);
+                    showToast('error', `Failed to refresh disk space (HTTP ${response.status})`);
+                }
+            } catch (err) {
+                console.error('Error manually refreshing disk space data:', err);
+                showToast('error', `Error refreshing disk space: ${err.message || 'Network error'}`);
+            } finally {
+                this.diskSpaceRefreshing = false;
+            }
+        },
+        
+        async refreshSingleServerDiskSpace(serverId) {
+            // Add server to refreshing list
+            if (this.diskSpaceRefreshingServers.includes(serverId)) {
+                return; // Already refreshing
+            }
+            this.diskSpaceRefreshingServers.push(serverId);
+            
+            try {
+                const response = await authFetch(`/servers/${serverId}/disk-space?force_refresh=true`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.disk_space) {
+                        // Update the disk space data for this server
+                        this.diskSpaceData[serverId] = data.disk_space;
+                        console.log(`Disk space refreshed for server ${serverId}`);
+                        showToast('success', window.i18n?.t('servers.diskSpace.refreshSuccess') || 'Disk space refreshed');
+                    } else {
+                        showToast('error', window.i18n?.t('servers.diskSpace.refreshFailed') || 'Failed to get disk space');
+                    }
+                } else {
+                    console.warn(`Failed to refresh disk space for server ${serverId}:`, response.status);
+                    showToast('error', `Failed to refresh (HTTP ${response.status})`);
+                }
+            } catch (err) {
+                console.error(`Error refreshing disk space for server ${serverId}:`, err);
+                showToast('error', `Error: ${err.message || 'Network error'}`);
+            } finally {
+                // Remove server from refreshing list
+                this.diskSpaceRefreshingServers = this.diskSpaceRefreshingServers.filter(id => id !== serverId);
             }
         },
         
@@ -1148,4 +1224,14 @@ async function fillFromInitializedServer(serverKey) {
     }
 }
 </script>
+
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.spin {
+    animation: spin 1s linear infinite;
+}
+</style>
 {% endblock %}

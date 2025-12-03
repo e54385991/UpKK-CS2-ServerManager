@@ -1294,20 +1294,41 @@ async def reconnect_ssh(
 ):
     """
     Manually reconnect SSH connection for a server.
-    This bypasses rate limiting and resets the reconnection counter.
+    This bypasses rate limiting, resets the reconnection counter, and clears the SSH down flag.
     """
+    from sqlalchemy import update as sql_update
+    
     # Get server and verify ownership
     server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    
+    # Clear the SSH down flag to allow reconnection
+    if server.is_ssh_down:
+        await db.execute(
+            sql_update(Server)
+            .where(Server.id == server_id)
+            .values(
+                is_ssh_down=False,
+                consecutive_ssh_failures=0
+            )
+        )
+        await db.commit()
+        await db.refresh(server)
     
     # Perform manual reconnection through pool
     from services.ssh_connection_pool import ssh_connection_pool
     
     try:
-        await ssh_connection_pool.manual_reconnect(server)
-        return {
-            "success": True,
-            "message": "手动重连成功，计数已重置 | Manual reconnection successful, counter reset"
-        }
+        success, conn, msg = await ssh_connection_pool.manual_reconnect(server)
+        if success:
+            return {
+                "success": True,
+                "message": msg
+            }
+        else:
+            return {
+                "success": False,
+                "message": msg
+            }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

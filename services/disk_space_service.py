@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 class DiskSpaceService:
     """Service to read and cache disk space for server directories"""
     
-    # Cache TTL: 6 hours
-    CACHE_TTL_SECONDS = 6 * 60 * 60
+    # Cache TTL: 1 hour
+    CACHE_TTL_SECONDS = 1 * 60 * 60
     
     def __init__(self):
         pass

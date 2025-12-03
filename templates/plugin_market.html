@@ -1,0 +1,1683 @@
+{% extends "base.html" %}
+
+{% block title %}Plugin Market - CS2 Server Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    .plugin-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        background-color: #fff;
+    }
+    
+    .plugin-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .plugin-icon {
+        width: 64px;
+        height: 64px;
+        object-fit: cover;
+        border-radius: 8px;
+        margin-right: 15px;
+        flex-shrink: 0;
+    }
+    
+    .plugin-icon-placeholder {
+        width: 64px;
+        height: 64px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        margin-right: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 24px;
+        flex-shrink: 0;
+    }
+    
+    .plugin-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+        margin-right: 5px;
+    }
+    
+    .badge-recommended {
+        background-color: #ffc107;
+        color: #000;
+    }
+    
+    .badge-category {
+        background-color: #6c757d;
+        color: #fff;
+    }
+    
+    .plugin-stats {
+        font-size: 14px;
+        color: #6c757d;
+        background-color: transparent;
+        z-index: 1;
+        position: relative;
+    }
+    
+    .plugin-stats i {
+        margin-right: 4px;
+    }
+    
+    .filter-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+    }
+    
+    .pagination-controls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        margin-top: 30px;
+    }
+    
+    .admin-section {
+        background: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 30px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="bi bi-shop"></i> <span data-i18n="pluginMarket.title">Plugin Center</span>
+            </h1>
+            
+            <!-- Description Section -->
+            <div class="alert alert-info mb-4">
+                <h6 class="mb-2"><i class="bi bi-info-circle"></i> <strong data-i18n="pluginMarket.description.title">Features</strong></h6>
+                <p class="mb-1" data-i18n="pluginMarket.description.feature1">1. Plugin Center can add GitHub plugins, supports automatic title and description retrieval, automatic release version identification, no maintenance required</p>
+                <p class="mb-0" data-i18n="pluginMarket.description.feature2">2. Supports file analysis, extraction ignore directory settings, worry-free plugin upgrades</p>
+            </div>
+            
+            <!-- Deployment Recommendation -->
+            <div class="alert alert-warning mb-4">
+                <h6 class="mb-2">
+                    <i class="bi bi-exclamation-triangle-fill"></i> 
+                    <strong data-i18n="pluginMarket.description.deploymentTitle">⚠️ Deployment Recommendation</strong>
+                </h6>
+                <p class="mb-2" data-i18n="pluginMarket.description.deploymentText">
+                    It is strongly recommended to deploy this panel outside of mainland China to avoid GitHub connection issues. 
+                    If your server is located in mainland China, you can enable "Use Panel Server Proxy" in Server Management - Settings - Download Proxy Settings. 
+                    When enabled, all downloads (SteamCMD, GitHub plugins) will be downloaded to this panel server first, then uploaded to your game server via SFTP with progress display.
+                </p>
+                <!-- Visual Indicator Diagram -->
+                <div class="text-center p-3 bg-light rounded">
+                    <div class="d-flex justify-content-center align-items-center flex-wrap" style="gap: 10px;">
+                        <div class="badge bg-primary p-2"><i class="bi bi-github"></i> GitHub</div>
+                        <i class="bi bi-arrow-right fs-4"></i>
+                        <div class="badge bg-success p-2"><i class="bi bi-hdd-rack"></i> Panel Server</div>
+                        <i class="bi bi-arrow-right fs-4"></i>
+                        <div class="badge bg-info p-2"><i class="bi bi-server"></i> Game Server</div>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        <i class="bi bi-diagram-3"></i> 
+                        <span data-i18n="pluginMarket.description.proxyFlow">Proxy Download Flow</span>
+                    </small>
+                </div>
+            </div>
+            
+            <!-- Admin Section (only shown to admins) -->
+            <div id="admin-section" class="admin-section" style="display: none;">
+                <h5><i class="bi bi-shield-lock"></i> <span data-i18n="pluginMarket.adminPanel">Admin Panel</span></h5>
+                <button class="btn btn-primary" onclick="showAddPluginModal()">
+                    <i class="bi bi-plus-circle"></i> <span data-i18n="pluginMarket.addPlugin">Add Plugin</span>
+                </button>
+            </div>
+            
+            <!-- Filter Section -->
+            <div class="filter-section">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="category-filter" class="form-label">
+                            <i class="bi bi-funnel"></i> <span data-i18n="pluginMarket.category">Category</span>
+                        </label>
+                        <select id="category-filter" class="form-select" onchange="loadPlugins()">
+                            <option value="" data-i18n="pluginMarket.allCategories">All Categories</option>
+                            <!-- Categories loaded dynamically -->
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="search-input" class="form-label">
+                            <i class="bi bi-search"></i> <span data-i18n="pluginMarket.search">Search</span>
+                        </label>
+                        <input type="text" id="search-input" class="form-control" 
+                               data-i18n-placeholder="pluginMarket.searchPlaceholder"
+                               placeholder="Search by name, author, or description..."
+                               onkeyup="handleSearchKeyup(event)">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-primary w-100" onclick="loadPlugins()">
+                            <i class="bi bi-search"></i> <span data-i18n="pluginMarket.searchBtn">Search</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Plugins List -->
+            <div id="plugins-container">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Pagination -->
+            <div id="pagination-container" class="pagination-controls">
+                <!-- Pagination loaded dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Plugin Modal (Admin Only) -->
+<div class="modal fade" id="addPluginModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><span data-i18n="pluginMarket.addPlugin">Add Plugin</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="add-plugin-form">
+                    <div class="mb-3">
+                        <label for="github-url" class="form-label">
+                            <span data-i18n="pluginMarket.addPluginModal.githubUrl">GitHub URL</span> <span class="text-danger" data-i18n="pluginMarket.addPluginModal.required">*</span>
+                        </label>
+                        <input type="url" class="form-control" id="github-url" required
+                               data-i18n-placeholder="pluginMarket.addPluginModal.githubUrlPlaceholder"
+                               placeholder="https://github.com/owner/repo">
+                        <button type="button" class="btn btn-sm btn-secondary mt-2" onclick="fetchRepoInfo()">
+                            <i class="bi bi-arrow-down-circle"></i> <span data-i18n="pluginMarket.addPluginModal.autoFill">Auto-fill from GitHub</span>
+                        </button>
+                    </div>
+                    <div class="mb-3">
+                        <label for="plugin-title" class="form-label">
+                            <span data-i18n="pluginMarket.addPluginModal.pluginTitle">Title</span> <span class="text-danger" data-i18n="pluginMarket.addPluginModal.required">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="plugin-title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="plugin-description" class="form-label" data-i18n="pluginMarket.addPluginModal.description">Description</label>
+                        <textarea class="form-control" id="plugin-description" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="plugin-author" class="form-label" data-i18n="pluginMarket.addPluginModal.pluginAuthor">Author</label>
+                            <input type="text" class="form-control" id="plugin-author">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="plugin-version" class="form-label" data-i18n="pluginMarket.addPluginModal.pluginVersion">Version</label>
+                            <input type="text" class="form-control" id="plugin-version">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="plugin-category" class="form-label">
+                                <span data-i18n="pluginMarket.addPluginModal.pluginCategory">Category</span> <span class="text-danger" data-i18n="pluginMarket.addPluginModal.required">*</span>
+                            </label>
+                            <select class="form-select" id="plugin-category" required>
+                                <!-- Categories loaded dynamically -->
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="plugin-icon-url" class="form-label" data-i18n="pluginMarket.addPluginModal.iconUrl">Icon URL</label>
+                            <input type="url" class="form-control" id="plugin-icon-url">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="plugin-tags" class="form-label" data-i18n="pluginMarket.addPluginModal.tags">Tags (comma-separated)</label>
+                        <input type="text" class="form-control" id="plugin-tags" 
+                               data-i18n-placeholder="pluginMarket.addPluginModal.tagsPlaceholder"
+                               placeholder="tag1, tag2, tag3">
+                    </div>
+                    <div class="mb-3">
+                        <label for="plugin-dependencies" class="form-label">
+                            <span data-i18n="pluginMarket.addPluginModal.dependenciesLabel">Dependencies</span>
+                            <small class="text-muted" data-i18n="pluginMarket.addPluginModal.dependenciesHint">(Select from published plugins)</small>
+                        </label>
+                        <input type="text" class="form-control mb-2" id="dependency-search" 
+                               data-i18n-placeholder="pluginMarket.addPluginModal.searchPlugins"
+                               placeholder="Search plugins..." onkeyup="filterDependencies()">
+                        <small id="dependency-search-info" class="text-muted d-block mb-1"></small>
+                        <select multiple class="form-select" id="plugin-dependencies" size="8">
+                            <!-- Available plugins loaded dynamically -->
+                        </select>
+                        <small class="form-text text-muted" data-i18n="pluginMarket.addPluginModal.dependenciesHelp">
+                            Use the search box above to filter plugins (backend search). Hold Ctrl/Cmd to select multiple. Selected dependencies will be auto-installed when users install this plugin.
+                        </small>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="plugin-recommended">
+                        <label class="form-check-label" for="plugin-recommended" data-i18n="pluginMarket.addPluginModal.markRecommended">
+                            Mark as Recommended
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="pluginMarket.addPluginModal.cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitAddPlugin()">
+                    <i class="bi bi-plus-circle"></i> <span data-i18n="pluginMarket.addPluginModal.addButton">Add Plugin</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Plugin Modal (Admin Only) -->
+<div class="modal fade" id="editPluginModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><span data-i18n="pluginMarket.editPluginModal.title">Edit Plugin</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-plugin-form">
+                    <input type="hidden" id="edit-plugin-id">
+                    <div class="mb-3">
+                        <label for="edit-github-url" class="form-label">
+                            <span data-i18n="pluginMarket.addPluginModal.githubUrl">GitHub URL</span> <span class="text-danger" data-i18n="pluginMarket.addPluginModal.required">*</span>
+                        </label>
+                        <input type="url" class="form-control" id="edit-github-url" required readonly
+                               data-i18n-placeholder="pluginMarket.addPluginModal.githubUrlPlaceholder"
+                               placeholder="https://github.com/owner/repo">
+                        <small class="text-muted">GitHub URL cannot be changed</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-plugin-title" class="form-label">
+                            <span data-i18n="pluginMarket.addPluginModal.pluginTitle">Title</span> <span class="text-danger" data-i18n="pluginMarket.addPluginModal.required">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="edit-plugin-title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-plugin-description" class="form-label" data-i18n="pluginMarket.addPluginModal.description">Description</label>
+                        <textarea class="form-control" id="edit-plugin-description" rows="3"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit-plugin-author" class="form-label" data-i18n="pluginMarket.addPluginModal.pluginAuthor">Author</label>
+                            <input type="text" class="form-control" id="edit-plugin-author">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit-plugin-version" class="form-label" data-i18n="pluginMarket.addPluginModal.pluginVersion">Version</label>
+                            <input type="text" class="form-control" id="edit-plugin-version">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit-plugin-category" class="form-label">
+                                <span data-i18n="pluginMarket.addPluginModal.pluginCategory">Category</span> <span class="text-danger" data-i18n="pluginMarket.addPluginModal.required">*</span>
+                            </label>
+                            <select class="form-select" id="edit-plugin-category" required>
+                                <!-- Categories loaded dynamically -->
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit-plugin-icon-url" class="form-label" data-i18n="pluginMarket.addPluginModal.iconUrl">Icon URL</label>
+                            <input type="url" class="form-control" id="edit-plugin-icon-url">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-plugin-tags" class="form-label" data-i18n="pluginMarket.addPluginModal.tags">Tags (comma-separated)</label>
+                        <input type="text" class="form-control" id="edit-plugin-tags" 
+                               data-i18n-placeholder="pluginMarket.addPluginModal.tagsPlaceholder"
+                               placeholder="tag1, tag2, tag3">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-plugin-dependencies" class="form-label">
+                            <span data-i18n="pluginMarket.addPluginModal.dependenciesLabel">Dependencies</span>
+                            <small class="text-muted" data-i18n="pluginMarket.addPluginModal.dependenciesHint">(Select from published plugins)</small>
+                        </label>
+                        <input type="text" class="form-control mb-2" id="edit-dependency-search" 
+                               data-i18n-placeholder="pluginMarket.addPluginModal.searchPlugins"
+                               placeholder="Search plugins..." onkeyup="filterEditDependencies()">
+                        <small id="edit-dependency-search-info" class="text-muted d-block mb-1"></small>
+                        <select multiple class="form-select" id="edit-plugin-dependencies" size="8">
+                            <!-- Available plugins loaded dynamically -->
+                        </select>
+                        <small class="form-text text-muted" data-i18n="pluginMarket.addPluginModal.dependenciesHelp">
+                            Use the search box above to filter plugins (backend search). Hold Ctrl/Cmd to select multiple. Selected dependencies will be auto-installed when users install this plugin.
+                        </small>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="edit-plugin-recommended">
+                        <label class="form-check-label" for="edit-plugin-recommended" data-i18n="pluginMarket.addPluginModal.markRecommended">
+                            Mark as Recommended
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="pluginMarket.editPluginModal.cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitEditPlugin()">
+                    <i class="bi bi-save"></i> <span data-i18n="pluginMarket.editPluginModal.updateButton">Update Plugin</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Install Plugin Modal -->
+<div class="modal fade" id="installPluginModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-terminal"></i>
+                    <span data-i18n="pluginMarket.installModal.title">Install Plugin</span>: 
+                    <strong id="install-plugin-name"></strong>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" id="install-modal-close" onclick="closeInstallModal()"></button>
+            </div>
+            <div class="modal-body p-0">
+                <!-- Server selection and options (only shown before installation starts) -->
+                <div id="install-server-selection" style="padding: 20px;">
+                    <!-- Server selection -->
+                    <div class="mb-3">
+                        <label for="install-server-select" class="form-label">
+                            <span data-i18n="pluginMarket.installModal.selectServer">Select a server to install</span>:
+                        </label>
+                        <select id="install-server-select" class="form-select" onchange="onServerSelected()">
+                            <option value="" data-i18n="pluginMarket.installModal.serverPlaceholder">Select a server...</option>
+                            <!-- Servers loaded dynamically -->
+                        </select>
+                    </div>
+                    
+                    <!-- Version selection (shown after server is selected) -->
+                    <div id="version-selection-section" style="display: none;">
+                        <div class="mb-3">
+                            <label for="install-version-select" class="form-label">
+                                <i class="bi bi-tag"></i> <span data-i18n="pluginMarket.installModal.selectVersion">Select Version</span>:
+                            </label>
+                            <select id="install-version-select" class="form-select">
+                                <option value="" data-i18n="pluginMarket.installModal.loadingVersions">Loading versions...</option>
+                            </select>
+                            <small class="text-muted" data-i18n="pluginMarket.installModal.versionHelp">Latest version is selected by default</small>
+                        </div>
+                        
+                        <!-- Dependency Installation Checkbox -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="install-dependencies-checkbox" checked onchange="onDependencyCheckboxChanged()">
+                                <label class="form-check-label" for="install-dependencies-checkbox">
+                                    <span data-i18n="pluginMarket.installModal.installDependencies">Automatically install dependencies</span>
+                                </label>
+                            </div>
+                            <small class="text-muted" data-i18n="pluginMarket.installModal.installDependenciesHelp">
+                                When unchecked, plugin dependencies will not be installed automatically. This option is automatically disabled when using selective extraction.
+                            </small>
+                        </div>
+                        
+                        <!-- Advanced Options -->
+                        <div class="card bg-light">
+                            <div class="card-header">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="advanced-options-toggle" onchange="toggleAdvancedOptions()">
+                                    <label class="form-check-label fw-bold" for="advanced-options-toggle">
+                                        <i class="bi bi-gear"></i> <span data-i18n="pluginMarket.installModal.advancedOptions">Advanced Options (For Updates/Upgrades)</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="card-body" id="advanced-options-content" style="display: none;">
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    <strong data-i18n="pluginMarket.installModal.advancedWarning">Warning:</strong>
+                                    <span data-i18n="pluginMarket.installModal.advancedWarningText">
+                                        When using selective extraction, the plugin package will be analyzed first.
+                                        You can then choose which directories to exclude from installation.
+                                        <strong>Dependencies will NOT be automatically installed when using this mode.</strong>
+                                    </span>
+                                </div>
+                                
+                                <!-- Analyze button -->
+                                <button type="button" class="btn btn-sm btn-primary mb-3" id="analyze-archive-button" onclick="analyzeArchive()">
+                                    <i class="bi bi-search"></i> <span data-i18n="pluginMarket.installModal.analyzePlugin">Analyze Plugin Package</span>
+                                </button>
+                                
+                                <!-- Directory exclusion section (shown after analysis) -->
+                                <div id="directory-exclusion-section" style="display: none;">
+                                    <label class="form-label fw-bold">
+                                        <span data-i18n="pluginMarket.installModal.selectExclude">Select directories to EXCLUDE from installation:</span>
+                                    </label>
+                                    <div id="directory-tree" class="border rounded p-2" style="max-height: 300px; overflow-y: auto; background-color: white;">
+                                        <!-- Directory checkboxes will be populated here -->
+                                    </div>
+                                    <small class="text-muted mt-1 d-block" data-i18n="pluginMarket.installModal.excludeHelp">
+                                        Check directories you want to EXCLUDE (useful for preserving configs during updates)
+                                    </small>
+                                </div>
+                                
+                                <!-- Analysis loading indicator -->
+                                <div id="analysis-loading" style="display: none;">
+                                    <div class="text-center">
+                                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                                        <span data-i18n="pluginMarket.installModal.analyzing">Analyzing plugin package...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Terminal output container (shown during and after installation) -->
+                <div id="install-terminal-container" style="display: none;">
+                    <div id="installTerminal" style="height: 500px; background-color: #1e1e1e; color: #d4d4d4; padding: 15px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 14px; line-height: 1.4;">
+                        <!-- Messages will be added here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="flex-grow-1 d-flex align-items-center">
+                    <div id="install-status-indicator">
+                        <!-- Status will be shown here -->
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="install-cancel-button" onclick="closeInstallModal()">
+                    <span data-i18n="pluginMarket.installModal.cancel">Cancel</span>
+                </button>
+                <button type="button" class="btn btn-primary" id="install-plugin-button" onclick="submitInstallPlugin()">
+                    <i class="bi bi-download"></i> <span data-i18n="pluginMarket.installModal.installButton">Install</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Configuration constants
+const MAX_RELEASES_TO_FETCH = 10;
+
+let currentPage = 1;
+let currentPluginId = null;
+let currentUser = null;
+let installWs = null;
+let installInProgress = false;
+let currentInstallServerId = null;
+let installMessages = [];
+let installModalInstance = null;
+
+// Add message to install terminal
+function addInstallMessage(type, message) {
+    const timestamp = new Date().toLocaleTimeString();
+    const msg = {
+        id: Date.now() + Math.random(),
+        type: type,
+        message: message,
+        timestamp: timestamp
+    };
+    installMessages.push(msg);
+    
+    // Render message
+    const terminal = document.getElementById('installTerminal');
+    if (terminal) {
+        const msgDiv = document.createElement('div');
+        
+        // Apply color based on message type (matching server detail style)
+        if (type === 'status') {
+            msgDiv.className = 'text-info';
+        } else if (type === 'complete') {
+            msgDiv.className = 'text-success';
+        } else if (type === 'error') {
+            msgDiv.className = 'text-danger';
+        } else if (type === 'warning') {
+            msgDiv.className = 'text-warning';
+        } else {
+            msgDiv.className = 'text-light';
+        }
+        
+        msgDiv.innerHTML = `<span class="text-muted">${timestamp}</span> ${escapeHtml(message)}`;
+        terminal.appendChild(msgDiv);
+        
+        // Auto-scroll to bottom
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+}
+
+// Connect to deployment WebSocket for real-time updates
+function connectInstallWebSocket(serverId) {
+    // Close existing connection if any
+    if (installWs && installWs.readyState === WebSocket.OPEN) {
+        return;
+    }
+    
+    if (installWs) {
+        installWs.close();
+    }
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/servers/${serverId}/deployment-status`;
+    
+    installWs = new WebSocket(wsUrl);
+    
+    installWs.onopen = () => {
+        addInstallMessage('info', window.i18n ? window.i18n.t('pluginMarket.websocket.connecting') : 'Connected to operation monitor');
+    };
+    
+    installWs.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type !== 'ack') {
+                addInstallMessage(data.type, data.message);
+                
+                // Update status indicator
+                const statusIndicator = document.getElementById('install-status-indicator');
+                if (data.type === 'complete') {
+                    installInProgress = false;
+                    if (statusIndicator) {
+                        statusIndicator.innerHTML = `
+                            <div class="text-success">
+                                <i class="bi bi-check-circle me-2"></i>
+                                <span data-i18n="serverDetail.operationCompleted">Operation completed</span>
+                            </div>
+                        `;
+                    }
+                    // Enable close button
+                    document.getElementById('install-modal-close').disabled = false;
+                    document.getElementById('install-cancel-button').disabled = false;
+                    // Hide install button
+                    document.getElementById('install-plugin-button').style.display = 'none';
+                } else if (data.type === 'error') {
+                    installInProgress = false;
+                    if (statusIndicator) {
+                        statusIndicator.innerHTML = `
+                            <div class="text-danger">
+                                <i class="bi bi-x-circle me-2"></i>
+                                <span data-i18n="serverDetail.operationFailed">Operation failed</span>
+                            </div>
+                        `;
+                    }
+                    // Enable close button
+                    document.getElementById('install-modal-close').disabled = false;
+                    document.getElementById('install-cancel-button').disabled = false;
+                    // Hide install button
+                    document.getElementById('install-plugin-button').style.display = 'none';
+                }
+            }
+        } catch (parseErr) {
+            console.error('Failed to parse WebSocket message:', parseErr);
+            addInstallMessage('error', 'Invalid message received from server');
+        }
+    };
+    
+    installWs.onerror = () => {
+        addInstallMessage('error', 'WebSocket connection error');
+    };
+    
+    installWs.onclose = () => {
+        if (installInProgress) {
+            addInstallMessage('info', 'Connection closed');
+        }
+    };
+}
+
+// Close install modal and cleanup
+function closeInstallModal() {
+    if (installWs) {
+        installWs.close();
+        installWs = null;
+    }
+    installInProgress = false;
+    installMessages = [];
+    currentInstallServerId = null;
+    
+    // Reset UI
+    document.getElementById('install-server-selection').style.display = 'block';
+    document.getElementById('install-terminal-container').style.display = 'none';
+    document.getElementById('installTerminal').innerHTML = '';
+    document.getElementById('install-status-indicator').innerHTML = '';
+    document.getElementById('install-plugin-button').style.display = 'inline-block';
+    
+    if (installModalInstance) {
+        installModalInstance.hide();
+    }
+}
+
+// Load user info on page load
+async function loadUserInfo() {
+    try {
+        const response = await fetch('/api/auth/me', {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            currentUser = await response.json();
+            
+            // Show admin section if user is admin
+            if (currentUser.is_admin) {
+                document.getElementById('admin-section').style.display = 'block';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading user info:', error);
+    }
+}
+
+// Load categories
+async function loadCategories() {
+    try {
+        const response = await fetch('/api/plugin-market/categories', {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const categoryFilter = document.getElementById('category-filter');
+            const pluginCategory = document.getElementById('plugin-category');
+            
+            data.categories.forEach(cat => {
+                // Use i18n translation if available
+                const categoryName = formatCategory(cat.value);
+                
+                const option1 = document.createElement('option');
+                option1.value = cat.value;
+                option1.textContent = categoryName;
+                categoryFilter.appendChild(option1);
+                
+                if (pluginCategory) {
+                    const option2 = document.createElement('option');
+                    option2.value = cat.value;
+                    option2.textContent = categoryName;
+                    pluginCategory.appendChild(option2);
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error loading categories:', error);
+    }
+}
+
+// Load plugins
+async function loadPlugins(page = 1) {
+    currentPage = page;
+    const category = document.getElementById('category-filter').value;
+    const search = document.getElementById('search-input').value;
+    
+    const params = new URLSearchParams({
+        page: page,
+        page_size: 20
+    });
+    
+    if (category) params.append('category', category);
+    if (search) params.append('search', search);
+    
+    try {
+        const response = await fetch(`/api/plugin-market/plugins?${params}`, {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            renderPlugins(data.plugins);
+            renderPagination(data.page, data.total_pages);
+        } else {
+            showError('Failed to load plugins');
+        }
+    } catch (error) {
+        console.error('Error loading plugins:', error);
+        showError('Error loading plugins');
+    }
+}
+
+// Render plugins
+function renderPlugins(plugins) {
+    const container = document.getElementById('plugins-container');
+    
+    if (plugins.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted"><p>No plugins found.</p></div>';
+        return;
+    }
+    
+    // Get translated strings
+    const recommendedText = window.i18n ? window.i18n.t('pluginMarket.recommended') : 'Recommended';
+    const installText = window.i18n ? window.i18n.t('pluginMarket.install') : 'Install';
+    const downloadsText = window.i18n ? window.i18n.t('pluginMarket.downloads') : 'downloads';
+    const installsText = window.i18n ? window.i18n.t('pluginMarket.installs') : 'installs';
+    const dependenciesText = window.i18n ? window.i18n.t('pluginMarket.dependenciesLabel') : 'Dependencies';
+    const editText = window.i18n ? window.i18n.t('pluginMarket.edit') : 'Edit';
+    const deleteText = window.i18n ? window.i18n.t('pluginMarket.delete') : 'Delete';
+    const viewOnGitHubText = window.i18n ? window.i18n.t('pluginMarket.viewOnGitHub') : 'View on GitHub';
+    
+    container.innerHTML = plugins.map(plugin => {
+        // Format dependency details if available
+        let dependencyHtml = '';
+        if (plugin.dependency_details && plugin.dependency_details.length > 0) {
+            const depNames = plugin.dependency_details.map(dep => escapeHtml(dep.title)).join(', ');
+            dependencyHtml = `<p class="mb-1"><small><i class="bi bi-link-45deg"></i> <strong>${dependenciesText}:</strong> ${depNames}</small></p>`;
+        }
+        
+        return `
+        <div class="plugin-card">
+            <div class="d-flex">
+                ${plugin.icon_url 
+                    ? `<img src="${escapeHtml(plugin.icon_url)}" class="plugin-icon" alt="${escapeHtml(plugin.title)}">`
+                    : `<div class="plugin-icon-placeholder"><i class="bi bi-puzzle"></i></div>`
+                }
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h5 class="mb-1">
+                                ${escapeHtml(plugin.title)}
+                                ${plugin.github_url ? `
+                                    <a href="${escapeHtml(plugin.github_url)}" target="_blank" rel="noopener noreferrer" 
+                                       class="btn btn-sm btn-outline-secondary ms-2" style="padding: 0.1rem 0.4rem; font-size: 0.75rem;"
+                                       title="${viewOnGitHubText}">
+                                        <i class="bi bi-github"></i>
+                                    </a>
+                                ` : ''}
+                            </h5>
+                            ${plugin.is_recommended 
+                                ? `<span class="plugin-badge badge-recommended"><i class="bi bi-star-fill"></i> ${recommendedText}</span>` 
+                                : ''
+                            }
+                            <span class="plugin-badge badge-category">${formatCategory(plugin.category)}</span>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="showInstallModal(${plugin.id}, '${escapeHtml(plugin.title)}')">
+                            <i class="bi bi-download"></i> ${installText}
+                        </button>
+                    </div>
+                    
+                    ${plugin.author ? `<p class="mb-1"><small><i class="bi bi-person"></i> ${escapeHtml(plugin.author)}</small></p>` : ''}
+                    ${plugin.description ? `<p class="mb-2">${escapeHtml(plugin.description)}</p>` : ''}
+                    ${dependencyHtml}
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="plugin-stats">
+                            <i class="bi bi-download"></i> ${plugin.download_count} ${downloadsText}
+                            <span class="ms-3"><i class="bi bi-box-seam"></i> ${plugin.install_count} ${installsText}</span>
+                            ${plugin.version ? `<span class="ms-3"><i class="bi bi-tag"></i> v${escapeHtml(plugin.version)}</span>` : ''}
+                        </div>
+                        ${currentUser && currentUser.is_admin ? `
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-primary" onclick="showEditPluginModal(${plugin.id})">
+                                    <i class="bi bi-pencil"></i> ${editText}
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deletePlugin(${plugin.id})">
+                                    <i class="bi bi-trash"></i> ${deleteText}
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    }).join('');
+}
+
+// Render pagination
+function renderPagination(currentPage, totalPages) {
+    const container = document.getElementById('pagination-container');
+    
+    if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    
+    // Previous button
+    html += `<button class="btn btn-outline-primary" ${currentPage === 1 ? 'disabled' : ''} 
+             onclick="loadPlugins(${currentPage - 1})">
+             <i class="bi bi-chevron-left"></i> Previous
+             </button>`;
+    
+    // Page info
+    html += `<span class="mx-3">Page ${currentPage} of ${totalPages}</span>`;
+    
+    // Next button
+    html += `<button class="btn btn-outline-primary" ${currentPage === totalPages ? 'disabled' : ''} 
+             onclick="loadPlugins(${currentPage + 1})">
+             Next <i class="bi bi-chevron-right"></i>
+             </button>`;
+    
+    container.innerHTML = html;
+}
+
+// Handle search keyup
+function handleSearchKeyup(event) {
+    if (event.key === 'Enter') {
+        loadPlugins(1);
+    }
+}
+
+// Show add plugin modal
+async function showAddPluginModal() {
+    const modal = new bootstrap.Modal(document.getElementById('addPluginModal'));
+    document.getElementById('add-plugin-form').reset();
+    
+    // Load available plugins for dependencies selection
+    await loadAvailablePlugins();
+    
+    modal.show();
+}
+
+// Load available plugins for dependency selection
+async function loadAvailablePlugins(excludeId = null, searchQuery = '') {
+    try {
+        let url = '/api/plugin-market/plugins-for-dependencies?';
+        const params = new URLSearchParams();
+        
+        if (excludeId) {
+            params.append('exclude_id', excludeId);
+        }
+        if (searchQuery) {
+            params.append('search', searchQuery);
+        }
+        
+        url += params.toString();
+        
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const select = document.getElementById('plugin-dependencies');
+            
+            // Store current selections
+            const selectedValues = Array.from(select.selectedOptions).map(opt => opt.value);
+            
+            // Render options
+            select.innerHTML = '';
+            data.plugins.forEach(plugin => {
+                const option = document.createElement('option');
+                option.value = plugin.id;
+                option.textContent = `${plugin.title} (ID: ${plugin.id})`;
+                if (selectedValues.includes(String(plugin.id))) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+            
+            // Show count if searching
+            if (searchQuery) {
+                const searchInfo = document.getElementById('dependency-search-info');
+                if (searchInfo) {
+                    searchInfo.textContent = `Found ${data.plugins.length} plugins`;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading available plugins:', error);
+    }
+}
+
+// Filter dependencies based on search input (now with backend search)
+let searchTimeout;
+function filterDependencies() {
+    const searchTerm = document.getElementById('dependency-search').value;
+    
+    // Clear previous timeout
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
+    
+    // Debounce search to avoid too many requests
+    searchTimeout = setTimeout(() => {
+        loadAvailablePlugins(null, searchTerm);
+    }, 300);
+}
+
+// Fetch repo info
+async function fetchRepoInfo() {
+    const githubUrl = document.getElementById('github-url').value;
+    if (!githubUrl) {
+        const msg = window.i18n ? window.i18n.t('pluginMarket.messages.enterGithubUrl') : 'Please enter a GitHub URL first';
+        alert(msg);
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/plugin-market/fetch-repo-info?github_url=${encodeURIComponent(githubUrl)}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                if (data.repo_name) document.getElementById('plugin-title').value = data.repo_name;
+                if (data.description) document.getElementById('plugin-description').value = data.description;
+                if (data.author) document.getElementById('plugin-author').value = data.author;
+                showSuccess('Repository info loaded successfully');
+            } else {
+                showError(data.error || 'Failed to fetch repository info');
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching repo info:', error);
+        showError('Error fetching repository info');
+    }
+}
+
+// Submit add plugin
+async function submitAddPlugin() {
+    // Get selected dependency IDs
+    const dependenciesSelect = document.getElementById('plugin-dependencies');
+    const selectedDeps = Array.from(dependenciesSelect.selectedOptions).map(opt => opt.value);
+    
+    const data = {
+        github_url: document.getElementById('github-url').value,
+        title: document.getElementById('plugin-title').value,
+        description: document.getElementById('plugin-description').value || null,
+        author: document.getElementById('plugin-author').value || null,
+        version: document.getElementById('plugin-version').value || null,
+        category: document.getElementById('plugin-category').value,
+        icon_url: document.getElementById('plugin-icon-url').value || null,
+        tags: document.getElementById('plugin-tags').value || null,
+        is_recommended: document.getElementById('plugin-recommended').checked,
+        dependencies: selectedDeps.length > 0 ? selectedDeps.join(',') : null
+    };
+    
+    try {
+        const response = await fetch('/api/plugin-market/plugins', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            const successMsg = window.i18n ? window.i18n.t('pluginMarket.messages.addSuccess') : 'Plugin added successfully';
+            showSuccess(successMsg);
+            bootstrap.Modal.getInstance(document.getElementById('addPluginModal')).hide();
+            loadPlugins(currentPage);
+        } else {
+            const error = await response.json();
+            const errorMsg = error.detail || (window.i18n ? window.i18n.t('pluginMarket.messages.addFailed') : 'Failed to add plugin');
+            showError(errorMsg);
+        }
+    } catch (error) {
+        console.error('Error adding plugin:', error);
+        const errorMsg = window.i18n ? window.i18n.t('pluginMarket.messages.addFailed') : 'Error adding plugin';
+        showError(errorMsg);
+    }
+}
+
+// Show edit plugin modal
+async function showEditPluginModal(pluginId) {
+    try {
+        // Fetch plugin data
+        const response = await fetch(`/api/plugin-market/plugins/${pluginId}`, {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (!response.ok) {
+            showError('Failed to load plugin data');
+            return;
+        }
+        
+        const plugin = await response.json();
+        
+        // Populate form
+        document.getElementById('edit-plugin-id').value = plugin.id;
+        document.getElementById('edit-github-url').value = plugin.github_url;
+        document.getElementById('edit-plugin-title').value = plugin.title;
+        document.getElementById('edit-plugin-description').value = plugin.description || '';
+        document.getElementById('edit-plugin-author').value = plugin.author || '';
+        document.getElementById('edit-plugin-version').value = plugin.version || '';
+        document.getElementById('edit-plugin-category').value = plugin.category;
+        document.getElementById('edit-plugin-icon-url').value = plugin.icon_url || '';
+        document.getElementById('edit-plugin-tags').value = plugin.tags || '';
+        document.getElementById('edit-plugin-recommended').checked = plugin.is_recommended;
+        
+        // Load categories for edit form
+        await loadCategoriesForEdit();
+        document.getElementById('edit-plugin-category').value = plugin.category;
+        
+        // Load available plugins for dependencies
+        await loadAvailablePluginsForEdit(plugin.id);
+        
+        // Select current dependencies
+        if (plugin.dependencies) {
+            const depIds = plugin.dependencies.split(',').map(id => id.trim());
+            const select = document.getElementById('edit-plugin-dependencies');
+            Array.from(select.options).forEach(option => {
+                if (depIds.includes(option.value)) {
+                    option.selected = true;
+                }
+            });
+        }
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('editPluginModal'));
+        modal.show();
+    } catch (error) {
+        console.error('Error loading plugin for edit:', error);
+        showError('Error loading plugin data');
+    }
+}
+
+// Load categories for edit modal
+async function loadCategoriesForEdit() {
+    try {
+        const response = await fetch('/api/plugin-market/categories', {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const editCategory = document.getElementById('edit-plugin-category');
+            
+            if (editCategory) {
+                editCategory.innerHTML = '';
+                data.categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.value;
+                    option.textContent = cat.name;
+                    editCategory.appendChild(option);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading categories for edit:', error);
+    }
+}
+
+// Load available plugins for edit dependency selection
+async function loadAvailablePluginsForEdit(excludeId = null, searchQuery = '') {
+    try {
+        let url = '/api/plugin-market/plugins-for-dependencies?';
+        const params = new URLSearchParams();
+        
+        if (excludeId) {
+            params.append('exclude_id', excludeId);
+        }
+        if (searchQuery) {
+            params.append('search', searchQuery);
+        }
+        
+        url += params.toString();
+        
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const select = document.getElementById('edit-plugin-dependencies');
+            
+            // Store current selections
+            const selectedValues = Array.from(select.selectedOptions).map(opt => opt.value);
+            
+            // Render options
+            select.innerHTML = '';
+            data.plugins.forEach(plugin => {
+                const option = document.createElement('option');
+                option.value = plugin.id;
+                option.textContent = `${plugin.title} (ID: ${plugin.id})`;
+                if (selectedValues.includes(String(plugin.id))) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+            
+            // Show count if searching
+            if (searchQuery) {
+                const searchInfo = document.getElementById('edit-dependency-search-info');
+                if (searchInfo) {
+                    searchInfo.textContent = `Found ${data.plugins.length} plugins`;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading available plugins for edit:', error);
+    }
+}
+
+// Filter edit dependencies
+let editSearchTimeout;
+function filterEditDependencies() {
+    const searchTerm = document.getElementById('edit-dependency-search').value;
+    const pluginId = document.getElementById('edit-plugin-id').value;
+    
+    if (editSearchTimeout) {
+        clearTimeout(editSearchTimeout);
+    }
+    
+    editSearchTimeout = setTimeout(() => {
+        loadAvailablePluginsForEdit(pluginId, searchTerm);
+    }, 300);
+}
+
+// Submit edit plugin
+async function submitEditPlugin() {
+    const pluginId = document.getElementById('edit-plugin-id').value;
+    
+    // Get selected dependencies
+    const dependencySelect = document.getElementById('edit-plugin-dependencies');
+    const selectedDependencies = Array.from(dependencySelect.selectedOptions).map(opt => opt.value);
+    
+    const data = {
+        title: document.getElementById('edit-plugin-title').value,
+        description: document.getElementById('edit-plugin-description').value,
+        author: document.getElementById('edit-plugin-author').value,
+        version: document.getElementById('edit-plugin-version').value,
+        category: document.getElementById('edit-plugin-category').value,
+        tags: document.getElementById('edit-plugin-tags').value,
+        is_recommended: document.getElementById('edit-plugin-recommended').checked,
+        icon_url: document.getElementById('edit-plugin-icon-url').value,
+        dependencies: selectedDependencies.join(',')
+    };
+    
+    try {
+        const response = await fetch(`/api/plugin-market/plugins/${pluginId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            showSuccess(window.i18n ? window.i18n.t('pluginMarket.messages.updateSuccess') : 'Plugin updated successfully');
+            bootstrap.Modal.getInstance(document.getElementById('editPluginModal')).hide();
+            loadPlugins(currentPage);
+        } else {
+            const error = await response.json();
+            showError(error.detail || (window.i18n ? window.i18n.t('pluginMarket.messages.updateFailed') : 'Failed to update plugin'));
+        }
+    } catch (error) {
+        console.error('Error updating plugin:', error);
+        showError(window.i18n ? window.i18n.t('pluginMarket.messages.updateFailed') : 'Error updating plugin');
+    }
+}
+
+// Show install modal
+async function showInstallModal(pluginId, pluginName) {
+    currentPluginId = pluginId;
+    document.getElementById('install-plugin-name').textContent = pluginName;
+    
+    // Reset UI to initial state
+    document.getElementById('install-server-selection').style.display = 'block';
+    document.getElementById('install-terminal-container').style.display = 'none';
+    document.getElementById('installTerminal').innerHTML = '';
+    document.getElementById('install-status-indicator').innerHTML = '';
+    document.getElementById('install-plugin-button').style.display = 'inline-block';
+    document.getElementById('install-modal-close').disabled = false;
+    document.getElementById('install-cancel-button').disabled = false;
+    
+    // Reset advanced options
+    document.getElementById('advanced-options-toggle').checked = false;
+    document.getElementById('advanced-options-content').style.display = 'none';
+    document.getElementById('version-selection-section').style.display = 'none';
+    document.getElementById('directory-exclusion-section').style.display = 'none';
+    document.getElementById('analysis-loading').style.display = 'none';
+    
+    // Reset dependency checkbox
+    document.getElementById('install-dependencies-checkbox').checked = true;
+    document.getElementById('install-dependencies-checkbox').disabled = false;
+    
+    // Load user's servers
+    try {
+        const response = await fetch('/servers/', {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const servers = await response.json();
+            const select = document.getElementById('install-server-select');
+            select.innerHTML = '<option value="">Select a server...</option>';
+            
+            // Check if servers is an array
+            if (Array.isArray(servers)) {
+                if (servers.length === 0) {
+                    select.innerHTML = '<option value="">No servers available</option>';
+                } else {
+                    servers.forEach(server => {
+                        const option = document.createElement('option');
+                        option.value = server.id;
+                        option.textContent = server.name;
+                        select.appendChild(option);
+                    });
+                }
+            } else {
+                console.error('Servers response is not an array:', servers);
+                select.innerHTML = '<option value="">Error loading servers</option>';
+            }
+        } else {
+            console.error('Failed to fetch servers:', response.status);
+            const select = document.getElementById('install-server-select');
+            select.innerHTML = '<option value="">Failed to load servers</option>';
+        }
+    } catch (error) {
+        console.error('Error loading servers:', error);
+        const select = document.getElementById('install-server-select');
+        select.innerHTML = '<option value="">Error loading servers</option>';
+    }
+    
+    // Initialize modal instance if not already done
+    if (!installModalInstance) {
+        installModalInstance = new bootstrap.Modal(document.getElementById('installPluginModal'));
+    }
+    installModalInstance.show();
+}
+
+// Called when server is selected - load versions
+async function onServerSelected() {
+    const serverId = document.getElementById('install-server-select').value;
+    
+    if (!serverId) {
+        document.getElementById('version-selection-section').style.display = 'none';
+        return;
+    }
+    
+    // Show version selection section
+    document.getElementById('version-selection-section').style.display = 'block';
+    
+    // Load available versions
+    await loadVersions(serverId);
+}
+
+// Load available versions for the plugin
+async function loadVersions(serverId) {
+    const versionSelect = document.getElementById('install-version-select');
+    versionSelect.innerHTML = '<option value="">Loading versions...</option>';
+    
+    try {
+        const response = await fetch(`/api/plugin-market/plugins/${currentPluginId}/releases?server_id=${serverId}&count=${MAX_RELEASES_TO_FETCH}`, {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data.success && data.releases && data.releases.length > 0) {
+                versionSelect.innerHTML = '';
+                
+                data.releases.forEach((release, index) => {
+                    if (release.assets && release.assets.length > 0) {
+                        // Find first valid asset with download URL
+                        const asset = release.assets.find(a => a.browser_download_url);
+                        if (asset && asset.browser_download_url) {
+                            const option = document.createElement('option');
+                            option.value = asset.browser_download_url;
+                            const label = release.name || release.tag_name;
+                            option.textContent = `${label}${index === 0 ? ' (Latest)' : ''}${release.prerelease ? ' [Pre-release]' : ''}`;
+                            if (index === 0) {
+                                option.selected = true;
+                            }
+                            versionSelect.appendChild(option);
+                        }
+                    }
+                });
+            } else {
+                versionSelect.innerHTML = '<option value="">No releases available</option>';
+            }
+        } else {
+            versionSelect.innerHTML = '<option value="">Failed to load versions</option>';
+        }
+    } catch (error) {
+        console.error('Error loading versions:', error);
+        versionSelect.innerHTML = '<option value="">Error loading versions</option>';
+    }
+}
+
+// Toggle advanced options
+function toggleAdvancedOptions() {
+    const enabled = document.getElementById('advanced-options-toggle').checked;
+    document.getElementById('advanced-options-content').style.display = enabled ? 'block' : 'none';
+    
+    if (!enabled) {
+        // Reset advanced options state
+        document.getElementById('directory-exclusion-section').style.display = 'none';
+        document.getElementById('analysis-loading').style.display = 'none';
+        // Re-enable dependency checkbox when advanced options disabled
+        document.getElementById('install-dependencies-checkbox').disabled = false;
+    }
+}
+
+// Handle dependency checkbox changes
+function onDependencyCheckboxChanged() {
+    // This is just a user interaction, no forced behavior here
+    // The forced unchecking happens when directories are selected
+}
+
+// Check if any directories are excluded and update dependency checkbox accordingly
+function updateDependencyCheckboxState() {
+    const excludedDirs = getExcludedDirectories();
+    const dependencyCheckbox = document.getElementById('install-dependencies-checkbox');
+    
+    if (excludedDirs.length > 0) {
+        // Force uncheck and disable when directories are excluded
+        dependencyCheckbox.checked = false;
+        dependencyCheckbox.disabled = true;
+    } else if (document.getElementById('advanced-options-toggle').checked) {
+        // Keep disabled in advanced mode but allow user control
+        dependencyCheckbox.disabled = false;
+    }
+}
+
+// Analyze archive to show directory structure
+async function analyzeArchive() {
+    const serverId = document.getElementById('install-server-select').value;
+    const downloadUrl = document.getElementById('install-version-select').value;
+    
+    if (!serverId) {
+        alert('Please select a server first');
+        return;
+    }
+    
+    // Show loading
+    document.getElementById('analysis-loading').style.display = 'block';
+    document.getElementById('directory-exclusion-section').style.display = 'none';
+    document.getElementById('analyze-archive-button').disabled = true;
+    
+    try {
+        let url = `/api/plugin-market/plugins/${currentPluginId}/analyze-archive?server_id=${serverId}`;
+        if (downloadUrl) {
+            url += `&download_url=${encodeURIComponent(downloadUrl)}`;
+        }
+        
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data.success) {
+                // Display directory tree
+                displayDirectoryTree(data.all_dirs || []);
+                document.getElementById('directory-exclusion-section').style.display = 'block';
+            } else {
+                alert(data.error || 'Failed to analyze archive');
+            }
+        } else {
+            alert('Failed to analyze archive');
+        }
+    } catch (error) {
+        console.error('Error analyzing archive:', error);
+        alert('Error analyzing archive: ' + error.message);
+    } finally {
+        document.getElementById('analysis-loading').style.display = 'none';
+        document.getElementById('analyze-archive-button').disabled = false;
+    }
+}
+
+// Display directory tree with checkboxes
+function displayDirectoryTree(directories) {
+    const container = document.getElementById('directory-tree');
+    container.innerHTML = '';
+    
+    if (!directories || directories.length === 0) {
+        container.innerHTML = '<p class="text-muted">No directories found in archive</p>';
+        return;
+    }
+    
+    directories.forEach(dir => {
+        const div = document.createElement('div');
+        div.className = 'form-check';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'form-check-input';
+        checkbox.id = `exclude-${dir.replace(/\//g, '-')}`;
+        checkbox.value = dir;
+        
+        // Add change listener to update dependency checkbox state
+        checkbox.addEventListener('change', updateDependencyCheckboxState);
+        
+        const label = document.createElement('label');
+        label.className = 'form-check-label';
+        label.htmlFor = checkbox.id;
+        label.textContent = dir;
+        
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        container.appendChild(div);
+    });
+}
+
+// Get selected directories to exclude
+function getExcludedDirectories() {
+    const checkboxes = document.querySelectorAll('#directory-tree input[type="checkbox"]:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+// Submit install plugin
+async function submitInstallPlugin() {
+    const serverId = document.getElementById('install-server-select').value;
+    if (!serverId) {
+        const msg = window.i18n ? window.i18n.t('pluginMarket.messages.selectServer') : 'Please select a server';
+        alert(msg);
+        return;
+    }
+    
+    // Store server ID for WebSocket connection
+    currentInstallServerId = serverId;
+    installInProgress = true;
+    
+    // Hide server selection, show terminal
+    document.getElementById('install-server-selection').style.display = 'none';
+    document.getElementById('install-terminal-container').style.display = 'block';
+    
+    // Disable close and cancel buttons
+    document.getElementById('install-modal-close').disabled = true;
+    document.getElementById('install-cancel-button').disabled = true;
+    
+    // Hide install button
+    document.getElementById('install-plugin-button').style.display = 'none';
+    
+    // Show "in progress" status
+    const statusIndicator = document.getElementById('install-status-indicator');
+    statusIndicator.innerHTML = `
+        <div class="text-muted">
+            <span class="spinner-border spinner-border-sm me-2"></span>
+            <span data-i18n="serverDetail.operationInProgress">Operation in progress...</span>
+        </div>
+    `;
+    
+    // Clear previous messages
+    installMessages = [];
+    document.getElementById('installTerminal').innerHTML = '';
+    
+    // Connect to WebSocket for real-time updates
+    connectInstallWebSocket(serverId);
+    
+    // Get selected version (download URL) and advanced options
+    const downloadUrl = document.getElementById('install-version-select').value;
+    const useAdvancedOptions = document.getElementById('advanced-options-toggle').checked;
+    const excludeDirs = useAdvancedOptions ? getExcludedDirectories() : [];
+    
+    // Get dependency installation preference from checkbox
+    const installDependencies = document.getElementById('install-dependencies-checkbox').checked;
+    
+    try {
+        // Build query parameters
+        const params = new URLSearchParams({
+            server_id: serverId,
+            install_dependencies: installDependencies
+        });
+        
+        // Add download_url if a specific version is selected
+        if (downloadUrl) {
+            params.append('download_url', downloadUrl);
+        }
+        
+        // Add exclude_dirs if any
+        excludeDirs.forEach(dir => {
+            params.append('exclude_dirs', dir);
+        });
+        
+        const response = await fetch(`/api/plugin-market/plugins/${currentPluginId}/install?${params}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        let data;
+        
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            // Handle non-JSON responses (e.g., HTML error pages)
+            const text = await response.text();
+            const ERROR_MESSAGE_MAX_LENGTH = 200;
+            data = {
+                success: false,
+                message: response.ok ? text : `Server error (${response.status}): ${text.substring(0, ERROR_MESSAGE_MAX_LENGTH)}`
+            };
+        }
+        
+        // The WebSocket will handle displaying messages and updating status
+        // We only need to handle cases where the API call itself fails
+        if (!data.success && !installMessages.some(m => m.type === 'error')) {
+            // Only show error if WebSocket didn't already show it
+            addInstallMessage('error', data.message || 'Installation failed');
+            installInProgress = false;
+            statusIndicator.innerHTML = `
+                <div class="text-danger">
+                    <i class="bi bi-x-circle me-2"></i>
+                    <span data-i18n="serverDetail.operationFailed">Operation failed</span>
+                </div>
+            `;
+            document.getElementById('install-modal-close').disabled = false;
+            document.getElementById('install-cancel-button').disabled = false;
+        }
+    } catch (error) {
+        console.error('Error installing plugin:', error);
+        if (!installMessages.some(m => m.type === 'error')) {
+            addInstallMessage('error', window.i18n ? window.i18n.t('pluginMarket.messages.installFailed') : 'Error installing plugin: ' + error.message);
+        }
+        installInProgress = false;
+        statusIndicator.innerHTML = `
+            <div class="text-danger">
+                <i class="bi bi-x-circle me-2"></i>
+                <span data-i18n="serverDetail.operationFailed">Operation failed</span>
+            </div>
+        `;
+        document.getElementById('install-modal-close').disabled = false;
+        document.getElementById('install-cancel-button').disabled = false;
+    }
+}
+
+// Delete plugin
+async function deletePlugin(pluginId) {
+    const confirmMsg = window.i18n ? window.i18n.t('pluginMarket.messages.deleteConfirm') : 'Are you sure you want to delete this plugin?';
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/plugin-market/plugins/${pluginId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        });
+        
+        if (response.ok) {
+            const successMsg = window.i18n ? window.i18n.t('pluginMarket.messages.deleteSuccess') : 'Plugin deleted successfully';
+            showSuccess(successMsg);
+            loadPlugins(currentPage);
+        } else {
+            const errorMsg = window.i18n ? window.i18n.t('pluginMarket.messages.deleteFailed') : 'Failed to delete plugin';
+            showError(errorMsg);
+        }
+    } catch (error) {
+        console.error('Error deleting plugin:', error);
+        const errorMsg = window.i18n ? window.i18n.t('pluginMarket.messages.deleteFailed') : 'Error deleting plugin';
+        showError(errorMsg);
+    }
+}
+
+// Utility functions
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatCategory(category) {
+    // Try to use i18n translation for category
+    if (window.i18n && typeof window.i18n.t === 'function') {
+        try {
+            const translatedKey = `pluginMarket.categories.${category}`;
+            const translated = window.i18n.t(translatedKey);
+            // If translation exists and is different from key, use it
+            if (translated && translated !== translatedKey) {
+                return translated;
+            }
+        } catch (e) {
+            // Fallback to default formatting if translation fails
+        }
+    }
+    // Fallback to formatted category name
+    return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function showSuccess(message) {
+    // Use existing toast/notification system if available
+    alert(message);
+}
+
+function showError(message) {
+    // Use existing toast/notification system if available
+    alert(message);
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    loadUserInfo();
+    loadCategories();
+    loadPlugins(1);
+});
+</script>
+{% endblock %}

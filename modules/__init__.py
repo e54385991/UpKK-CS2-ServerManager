@@ -2,7 +2,7 @@
 Core modules for CS2 Server Manager
 """
 from .config import settings, Settings
-from .models import Base, Server, DeploymentLog, MonitoringLog, ServerStatus, AuthType, User, InitializedServer, ScheduledTask
+from .models import Base, Server, DeploymentLog, MonitoringLog, ServerStatus, AuthType, User, InitializedServer, ScheduledTask, MarketPlugin, PluginCategory
 from .schemas import (
     ServerCreate, ServerUpdate, ServerResponse,
     ServerAction, ActionResponse, DeploymentLogResponse,
@@ -16,7 +16,9 @@ from .schemas import (
     ScheduledTaskCreate, ScheduledTaskUpdate, ScheduledTaskResponse,
     GitHubReleaseAsset, GitHubRelease, GitHubReleasesResponse,
     ArchiveContentItem, ArchiveAnalysisResponse,
-    GitHubPluginInstallRequest, GitHubPluginInstallResponse
+    GitHubPluginInstallRequest, GitHubPluginInstallResponse,
+    MarketPluginCreate, MarketPluginUpdate, MarketPluginResponse, MarketPluginListResponse,
+    MarketPluginInstallRequest, GitHubRepoInfo, DependencyInfo
 )
 from .database import get_db, init_db, engine, async_session_maker, migrate_db
 from .auth import (
@@ -37,6 +39,8 @@ __all__ = [
     'User',
     'InitializedServer',
     'ScheduledTask',
+    'MarketPlugin',
+    'PluginCategory',
     'ServerStatus',
     'AuthType',
     'ServerCreate',
@@ -77,6 +81,13 @@ __all__ = [
     'ArchiveAnalysisResponse',
     'GitHubPluginInstallRequest',
     'GitHubPluginInstallResponse',
+    'MarketPluginCreate',
+    'MarketPluginUpdate',
+    'MarketPluginResponse',
+    'MarketPluginListResponse',
+    'MarketPluginInstallRequest',
+    'GitHubRepoInfo',
+    'DependencyInfo',
     'get_db',
     'init_db',
     'migrate_db',

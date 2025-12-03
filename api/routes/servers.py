@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from typing import List, Dict, Any
+import asyncio
 import asyncssh
 import shlex
 
@@ -71,12 +72,17 @@ async def create_server(
                 username=server_data.ssh_user,
                 password=server_data.ssh_password,
                 known_hosts=None,
-                connect_timeout=10
+                connect_timeout=15
             )
         except asyncssh.PermissionDenied:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"SSH authentication failed for {server_data.ssh_user}@{server_data.host}. Please verify your username and password."
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=f"SSH connection to {server_data.host}:{server_data.ssh_port} timed out. The server may be unreachable or too slow to respond. Please check the network connection and server status."
             )
         except asyncssh.ConnectionLost as e:
             raise HTTPException(
@@ -157,12 +163,15 @@ async def list_servers(
 
 @router.get("/disk-space-all")
 async def get_all_servers_disk_space(
+    force_refresh: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """
     Get cached disk space information for all servers owned by current user.
-    Returns cached data only - does not trigger new SSH connections.
+    
+    Args:
+        force_refresh: If True, bypass cache and read from system
     
     NOTE: This route MUST be defined before /{server_id} routes
     to avoid path parameter matching conflicts.
@@ -172,8 +181,8 @@ async def get_all_servers_disk_space(
     # Get all servers for current user
     servers = await Server.get_all_by_user(db, current_user.id)
     
-    # Get disk space for all servers (from cache only)
-    disk_space_map = await system_info_helper.get_all_servers_disk_space(servers, force_refresh=False)
+    # Get disk space for all servers
+    disk_space_map = await system_info_helper.get_all_servers_disk_space(servers, force_refresh=force_refresh)
     
     # Convert to string keys for JSON
     response = {str(k): v for k, v in disk_space_map.items()}
@@ -510,10 +519,16 @@ async def get_server_cpu_count(
 @router.get("/{server_id}/disk-space")
 async def get_server_disk_space(
     server_id: int,
+    force_refresh: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get disk space information for server directory"""
+    """
+    Get disk space information for server directory
+    
+    Args:
+        force_refresh: If True, bypass cache and read from system
+    """
     from services.system_info_helper import system_info_helper
     
     # Verify server exists and user has access
@@ -525,7 +540,7 @@ async def get_server_disk_space(
         )
     
     # Get disk space info from system info helper
-    disk_info = await system_info_helper.get_disk_space(server)
+    disk_info = await system_info_helper.get_disk_space(server, force_refresh=force_refresh)
     
     if disk_info:
         return {

@@ -14,7 +14,7 @@ import logging
 
 from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse, get_optional_current_user, User, setup_logging, _get_log_level
 from services import redis_manager
-from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins
+from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market
 
 # Initialize logging first (before anything else logs)
 # Get log level from settings
@@ -50,6 +50,7 @@ app.include_router(server_status.router)
 app.include_router(file_manager.router)
 app.include_router(scheduled_tasks.router)
 app.include_router(github_plugins.router)
+app.include_router(plugin_market.router)
 
 
 @app.on_event("startup")
@@ -225,6 +226,12 @@ async def console_popup(request: Request, server_id: int, console_type: str):
         "server_id": server_id,
         "console_type": console_type.upper()
     })
+
+
+@app.get("/plugin-market", response_class=HTMLResponse)
+async def plugin_market_page(request: Request):
+    """Plugin market page"""
+    return templates.TemplateResponse("plugin_market.html", {"request": request})
 
 
 @app.get("/servers/{server_id}/ssh-console", response_class=HTMLResponse)

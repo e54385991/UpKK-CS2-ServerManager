@@ -426,6 +426,146 @@ async def migrate_db():
             else:
                 print(f"✓ {column} column exists")
         
+        # Check if github_proxy column exists in servers table
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'servers' 
+                AND COLUMN_NAME = 'github_proxy'
+            """)
+        )
+        github_proxy_exists = result.fetchone() is not None
+        
+        if not github_proxy_exists:
+            print("Adding github_proxy column to servers table...")
+            await conn.execute(
+                text("""
+                    ALTER TABLE servers 
+                    ADD COLUMN github_proxy VARCHAR(500) NULL
+                """)
+            )
+            print("✓ Migration completed: github_proxy column added")
+        else:
+            print("✓ github_proxy column exists")
+        
+        # Check if use_panel_proxy column exists in servers table
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'servers' 
+                AND COLUMN_NAME = 'use_panel_proxy'
+            """)
+        )
+        use_panel_proxy_exists = result.fetchone() is not None
+        
+        if not use_panel_proxy_exists:
+            print("Adding use_panel_proxy column to servers table...")
+            await conn.execute(
+                text("""
+                    ALTER TABLE servers 
+                    ADD COLUMN use_panel_proxy TINYINT(1) DEFAULT 0
+                """)
+            )
+            print("✓ Migration completed: use_panel_proxy column added")
+        else:
+            print("✓ use_panel_proxy column exists")
+        
+        # Check if market_plugins table exists
+        result = await conn.execute(
+            text("""
+                SELECT TABLE_NAME 
+                FROM INFORMATION_SCHEMA.TABLES 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'market_plugins'
+            """)
+        )
+        market_plugins_exists = result.fetchone() is not None
+        
+        if not market_plugins_exists:
+            print("Creating market_plugins table...")
+            await conn.execute(
+                text("""
+                    CREATE TABLE market_plugins (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        github_url VARCHAR(500) NOT NULL UNIQUE,
+                        title VARCHAR(255) NOT NULL,
+                        description TEXT NULL,
+                        author VARCHAR(255) NULL,
+                        version VARCHAR(50) NULL,
+                        category ENUM('GAME_MODE', 'ENTERTAINMENT', 'UTILITY', 'ADMIN', 'PERFORMANCE', 'LIBRARY', 'OTHER') NOT NULL DEFAULT 'OTHER',
+                        tags TEXT NULL,
+                        is_recommended TINYINT(1) DEFAULT 0,
+                        icon_url VARCHAR(500) NULL,
+                        download_count INT DEFAULT 0,
+                        install_count INT DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_market_plugins_github_url (github_url),
+                        INDEX idx_market_plugins_title (title)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """)
+            )
+            print("✓ Migration completed: market_plugins table created")
+        else:
+            print("✓ market_plugins table exists")
+        
+        # Check if dependencies column exists in market_plugins table
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'market_plugins' 
+                AND COLUMN_NAME = 'dependencies'
+            """)
+        )
+        dependencies_exists = result.fetchone() is not None
+        
+        if not dependencies_exists:
+            print("Adding dependencies column to market_plugins table...")
+            await conn.execute(
+                text("""
+                    ALTER TABLE market_plugins 
+                    ADD COLUMN dependencies TEXT NULL
+                """)
+            )
+            print("✓ Migration completed: dependencies column added to market_plugins")
+        else:
+            print("✓ dependencies column exists in market_plugins table")
+        
+        # Fix category enum values if needed (lowercase to uppercase migration)
+        # Check current enum definition
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_TYPE 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'market_plugins' 
+                AND COLUMN_NAME = 'category'
+            """)
+        )
+        category_type = result.fetchone()
+        
+        if category_type and 'game_mode' in category_type[0]:
+            print("Migrating category enum from lowercase to uppercase...")
+            # SQLAlchemy expects uppercase enum names, so we need to update the database
+            try:
+                await conn.execute(
+                    text("""
+                        ALTER TABLE market_plugins 
+                        MODIFY COLUMN category ENUM('GAME_MODE', 'ENTERTAINMENT', 'UTILITY', 'ADMIN', 'PERFORMANCE', 'LIBRARY', 'OTHER') NOT NULL DEFAULT 'OTHER'
+                    """)
+                )
+                print("✓ Migration completed: category enum values updated to uppercase")
+            except Exception as e:
+                print(f"Note: Could not update category enum (might already be updated): {e}")
+        else:
+            print("✓ category enum is using correct uppercase values")
+        
         print("✓ Database schema migration completed")
 
 

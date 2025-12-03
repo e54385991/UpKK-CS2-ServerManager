@@ -283,6 +283,19 @@ class SSHConnectionPool:
         Returns:
             Tuple[bool, Optional[connection], str]: (success, connection, message)
         """
+        # Early validation: Check if server is marked as SSH down
+        # This prevents repeated connection attempts to offline servers
+        if server.is_ssh_down:
+            logger.warning(
+                f"[SSH Pool] Server {server.id} ({server.host}) is marked as SSH down. "
+                f"Skipping connection attempt to prevent resource exhaustion."
+            )
+            return False, None, (
+                "服务器已标记为离线（SSH连接失败多次）。请检查服务器状态后手动重连。 | "
+                "Server marked as offline (SSH connection failed multiple times). "
+                "Please check server status and manually reconnect."
+            )
+        
         key = self._create_connection_key(server)
         
         async with self.pool_lock:
@@ -326,7 +339,8 @@ class SSHConnectionPool:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         password=server.ssh_password,
-                        known_hosts=None
+                        known_hosts=None,
+                        connect_timeout=15
                     )
                 elif server.is_key_auth:
                     conn = await asyncssh.connect(
@@ -334,7 +348,8 @@ class SSHConnectionPool:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         client_keys=[server.ssh_key_path],
-                        known_hosts=None
+                        known_hosts=None,
+                        connect_timeout=15
                     )
                 else:
                     return False, None, f"Unsupported auth type: {server.auth_type}"
@@ -354,6 +369,8 @@ class SSHConnectionPool:
                 
             except asyncssh.PermissionDenied:
                 return False, None, "Authentication failed"
+            except asyncio.TimeoutError:
+                return False, None, "SSH connection timeout - server may be unreachable or too slow to respond"
             except asyncssh.Error as e:
                 return False, None, f"SSH error: {str(e)}"
             except Exception as e:
@@ -407,7 +424,8 @@ class SSHConnectionPool:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         password=server.ssh_password,
-                        known_hosts=None
+                        known_hosts=None,
+                        connect_timeout=15
                     )
                 elif server.is_key_auth:
                     conn = await asyncssh.connect(
@@ -415,7 +433,8 @@ class SSHConnectionPool:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         client_keys=[server.ssh_key_path],
-                        known_hosts=None
+                        known_hosts=None,
+                        connect_timeout=15
                     )
                 else:
                     return False, None, f"Unsupported auth type: {server.auth_type}"
@@ -438,6 +457,9 @@ class SSHConnectionPool:
             except asyncssh.PermissionDenied:
                 logger.error(f"[SSH Pool] ✗ Reconnection failed: Authentication failed for {key}")
                 return False, None, "Authentication failed"
+            except asyncio.TimeoutError:
+                logger.error(f"[SSH Pool] ✗ Reconnection failed: Connection timeout for {key}")
+                return False, None, "SSH connection timeout - server may be unreachable or too slow to respond"
             except asyncssh.Error as e:
                 logger.error(f"[SSH Pool] ✗ Reconnection failed: SSH error for {key}: {str(e)}")
                 return False, None, f"SSH error: {str(e)}"
@@ -481,7 +503,8 @@ class SSHConnectionPool:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         password=server.ssh_password,
-                        known_hosts=None
+                        known_hosts=None,
+                        connect_timeout=15
                     )
                 elif server.is_key_auth:
                     conn = await asyncssh.connect(
@@ -489,7 +512,8 @@ class SSHConnectionPool:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         client_keys=[server.ssh_key_path],
-                        known_hosts=None
+                        known_hosts=None,
+                        connect_timeout=15
                     )
                 else:
                     return False, None, f"Unsupported auth type: {server.auth_type}"
@@ -511,6 +535,9 @@ class SSHConnectionPool:
             except asyncssh.PermissionDenied:
                 logger.error(f"[SSH Pool] ✗ Manual reconnection failed: Authentication failed for {key}")
                 return False, None, "认证失败 | Authentication failed"
+            except asyncio.TimeoutError:
+                logger.error(f"[SSH Pool] ✗ Manual reconnection failed: Connection timeout for {key}")
+                return False, None, "连接超时 - 服务器可能无法访问或响应过慢 | SSH connection timeout - server may be unreachable or too slow to respond"
             except asyncssh.Error as e:
                 logger.error(f"[SSH Pool] ✗ Manual reconnection failed: SSH error for {key}: {str(e)}")
                 return False, None, f"SSH错误 | SSH error: {str(e)}"

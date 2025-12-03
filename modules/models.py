@@ -212,15 +212,27 @@ class Server(SQLModel, table=True):
         
         # Server is marked as down - verify it's still in failure state
         from modules.utils import get_current_time
+        from datetime import timezone
         now = get_current_time()
+        
+        # Helper to make datetime timezone-aware if it's naive
+        def ensure_aware(dt):
+            if dt is None:
+                return None
+            if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                # Assume UTC for naive datetimes from database
+                return dt.replace(tzinfo=timezone.utc)
+            return dt
         
         # Check days since last successful connection
         if self.last_ssh_success:
-            days_since_success = (now - self.last_ssh_success).days
+            last_success = ensure_aware(self.last_ssh_success)
+            days_since_success = (now - last_success).days
             return days_since_success >= 3
         elif hasattr(self, 'created_at') and self.created_at:
             # Never had success - check age of server
-            days_since_creation = (now - self.created_at).days
+            created = ensure_aware(self.created_at)
+            days_since_creation = (now - created).days
             return days_since_creation >= 3
         
         # If we don't have enough info, don't skip
@@ -416,6 +428,103 @@ class InitializedServer(SQLModel, table=True):
             select(cls).where(cls.user_id == user_id).order_by(cls.created_at.desc())
         )
         return result.scalars().all()
+
+
+class PluginCategory(str, enum.Enum):
+    """Plugin category enumeration"""
+    GAME_MODE = "game_mode"
+    ENTERTAINMENT = "entertainment"
+    UTILITY = "utility"
+    ADMIN = "admin"
+    PERFORMANCE = "performance"
+    LIBRARY = "library"
+    OTHER = "other"
+
+
+class MarketPlugin(SQLModel, table=True):
+    """Plugin market model - stores plugins available for installation"""
+    __tablename__ = "market_plugins"
+    
+    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    github_url: str = Field(max_length=500, nullable=False, unique=True, index=True)
+    title: str = Field(max_length=255, nullable=False, index=True)
+    description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    author: Optional[str] = Field(default=None, max_length=255)
+    version: Optional[str] = Field(default=None, max_length=50)
+    category: PluginCategory = Field(default=PluginCategory.OTHER, sa_column=Column(SQLEnum(PluginCategory), nullable=False))
+    tags: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))  # Comma-separated tags
+    is_recommended: bool = Field(default=False)
+    icon_url: Optional[str] = Field(default=None, max_length=500)
+    dependencies: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))  # Comma-separated plugin IDs
+    download_count: int = Field(default=0)
+    install_count: int = Field(default=0)
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+    
+    def __repr__(self):
+        return f"<MarketPlugin(id={self.id}, title='{self.title}', category='{self.category.value}')>"
+    
+    @classmethod
+    async def get_by_id(cls, session: AsyncSession, plugin_id: int) -> Optional["MarketPlugin"]:
+        """Get plugin by ID"""
+        result = await session.execute(select(cls).where(cls.id == plugin_id))
+        return result.scalar_one_or_none()
+    
+    @classmethod
+    async def get_by_github_url(cls, session: AsyncSession, github_url: str) -> Optional["MarketPlugin"]:
+        """Get plugin by GitHub URL"""
+        result = await session.execute(select(cls).where(cls.github_url == github_url))
+        return result.scalar_one_or_none()
+    
+    @classmethod
+    async def search_plugins(
+        cls,
+        session: AsyncSession,
+        category: Optional[PluginCategory] = None,
+        search_query: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 20
+    ) -> tuple[List["MarketPlugin"], int]:
+        """
+        Search plugins with filters and pagination.
+        Returns tuple of (plugins, total_count)
+        """
+        from sqlalchemy import or_, func as sqlfunc
+        
+        query = select(cls)
+        count_query = select(sqlfunc.count()).select_from(cls)
+        
+        # Apply category filter
+        if category:
+            query = query.where(cls.category == category)
+            count_query = count_query.where(cls.category == category)
+        
+        # Apply search query (search in title, description, author)
+        if search_query and search_query.strip():
+            search_pattern = f"%{search_query.strip()}%"
+            search_condition = or_(
+                cls.title.like(search_pattern),
+                cls.description.like(search_pattern),
+                cls.author.like(search_pattern)
+            )
+            query = query.where(search_condition)
+            count_query = count_query.where(search_condition)
+        
+        # Get total count
+        count_result = await session.execute(count_query)
+        total_count = count_result.scalar()
+        
+        # Apply ordering (recommended first, then by install count)
+        query = query.order_by(cls.is_recommended.desc(), cls.install_count.desc(), cls.created_at.desc())
+        
+        # Apply pagination
+        query = query.offset(skip).limit(limit)
+        
+        # Execute query
+        result = await session.execute(query)
+        plugins = result.scalars().all()
+        
+        return plugins, total_count
 
 
 # For backward compatibility with existing code that uses Base.metadata

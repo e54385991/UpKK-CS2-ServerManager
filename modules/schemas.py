@@ -778,3 +778,85 @@ class GitHubPluginInstallResponse(SQLModel):
     success: bool
     message: str
     installed_files: int = 0
+
+
+# Plugin Market schemas
+class MarketPluginCreate(SQLModel):
+    """Schema for creating a market plugin (admin only)"""
+    github_url: str = Field(..., max_length=500, description="GitHub repository URL")
+    title: Optional[str] = Field(None, max_length=255, description="Plugin title (auto-filled if not provided)")
+    description: Optional[str] = Field(None, description="Plugin description (auto-filled if not provided)")
+    author: Optional[str] = Field(None, max_length=255, description="Plugin author")
+    version: Optional[str] = Field(None, max_length=50, description="Plugin version")
+    category: str = Field(default="other", description="Plugin category")
+    tags: Optional[str] = Field(None, description="Comma-separated tags")
+    is_recommended: bool = Field(default=False, description="Whether to mark as recommended")
+    icon_url: Optional[str] = Field(None, max_length=500, description="Icon URL")
+    dependencies: Optional[str] = Field(None, description="Comma-separated plugin IDs")
+
+
+class MarketPluginUpdate(SQLModel):
+    """Schema for updating a market plugin (admin only)"""
+    title: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    author: Optional[str] = Field(None, max_length=255)
+    version: Optional[str] = Field(None, max_length=50)
+    category: Optional[str] = None
+    tags: Optional[str] = None
+    is_recommended: Optional[bool] = None
+    icon_url: Optional[str] = Field(None, max_length=500)
+    dependencies: Optional[str] = None
+
+
+class DependencyInfo(SQLModel):
+    """Schema for dependency information"""
+    id: int
+    title: str
+
+
+class MarketPluginResponse(SQLModel):
+    """Schema for market plugin response"""
+    id: int
+    github_url: str
+    title: str
+    description: Optional[str] = None
+    author: Optional[str] = None
+    version: Optional[str] = None
+    category: str
+    tags: Optional[str] = None
+    is_recommended: bool
+    icon_url: Optional[str] = None
+    dependencies: Optional[str] = None
+    dependency_details: Optional[List[DependencyInfo]] = None
+    download_count: int
+    install_count: int
+    created_at: datetime
+    updated_at: datetime
+    
+    model_config = {"from_attributes": True}
+
+
+class MarketPluginListResponse(SQLModel):
+    """Schema for market plugin list response with pagination"""
+    success: bool
+    plugins: List[MarketPluginResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class MarketPluginInstallRequest(SQLModel):
+    """Schema for installing a market plugin"""
+    plugin_id: int = Field(..., description="Market plugin ID to install")
+    server_id: int = Field(..., description="Server ID to install plugin on")
+    exclude_dirs: List[str] = Field(default=[], description="Directories to exclude from installation")
+
+
+class GitHubRepoInfo(SQLModel):
+    """Schema for GitHub repository information"""
+    success: bool
+    repo_name: Optional[str] = None
+    description: Optional[str] = None
+    author: Optional[str] = None
+    error: Optional[str] = None

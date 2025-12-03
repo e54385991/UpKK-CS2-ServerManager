@@ -14,7 +14,9 @@
     "register": "注册",
     "profile": "个人中心",
     "logout": "退出",
-    "language": "语言"
+    "language": "语言",
+    "pluginMarket": "插件市场",
+    "pluginCenter": "插件中心"
   },
   "home": {
     "title": "CS2 服务器管理器",
@@ -200,7 +202,11 @@
       "directory": "目录占用",
       "total": "磁盘总量",
       "usage": "占用率",
-      "note": "占用率仅代表服务器目录，非磁盘实际使用"
+      "note": "占用率仅代表服务器目录，非磁盘实际使用",
+      "refresh": "刷新磁盘空间",
+      "refreshing": "刷新中...",
+      "refreshSuccess": "磁盘空间已刷新",
+      "refreshFailed": "获取磁盘空间失败"
     },
     "addNewServer": "添加CS2服务器（确保已完成新服务器初始化）",
     "serverNameLabel": "服务器名称 *",
@@ -550,7 +556,8 @@
     "deploymentLockMessage": "服务器可能正在更新或部署。如果长时间卡住，您可以尝试清除锁定并重新开始。通常无需操作。",
     "clearDeploymentLock": "清除部署锁定",
     "clearing": "清除中...",
-    "confirmClearDeploymentLock": "您确定要清除部署锁定吗？\n\n仅在确认没有部署正在运行时执行此操作。"
+    "confirmClearDeploymentLock": "您确定要清除部署锁定吗？\n\n仅在确认没有部署正在运行时执行此操作。",
+    "lowDiskSpaceWarning": "警告：检测到磁盘空间不足！\n\n可用空间：{available} GB\n推荐容量：{recommended} GB 或以上\n\n磁盘空间不足可能导致安装失败或服务器问题。\n\n是否仍要继续？"
   },
   "setupWizard": {
     "title": "新服务器初始化",
@@ -924,6 +931,117 @@
     },
     "step10": {
       "title": "步骤 10"
+    }
+  },
+  "pluginMarket": {
+    "title": "插件中心",
+    "adminPanel": "管理员面板",
+    "addPlugin": "添加插件",
+    "editPlugin": "编辑插件",
+    "category": "分类",
+    "allCategories": "所有分类",
+    "search": "搜索",
+    "searchBtn": "搜索",
+    "searchPlaceholder": "按名称、作者或描述搜索...",
+    "loading": "加载中...",
+    "noPlugins": "未找到插件",
+    "recommended": "推荐",
+    "downloads": "下载",
+    "installs": "安装",
+    "version": "版本",
+    "delete": "删除",
+    "edit": "编辑",
+    "install": "安装",
+    "author": "作者",
+    "dependencies": "包含依赖项（将自动安装）",
+    "dependenciesLabel": "自动安装依赖项",
+    "viewOnGitHub": "在 GitHub 上查看",
+    "addPluginModal": {
+      "title": "添加插件",
+      "githubUrl": "GitHub URL",
+      "required": "*",
+      "githubUrlPlaceholder": "https://github.com/owner/repo",
+      "autoFill": "从 GitHub 自动填充",
+      "pluginTitle": "标题",
+      "description": "描述",
+      "pluginAuthor": "作者",
+      "pluginVersion": "版本",
+      "pluginCategory": "分类",
+      "iconUrl": "图标 URL",
+      "tags": "标签（逗号分隔）",
+      "tagsPlaceholder": "标签1, 标签2, 标签3",
+      "dependenciesLabel": "依赖项",
+      "dependenciesHint": "（从已发布的插件中选择）",
+      "searchPlugins": "搜索插件...",
+      "dependenciesHelp": "使用上面的搜索框过滤插件（后端搜索）。按住 Ctrl/Cmd 选择多个。用户安装此插件时将自动安装所选的依赖项。",
+      "markRecommended": "标记为推荐",
+      "cancel": "取消",
+      "addButton": "添加插件",
+      "updateButton": "更新插件"
+    },
+    "editPluginModal": {
+      "title": "编辑插件",
+      "cancel": "取消",
+      "updateButton": "更新插件"
+    },
+    "installModal": {
+      "title": "安装插件",
+      "selectServer": "选择要安装的服务器",
+      "serverPlaceholder": "选择服务器...",
+      "installing": "正在安装插件...",
+      "cancel": "取消",
+      "installButton": "安装",
+      "selectVersion": "选择版本",
+      "loadingVersions": "加载版本中...",
+      "versionHelp": "默认选择最新版本",
+      "advancedOptions": "高级选项（用于更新/升级）",
+      "advancedWarning": "警告：",
+      "advancedWarningText": "使用选择性解压时，将先分析插件包。然后您可以选择不解压的目录。使用此模式时，依赖项将不会自动安装。",
+      "analyzePlugin": "分析插件包",
+      "analyzing": "正在分析插件包...",
+      "selectExclude": "选择要排除安装的目录：",
+      "excludeHelp": "勾选您想要排除的目录（在更新时保留配置文件很有用）",
+      "installDependencies": "自动安装依赖",
+      "installDependenciesHelp": "取消勾选后，插件依赖不会自动安装。使用选择性解压时此选项会自动禁用。"
+    },
+    "messages": {
+      "deleteConfirm": "确定要删除此插件吗？",
+      "deleteSuccess": "插件删除成功",
+      "deleteFailed": "删除插件失败",
+      "addSuccess": "插件添加成功",
+      "addFailed": "添加插件失败",
+      "updateSuccess": "插件更新成功",
+      "updateFailed": "更新插件失败",
+      "installSuccess": "插件安装成功！重启服务器以使更改生效。",
+      "installFailed": "插件安装失败",
+      "enterGithubUrl": "请先输入 GitHub URL",
+      "selectServer": "请选择服务器",
+      "fillRequired": "请填写所有必填字段"
+    },
+    "categories": {
+      "game_mode": "游戏模式",
+      "entertainment": "娱乐",
+      "utility": "实用工具",
+      "admin": "管理",
+      "performance": "性能",
+      "library": "库",
+      "other": "其他"
+    },
+    "websocket": {
+      "connecting": "连接中...",
+      "downloading": "正在下载插件...",
+      "uploading": "正在上传到服务器...",
+      "installing": "正在安装...",
+      "success": "安装成功完成！",
+      "failed": "安装失败",
+      "progress": "进度：{percent}%"
+    },
+    "description": {
+      "feature1": "1. 插件中心可添加Github中插件，支持自动获取标题描述，自动识别发布版本，无需任何维护",
+      "feature2": "2. 支持文件分析，解压忽略目录设置，插件升级无忧",
+      "deploymentTitle": "⚠️ 部署建议",
+      "deploymentText": "强烈建议将此面板部署到境外，避免中国大陆网络GitHub连接困难问题。如果您的服务器位于中国大陆，可在 服务器管理 - 配置 - 下载代理配置 中启用\"使用面板服务器代理\"。启用后，所有下载（SteamCMD、GitHub插件）都将先下载到本面板服务器，然后通过SFTP上传到您的游戏服务器，并显示进度。",
+      "proxyFlow": "代理下载流程"
     }
   }
 }

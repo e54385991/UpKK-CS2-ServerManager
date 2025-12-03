@@ -14,7 +14,9 @@
     "register": "Register",
     "profile": "Profile",
     "logout": "Logout",
-    "language": "Language"
+    "language": "Language",
+    "pluginMarket": "Plugin Market",
+    "pluginCenter": "Plugin Center"
   },
   "home": {
     "title": "CS2 Server Manager",
@@ -200,7 +202,11 @@
       "directory": "Directory",
       "total": "Total",
       "usage": "Usage",
-      "note": "Usage represents server directory only, not total disk"
+      "note": "Usage represents server directory only, not total disk",
+      "refresh": "Refresh Disk Space",
+      "refreshing": "Refreshing...",
+      "refreshSuccess": "Disk space refreshed",
+      "refreshFailed": "Failed to get disk space"
     },
     "addNewServer": "Add CS2 Server (Ensure New Server Initialization Complete)",
     "serverNameLabel": "Server Name *",
@@ -550,7 +556,8 @@
     "deploymentLockMessage": "Server may be updating or deploying. If stuck for a long time, you can try clearing the lock and restarting. Usually no action is needed.",
     "clearDeploymentLock": "Clear Deployment Lock",
     "clearing": "Clearing...",
-    "confirmClearDeploymentLock": "Are you sure you want to clear the deployment lock?\n\nOnly do this if no deployment is actually running."
+    "confirmClearDeploymentLock": "Are you sure you want to clear the deployment lock?\n\nOnly do this if no deployment is actually running.",
+    "lowDiskSpaceWarning": "WARNING: Low disk space detected!\n\nAvailable space: {available} GB\nRecommended: {recommended} GB or more\n\nDeploying with low disk space may cause installation failures or server issues.\n\nDo you want to continue anyway?"
   },
   "setupWizard": {
     "title": "New Server Initialization",
@@ -924,6 +931,117 @@
     },
     "step10": {
       "title": "Step 10"
+    }
+  },
+  "pluginMarket": {
+    "title": "Plugin Center",
+    "adminPanel": "Admin Panel",
+    "addPlugin": "Add Plugin",
+    "editPlugin": "Edit Plugin",
+    "category": "Category",
+    "allCategories": "All Categories",
+    "search": "Search",
+    "searchBtn": "Search",
+    "searchPlaceholder": "Search by name, author, or description...",
+    "loading": "Loading...",
+    "noPlugins": "No plugins found",
+    "recommended": "Recommended",
+    "downloads": "downloads",
+    "installs": "installs",
+    "version": "v",
+    "delete": "Delete",
+    "edit": "Edit",
+    "install": "Install",
+    "author": "Author",
+    "dependencies": "Has dependencies (will be auto-installed)",
+    "dependenciesLabel": "Dependencies",
+    "viewOnGitHub": "View on GitHub",
+    "addPluginModal": {
+      "title": "Add Plugin",
+      "githubUrl": "GitHub URL",
+      "required": "*",
+      "githubUrlPlaceholder": "https://github.com/owner/repo",
+      "autoFill": "Auto-fill from GitHub",
+      "pluginTitle": "Title",
+      "description": "Description",
+      "pluginAuthor": "Author",
+      "pluginVersion": "Version",
+      "pluginCategory": "Category",
+      "iconUrl": "Icon URL",
+      "tags": "Tags (comma-separated)",
+      "tagsPlaceholder": "tag1, tag2, tag3",
+      "dependenciesLabel": "Dependencies",
+      "dependenciesHint": "(Select from published plugins)",
+      "searchPlugins": "Search plugins...",
+      "dependenciesHelp": "Use the search box above to filter plugins (backend search). Hold Ctrl/Cmd to select multiple. Selected dependencies will be auto-installed when users install this plugin.",
+      "markRecommended": "Mark as Recommended",
+      "cancel": "Cancel",
+      "addButton": "Add Plugin",
+      "updateButton": "Update Plugin"
+    },
+    "editPluginModal": {
+      "title": "Edit Plugin",
+      "cancel": "Cancel",
+      "updateButton": "Update Plugin"
+    },
+    "installModal": {
+      "title": "Install Plugin",
+      "selectServer": "Select a server to install",
+      "serverPlaceholder": "Select a server...",
+      "installing": "Installing plugin...",
+      "cancel": "Cancel",
+      "installButton": "Install",
+      "selectVersion": "Select Version",
+      "loadingVersions": "Loading versions...",
+      "versionHelp": "Latest version is selected by default",
+      "advancedOptions": "Advanced Options (For Updates/Upgrades)",
+      "advancedWarning": "Warning:",
+      "advancedWarningText": "When using selective extraction, the plugin package will be analyzed first. You can then choose which directories to exclude from installation. Dependencies will NOT be automatically installed when using this mode.",
+      "analyzePlugin": "Analyze Plugin Package",
+      "analyzing": "Analyzing plugin package...",
+      "selectExclude": "Select directories to EXCLUDE from installation:",
+      "excludeHelp": "Check directories you want to EXCLUDE (useful for preserving configs during updates)",
+      "installDependencies": "Automatically install dependencies",
+      "installDependenciesHelp": "When unchecked, plugin dependencies will not be installed automatically. This option is automatically disabled when using selective extraction."
+    },
+    "messages": {
+      "deleteConfirm": "Are you sure you want to delete this plugin?",
+      "deleteSuccess": "Plugin deleted successfully",
+      "deleteFailed": "Failed to delete plugin",
+      "addSuccess": "Plugin added successfully",
+      "addFailed": "Failed to add plugin",
+      "updateSuccess": "Plugin updated successfully",
+      "updateFailed": "Failed to update plugin",
+      "installSuccess": "Plugin installed successfully! Restart the server for changes to take effect.",
+      "installFailed": "Plugin installation failed",
+      "enterGithubUrl": "Please enter a GitHub URL first",
+      "selectServer": "Please select a server",
+      "fillRequired": "Please fill in all required fields"
+    },
+    "categories": {
+      "game_mode": "Game Mode",
+      "entertainment": "Entertainment",
+      "utility": "Utility",
+      "admin": "Admin",
+      "performance": "Performance",
+      "library": "Library",
+      "other": "Other"
+    },
+    "websocket": {
+      "connecting": "Connecting...",
+      "downloading": "Downloading plugin...",
+      "uploading": "Uploading to server...",
+      "installing": "Installing...",
+      "success": "Installation completed successfully!",
+      "failed": "Installation failed",
+      "progress": "Progress: {percent}%"
+    },
+    "description": {
+      "feature1": "1. Plugin Center can add GitHub plugins, supports automatic title and description retrieval, automatic release version identification, no maintenance required",
+      "feature2": "2. Supports file analysis, extraction ignore directory settings, worry-free plugin upgrades",
+      "deploymentTitle": "⚠️ Deployment Recommendation",
+      "deploymentText": "It is strongly recommended to deploy this panel outside of mainland China to avoid GitHub connection issues. If your server is located in mainland China, you can enable \"Use Panel Server Proxy\" in Server Management - Settings - Download Proxy Settings. When enabled, all downloads (SteamCMD, GitHub plugins) will be downloaded to this panel server first, then uploaded to your game server via SFTP with progress display.",
+      "proxyFlow": "Proxy Download Flow"
     }
   }
 }

@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="/static/css/app.css">
     
     <!-- i18n Script - Load Early (with cache busting) -->
-    <script src="/static/js/i18n.js?v=1.0.15"></script>
+    <script src="/static/js/i18n.js?v=1.0.19"></script>
     
     {% block extra_css %}{% endblock %}
 </head>
@@ -37,6 +37,11 @@
                     <li class="nav-item">
                         <a class="nav-link {% if '/servers' in request.url.path %}active{% endif %}" href="/servers-ui">
                             <i class="bi bi-hdd-rack"></i> <span data-i18n="nav.servers">Servers</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if '/plugin-market' in request.url.path %}active{% endif %}" href="/plugin-market">
+                            <i class="bi bi-shop"></i> <span data-i18n="nav.pluginCenter">Plugin Center</span>
                         </a>
                     </li>
                     <li class="nav-item">

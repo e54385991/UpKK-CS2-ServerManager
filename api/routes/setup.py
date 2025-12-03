@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, Tuple, List
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 import asyncssh
 import secrets
 import string
@@ -168,7 +169,8 @@ async def auto_setup_server(
             port=setup_req.ssh_port,
             username=setup_req.ssh_user,
             password=setup_req.ssh_password,
-            known_hosts=None
+            known_hosts=None,
+            connect_timeout=15
         )
         
         logs.append("✓ SSH 连接成功")
@@ -404,6 +406,12 @@ async def auto_setup_server(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="SSH 认证失败，请检查用户名和密码/密钥"
+        )
+    except asyncio.TimeoutError:
+        logs.append("✗ SSH 连接超时")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="SSH 连接超时 - 服务器可能无法访问或响应过慢，请检查网络连接和服务器状态"
         )
     except asyncssh.Error as e:
         logs.append(f"✗ SSH 错误: {str(e)}")
