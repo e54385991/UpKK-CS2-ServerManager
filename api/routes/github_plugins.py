@@ -55,13 +55,18 @@ def parse_github_url(url: str) -> tuple[str, str]:
 
 
 async def get_server_and_verify_ownership(
-    db: AsyncSession, server_id: int, user_id: int
+    db: AsyncSession, server_id: int, user: User
 ) -> Server:
     """
     Get server by ID and verify user ownership.
-    Raises HTTPException if server not found or user doesn't own it.
+    Admins can access any server, regular users can only access their own.
+    Raises HTTPException if server not found or user doesn't have access.
     """
-    server = await Server.get_by_id_and_user(db, server_id, user_id)
+    if user.is_admin:
+        server = await Server.get_by_id(db, server_id)
+    else:
+        server = await Server.get_by_id_and_user(db, server_id, user.id)
+    
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -101,7 +106,7 @@ async def get_github_releases(
     # Get server's GitHub proxy if server_id is provided
     github_proxy = None
     if server_id:
-        server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+        server = await get_server_and_verify_ownership(db, server_id, current_user)
         github_proxy = server.github_proxy
     
     # Limit count to prevent abuse
@@ -209,7 +214,7 @@ async def analyze_archive(
         )
     
     # Get server
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     ssh_manager = SSHManager()
     success, msg = await ssh_manager.connect(server)
@@ -467,7 +472,7 @@ async def install_github_plugin(
     """
     from api.routes.actions import send_deployment_update
     
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     async def progress(msg: str, msg_type: str = "status"):
         """Send progress update via WebSocket"""
@@ -975,7 +980,7 @@ async def analyze_installed_plugins(
     """
     from modules import InstalledPluginAnalysisResponse, InstalledPluginFile
     
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     ssh_manager = SSHManager()
     success, msg = await ssh_manager.connect(server)
@@ -1099,7 +1104,7 @@ async def uninstall_plugin(
     """
     from api.routes.actions import send_deployment_update
     
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     async def progress(msg: str, msg_type: str = "status"):
         """Send progress update via WebSocket"""

@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- 主机： 1Panel-mysql-KZBC
--- 生成日期： 2025-12-02 04:51:22
+-- 生成日期： 2025-12-04 15:09:36
 -- 服务器版本： 8.4.7
 -- PHP 版本： 8.3.27
 
@@ -70,6 +70,31 @@ CREATE TABLE `initialized_servers` (
   `created_at` datetime DEFAULT (now()),
   `updated_at` datetime DEFAULT (now())
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- 表的结构 `market_plugins`
+--
+
+CREATE TABLE `market_plugins` (
+  `id` int NOT NULL,
+  `github_url` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `author` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `version` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `category` enum('GAME_MODE','ENTERTAINMENT','UTILITY','ADMIN','PERFORMANCE','LIBRARY','OTHER') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'OTHER',
+  `tags` text COLLATE utf8mb4_unicode_ci,
+  `is_recommended` tinyint(1) DEFAULT '0',
+  `icon_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `download_count` int DEFAULT '0',
+  `install_count` int DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `dependencies` text COLLATE utf8mb4_unicode_ci,
+  `custom_install_path` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Custom extraction path for non-standard packages (e.g., "addons")'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -168,8 +193,34 @@ CREATE TABLE `servers` (
   `cpu_affinity` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `github_proxy` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'GitHub proxy URL for plugin installation (e.g., https://ghfast.top/https://github.com)',
   `use_panel_proxy` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Use panel server as proxy for all downloads (SteamCMD, GitHub plugins). Mutually exclusive with github_proxy.',
-  `steam_account_token` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL
+  `steam_account_token` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `last_ssh_success` timestamp NULL DEFAULT NULL,
+  `last_ssh_failure` timestamp NULL DEFAULT NULL,
+  `consecutive_ssh_failures` int DEFAULT '0',
+  `is_ssh_down` tinyint(1) DEFAULT '0',
+  `enable_ssh_health_monitoring` tinyint(1) DEFAULT '1',
+  `ssh_health_check_interval_hours` int DEFAULT '2',
+  `ssh_health_failure_threshold` int DEFAULT '84',
+  `last_ssh_health_check` timestamp NULL DEFAULT NULL,
+  `ssh_health_status` varchar(50) COLLATE utf8mb4_general_ci DEFAULT 'unknown'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- 表的结构 `ssh_servers_sudo`
+--
+
+CREATE TABLE `ssh_servers_sudo` (
+  `id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `host` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ssh_port` int NOT NULL DEFAULT '22',
+  `sudo_user` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sudo_password` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -235,6 +286,15 @@ ALTER TABLE `initialized_servers`
   ADD KEY `ix_initialized_servers_id` (`id`);
 
 --
+-- 表的索引 `market_plugins`
+--
+ALTER TABLE `market_plugins`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `github_url` (`github_url`),
+  ADD KEY `idx_market_plugins_github_url` (`github_url`),
+  ADD KEY `idx_market_plugins_title` (`title`);
+
+--
 -- 表的索引 `monitoring_logs`
 --
 ALTER TABLE `monitoring_logs`
@@ -263,6 +323,14 @@ ALTER TABLE `servers`
   ADD KEY `idx_servers_last_status_check` (`last_status_check`),
   ADD KEY `idx_servers_panel_monitoring` (`enable_panel_monitoring`),
   ADD KEY `idx_last_update_check` (`last_update_check`);
+
+--
+-- 表的索引 `ssh_servers_sudo`
+--
+ALTER TABLE `ssh_servers_sudo`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_ssh_sudo_config` (`user_id`,`host`,`ssh_port`,`sudo_user`),
+  ADD KEY `idx_ssh_servers_sudo_user_id` (`user_id`);
 
 --
 -- 表的索引 `users`
@@ -305,6 +373,12 @@ ALTER TABLE `initialized_servers`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
+-- 使用表AUTO_INCREMENT `market_plugins`
+--
+ALTER TABLE `market_plugins`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
 -- 使用表AUTO_INCREMENT `monitoring_logs`
 --
 ALTER TABLE `monitoring_logs`
@@ -320,6 +394,12 @@ ALTER TABLE `scheduled_tasks`
 -- 使用表AUTO_INCREMENT `servers`
 --
 ALTER TABLE `servers`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
+-- 使用表AUTO_INCREMENT `ssh_servers_sudo`
+--
+ALTER TABLE `ssh_servers_sudo`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
@@ -349,6 +429,12 @@ ALTER TABLE `initialized_servers`
 --
 ALTER TABLE `scheduled_tasks`
   ADD CONSTRAINT `scheduled_tasks_ibfk_1` FOREIGN KEY (`server_id`) REFERENCES `servers` (`id`) ON DELETE CASCADE;
+
+--
+-- 限制表 `ssh_servers_sudo`
+--
+ALTER TABLE `ssh_servers_sudo`
+  ADD CONSTRAINT `ssh_servers_sudo_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- 限制表 `user_settings`

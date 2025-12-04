@@ -397,6 +397,13 @@ class ServerResponse(SQLModel):
     model_config = {"from_attributes": True}
 
 
+class ServerResponseWithUser(ServerResponse):
+    """Schema for server response with user information (admin only)"""
+    user: Optional[UserResponse] = None
+    
+    model_config = {"from_attributes": True}
+
+
 class ServerAction(SQLModel):
     """Schema for server actions"""
     action: str = Field(..., description="Server action to perform")

@@ -29,6 +29,21 @@ GITHUB_REPO_PATTERN = re.compile(
 )
 
 
+async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
+    """Helper to get server and verify ownership - admins can access any server"""
+    if current_user.is_admin:
+        server = await Server.get_by_id(db, server_id)
+    else:
+        server = await Server.get_by_id_and_user(db, server_id, current_user.id)
+    
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Server not found"
+        )
+    return server
+
+
 def parse_github_url(url: str) -> tuple[str, str]:
     """
     Parse GitHub repository URL to extract owner and repo name.
@@ -579,12 +594,7 @@ async def install_plugin(
         )
     
     # Verify server ownership
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Server not found"
-        )
+    server = await get_server_for_user(server_id, db, current_user)
     
     # CRITICAL: Check SSH connectivity BEFORE any database modifications
     # This prevents database locks when SSH connection hangs or fails
@@ -825,12 +835,7 @@ async def analyze_plugin_archive(
         )
     
     # Verify server ownership
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Server not found"
-        )
+    server = await get_server_for_user(server_id, db, current_user)
     
     # If download_url is not provided, fetch latest release
     if not download_url:
@@ -944,12 +949,7 @@ async def uninstall_market_plugin(
         )
     
     # Verify server ownership
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Server not found"
-        )
+    server = await get_server_for_user(server_id, db, current_user)
     
     # Use the existing uninstall function
     return await uninstall_plugin(server_id, request, db, current_user)

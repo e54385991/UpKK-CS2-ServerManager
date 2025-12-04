@@ -284,6 +284,32 @@ class Server(SQLModel, table=True):
         return result.scalars().all()
     
     @classmethod
+    async def get_all(cls, session: AsyncSession, skip: int = 0, limit: int = 100) -> List["Server"]:
+        """
+        Get all servers (admin only) with pagination.
+        
+        ⚠️ SECURITY WARNING: This method bypasses all user ownership checks.
+        It MUST only be called from routes protected by get_current_admin_user.
+        Never call this method without proper admin authentication.
+        """
+        result = await session.execute(
+            select(cls).offset(skip).limit(limit)
+        )
+        return result.scalars().all()
+    
+    @classmethod
+    async def get_by_id(cls, session: AsyncSession, server_id: int) -> Optional["Server"]:
+        """
+        Get server by ID (without user restriction, for admin).
+        
+        ⚠️ SECURITY WARNING: This method bypasses all user ownership checks.
+        It MUST only be used in conjunction with admin permission validation.
+        Use get_by_id_and_user for regular user access.
+        """
+        result = await session.execute(select(cls).where(cls.id == server_id))
+        return result.scalar_one_or_none()
+    
+    @classmethod
     async def get_by_api_key(cls, session: AsyncSession, api_key: str) -> Optional["Server"]:
         """Get server by API key"""
         result = await session.execute(select(cls).where(cls.api_key == api_key))
@@ -533,6 +559,78 @@ class MarketPlugin(SQLModel, table=True):
         plugins = result.scalars().all()
         
         return plugins, total_count
+
+
+class SSHServerSudo(SQLModel, table=True):
+    """SSH Server Sudo Configuration model for setup wizard"""
+    __tablename__ = "ssh_servers_sudo"
+    
+    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+    host: str = Field(max_length=255, nullable=False)
+    ssh_port: int = Field(default=22, nullable=False)
+    sudo_user: str = Field(max_length=100, nullable=False)
+    sudo_password: str = Field(max_length=255, nullable=False)
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+    
+    def __repr__(self):
+        return f"<SSHServerSudo(id={self.id}, host='{self.host}', port={self.ssh_port}, user='{self.sudo_user}')>"
+    
+    @classmethod
+    async def get_by_unique_key(
+        cls, 
+        session: AsyncSession, 
+        user_id: int, 
+        host: str, 
+        ssh_port: int, 
+        sudo_user: str
+    ) -> Optional["SSHServerSudo"]:
+        """Get SSH sudo config by unique composite key"""
+        result = await session.execute(
+            select(cls).where(
+                cls.user_id == user_id,
+                cls.host == host,
+                cls.ssh_port == ssh_port,
+                cls.sudo_user == sudo_user
+            )
+        )
+        return result.scalar_one_or_none()
+    
+    @classmethod
+    async def upsert(
+        cls,
+        session: AsyncSession,
+        user_id: int,
+        host: str,
+        ssh_port: int,
+        sudo_user: str,
+        sudo_password: str
+    ) -> "SSHServerSudo":
+        """Insert or update SSH sudo configuration"""
+        # Try to get existing record
+        existing = await cls.get_by_unique_key(session, user_id, host, ssh_port, sudo_user)
+        
+        if existing:
+            # Update existing record (updated_at is handled by database trigger)
+            existing.sudo_password = sudo_password
+            session.add(existing)
+            await session.commit()
+            await session.refresh(existing)
+            return existing
+        else:
+            # Create new record
+            new_record = cls(
+                user_id=user_id,
+                host=host,
+                ssh_port=ssh_port,
+                sudo_user=sudo_user,
+                sudo_password=sudo_password
+            )
+            session.add(new_record)
+            await session.commit()
+            await session.refresh(new_record)
+            return new_record
 
 
 # For backward compatibility with existing code that uses Base.metadata

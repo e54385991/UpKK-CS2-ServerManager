@@ -159,6 +159,31 @@
                                         <span data-i18n="serverDetail.securityGroupHint">Allow TCP+UDP port 27015 (Source: 0.0.0.0/0 for all IPs)</span>
                                     </p>
                                     
+                                    <!-- Aliyun Security Group Example -->
+                                    <div class="mb-3">
+                                        <p class="mb-2">
+                                            <strong data-i18n="serverDetail.aliyunSecurityGroupExample">阿里云轻量服务器安全组设置示例：</strong>
+                                        </p>
+                                        <div class="text-center">
+                                            <img src="/static/images/aliyun-deploy/firewall/firewall-ali.webp" 
+                                                 alt="Aliyun Firewall Example" 
+                                                 class="img-fluid rounded border shadow-sm"
+                                                 style="max-width: 100%; height: auto;">
+                                        </div>
+                                        <p class="text-muted small mt-2" data-i18n="serverDetail.otherCloudProvidersNote">
+                                            其他厂商（腾讯云、Vultr等）设置方法类似，请参考以上示例类推即可。
+                                        </p>
+                                        <p class="text-muted small mt-2" data-i18n="serverDetail.cloudProvidersGeneralNote">
+                                            不管是轻量、腾讯云、阿里云、Google Cloud、Amazon Cloud 都是类似原理，进行类推即可。这里仅以阿里云为例。
+                                        </p>
+                                        <div class="alert alert-warning mt-2" role="alert">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>
+                                            <span data-i18n="serverDetail.chinaSteamDownloadWarning">
+                                                中国大陆服务器可能因为Steam国际连接问题，导致从Steam下载服务器非常缓慢。这种情况您可自行部署代理网关等方法进行加速。这并非本程序的问题，本程序遵循 Valve 文档最佳部署实践。
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
                                     <p class="mb-2">
                                         <strong data-i18n="serverDetail.systemFirewallLabel">System Firewall:</strong>
                                         <span data-i18n="serverDetail.systemFirewallHint">Open UDP port 27015</span>

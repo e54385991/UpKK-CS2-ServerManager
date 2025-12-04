@@ -2,7 +2,7 @@
   "app": {
     "title": "CS2 服务器管理器",
     "subtitle": "Upkk CS2 服务器管理器 & Python v3.14 & FastAPI",
-    "version": "v1.0.0",
+    "version": "v1.0.1",
     "builtWith": "基于 FastAPI、Bootstrap 和 Alpine.js 构建"
   },
   "nav": {
@@ -322,7 +322,23 @@
     "serverPassword": "服务器密码",
     "rconPassword": "RCON 密码",
     "sourceTV": "SourceTV",
+    "steamGSLT": "Steam Game Server Login Token (GSLT)",
+    "steamGSLTHint": "可选 - 公共服务器必需",
+    "steamGSLTInfo": "⚠️ 重要：如使用CS2创意工坊地图必须从Steam社区申请GSLT，AppID为730",
+    "steamGSLTLink": "从这里获取您的Token",
+    "steamGSLTGenerate": "生成",
+    "steamGSLTGenerateInfo": "如果您已在个人设置中设置Steam API密钥，可一键生成",
     "additionalParameters": "附加参数",
+    "additionalParametersAdvanced": "附加参数 (高级)",
+    "additionalParametersHint": "自定义命令行参数",
+    "additionalParametersPlaceholder": "+sv_hibernate_when_empty 1 +mp_autoteambalance 1",
+    "additionalParametersExamples": "启动行推荐示例",
+    "additionalParametersZEExample": "ZE启动示例",
+    "additionalParametersZEDesc": "初始地图为Steam创意工坊的 3171881962（示例地图ID，请替换为您需要的ZE地图）",
+    "additionalParametersZECode": "+sv_hibernate_when_empty 0 +host_workshop_map 3171881962 -nohltv",
+    "additionalParametersKZExample": "KZ启动示例",
+    "additionalParametersKZDesc": "初始地图为Steam创意工坊的 3171881962（示例地图ID，请替换为您需要的KZ地图）",
+    "additionalParametersKZCode": "+sv_hibernate_when_empty 0 +host_workshop_map 3171881962 -nohltv",
     "checkInterval": "检查间隔",
     "autoRestartOnCrash": "崩溃自动重启",
     "crashHistorySettings": "崩溃历史设置",
@@ -574,19 +590,25 @@
     "portNoteHint": "示例使用端口 27015。如果您的游戏端口不同，请替换为实际端口。",
     "deploymentLockDetected": "检测到 SteamCMD 正在运行",
     "deploymentLockMessage": "服务器可能正在更新或部署。如果长时间卡住，您可以尝试清除锁定并重新开始。通常无需操作。",
-    "clearDeploymentLock": "清除部署锁定",
+    "clearDeploymentLock": "清除部署锁定并中断部署",
     "clearing": "清除中...",
     "confirmClearDeploymentLock": "您确定要清除部署锁定吗？\n\n仅在确认没有部署正在运行时执行此操作。",
     "lowDiskSpaceWarning": "警告：检测到磁盘空间不足！\n\n可用空间：{available} GB\n推荐容量：{recommended} GB 或以上\n\n磁盘空间不足可能导致安装失败或服务器问题。\n\n是否仍要继续？",
-    "metamodWarning": {
-      "title": "未安装 Metamod:Source 框架",
-      "message": "运行 CS2 插件需要 Metamod:Source 框架。请在 操作 - 插件框架管理 中安装。",
-      "installButton": "安装 Metamod:Source",
-      "checkingStatus": "正在检查 Metamod 状态...",
-      "installed": "Metamod:Source 已安装",
-      "notInstalled": "Metamod:Source 未安装",
-      "installPath": "安装路径: {path}"
-    }
+    "deploymentLockChinaWarning": "如果您的服务器位于中国大陆：由于中国大陆服务器与Steam服务器连接不佳，部署可能非常缓慢或多次失败。这不属于本程序的问题。建议耐心等待并多次重试，或自行部署代理网关加速。",
+    "workshopMapHint": "如果是创意工坊地图，请设置成官方图（比如 de_dust2），然后使用附加参数设置 +host_workshop_map 工坊地图ID",
+    "aliyunSecurityGroupExample": "阿里云轻量服务器安全组设置示例：",
+    "otherCloudProvidersNote": "其他厂商（腾讯云、Vultr等）设置方法类似，请参考以上示例类推即可。",
+    "cloudProvidersGeneralNote": "不管是轻量、腾讯云、阿里云、Google Cloud、Amazon Cloud 都是类似原理，进行类推即可。这里仅以阿里云为例。",
+    "chinaSteamDownloadWarning": "中国大陆服务器可能因为Steam国际连接问题，导致从Steam下载服务器非常缓慢。这种情况您可自行部署代理网关等方法进行加速。这并非本程序的问题，本程序遵循 Valve 文档最佳部署实践。"
+  },
+  "pluginFrameworkManagement": {
+    "description": "安装插件框架以启用服务器修改和自定义插件。",
+    "metamodDescription": "Source 2 引擎的插件加载器",
+    "metamodRequiredNotice": "几乎所有 CS2 插件都依赖 Metamod:Source，因此必须友好安装此框架。",
+    "metamodCardDescription": "Source 2 引擎的插件加载器。",
+    "metamodEssential": "几乎所有插件都需要此框架！",
+    "cssDescription": "使用 C# 编写 CS2 插件",
+    "cssCardDescription": "使用 C# 编写 CS2 服务器插件。需要 Metamod:Source。"
   },
   "setupWizard": {
     "title": "新服务器初始化",
@@ -963,7 +985,8 @@
     },
     "step10": {
       "title": "步骤 10"
-    }
+    },
+    "chinaSteamWarning": "中国大陆服务器可能因为Steam国际连接问题导致从Steam下载服务器非常缓慢。这种情况您可自行部署代理网关等方法进行加速。这并非本程序的问题，本程序遵循Valve文档及最佳部署实践。"
   },
   "pluginMarket": {
     "title": "插件中心",

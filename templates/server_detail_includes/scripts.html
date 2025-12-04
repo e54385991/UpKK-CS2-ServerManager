@@ -30,8 +30,7 @@
                                                                                     loadingA2SCheckLogs: false,
                                                                                         pluginSelection: {
             metamod: false,
-                counterstrikesharp: false,
-                cs2fixes: false
+                counterstrikesharp: false
         },
         // Deployment lock tracking
         deploymentLockExists: false,
@@ -1139,8 +1138,6 @@
                 'update_metamod': 'Update Metamod:Source',
                 'install_counterstrikesharp': 'Install CounterStrikeSharp',
                 'update_counterstrikesharp': 'Update CounterStrikeSharp',
-                'install_cs2fixes': 'Install CS2Fixes',
-                'update_cs2fixes': 'Update CS2Fixes',
                 'backup_plugins': window.i18n?.t('serverDetail.backupPlugins') || 'Backup Plugins',
                 'install_github_plugin': window.i18n?.t('serverDetail.installFromGitHub') || 'Install from GitHub'
             };
@@ -1289,9 +1286,6 @@
             if (this.pluginSelection.counterstrikesharp) {
                 plugins.push('counterstrikesharp');
             }
-            if (this.pluginSelection.cs2fixes) {
-                plugins.push('cs2fixes');
-            }
 
             if (plugins.length === 0) {
                 this.addLog('error', 'Please select at least one plugin framework to install');
@@ -1317,8 +1311,7 @@
             // Action mapping for plugins
             const actionMap = {
                 'metamod': 'install_metamod',
-                'counterstrikesharp': 'install_counterstrikesharp',
-                'cs2fixes': 'install_cs2fixes'
+                'counterstrikesharp': 'install_counterstrikesharp'
             };
 
             // Install plugins sequentially
@@ -1337,7 +1330,6 @@
             // Reset selection after installation
             this.pluginSelection.metamod = false;
             this.pluginSelection.counterstrikesharp = false;
-            this.pluginSelection.cs2fixes = false;
         },
 
         // Get the backup path based on server's game directory
@@ -2864,42 +2856,6 @@
                 });
             });
         });
-        
-        // Metamod status checker
-        function metamodStatus() {
-            return {
-                checking: true,
-                metamodInstalled: false,
-                metamodPath: null,
-                error: null,
-                
-                async checkMetamodStatus() {
-                    this.checking = true;
-                    try {
-                        const response = await fetch(`/servers/{{ server.id }}/metamod-status`, {
-                            headers: {
-                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-                            }
-                        });
-                        
-                        if (response.ok) {
-                            const data = await response.json();
-                            this.metamodInstalled = data.installed;
-                            this.metamodPath = data.path;
-                            this.error = data.error;
-                        } else {
-                            console.error('Failed to check metamod status');
-                            this.error = 'Failed to check metamod status';
-                        }
-                    } catch (error) {
-                        console.error('Error checking metamod status:', error);
-                        this.error = error.message;
-                    } finally {
-                        this.checking = false;
-                    }
-                }
-            };
-        }
         
         // GitHub Plugin Uninstall Functions
         let githubUninstallFiles = [];

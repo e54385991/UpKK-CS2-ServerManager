@@ -79,8 +79,13 @@
                                                 placeholder="My CS2 Server">
                                         </div>
                                         <div class="col-md-6">
-                                            <label class="form-label">Default Map</label>
-                                            <select class="form-select" x-model="configForm.default_map">
+                                            <label class="form-label" data-i18n="serverDetail.defaultMap">Default Map</label>
+                                            <input type="text" 
+                                                   class="form-control" 
+                                                   x-model="configForm.default_map"
+                                                   list="map-options"
+                                                   placeholder="de_dust2">
+                                            <datalist id="map-options">
                                                 <option value="de_dust2">de_dust2</option>
                                                 <option value="de_mirage">de_mirage</option>
                                                 <option value="de_inferno">de_inferno</option>
@@ -88,7 +93,10 @@
                                                 <option value="de_ancient">de_ancient</option>
                                                 <option value="de_anubis">de_anubis</option>
                                                 <option value="de_vertigo">de_vertigo</option>
-                                            </select>
+                                            </datalist>
+                                            <small class="form-text text-muted" data-i18n="serverDetail.workshopMapHint">
+                                                如果是创意工坊地图，请设置成官方图（比如 de_dust2），然后使用附加参数设置 +host_workshop_map 工坊地图ID
+                                            </small>
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label">Max Players</label>
@@ -153,23 +161,32 @@
                                                 x-model="configForm.rcon_password" placeholder="Admin password">
                                         </div>
                                         <div class="col-md-12">
-                                            <label class="form-label">Steam Game Server Login Token (GSLT)</label>
+                                            <label class="form-label" data-i18n="serverDetail.steamGSLT">Steam Game Server Login Token (GSLT)</label>
                                             <div class="input-group mb-2">
                                                 <input type="text" class="form-control"
                                                     x-model="configForm.steam_account_token"
+                                                    data-i18n-placeholder="serverDetail.steamGSLTHint"
                                                     placeholder="Optional - Required for public servers"
                                                     id="steam-token-input">
                                                 <button type="button" class="btn btn-outline-secondary" 
                                                     @click="showTokenGeneratorModal = true"
                                                     :disabled="generatingToken">
-                                                    <i class="bi bi-magic"></i> Generate
+                                                    <i class="bi bi-magic"></i> <span data-i18n="serverDetail.steamGSLTGenerate">Generate</span>
                                                 </button>
                                             </div>
                                             <small class="text-muted">
-                                                Get your token from 
+                                                <span data-i18n="serverDetail.steamGSLTInfo">⚠️ Important: GSLT is required if using CS2 Workshop maps. Apply for GSLT from Steam Community, AppID 730</span>
+                                            </small>
+                                            <br>
+                                            <small class="text-muted">
+                                                <span data-i18n="serverDetail.steamGSLTLink">Get your token from here</span>: 
                                                 <a href="https://steamcommunity.com/dev/managegameservers" target="_blank" rel="noopener">
                                                     Steam Game Server Management <i class="bi bi-box-arrow-up-right"></i>
-                                                </a> or generate with one click if you've set your Steam API key in profile settings.
+                                                </a>
+                                            </small>
+                                            <br>
+                                            <small class="text-muted">
+                                                <span data-i18n="serverDetail.steamGSLTGenerateInfo">Generate with one click if you've set your Steam API key in profile settings</span>
                                             </small>
                                         </div>
                                         <div class="col-md-4">
@@ -185,12 +202,55 @@
                                                 placeholder="27020">
                                         </div>
                                         <div class="col-12">
-                                            <label class="form-label">Additional Parameters (Advanced)</label>
+                                            <label class="form-label" data-i18n="serverDetail.additionalParametersAdvanced">Additional Parameters (Advanced)</label>
                                             <input type="text" class="form-control"
                                                 x-model="configForm.additional_parameters"
+                                                data-i18n-placeholder="serverDetail.additionalParametersPlaceholder"
                                                 placeholder="+sv_hibernate_when_empty 1 +mp_autoteambalance 1">
-                                            <small class="text-muted">Custom command-line parameters (e.g., +sv_cheats 0
-                                                +mp_limitteams 1)</small>
+                                            <small class="text-muted">
+                                                <span data-i18n="serverDetail.additionalParametersHint">Custom command-line parameters</span>
+                                            </small>
+                                            
+                                            <!-- Startup Examples -->
+                                            <div class="mt-3">
+                                                <strong data-i18n="serverDetail.additionalParametersExamples">Recommended Startup Examples:</strong>
+                                                
+                                                <!-- ZE Example -->
+                                                <div class="mt-2 p-2 bg-light rounded">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <strong data-i18n="serverDetail.additionalParametersZEExample">ZE Startup Example</strong>
+                                                    </div>
+                                                    <small class="text-muted" data-i18n="serverDetail.additionalParametersZEDesc">Initial map from Steam Workshop: 3171881962</small>
+                                                    <div class="input-group input-group-sm mt-1">
+                                                        <input type="text" class="form-control font-monospace" 
+                                                            value="+sv_hibernate_when_empty 0 +host_workshop_map 3171881962 -nohltv" 
+                                                            readonly 
+                                                            id="ze-example">
+                                                        <button type="button" class="btn btn-outline-secondary" 
+                                                            @click="configForm.additional_parameters = '+sv_hibernate_when_empty 0 +host_workshop_map 3171881962 -nohltv'">
+                                                            <i class="bi bi-clipboard"></i> Use
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- KZ Example -->
+                                                <div class="mt-2 p-2 bg-light rounded">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <strong data-i18n="serverDetail.additionalParametersKZExample">KZ Startup Example</strong>
+                                                    </div>
+                                                    <small class="text-muted" data-i18n="serverDetail.additionalParametersKZDesc">Initial map from Steam Workshop: 3171881962</small>
+                                                    <div class="input-group input-group-sm mt-1">
+                                                        <input type="text" class="form-control font-monospace" 
+                                                            value="+sv_hibernate_when_empty 0 +host_workshop_map 3171881962 -nohltv" 
+                                                            readonly 
+                                                            id="kz-example">
+                                                        <button type="button" class="btn btn-outline-secondary" 
+                                                            @click="configForm.additional_parameters = '+sv_hibernate_when_empty 0 +host_workshop_map 3171881962 -nohltv'">
+                                                            <i class="bi bi-clipboard"></i> Use
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="mt-3">

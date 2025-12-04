@@ -85,8 +85,12 @@ class ExtractArchiveRequest(SQLModel):
 
 
 async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
-    """Helper to get server and verify ownership"""
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
+    """Helper to get server and verify ownership - admins can access any server"""
+    if current_user.is_admin:
+        server = await Server.get_by_id(db, server_id)
+    else:
+        server = await Server.get_by_id_and_user(db, server_id, current_user.id)
+    
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

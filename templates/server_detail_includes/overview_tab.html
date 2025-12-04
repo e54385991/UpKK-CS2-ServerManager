@@ -85,29 +85,6 @@
                                     </div>
                                 </div>
                                 
-                                <!-- Metamod Warning Alert -->
-                                <div x-data="metamodStatus()" x-init="checkMetamodStatus()" x-show="deploymentStatus.isDeployed && !metamodInstalled && !checking" x-cloak class="alert alert-danger mt-3" role="alert">
-                                    <div class="d-flex align-items-center">
-                                        <i class="bi bi-exclamation-octagon-fill me-2" style="font-size: 1.5rem;"></i>
-                                        <div class="flex-grow-1">
-                                            <h6 class="alert-heading mb-1" data-i18n="serverDetail.metamodWarning.title">Metamod:Source Framework Not Installed</h6>
-                                            <p class="mb-0 small" data-i18n="serverDetail.metamodWarning.message">
-                                                Metamod:Source framework is required to run CS2 plugins. Please install it from Actions - Plugin Framework Management.
-                                            </p>
-                                        </div>
-                                        <button @click="
-                                            document.querySelector('#actions-tab').click(); 
-                                            setTimeout(() => {
-                                                const actionsSection = document.querySelector('#actions');
-                                                if (actionsSection) {
-                                                    actionsSection.scrollIntoView({ behavior: 'smooth' });
-                                                }
-                                            }, 100)
-                                        " class="btn btn-danger">
-                                            <i class="bi bi-box-seam"></i> <span data-i18n="serverDetail.metamodWarning.installButton">Install Metamod:Source</span>
-                                        </button>
-                                    </div>
-                                </div>
                             </div>
 
                             <!-- Edit Mode -->

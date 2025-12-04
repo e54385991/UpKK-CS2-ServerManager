@@ -622,6 +622,40 @@ async def migrate_db():
         else:
             print("✓ category enum is using correct uppercase values")
         
+        # Check if ssh_servers_sudo table exists
+        result = await conn.execute(
+            text("""
+                SELECT TABLE_NAME 
+                FROM INFORMATION_SCHEMA.TABLES 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'ssh_servers_sudo'
+            """)
+        )
+        ssh_servers_sudo_exists = result.fetchone() is not None
+        
+        if not ssh_servers_sudo_exists:
+            print("Creating ssh_servers_sudo table...")
+            await conn.execute(
+                text("""
+                    CREATE TABLE ssh_servers_sudo (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        host VARCHAR(255) NOT NULL,
+                        ssh_port INT NOT NULL DEFAULT 22,
+                        sudo_user VARCHAR(100) NOT NULL,
+                        sudo_password VARCHAR(255) NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        UNIQUE KEY unique_ssh_sudo_config (user_id, host, ssh_port, sudo_user),
+                        INDEX idx_ssh_servers_sudo_user_id (user_id),
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """)
+            )
+            print("✓ Migration completed: ssh_servers_sudo table created")
+        else:
+            print("✓ ssh_servers_sudo table exists")
+        
         print("✓ Database schema migration completed")
 
 

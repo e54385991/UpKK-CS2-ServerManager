@@ -10,6 +10,7 @@ import asyncio
 import json
 import uuid
 import secrets
+import logging
 
 from modules import (
     Server, DeploymentLog, ServerStatus,
@@ -19,6 +20,8 @@ from modules import (
 )
 from modules.database import async_session_maker
 from services import SSHManager, redis_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["actions"])
 
@@ -31,13 +34,18 @@ _background_tasks: Set[asyncio.Task] = set()
 
 
 async def get_server_and_verify_ownership(
-    db: AsyncSession, server_id: int, user_id: int
+    db: AsyncSession, server_id: int, user: User
 ) -> Server:
     """
     Get server by ID and verify user ownership.
-    Raises HTTPException if server not found or user doesn't own it.
+    Admins can access any server, regular users can only access their own.
+    Raises HTTPException if server not found or user doesn't have access.
     """
-    server = await Server.get_by_id_and_user(db, server_id, user_id)
+    if user.is_admin:
+        server = await Server.get_by_id(db, server_id)
+    else:
+        server = await Server.get_by_id_and_user(db, server_id, user.id)
+    
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -192,7 +200,7 @@ async def check_deployment_lock(
         HTTPException 404: Server not found or user doesn't own it
     """
     # Verify user owns this server
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     deployment_lock_key = f"deployment_lock:{server_id}"
     lock_exists = await redis_manager.get(deployment_lock_key)
@@ -212,43 +220,83 @@ async def cancel_deployment(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Cancel an in-progress or stuck deployment by clearing the deployment lock.
+    Cancel an in-progress or stuck deployment by clearing the deployment lock
+    and forcefully terminating related SteamCMD processes.
     
     This endpoint allows users to clear a deployment lock that may be stuck
-    due to interruptions, crashes, or other issues. Use with caution as clearing
-    the lock while a deployment is actually running may cause issues.
+    due to interruptions, crashes, or other issues. It will also forcefully kill
+    any running SteamCMD processes to ensure a clean slate.
     """
-    # Verify user owns this server
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
-    
-    deployment_lock_key = f"deployment_lock:{server_id}"
-    lock_exists = await redis_manager.get(deployment_lock_key)
-    
-    if not lock_exists:
+    try:
+        # Verify user owns this server
+        server = await get_server_and_verify_ownership(db, server_id, current_user)
+        
+        deployment_lock_key = f"deployment_lock:{server_id}"
+        lock_exists = await redis_manager.get(deployment_lock_key)
+        
+        if not lock_exists:
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "message": "No deployment lock found for this server"
+                }
+            )
+        
+        # Kill any running SteamCMD processes
+        ssh_manager = SSHManager()
+        killed_processes = False
+        try:
+            success, msg = await ssh_manager.connect(server)
+            if success:
+                # Find and kill SteamCMD processes
+                kill_cmd = "pkill -9 steamcmd || true"
+                success_kill, output, error = await ssh_manager.execute_command(kill_cmd)
+                killed_processes = True
+                logger.info(f"Attempted to kill SteamCMD processes for server {server_id}")
+            else:
+                logger.warning(f"Could not connect to server {server_id} to kill SteamCMD: {msg}")
+        except Exception as e:
+            logger.warning(f"Failed to kill SteamCMD processes for server {server_id}: {e}")
+        finally:
+            try:
+                await ssh_manager.disconnect()
+            except Exception as e:
+                logger.debug(f"Error disconnecting SSH for server {server_id}: {e}")
+        
+        # Clear the deployment lock
+        await redis_manager.delete(deployment_lock_key)
+        
+        # Also clear deployment progress
+        await redis_manager.clear_deployment_progress(server_id)
+        
+        # Update server status if it's stuck in DEPLOYING
+        if server.status == ServerStatus.DEPLOYING:
+            server.status = ServerStatus.ERROR
+            await db.commit()
+        
+        message = "Deployment lock cleared successfully"
+        if killed_processes:
+            message += " and SteamCMD processes terminated"
+        message += ". You can now start a new operation."
+        
         return JSONResponse(
             content={
                 "success": True,
-                "message": "No deployment lock found for this server"
+                "message": message
             }
         )
-    
-    # Clear the deployment lock
-    await redis_manager.delete(deployment_lock_key)
-    
-    # Also clear deployment progress
-    await redis_manager.clear_deployment_progress(server_id)
-    
-    # Update server status if it's stuck in DEPLOYING
-    if server.status == ServerStatus.DEPLOYING:
-        server.status = ServerStatus.ERROR
-        await db.commit()
-    
-    return JSONResponse(
-        content={
-            "success": True,
-            "message": "Deployment lock cleared successfully. You can now start a new operation."
-        }
-    )
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 403, 404) to be handled by FastAPI
+        raise
+    except Exception as e:
+        logger.error(f"Error clearing deployment lock for server {server_id}: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to clear deployment lock: {str(e)}"
+            }
+        )
 
 
 @router.post("/servers/{server_id}/actions", response_model=ActionResponse)
@@ -259,7 +307,7 @@ async def server_action(
     current_user: User = Depends(get_current_active_user)
 ):
     """Execute action on server (deploy, start, stop, restart, status)"""
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     # Check if server is already being deployed (prevent concurrent operations during deployment)
     action = action_data.action
@@ -669,7 +717,7 @@ async def get_deployment_progress(
     or if the WebSocket connection was lost. Useful for recovering progress after
     program restart or SSH disconnect.
     """
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     # Get accumulated progress from Redis
     progress = await redis_manager.get_deployment_progress(server_id)
@@ -690,14 +738,14 @@ async def get_server_logs(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get deployment logs for a server"""
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     logs = await DeploymentLog.get_logs_by_server(db, server_id, skip, limit)
     
     return logs
 
 
-async def execute_single_server_action(server_id: int, action: str, user_id: int, batch_id: str):
+async def execute_single_server_action(server_id: int, action: str, user_id: int, is_admin: bool, batch_id: str):
     """
     Execute an action on a single server in the background.
     This function is designed to run as a background task.
@@ -706,6 +754,7 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
         server_id: Server ID
         action: Action to perform (restart, stop, update)
         user_id: User ID for ownership verification
+        is_admin: Whether the user is an admin
         batch_id: Batch ID for tracking progress
     """
     import logging
@@ -717,7 +766,10 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
         
         # Get server and verify ownership - close DB session quickly to avoid pool exhaustion
         async with async_session_maker() as db:
-            server = await Server.get_by_id_and_user(db, server_id, user_id)
+            if is_admin:
+                server = await Server.get_by_id(db, server_id)
+            else:
+                server = await Server.get_by_id_and_user(db, server_id, user_id)
             
             if not server:
                 await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
@@ -837,7 +889,7 @@ async def batch_server_actions(
     # Tasks are stored to prevent garbage collection
     for server_id in valid_server_ids:
         task = asyncio.create_task(
-            execute_single_server_action(server_id, request.action, current_user.id, batch_id)
+            execute_single_server_action(server_id, request.action, current_user.id, current_user.is_admin, batch_id)
         )
         _store_task(task)
     
@@ -892,7 +944,7 @@ async def get_batch_action_status(
     }
 
 
-async def execute_single_server_plugins(server_id: int, plugins: List[str], user_id: int, batch_id: str):
+async def execute_single_server_plugins(server_id: int, plugins: List[str], user_id: int, is_admin: bool, batch_id: str):
     """
     Install plugins on a single server in the background.
     This function is designed to run as a background task.
@@ -901,6 +953,7 @@ async def execute_single_server_plugins(server_id: int, plugins: List[str], user
         server_id: Server ID
         plugins: List of plugins to install
         user_id: User ID for ownership verification
+        is_admin: Whether the user is an admin
         batch_id: Batch ID for tracking progress
     """
     import logging
@@ -912,7 +965,10 @@ async def execute_single_server_plugins(server_id: int, plugins: List[str], user
         
         # Get server and verify ownership - close DB session quickly to avoid pool exhaustion
         async with async_session_maker() as db:
-            server = await Server.get_by_id_and_user(db, server_id, user_id)
+            if is_admin:
+                server = await Server.get_by_id(db, server_id)
+            else:
+                server = await Server.get_by_id_and_user(db, server_id, user_id)
             
             if not server:
                 await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
@@ -1023,7 +1079,7 @@ async def batch_install_plugins(
     # Tasks are stored to prevent garbage collection
     for server_id in valid_server_ids:
         task = asyncio.create_task(
-            execute_single_server_plugins(server_id, request.plugins, current_user.id, batch_id)
+            execute_single_server_plugins(server_id, request.plugins, current_user.id, current_user.is_admin, batch_id)
         )
         _store_task(task)
     
@@ -1276,7 +1332,7 @@ async def get_ssh_connection_info(
     Returns connection status, age, reconnection count, and pooling status.
     """
     # Get server and verify ownership
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     # Get connection info from pool
     from services.ssh_connection_pool import ssh_connection_pool
@@ -1299,7 +1355,7 @@ async def reconnect_ssh(
     from sqlalchemy import update as sql_update
     
     # Get server and verify ownership
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     # Clear the SSH down flag to allow reconnection
     if server.is_ssh_down:
@@ -1346,7 +1402,7 @@ async def reset_reconnect_counter(
     Reset the reconnection counter for a server without reconnecting.
     """
     # Get server and verify ownership
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     # Reset counter through pool
     from services.ssh_connection_pool import ssh_connection_pool
@@ -1383,7 +1439,7 @@ async def get_metamod_status(
     from modules import MetamodStatusResponse
     
     # Get server and verify ownership
-    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
     
     # Create cache key
     cache_key = f"metamod_status:server:{server_id}"

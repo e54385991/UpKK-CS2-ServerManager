@@ -523,9 +523,47 @@ echo "密码: ${this.password}"`;
                     }, 100);
                 };
 
+                // Generate a unique session ID for WebSocket
+                // Use crypto.randomUUID if available, otherwise fallback to custom implementation
+                const sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+                    ? crypto.randomUUID()
+                    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                        return v.toString(16);
+                    });
+                let ws = null;
+
                 try {
-                    addLog('Initializing setup process...');
-                    addLog(`Connecting to ${this.autoSetupForm.host}:${this.autoSetupForm.ssh_port}...`);
+                    addLog('正在建立实时日志连接...');
+                    
+                    // Connect to WebSocket for real-time logs
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/api/setup/setup-progress/${sessionId}`;
+                    
+                    ws = new WebSocket(wsUrl);
+                    
+                    ws.onopen = () => {
+                        addLog('✓ 实时日志连接已建立');
+                    };
+                    
+                    ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            addLog(data.message);
+                        } catch (e) {
+                            console.error('Failed to parse WebSocket message:', e);
+                        }
+                    };
+                    
+                    ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        addLog('⚠ 实时日志连接出错，将在完成后显示所有日志');
+                    };
+
+                    // Wait a bit for WebSocket to connect
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    addLog('正在执行服务器初始化...');
 
                     const payload = {
                         name: this.autoSetupForm.name,
@@ -537,7 +575,8 @@ echo "密码: ${this.password}"`;
                         save_config: this.autoSetupForm.save_config,
                         open_game_ports: this.autoSetupForm.open_game_ports,
                         captcha_token: this.autoSetupForm.captcha_token,
-                        captcha_code: this.autoSetupForm.captcha_code
+                        captcha_code: this.autoSetupForm.captcha_code,
+                        session_id: sessionId  // Include session_id for real-time updates
                     };
 
                     // Only provide sudo_password if explicitly different
@@ -545,7 +584,6 @@ echo "密码: ${this.password}"`;
                         payload.sudo_password = this.autoSetupForm.sudo_password;
                     }
 
-                    addLog('正在执行服务器初始化...');
                     const response = await authFetch('/api/setup/auto-setup', {
                         method: 'POST',
                         headers: {
@@ -557,8 +595,10 @@ echo "密码: ${this.password}"`;
                     const result = await response.json();
 
                     if (response.ok) {
-                        // Replace initial progress logs with detailed server logs
-                        this.setupLogs = result.logs.map((msg, i) => ({ id: i, message: msg }));
+                        // If WebSocket didn't work, show all logs from response
+                        if (!ws || ws.readyState !== WebSocket.OPEN) {
+                            this.setupLogs = result.logs.map((msg, i) => ({ id: i, message: msg }));
+                        }
                         this.setupResult = result;
 
                         // Reload initialized servers list if config was saved
@@ -578,6 +618,10 @@ echo "密码: ${this.password}"`;
                     // Refresh CAPTCHA on error
                     this.loadSetupCaptcha();
                 } finally {
+                    // Close WebSocket connection
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.close();
+                    }
                     this.isProcessing = false;
                 }
             },

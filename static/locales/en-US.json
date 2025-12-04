@@ -2,7 +2,7 @@
   "app": {
     "title": "CS2 Server Manager",
     "subtitle": "Upkk CS2 Server Manager & Python v3.14 & FastAPI",
-    "version": "v1.0.0",
+    "version": "v1.0.1",
     "builtWith": "Built with FastAPI, Bootstrap & Alpine.js"
   },
   "nav": {
@@ -322,7 +322,23 @@
     "serverPassword": "Server Password",
     "rconPassword": "RCON Password",
     "sourceTV": "SourceTV",
+    "steamGSLT": "Steam Game Server Login Token (GSLT)",
+    "steamGSLTHint": "Optional - Required for public servers",
+    "steamGSLTInfo": "⚠️ Important: GSLT is required if using CS2 Workshop maps. Apply for GSLT from Steam Community, AppID 730",
+    "steamGSLTLink": "Get your token from here",
+    "steamGSLTGenerate": "Generate",
+    "steamGSLTGenerateInfo": "Generate with one click if you've set your Steam API key in profile settings",
     "additionalParameters": "Additional Parameters",
+    "additionalParametersAdvanced": "Additional Parameters (Advanced)",
+    "additionalParametersHint": "Custom command-line parameters",
+    "additionalParametersPlaceholder": "+sv_hibernate_when_empty 1 +mp_autoteambalance 1",
+    "additionalParametersExamples": "Recommended Startup Examples",
+    "additionalParametersZEExample": "ZE Startup Example",
+    "additionalParametersZEDesc": "Initial map from Steam Workshop: 3171881962 (example map ID, replace with your desired ZE map)",
+    "additionalParametersZECode": "+sv_hibernate_when_empty 0 +host_workshop_map 3171881962 -nohltv",
+    "additionalParametersKZExample": "KZ Startup Example",
+    "additionalParametersKZDesc": "Initial map from Steam Workshop: 3171881962 (example map ID, replace with your desired KZ map)",
+    "additionalParametersKZCode": "+sv_hibernate_when_empty 0 +host_workshop_map 3171881962 -nohltv",
     "checkInterval": "Check Interval",
     "autoRestartOnCrash": "Auto-Restart on Crash",
     "crashHistorySettings": "Crash History Settings",
@@ -574,19 +590,25 @@
     "portNoteHint": "The examples use port 27015. Replace with your actual game port if different.",
     "deploymentLockDetected": "SteamCMD Running Detected",
     "deploymentLockMessage": "Server may be updating or deploying. If stuck for a long time, you can try clearing the lock and restarting. Usually no action is needed.",
-    "clearDeploymentLock": "Clear Deployment Lock",
+    "clearDeploymentLock": "Clear Lock and Interrupt Deployment",
     "clearing": "Clearing...",
     "confirmClearDeploymentLock": "Are you sure you want to clear the deployment lock?\n\nOnly do this if no deployment is actually running.",
     "lowDiskSpaceWarning": "WARNING: Low disk space detected!\n\nAvailable space: {available} GB\nRecommended: {recommended} GB or more\n\nDeploying with low disk space may cause installation failures or server issues.\n\nDo you want to continue anyway?",
-    "metamodWarning": {
-      "title": "Metamod:Source Framework Not Installed",
-      "message": "Metamod:Source framework is required to run CS2 plugins. Please install it from Actions - Plugin Framework Management.",
-      "installButton": "Install Metamod:Source",
-      "checkingStatus": "Checking Metamod status...",
-      "installed": "Metamod:Source is installed",
-      "notInstalled": "Metamod:Source is NOT installed",
-      "installPath": "Installation path: {path}"
-    }
+    "deploymentLockChinaWarning": "If your server is located in mainland China: Servers in mainland China may experience very slow deployment or multiple failures due to poor connectivity with Steam servers. This is not a bug of this program. We recommend being patient and retrying multiple times, or deploying a proxy gateway for acceleration.",
+    "workshopMapHint": "For workshop maps, set to an official map (e.g., de_dust2), then use additional parameters to set +host_workshop_map WorkshopMapID",
+    "aliyunSecurityGroupExample": "Aliyun Lightweight Server Security Group Example:",
+    "otherCloudProvidersNote": "Other cloud providers (Tencent Cloud, Vultr, etc.) have similar settings. Please refer to the example above.",
+    "cloudProvidersGeneralNote": "Whether it's lightweight servers, Tencent Cloud, Aliyun, Google Cloud, or Amazon Cloud, the principle is similar. This example uses Aliyun for reference.",
+    "chinaSteamDownloadWarning": "Servers in mainland China may experience very slow Steam server downloads due to international connectivity issues. You may deploy a proxy gateway or other methods for acceleration. This is not an issue with this program - it follows Valve documentation best practices."
+  },
+  "pluginFrameworkManagement": {
+    "description": "Install plugin frameworks to enable server modifications and custom plugins.",
+    "metamodDescription": "Plugin loader for Source 2 engine",
+    "metamodRequiredNotice": "Almost all CS2 plugins depend on Metamod:Source. It is essential for plugin functionality.",
+    "metamodCardDescription": "Plugin loader for Source 2 engine.",
+    "metamodEssential": "Almost all plugins require this!",
+    "cssDescription": "Write CS2 plugins in C#",
+    "cssCardDescription": "Write CS2 server plugins in C#. Requires Metamod:Source."
   },
   "setupWizard": {
     "title": "New Server Initialization",
@@ -963,7 +985,8 @@
     },
     "step10": {
       "title": "Step 10"
-    }
+    },
+    "chinaSteamWarning": "Mainland China servers may experience very slow Steam downloads due to international connectivity issues. You can deploy a proxy gateway or other acceleration methods. This is not a problem with this program. This program follows Valve documentation and best deployment practices."
   },
   "pluginMarket": {
     "title": "Plugin Center",

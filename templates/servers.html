@@ -27,16 +27,30 @@
     </div>
 
     <!-- Disk Space Refresh Button -->
-    <div class="mb-3">
-        <button @click="manualRefreshDiskSpace()" 
-                :disabled="diskSpaceRefreshing"
-                class="btn btn-outline-secondary btn-sm">
-            <i class="bi" :class="diskSpaceRefreshing ? 'bi-arrow-clockwise spin' : 'bi-arrow-clockwise'"></i>
-            <span data-i18n="servers.diskSpace.refresh">Refresh Disk Space</span>
-        </button>
-        <span x-show="diskSpaceRefreshing" class="text-muted ms-2">
-            <span data-i18n="servers.diskSpace.refreshing">Refreshing...</span>
-        </span>
+    <div class="mb-3 d-flex justify-content-between align-items-center">
+        <div>
+            <button @click="manualRefreshDiskSpace()" 
+                    :disabled="diskSpaceRefreshing"
+                    class="btn btn-outline-secondary btn-sm">
+                <i class="bi" :class="diskSpaceRefreshing ? 'bi-arrow-clockwise spin' : 'bi-arrow-clockwise'"></i>
+                <span data-i18n="servers.diskSpace.refresh">Refresh Disk Space</span>
+            </button>
+            <span x-show="diskSpaceRefreshing" class="text-muted ms-2">
+                <span data-i18n="servers.diskSpace.refreshing">Refreshing...</span>
+            </span>
+        </div>
+        <!-- Admin View Toggle -->
+        <div x-show="currentUser?.is_admin" x-cloak>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" 
+                       id="adminViewToggle" 
+                       x-model="adminViewMode" 
+                       @change="toggleAdminView()">
+                <label class="form-check-label" for="adminViewToggle">
+                    <i class="bi bi-shield-check"></i> Admin View (All Users)
+                </label>
+            </div>
+        </div>
     </div>
 
     <!-- Bulk Actions Bar -->
@@ -132,7 +146,15 @@
                                        :checked="isSelected(server.id)"
                                        @change="toggleServer(server.id)"
                                        :id="'server-' + server.id">
-                                <label :for="'server-' + server.id" class="mb-0" x-text="server.name"></label>
+                                <div>
+                                    <label :for="'server-' + server.id" class="mb-0" x-text="server.name"></label>
+                                    <!-- Show user info in admin mode -->
+                                    <div x-show="adminViewMode && server.user" x-cloak class="text-muted small">
+                                        <i class="bi bi-person-badge"></i>
+                                        <span x-text="server.user.username"></span>
+                                        <span x-show="server.user.is_admin" class="badge bg-warning ms-1">Admin</span>
+                                    </div>
+                                </div>
                             </div>
                             <span class="status-badge" :class="'status-' + server.status.toLowerCase()">
                                 <span class="status-dot"></span>
@@ -545,8 +567,12 @@ function serverManager() {
         sshHealthInterval: null,  // Interval for SSH health polling
         pollAttempts: 0,  // Track polling attempts
         maxAggressivePolls: 20,  // Max aggressive polls (20 * 3s = 60s max)
+        currentUser: null,  // Current user info
+        adminViewMode: false,  // Admin view mode toggle
         
         async init() {
+            // Load current user info first
+            await this.loadCurrentUser();
             await this.loadServers();
             // Initial A2S data load
             await this.refreshA2SData();
@@ -560,6 +586,17 @@ function serverManager() {
             this.startDiskSpacePolling();
             // Start SSH health polling (every 5 minutes)
             this.startSSHHealthPolling();
+        },
+        
+        async loadCurrentUser() {
+            try {
+                const response = await authFetch('/api/auth/me');
+                if (response.ok) {
+                    this.currentUser = await response.json();
+                }
+            } catch (err) {
+                console.error('Failed to load current user:', err);
+            }
         },
         
         startPolling() {
@@ -581,14 +618,39 @@ function serverManager() {
             this.loading = true;
             this.error = null;
             try {
-                const response = await authFetch('/servers');
-                if (!response.ok) throw new Error('Failed to load servers');
+                // SECURITY: Client-side admin check is for UX only - server validates permissions.
+                // Endpoint selection based on client state is safe because:
+                // 1. Server always validates admin permission on /servers/admin/all
+                // 2. Tampering with client state results in 403 error (handled below)
+                // 3. Regular endpoint /servers enforces user ownership server-side
+                const endpoint = this.adminViewMode && this.currentUser?.is_admin 
+                    ? '/servers/admin/all' 
+                    : '/servers';
+                const response = await authFetch(endpoint);
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        // Permission denied - reset admin mode and reload with user endpoint
+                        this.adminViewMode = false;
+                        throw new Error('Access denied. You do not have admin permissions.');
+                    }
+                    throw new Error('Failed to load servers');
+                }
                 this.servers = await response.json();
             } catch (err) {
                 this.error = err.message;
+                // Reset admin mode on error if it was enabled
+                if (this.adminViewMode && err.message.includes('Access denied')) {
+                    this.adminViewMode = false;
+                }
             } finally {
                 this.loading = false;
             }
+        },
+        
+        async toggleAdminView() {
+            if (!this.currentUser?.is_admin) return;
+            // adminViewMode is already updated by x-model binding
+            await this.loadServers();
         },
         
         async refreshA2SData() {

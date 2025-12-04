@@ -16,6 +16,18 @@ from services.scheduled_task_service import scheduled_task_service
 router = APIRouter(prefix="/api/scheduled-tasks", tags=["scheduled-tasks"])
 
 
+async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
+    """Helper to get server and verify ownership - admins can access any server"""
+    if current_user.is_admin:
+        server = await Server.get_by_id(db, server_id)
+    else:
+        server = await Server.get_by_id_and_user(db, server_id, current_user.id)
+    
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    return server
+
+
 @router.post("/{server_id}", response_model=ScheduledTaskResponse)
 async def create_scheduled_task(
     server_id: int,
@@ -25,9 +37,7 @@ async def create_scheduled_task(
 ):
     """Create a new scheduled task for a server"""
     # Verify server exists and belongs to user
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
+    server = await get_server_for_user(server_id, db, current_user)
     
     # Create task
     task = ScheduledTask(
@@ -60,9 +70,7 @@ async def list_scheduled_tasks(
 ):
     """List all scheduled tasks for a server"""
     # Verify server exists and belongs to user
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
+    server = await get_server_for_user(server_id, db, current_user)
     
     # Get tasks
     tasks = await ScheduledTask.get_all_by_server(db, server_id)
@@ -78,9 +86,7 @@ async def get_scheduled_task(
 ):
     """Get a specific scheduled task"""
     # Verify server exists and belongs to user
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
+    server = await get_server_for_user(server_id, db, current_user)
     
     # Get task
     task = await ScheduledTask.get_by_id_and_server(db, task_id, server_id)
@@ -100,9 +106,7 @@ async def update_scheduled_task(
 ):
     """Update a scheduled task"""
     # Verify server exists and belongs to user
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
+    server = await get_server_for_user(server_id, db, current_user)
     
     # Get task
     task = await ScheduledTask.get_by_id_and_server(db, task_id, server_id)
@@ -156,9 +160,7 @@ async def delete_scheduled_task(
 ):
     """Delete a scheduled task"""
     # Verify server exists and belongs to user
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
+    server = await get_server_for_user(server_id, db, current_user)
     
     # Delete task
     result = await db.execute(
@@ -185,9 +187,7 @@ async def toggle_scheduled_task(
 ):
     """Toggle a scheduled task enabled/disabled"""
     # Verify server exists and belongs to user
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
+    server = await get_server_for_user(server_id, db, current_user)
     
     # Get task
     task = await ScheduledTask.get_by_id_and_server(db, task_id, server_id)

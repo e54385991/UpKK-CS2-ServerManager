@@ -4,6 +4,10 @@
                         <i class="bi bi-info-circle-fill"></i>
                         <strong data-i18n="serverDetail.deploymentLockDetected">检测到 SteamCMD 正在运行</strong>
                         <p class="mb-2" data-i18n="serverDetail.deploymentLockMessage">服务器可能正在更新或部署。如果长时间卡住，您可以尝试清除锁定并重新开始。通常无需操作。</p>
+                        <p class="mb-2 text-warning">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            <span data-i18n="serverDetail.deploymentLockChinaWarning">如果您的服务器位于中国大陆：由于中国大陆服务器与Steam服务器连接不佳，部署可能非常缓慢或多次失败。这不属于本程序的问题。建议耐心等待并多次重试，或自行部署代理网关加速。</span>
+                        </p>
                         <button @click="cancelDeployment()" :disabled="cancellingDeployment" class="btn btn-sm btn-outline-danger">
                             <span x-show="!cancellingDeployment">
                                 <i class="bi bi-x-circle"></i> <span data-i18n="serverDetail.clearDeploymentLock">清除部署锁定</span>
@@ -68,8 +72,7 @@
                         </div>
                         <div class="card-body">
                             <p class="text-muted mb-3">
-                                <i class="bi bi-info-circle"></i> Install plugin frameworks to enable server
-                                modifications and custom plugins.
+                                <i class="bi bi-info-circle"></i> <span data-i18n="pluginFrameworkManagement.description">Install plugin frameworks to enable server modifications and custom plugins.</span>
                             </p>
 
                             <!-- Multi-select Installation -->
@@ -78,41 +81,34 @@
                                     <h6 class="card-title mb-3"><i class="bi bi-ui-checks"></i> <span
                                             data-i18n="serverDetail.batchInstallation">Batch Installation</span></h6>
                                     <div class="row mb-3">
-                                        <div class="col-md-4">
+                                        <div class="col-md-6">
                                             <div class="form-check">
                                                 <input class="form-check-input" type="checkbox"
                                                     x-model="pluginSelection.metamod" id="selectMetamod">
                                                 <label class="form-check-label" for="selectMetamod">
                                                     <strong>Metamod:Source</strong>
-                                                    <small class="d-block text-muted">Plugin loader for Source 2
-                                                        engine</small>
+                                                    <small class="d-block text-muted" data-i18n="pluginFrameworkManagement.metamodDescription">Plugin loader for Source 2 engine</small>
                                                 </label>
                                             </div>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-6">
                                             <div class="form-check">
                                                 <input class="form-check-input" type="checkbox"
                                                     x-model="pluginSelection.counterstrikesharp" id="selectCSS">
                                                 <label class="form-check-label" for="selectCSS">
                                                     <strong>CounterStrikeSharp</strong>
-                                                    <small class="d-block text-muted">Write CS2 plugins in C#</small>
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox"
-                                                    x-model="pluginSelection.cs2fixes" id="selectCS2Fixes">
-                                                <label class="form-check-label" for="selectCS2Fixes">
-                                                    <strong>CS2Fixes</strong>
-                                                    <small class="d-block text-muted">Essential fixes and features</small>
+                                                    <small class="d-block text-muted" data-i18n="pluginFrameworkManagement.cssDescription">Write CS2 plugins in C#</small>
                                                 </label>
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="alert alert-warning mb-3" role="alert">
+                                        <i class="bi bi-exclamation-triangle me-2"></i>
+                                        <strong data-i18n="pluginFrameworkManagement.metamodRequiredNotice">Almost all CS2 plugins depend on Metamod:Source. It is essential for plugin functionality.</strong>
+                                    </div>
                                     <div class="d-grid">
                                         <button @click="installSelectedPlugins()"
-                                            :disabled="isActionRunning || (!pluginSelection.metamod && !pluginSelection.counterstrikesharp && !pluginSelection.cs2fixes)"
+                                            :disabled="isActionRunning || (!pluginSelection.metamod && !pluginSelection.counterstrikesharp)"
                                             class="btn btn-success">
                                             <i class="bi bi-cloud-download"></i> <span
                                                 data-i18n="serverDetail.installSelectedFrameworks">Install Selected
@@ -124,13 +120,16 @@
 
                             <!-- Individual Plugin Cards -->
                             <div class="row g-3">
-                                <div class="col-md-4">
-                                    <div class="card h-100 border">
+                                <div class="col-md-6">
+                                    <div class="card h-100 border border-warning">
                                         <div class="card-body">
                                             <h6 class="card-title"><i class="bi bi-box-seam"></i> Metamod:Source</h6>
-                                            <p class="card-text small text-muted">
-                                                Plugin loader for Source 2 engine. Required for most CS2 plugins.
+                                            <p class="card-text small text-muted" data-i18n="pluginFrameworkManagement.metamodCardDescription">
+                                                Plugin loader for Source 2 engine.
                                             </p>
+                                            <div class="alert alert-warning py-2 px-2 mb-2" role="alert">
+                                                <small><i class="bi bi-exclamation-triangle me-1"></i> <strong data-i18n="pluginFrameworkManagement.metamodEssential">Almost all plugins require this!</strong></small>
+                                            </div>
                                             <div class="d-grid gap-2">
                                                 <button @click="executeAction('install_metamod')"
                                                     :disabled="isActionRunning" class="btn btn-primary btn-sm">
@@ -146,12 +145,12 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <div class="card h-100 border">
                                         <div class="card-body">
                                             <h6 class="card-title"><i class="bi bi-box-seam"></i> CounterStrikeSharp
                                             </h6>
-                                            <p class="card-text small text-muted">
+                                            <p class="card-text small text-muted" data-i18n="pluginFrameworkManagement.cssCardDescription">
                                                 Write CS2 server plugins in C#. Requires Metamod:Source.
                                             </p>
                                             <div class="d-grid gap-2">
@@ -161,28 +160,6 @@
                                                         data-i18n="serverDetail.install">Install</span>
                                                 </button>
                                                 <button @click="executeAction('update_counterstrikesharp')"
-                                                    :disabled="isActionRunning" class="btn btn-outline-primary btn-sm">
-                                                    <i class="bi bi-arrow-repeat"></i> <span
-                                                        data-i18n="serverDetail.update">Update</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="card h-100 border">
-                                        <div class="card-body">
-                                            <h6 class="card-title"><i class="bi bi-box-seam"></i> CS2Fixes</h6>
-                                            <p class="card-text small text-muted">
-                                                Essential bug fixes and features for CS2. Requires Metamod:Source.
-                                            </p>
-                                            <div class="d-grid gap-2">
-                                                <button @click="executeAction('install_cs2fixes')"
-                                                    :disabled="isActionRunning" class="btn btn-primary btn-sm">
-                                                    <i class="bi bi-download"></i> <span
-                                                        data-i18n="serverDetail.install">Install</span>
-                                                </button>
-                                                <button @click="executeAction('update_cs2fixes')"
                                                     :disabled="isActionRunning" class="btn btn-outline-primary btn-sm">
                                                     <i class="bi bi-arrow-repeat"></i> <span
                                                         data-i18n="serverDetail.update">Update</span>

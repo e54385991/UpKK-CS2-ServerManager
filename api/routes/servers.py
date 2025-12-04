@@ -10,8 +10,8 @@ import asyncssh
 import shlex
 
 from modules import (
-    Server, ServerCreate, ServerUpdate, ServerResponse, AuthType,
-    get_db, User, get_current_active_user, get_optional_current_user, generate_api_key,
+    Server, ServerCreate, ServerUpdate, ServerResponse, ServerResponseWithUser, AuthType,
+    get_db, User, UserResponse, get_current_active_user, get_current_admin_user, get_optional_current_user, generate_api_key,
     get_current_time
 )
 from services import redis_manager
@@ -19,6 +19,29 @@ from services.captcha_service import captcha_service
 from services.ssh_manager import SSHManager
 
 router = APIRouter(prefix="/servers", tags=["servers"])
+
+
+async def get_server_with_permission(
+    server_id: int,
+    current_user: User,
+    db: AsyncSession
+) -> Server:
+    """
+    Get server by ID, checking user permissions.
+    Admins can access any server, regular users can only access their own.
+    """
+    if current_user.is_admin:
+        server = await Server.get_by_id(db, server_id)
+    else:
+        server = await Server.get_by_id_and_user(db, server_id, current_user.id)
+    
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server not found"
+        )
+    
+    return server
 
 
 @router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
@@ -161,6 +184,36 @@ async def list_servers(
     return servers
 
 
+@router.get("/admin/all", response_model=List[ServerResponseWithUser])
+async def list_all_servers_admin(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """List all servers across all users (admin only)"""
+    servers = await Server.get_all(db, skip, limit)
+    
+    # Early return if no servers
+    if not servers:
+        return []
+    
+    # Fetch all unique user IDs and load users in one query to avoid N+1
+    user_ids = {server.user_id for server in servers}
+    users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    users = {user.id: user for user in users_result.scalars().all()}
+    
+    # Build response with user information
+    result = []
+    for server in servers:
+        server_dict = ServerResponse.model_validate(server).model_dump()
+        user = users.get(server.user_id)
+        server_dict['user'] = UserResponse.model_validate(user) if user else None
+        result.append(ServerResponseWithUser(**server_dict))
+    
+    return result
+
+
 @router.get("/disk-space-all")
 async def get_all_servers_disk_space(
     force_refresh: bool = False,
@@ -199,14 +252,8 @@ async def get_server(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get server by ID"""
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
-        )
-    
+    """Get server by ID - admins can access any server, users can only access their own"""
+    server = await get_server_with_permission(server_id, current_user, db)
     return server
 
 
@@ -217,13 +264,8 @@ async def update_server(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Update server"""
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
-        )
+    """Update server - admins can update any server, users can only update their own"""
+    server = await get_server_with_permission(server_id, current_user, db)
     
     # Track if monitoring status changed
     old_monitoring_enabled = server.enable_panel_monitoring
@@ -262,13 +304,8 @@ async def delete_server(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Delete server"""
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
-        )
+    """Delete server - admins can delete any server, users can only delete their own"""
+    server = await get_server_with_permission(server_id, current_user, db)
     
     await db.delete(server)
     await db.commit()
@@ -293,12 +330,7 @@ async def get_monitoring_logs(
     logger = logging.getLogger(__name__)
     
     # Verify server exists and user has access
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
-        )
+    server = await get_server_with_permission(server_id, current_user, db)
     
     # Get logs from Redis
     try:
@@ -419,12 +451,7 @@ async def get_server_a2s_info(
     from services.a2s_query import a2s_service
     
     # Verify server exists and user has access
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
-        )
+    server = await get_server_with_permission(server_id, current_user, db)
     
     # Use configured A2S host/port or fall back to server host/game_port
     query_host = server.a2s_query_host or server.host
@@ -461,12 +488,7 @@ async def get_server_cpu_count(
     from services.ssh_manager import SSHManager
     
     # Verify server exists and user has access
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
-        )
+    server = await get_server_with_permission(server_id, current_user, db)
     
     ssh_manager = SSHManager()
     
@@ -532,12 +554,7 @@ async def get_server_disk_space(
     from services.system_info_helper import system_info_helper
     
     # Verify server exists and user has access
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
-        )
+    server = await get_server_with_permission(server_id, current_user, db)
     
     # Get disk space info from system info helper
     disk_info = await system_info_helper.get_disk_space(server, force_refresh=force_refresh)
