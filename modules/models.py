@@ -158,6 +158,13 @@ class Server(SQLModel, table=True):
     consecutive_ssh_failures: int = Field(default=0)
     is_ssh_down: bool = Field(default=False)
     
+    # SSH health monitoring daemon configuration
+    enable_ssh_health_monitoring: bool = Field(default=True)
+    ssh_health_check_interval_hours: int = Field(default=2)  # Check every 2 hours
+    ssh_health_failure_threshold: int = Field(default=84)  # 84 failures = 7 days @ 2 hours
+    last_ssh_health_check: Optional[datetime] = Field(default=None)
+    ssh_health_status: str = Field(default="unknown", max_length=50)  # unknown, healthy, degraded, down, completely_down
+    
     # Additional info
     description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     last_deployed: Optional[datetime] = Field(default=None)
@@ -456,6 +463,7 @@ class MarketPlugin(SQLModel, table=True):
     is_recommended: bool = Field(default=False)
     icon_url: Optional[str] = Field(default=None, max_length=500)
     dependencies: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))  # Comma-separated plugin IDs
+    custom_install_path: Optional[str] = Field(default=None, max_length=255)  # Custom extraction path for non-standard packages (e.g., "addons")
     download_count: int = Field(default=0)
     install_count: int = Field(default=0)
     created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})

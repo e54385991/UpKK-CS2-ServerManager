@@ -467,3 +467,48 @@
         }
     </style>
 
+
+
+<!-- GitHub Plugin Uninstall Modal -->
+<div class="modal fade" id="githubUninstallModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-trash"></i> <span data-i18n="githubPlugins.uninstall">Uninstall Plugin</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <span data-i18n="githubPlugins.uninstallHelp">This will analyze the plugin archive from GitHub and show files that can be uninstalled. Make sure you have entered a GitHub repository URL and fetched releases in the install section above.</span>
+                </div>
+                
+                <div class="mb-3">
+                    <button class="btn btn-primary" onclick="analyzeGitHubInstalledFiles()">
+                        <i class="bi bi-search"></i> <span data-i18n="githubPlugins.analyzeFiles">Analyze Plugin Archive</span>
+                    </button>
+                </div>
+                
+                <div id="github-uninstall-file-list">
+                    <p class="text-muted"><span data-i18n="githubPlugins.clickAnalyze">Click "Analyze Plugin Archive" to start</span></p>
+                </div>
+                
+                <div class="alert alert-info mt-3" id="github-uninstall-info" style="display: none;">
+                    <i class="bi bi-info-circle"></i>
+                    <span data-i18n="pluginMarket.uninstallModal.filesSelected">Selected:</span>
+                    <strong id="github-uninstall-files-count">0</strong> <span id="github-uninstall-files-text">files</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <span data-i18n="common.cancel">Cancel</span>
+                </button>
+                <button type="button" class="btn btn-danger" id="github-uninstall-button" onclick="submitGitHubUninstall()" style="display: none;">
+                    <i class="bi bi-trash"></i> <span data-i18n="pluginMarket.uninstallModal.uninstallButton">Uninstall Selected Files</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

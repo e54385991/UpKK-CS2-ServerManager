@@ -613,3 +613,89 @@ async def check_server_deployment(
             "message": f"Error checking deployment: {str(e)}",
             "error": True
         }
+
+
+@router.post("/{server_id}/ssh-reconnect")
+async def manual_ssh_reconnect(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Manually reconnect to a server and reset SSH health status
+    
+    This endpoint is used to restore a "completely_down" server after 
+    manual intervention (e.g., fixing network issues, updating credentials).
+    """
+    # Get server and verify ownership
+    server = await db.get(Server, server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    
+    if server.user_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this server"
+        )
+    
+    # Use SSH health monitor to perform manual reconnection
+    from services.ssh_health_monitor import ssh_health_monitor
+    
+    success, message = await ssh_health_monitor.manual_reconnect(server_id)
+    
+    if success:
+        return {
+            "success": True,
+            "message": message,
+            "ssh_health_status": "healthy"
+        }
+    else:
+        return {
+            "success": False,
+            "message": message,
+            "ssh_health_status": server.ssh_health_status
+        }
+
+
+@router.get("/{server_id}/ssh-health")
+async def get_ssh_health_status(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get SSH health status for a server"""
+    # Get server and verify ownership
+    server = await db.get(Server, server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    
+    if server.user_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this server"
+        )
+    
+    # Calculate offline duration estimate based on consecutive failures
+    offline_duration_estimate = None
+    if server.consecutive_ssh_failures > 0:
+        check_interval_hours = server.ssh_health_check_interval_hours or 2
+        offline_hours = server.consecutive_ssh_failures * check_interval_hours
+        offline_duration_estimate = {
+            "hours": offline_hours,
+            "days": round(offline_hours / 24, 1),
+            "description": f"~{offline_hours} hours ({round(offline_hours / 24, 1)} days)"
+        }
+    
+    return {
+        "server_id": server_id,
+        "ssh_health_status": server.ssh_health_status,
+        "consecutive_failures": server.consecutive_ssh_failures,
+        "failure_threshold": server.ssh_health_failure_threshold or 84,
+        "is_ssh_down": server.is_ssh_down,
+        "last_ssh_success": server.last_ssh_success.isoformat() if server.last_ssh_success else None,
+        "last_ssh_failure": server.last_ssh_failure.isoformat() if server.last_ssh_failure else None,
+        "last_health_check": server.last_ssh_health_check.isoformat() if server.last_ssh_health_check else None,
+        "check_interval_hours": server.ssh_health_check_interval_hours or 2,
+        "offline_duration_estimate": offline_duration_estimate,
+        "monitoring_enabled": server.enable_ssh_health_monitoring
+    }

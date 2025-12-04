@@ -744,7 +744,8 @@ class ArchiveAnalysisResponse(SQLModel):
     success: bool
     has_addons_dir: bool = False
     root_dirs: List[str] = []
-    all_dirs: List[str] = []  # All directories in archive for exclusion selection
+    all_dirs: List[str] = []  # All directories in archive (kept for backward compatibility)
+    all_files: List[ArchiveContentItem] = []  # All files in archive for exclusion selection
     top_level_items: List[ArchiveContentItem] = []
     archive_type: Optional[str] = None
     error: Optional[str] = None
@@ -753,7 +754,9 @@ class ArchiveAnalysisResponse(SQLModel):
 class GitHubPluginInstallRequest(SQLModel):
     """Schema for GitHub plugin installation request"""
     download_url: str = Field(..., description="Direct download URL for the release asset")
-    exclude_dirs: List[str] = Field(default=[], description="Directories to exclude during extraction (for updates)")
+    exclude_dirs: List[str] = Field(default=[], description="Directories to exclude during extraction (deprecated, use exclude_files)")
+    exclude_files: List[str] = Field(default=[], description="Files to exclude during extraction (for updates)")
+    custom_install_path: Optional[str] = Field(default=None, description="Custom extraction path for non-standard packages (e.g., 'addons')")
     
     @field_validator('download_url')
     @classmethod
@@ -770,6 +773,15 @@ class GitHubPluginInstallRequest(SQLModel):
         for dir_path in v:
             if '..' in dir_path or dir_path.startswith('/'):
                 raise ValueError('Exclude directories cannot contain path traversal sequences')
+        return v
+    
+    @field_validator('exclude_files')
+    @classmethod
+    def validate_exclude_files(cls, v):
+        """Validate exclude files to prevent path traversal"""
+        for file_path in v:
+            if '..' in file_path or file_path.startswith('/'):
+                raise ValueError('Exclude files cannot contain path traversal sequences')
         return v
 
 
@@ -793,6 +805,7 @@ class MarketPluginCreate(SQLModel):
     is_recommended: bool = Field(default=False, description="Whether to mark as recommended")
     icon_url: Optional[str] = Field(None, max_length=500, description="Icon URL")
     dependencies: Optional[str] = Field(None, description="Comma-separated plugin IDs")
+    custom_install_path: Optional[str] = Field(None, max_length=255, description="Custom extraction path for non-standard packages (e.g., 'addons')")
 
 
 class MarketPluginUpdate(SQLModel):
@@ -806,6 +819,7 @@ class MarketPluginUpdate(SQLModel):
     is_recommended: Optional[bool] = None
     icon_url: Optional[str] = Field(None, max_length=500)
     dependencies: Optional[str] = None
+    custom_install_path: Optional[str] = Field(None, max_length=255)
 
 
 class DependencyInfo(SQLModel):
@@ -827,6 +841,7 @@ class MarketPluginResponse(SQLModel):
     is_recommended: bool
     icon_url: Optional[str] = None
     dependencies: Optional[str] = None
+    custom_install_path: Optional[str] = None
     dependency_details: Optional[List[DependencyInfo]] = None
     download_count: int
     install_count: int
@@ -859,4 +874,79 @@ class GitHubRepoInfo(SQLModel):
     repo_name: Optional[str] = None
     description: Optional[str] = None
     author: Optional[str] = None
+    error: Optional[str] = None
+
+
+# Plugin Uninstallation schemas
+class PluginUninstallRequest(SQLModel):
+    """Schema for plugin uninstallation request"""
+    files_to_delete: List[str] = Field(..., description="List of file paths to delete (relative to csgo directory)")
+    
+    @field_validator('files_to_delete')
+    @classmethod
+    def validate_files_to_delete(cls, v):
+        """Validate file paths to prevent path traversal and injection attacks"""
+        import os
+        import urllib.parse
+        
+        for file_path in v:
+            # Normalize the path first
+            normalized = os.path.normpath(file_path)
+            
+            # Check for various path traversal attempts
+            if '..' in file_path or '..' in normalized:
+                raise ValueError('File paths cannot contain path traversal sequences (..)')
+            
+            # Check for absolute paths
+            if file_path.startswith('/') or os.path.isabs(normalized):
+                raise ValueError('File paths must be relative (cannot start with /)')
+            
+            # Check for null bytes
+            if '\x00' in file_path:
+                raise ValueError('File paths cannot contain null bytes')
+            
+            # Check for URL-encoded path traversal (specifically look for encoded dots and slashes)
+            # Only reject if there are actual encoded path traversal sequences
+            decoded = urllib.parse.unquote(file_path)
+            if '..' in decoded and '..' not in file_path:
+                # Path contains encoded ".." which could be used for traversal
+                raise ValueError('File paths cannot contain URL-encoded path traversal sequences')
+            
+            # Ensure normalized path doesn't escape the base directory
+            if normalized.startswith('..') or normalized == '..':
+                raise ValueError('Normalized path cannot escape base directory')
+        
+        return v
+
+
+class PluginUninstallResponse(SQLModel):
+    """Schema for plugin uninstallation response"""
+    success: bool
+    message: str
+    deleted_files: int = 0
+    failed_files: List[str] = []
+
+
+class InstalledPluginFile(SQLModel):
+    """Schema for an installed plugin file"""
+    path: str
+    size: int = 0
+    is_dir: bool = False
+
+
+class InstalledPluginAnalysisResponse(SQLModel):
+    """Schema for analyzing installed plugins"""
+    success: bool
+    files: List[InstalledPluginFile] = []
+    total_size: int = 0
+    error: Optional[str] = None
+
+
+# Metamod Detection schemas
+class MetamodStatusResponse(SQLModel):
+    """Schema for metamod installation status"""
+    success: bool
+    installed: bool
+    path: Optional[str] = None
+    message: Optional[str] = None
     error: Optional[str] = None

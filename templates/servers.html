@@ -258,6 +258,60 @@
                             </div>
                         </template>
                         
+                        <!-- SSH Health Status -->
+                        <template x-if="getSSHHealth(server.id)">
+                            <div class="mt-2 p-2 rounded" 
+                                 :class="{
+                                     'bg-success-subtle': getSSHHealth(server.id).ssh_health_status === 'healthy',
+                                     'bg-warning-subtle': getSSHHealth(server.id).ssh_health_status === 'degraded' || getSSHHealth(server.id).ssh_health_status === 'down',
+                                     'bg-danger-subtle': getSSHHealth(server.id).ssh_health_status === 'completely_down'
+                                 }">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi me-2"
+                                           :class="{
+                                               'bi-shield-check text-success': getSSHHealth(server.id).ssh_health_status === 'healthy',
+                                               'bi-shield-exclamation text-warning': getSSHHealth(server.id).ssh_health_status === 'degraded' || getSSHHealth(server.id).ssh_health_status === 'down',
+                                               'bi-shield-x text-danger': getSSHHealth(server.id).ssh_health_status === 'completely_down'
+                                           }"></i>
+                                        <strong class="small" data-i18n="servers.sshHealth.title">SSH Connectivity</strong>
+                                    </div>
+                                    <template x-if="getSSHHealth(server.id).ssh_health_status === 'completely_down'">
+                                        <button @click="manualSSHReconnect(server.id)" 
+                                                :disabled="sshReconnecting[server.id]"
+                                                class="btn btn-sm btn-outline-danger py-0 px-1"
+                                                style="font-size: 0.75rem; line-height: 1.2;"
+                                                :title="window.i18n?.t('servers.sshHealth.manualReconnect') || 'Manual Reconnect'">
+                                            <i class="bi" :class="sshReconnecting[server.id] ? 'bi-arrow-repeat spin' : 'bi-arrow-repeat'"></i>
+                                        </button>
+                                    </template>
+                                </div>
+                                <ul class="list-unstyled small mb-0">
+                                    <li>
+                                        <i class="bi bi-activity"></i> <span data-i18n="servers.sshHealth.status">Status</span>: 
+                                        <strong class="text-capitalize" x-text="getSSHHealth(server.id).ssh_health_status"></strong>
+                                    </li>
+                                    <template x-if="getSSHHealth(server.id).consecutive_failures > 0">
+                                        <li>
+                                            <i class="bi bi-x-circle"></i> <span data-i18n="servers.sshHealth.failures">Failures</span>: 
+                                            <strong>
+                                                <span x-text="getSSHHealth(server.id).consecutive_failures"></span>/<span x-text="getSSHHealth(server.id).failure_threshold"></span>
+                                            </strong>
+                                            <template x-if="getSSHHealth(server.id).offline_duration_estimate">
+                                                <span class="text-muted" style="font-size: 0.9em;">
+                                                    (~<span x-text="getSSHHealth(server.id).offline_duration_estimate.days"></span> <span data-i18n="common.days">days</span>)
+                                                </span>
+                                            </template>
+                                        </li>
+                                    </template>
+                                    <li class="text-muted" style="font-size: 0.85em;">
+                                        <i class="bi bi-clock-history"></i> <span data-i18n="servers.sshHealth.lastCheck">Last Check</span>: 
+                                        <span x-text="formatTimestamp(getSSHHealth(server.id).last_health_check)"></span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </template>
+                        
                         <div class="mt-3">
                             <a :href="'/servers-ui/' + server.id" class="btn btn-sm btn-primary w-100">
                                 <i class="bi bi-gear"></i> <span data-i18n="servers.manageServer">Manage Server</span>
@@ -462,6 +516,9 @@ function showBatchActionToast(message, type = 'success') {
     toast.show();
 }
 
+// Alias for compatibility with other parts of the code
+const showToast = showBatchActionToast;
+
 function serverManager() {
     // Constants for A2S polling
     const AGGRESSIVE_POLL_INTERVAL_MS = 3000;  // 3 seconds
@@ -480,9 +537,12 @@ function serverManager() {
         diskSpaceData: {},  // Store disk space data keyed by server ID
         diskSpaceRefreshing: false,  // Track if disk space is being manually refreshed
         diskSpaceRefreshingServers: [],  // Track which individual servers are being refreshed
+        sshHealthData: {},  // Store SSH health data keyed by server ID
+        sshReconnecting: {},  // Track which servers are being reconnected
         steamLatestVersion: null,  // Store Steam latest version info
         refreshInterval: null,
         diskSpaceInterval: null,
+        sshHealthInterval: null,  // Interval for SSH health polling
         pollAttempts: 0,  // Track polling attempts
         maxAggressivePolls: 20,  // Max aggressive polls (20 * 3s = 60s max)
         
@@ -492,10 +552,14 @@ function serverManager() {
             await this.refreshA2SData();
             // Initial disk space data load
             await this.refreshDiskSpaceData();
+            // Initial SSH health data load
+            await this.refreshSSHHealthData();
             // Start with aggressive polling (every 3 seconds) until we have data
             this.startPolling();
             // Start disk space polling (every 6 hours)
             this.startDiskSpacePolling();
+            // Start SSH health polling (every 5 minutes)
+            this.startSSHHealthPolling();
         },
         
         startPolling() {
@@ -654,6 +718,66 @@ function serverManager() {
             return gb.toFixed(2) + ' GB';
         },
         
+        async refreshSSHHealthData() {
+            // Fetch SSH health data for all servers
+            try {
+                const promises = this.servers.map(async server => {
+                    try {
+                        const response = await authFetch(`/servers/${server.id}/ssh-health`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.sshHealthData[server.id] = data;
+                        }
+                    } catch (err) {
+                        console.error(`Failed to fetch SSH health for server ${server.id}:`, err);
+                    }
+                });
+                await Promise.all(promises);
+            } catch (err) {
+                console.error('Error refreshing SSH health data:', err);
+            }
+        },
+        
+        startSSHHealthPolling() {
+            // Poll SSH health every 5 minutes
+            this.sshHealthInterval = setInterval(() => this.refreshSSHHealthData(), 5 * 60 * 1000);
+        },
+        
+        getSSHHealth(serverId) {
+            return this.sshHealthData[serverId] || null;
+        },
+        
+        async manualSSHReconnect(serverId) {
+            this.sshReconnecting[serverId] = true;
+            try {
+                const response = await authFetch(`/servers/${serverId}/ssh-reconnect`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        // Refresh SSH health data for this server
+                        const healthResponse = await authFetch(`/servers/${serverId}/ssh-health`);
+                        if (healthResponse.ok) {
+                            const data = await healthResponse.json();
+                            this.sshHealthData[serverId] = data;
+                        }
+                        showToast('success', 'SSH reconnection successful!');
+                    } else {
+                        showToast('error', `Reconnection failed: ${result.message}`);
+                    }
+                } else {
+                    showToast('error', 'Failed to reconnect to server');
+                }
+            } catch (err) {
+                console.error('Manual SSH reconnect failed:', err);
+                showToast('error', 'Failed to reconnect to server');
+            } finally {
+                this.sshReconnecting[serverId] = false;
+            }
+        },
+        
         getA2SInfo(serverId) {
             // Convert serverId to string to match API response keys
             const key = String(serverId);
@@ -677,6 +801,16 @@ function serverManager() {
                 const now = new Date();
                 const diffMs = now - date;
                 const diffSec = Math.floor(diffMs / 1000);
+                
+                // Handle invalid dates
+                if (isNaN(date.getTime())) {
+                    return 'N/A';
+                }
+                
+                // If timestamp is in the future (timezone issues), show absolute time
+                if (diffSec < 0) {
+                    return date.toLocaleString();
+                }
                 
                 // Show relative time if recent
                 if (diffSec < 60) {

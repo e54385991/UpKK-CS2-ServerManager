@@ -18,7 +18,10 @@ from .schemas import (
     ArchiveContentItem, ArchiveAnalysisResponse,
     GitHubPluginInstallRequest, GitHubPluginInstallResponse,
     MarketPluginCreate, MarketPluginUpdate, MarketPluginResponse, MarketPluginListResponse,
-    MarketPluginInstallRequest, GitHubRepoInfo, DependencyInfo
+    MarketPluginInstallRequest, GitHubRepoInfo, DependencyInfo,
+    PluginUninstallRequest, PluginUninstallResponse,
+    InstalledPluginFile, InstalledPluginAnalysisResponse,
+    MetamodStatusResponse
 )
 from .database import get_db, init_db, engine, async_session_maker, migrate_db
 from .auth import (
@@ -88,6 +91,11 @@ __all__ = [
     'MarketPluginInstallRequest',
     'GitHubRepoInfo',
     'DependencyInfo',
+    'PluginUninstallRequest',
+    'PluginUninstallResponse',
+    'InstalledPluginFile',
+    'InstalledPluginAnalysisResponse',
+    'MetamodStatusResponse',
     'get_db',
     'init_db',
     'migrate_db',

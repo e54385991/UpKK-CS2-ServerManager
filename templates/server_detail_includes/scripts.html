@@ -131,7 +131,10 @@
         selectedReleaseIndex: '',
         selectedAssetIndex: '',
         githubExcludeDirs: [],
+        githubExcludeFiles: [],
         githubArchiveDirs: [],
+        githubArchiveFiles: [],
+        githubExclusionMode: 'directory',  // Default to directory mode
 
         // Helper function to format SSH error messages with i18n support
         formatSSHError(errorMessage, defaultPrefixKey) {
@@ -1399,7 +1402,9 @@
         onReleaseSelected() {
             this.selectedAssetIndex = '';
             this.githubArchiveDirs = [];
+            this.githubArchiveFiles = [];
             this.githubExcludeDirs = [];
+            this.githubExcludeFiles = [];
         },
         
         toggleExcludeDir(dir) {
@@ -1411,8 +1416,21 @@
             }
         },
         
+        toggleExcludeFile(filePath) {
+            const index = this.githubExcludeFiles.indexOf(filePath);
+            if (index > -1) {
+                this.githubExcludeFiles.splice(index, 1);
+            } else {
+                this.githubExcludeFiles.push(filePath);
+            }
+        },
+        
         removeExcludeDir(index) {
             this.githubExcludeDirs.splice(index, 1);
+        },
+        
+        removeExcludeFile(index) {
+            this.githubExcludeFiles.splice(index, 1);
         },
         
         async analyzeGitHubArchive() {
@@ -1447,13 +1465,15 @@
                     return;
                 }
                 
-                // Set the available directories for selection
+                // Set the available directories and files for selection
                 this.githubArchiveDirs = data.all_dirs || [];
+                this.githubArchiveFiles = data.all_files || [];
                 
-                if (this.githubArchiveDirs.length === 0) {
-                    this.showToast(window.i18n?.t('serverDetail.noDirsFound') || 'No directories found in archive', 'info');
+                if (this.githubArchiveDirs.length === 0 && this.githubArchiveFiles.length === 0) {
+                    this.showToast(window.i18n?.t('serverDetail.noItemsFound') || 'No items found in archive', 'info');
                 } else {
-                    this.addLog('complete', `Found ${this.githubArchiveDirs.length} directories in archive`);
+                    const totalItems = this.githubArchiveDirs.length + this.githubArchiveFiles.length;
+                    this.addLog('complete', `Found ${this.githubArchiveDirs.length} directories and ${this.githubArchiveFiles.length} files in archive`);
                 }
             } catch (err) {
                 this.githubError = err.message;
@@ -1499,7 +1519,8 @@
                     },
                     body: JSON.stringify({
                         download_url: asset.browser_download_url,
-                        exclude_dirs: this.githubExcludeDirs
+                        exclude_dirs: this.githubExcludeDirs,
+                        exclude_files: this.githubExcludeFiles
                     })
                 });
                 
@@ -1513,7 +1534,9 @@
                     this.selectedReleaseIndex = '';
                     this.selectedAssetIndex = '';
                     this.githubExcludeDirs = [];
+                    this.githubExcludeFiles = [];
                     this.githubArchiveDirs = [];
+                    this.githubArchiveFiles = [];
                 } else {
                     this.githubError = result.message;
                     this.addLog('error', result.message);
@@ -2841,4 +2864,216 @@
                 });
             });
         });
+        
+        // Metamod status checker
+        function metamodStatus() {
+            return {
+                checking: true,
+                metamodInstalled: false,
+                metamodPath: null,
+                error: null,
+                
+                async checkMetamodStatus() {
+                    this.checking = true;
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/metamod-status`, {
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.metamodInstalled = data.installed;
+                            this.metamodPath = data.path;
+                            this.error = data.error;
+                        } else {
+                            console.error('Failed to check metamod status');
+                            this.error = 'Failed to check metamod status';
+                        }
+                    } catch (error) {
+                        console.error('Error checking metamod status:', error);
+                        this.error = error.message;
+                    } finally {
+                        this.checking = false;
+                    }
+                }
+            };
+        }
+        
+        // GitHub Plugin Uninstall Functions
+        let githubUninstallFiles = [];
+        
+        function showGitHubUninstallModal() {
+            document.getElementById('github-uninstall-file-list').innerHTML = '<p class="text-muted">Click "Analyze Installed Files" to start</p>';
+            document.getElementById('github-uninstall-info').style.display = 'none';
+            document.getElementById('github-uninstall-button').style.display = 'none';
+            githubUninstallFiles = [];
+            
+            const modal = new bootstrap.Modal(document.getElementById('githubUninstallModal'));
+            modal.show();
+        }
+        
+        async function analyzeGitHubInstalledFiles() {
+            const fileListDiv = document.getElementById('github-uninstall-file-list');
+            fileListDiv.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Analyzing plugin archive...';
+            
+            try {
+                // Get the selected asset URL from the install section
+                const serverDetailElement = document.querySelector('[x-data*="serverDetail"]');
+                if (!serverDetailElement) {
+                    fileListDiv.innerHTML = '<p class="text-danger">Cannot access server detail component. Please refresh the page.</p>';
+                    return;
+                }
+                
+                const serverDetailComponent = Alpine.$data(serverDetailElement);
+                
+                if (!serverDetailComponent || serverDetailComponent.selectedReleaseIndex === '' || serverDetailComponent.selectedAssetIndex === '') {
+                    fileListDiv.innerHTML = '<p class="text-danger">Please select a release and asset in the GitHub Plugin Install section above first.</p>';
+                    return;
+                }
+                
+                const release = serverDetailComponent.githubReleases[serverDetailComponent.selectedReleaseIndex];
+                const asset = release.assets[serverDetailComponent.selectedAssetIndex];
+                const downloadUrl = asset.browser_download_url;
+                
+                // Use the analyze-archive endpoint
+                const response = await fetch(`/api/github-plugins/servers/{{ server.id }}/analyze-archive?download_url=${encodeURIComponent(downloadUrl)}`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    fileListDiv.innerHTML = `<p class="text-danger">${data.error || 'Failed to analyze plugin archive'}</p>`;
+                    return;
+                }
+                
+                githubUninstallFiles = data.all_files || [];
+                
+                if (githubUninstallFiles.length === 0) {
+                    fileListDiv.innerHTML = `<p class="text-muted">No files found in plugin archive</p>`;
+                    return;
+                }
+                
+                renderGitHubUninstallFileTree();
+                document.getElementById('github-uninstall-info').style.display = 'block';
+                document.getElementById('github-uninstall-button').style.display = 'inline-block';
+                
+            } catch (error) {
+                console.error('Error analyzing files:', error);
+                fileListDiv.innerHTML = `<p class="text-danger">${error.message}</p>`;
+            }
+        }
+        
+        function renderGitHubUninstallFileTree() {
+            const fileListDiv = document.getElementById('github-uninstall-file-list');
+            const selectFilesText = window.i18n ? window.i18n.t('pluginMarket.uninstallModal.selectFiles') : 'Select files to DELETE:';
+            const selectFilesHelp = window.i18n ? window.i18n.t('pluginMarket.uninstallModal.selectFilesHelp') : 'Check the files and directories you want to REMOVE. Unchecked items will be kept.';
+            const selectAllText = window.i18n ? window.i18n.t('common.selectAll') : 'Select All';
+            
+            let html = `<p><strong>${selectFilesText}</strong></p>`;
+            html += `<p class="text-muted small">${selectFilesHelp}</p>`;
+            html += `<div class="mb-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="github-uninstall-select-all" onchange="toggleSelectAllGitHubUninstall(this.checked)">
+                    <label class="form-check-label fw-bold" for="github-uninstall-select-all">
+                        ${selectAllText}
+                    </label>
+                </div>
+            </div>`;
+            html += '<div style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; padding: 10px; border-radius: 4px;">';
+            
+            githubUninstallFiles.forEach((file, index) => {
+                const icon = file.is_dir ? 'bi-folder' : 'bi-file-earmark';
+                const sizeText = file.size > 0 ? `(${formatBytesUtil(file.size)})` : '';
+                // Escape special characters for HTML attribute value
+                const pathValue = file.path.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html += `
+                    <div class="form-check">
+                        <input class="form-check-input github-uninstall-file-checkbox" type="checkbox" value="${pathValue}" id="github-file-${index}" onchange="updateGitHubUninstallCount()">
+                        <label class="form-check-label" for="github-file-${index}">
+                            <i class="bi ${icon}"></i> ${file.path} ${sizeText}
+                        </label>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            fileListDiv.innerHTML = html;
+            updateGitHubUninstallCount();
+        }
+        
+        function toggleSelectAllGitHubUninstall(checked) {
+            document.querySelectorAll('.github-uninstall-file-checkbox').forEach(checkbox => {
+                checkbox.checked = checked;
+            });
+            updateGitHubUninstallCount();
+        }
+        
+        function updateGitHubUninstallCount() {
+            const checkboxes = document.querySelectorAll('.github-uninstall-file-checkbox:checked');
+            const count = checkboxes.length;
+            document.getElementById('github-uninstall-files-count').textContent = count;
+            
+            // Update pluralization
+            const filesTextTranslated = count === 1 ? 
+                (window.i18n ? window.i18n.t('common.file') || 'file' : 'file') :
+                (window.i18n ? window.i18n.t('common.files') || 'files' : 'files');
+            document.getElementById('github-uninstall-files-text').textContent = filesTextTranslated;
+        }
+        
+        async function submitGitHubUninstall() {
+            const checkboxes = document.querySelectorAll('.github-uninstall-file-checkbox:checked');
+            const filesToDelete = Array.from(checkboxes).map(cb => cb.value);
+            
+            if (filesToDelete.length === 0) {
+                showError('Please select at least one file to delete');
+                return;
+            }
+            
+            const confirmMsg = `Are you sure you want to delete ${filesToDelete.length} selected files? This action cannot be undone.`;
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+            
+            document.getElementById('github-uninstall-button').disabled = true;
+            
+            try {
+                const response = await fetch(`/api/github-plugins/servers/{{ server.id }}/uninstall`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        files_to_delete: filesToDelete
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSuccess('Plugin uninstalled successfully!');
+                    bootstrap.Modal.getInstance(document.getElementById('githubUninstallModal')).hide();
+                } else {
+                    showError(data.message || 'Failed to uninstall plugin');
+                }
+            } catch (error) {
+                console.error('Error uninstalling plugin:', error);
+                showError('Error uninstalling plugin');
+            } finally {
+                document.getElementById('github-uninstall-button').disabled = false;
+            }
+        }
+        
+        function formatBytesUtil(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
     </script>

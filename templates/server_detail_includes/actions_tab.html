@@ -306,8 +306,26 @@
                                                 </div>
                                             </div>
                                             
+                                            <!-- Exclusion Mode Toggle -->
+                                            <div x-show="(githubArchiveDirs.length > 0 || githubArchiveFiles.length > 0)" class="mb-2">
+                                                <label class="form-label fw-bold small">
+                                                    <span data-i18n="serverDetail.exclusionMode">Exclusion Mode:</span>
+                                                </label>
+                                                <div class="btn-group w-100" role="group">
+                                                    <input type="radio" class="btn-check" name="github-exclusion-mode" id="github-exclusion-mode-dir" value="directory" x-model="githubExclusionMode">
+                                                    <label class="btn btn-outline-primary btn-sm" for="github-exclusion-mode-dir">
+                                                        <i class="bi bi-folder"></i> <span data-i18n="serverDetail.byDirectory">By Directory</span>
+                                                    </label>
+                                                    
+                                                    <input type="radio" class="btn-check" name="github-exclusion-mode" id="github-exclusion-mode-file" value="file" x-model="githubExclusionMode">
+                                                    <label class="btn btn-outline-primary btn-sm" for="github-exclusion-mode-file">
+                                                        <i class="bi bi-file-earmark"></i> <span data-i18n="serverDetail.byFile">By File</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            
                                             <!-- Directory Selection from Archive -->
-                                            <div x-show="githubArchiveDirs.length > 0" class="mb-2">
+                                            <div x-show="githubArchiveDirs.length > 0 && githubExclusionMode === 'directory'" class="mb-2">
                                                 <small class="text-muted d-block mb-1" data-i18n="serverDetail.selectDirsToExclude">Select directories to exclude:</small>
                                                 <div class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
                                                     <template x-for="(dir, idx) in githubArchiveDirs" :key="idx">
@@ -324,14 +342,40 @@
                                                 </div>
                                             </div>
                                             
-                                            <!-- Selected directories -->
-                                            <div x-show="githubExcludeDirs.length > 0" class="mt-2">
+                                            <!-- File Selection from Archive -->
+                                            <div x-show="githubArchiveFiles.length > 0 && githubExclusionMode === 'file'" class="mb-2">
+                                                <small class="text-muted d-block mb-1" data-i18n="serverDetail.selectFilesToExclude">Select files to exclude:</small>
+                                                <div class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
+                                                    <template x-for="(file, idx) in githubArchiveFiles" :key="idx">
+                                                        <div class="form-check form-check-sm">
+                                                            <input class="form-check-input" type="checkbox" 
+                                                                :id="'exclude_file_' + idx"
+                                                                :checked="githubExcludeFiles.includes(file.path)"
+                                                                @change="toggleExcludeFile(file.path)">
+                                                            <label class="form-check-label small" :for="'exclude_file_' + idx">
+                                                                <i class="bi bi-file-earmark me-1"></i>
+                                                                <span x-text="file.path"></span>
+                                                                <span x-show="file.size > 0" class="text-muted" x-text="' (' + formatFileSize(file.size) + ')'"></span>
+                                                            </label>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Selected exclusions -->
+                                            <div x-show="githubExcludeDirs.length > 0 || githubExcludeFiles.length > 0" class="mt-2">
                                                 <small class="text-muted" data-i18n="serverDetail.selectedExclusions">Selected exclusions:</small>
                                                 <div class="mt-1">
-                                                    <template x-for="(dir, idx) in githubExcludeDirs" :key="idx">
+                                                    <template x-for="(dir, idx) in githubExcludeDirs" :key="'dir-' + idx">
                                                         <span class="badge bg-warning text-dark me-1 mb-1">
                                                             <i class="bi bi-folder-x"></i> <span x-text="dir"></span>
                                                             <button type="button" class="btn-close btn-close-dark ms-1" style="font-size: 0.5em;" @click="removeExcludeDir(idx)"></button>
+                                                        </span>
+                                                    </template>
+                                                    <template x-for="(file, idx) in githubExcludeFiles" :key="'file-' + idx">
+                                                        <span class="badge bg-info text-dark me-1 mb-1">
+                                                            <i class="bi bi-file-earmark-x"></i> <span x-text="file"></span>
+                                                            <button type="button" class="btn-close btn-close-dark ms-1" style="font-size: 0.5em;" @click="removeExcludeFile(idx)"></button>
                                                         </span>
                                                     </template>
                                                 </div>
@@ -350,6 +394,13 @@
                                     <span x-show="githubInstalling">
                                         <i class="bi bi-arrow-repeat spin"></i> <span data-i18n="serverDetail.installing">Installing...</span>
                                     </span>
+                                </button>
+                            </div>
+                            
+                            <!-- Uninstall Button -->
+                            <div class="d-grid gap-2 mt-2">
+                                <button class="btn btn-danger" @click="showGitHubUninstallModal()" :disabled="isActionRunning">
+                                    <i class="bi bi-trash"></i> <span data-i18n="githubPlugins.uninstallButton">Uninstall Plugin</span>
                                 </button>
                             </div>
                             

@@ -18,6 +18,7 @@ from modules import (
     GitHubReleasesResponse, GitHubRelease, GitHubReleaseAsset,
     ArchiveAnalysisResponse, ArchiveContentItem,
     GitHubPluginInstallRequest, GitHubPluginInstallResponse,
+    PluginUninstallRequest, PluginUninstallResponse,
     ActionResponse
 )
 from modules.http_helper import http_helper
@@ -351,29 +352,43 @@ async def analyze_archive(
                         is_dir=is_dir
                     ))
         
-        # Collect all directories from the archive for exclusion selection
+        # Collect all directories and files from the archive for exclusion selection
         all_dirs = set()
+        all_files = []
+        
         for line in lines:
             line = line.strip()
             if not line:
                 continue
             
+            # Parse path and size based on archive type
             if archive_type == 'zip':
                 parts = line.split()
                 if len(parts) >= 4:
                     path = ' '.join(parts[3:])
+                    # Try to extract size (first column)
+                    try:
+                        size = int(parts[0])
+                    except (ValueError, IndexError):
+                        size = 0
                 else:
                     continue
             else:
+                # tar output is just paths, no size info
                 path = line
+                size = 0
             
             path = path.strip('/')
             if not path:
                 continue
             
+            # Determine if this is a file or directory
+            is_dir = False
+            
             # If path ends with / it's definitely a directory
             if path.endswith('/'):
                 all_dirs.add(path.rstrip('/'))
+                is_dir = True
             else:
                 # Check if it's a directory by seeing if any other path starts with it
                 for other_line in lines:
@@ -389,7 +404,16 @@ async def analyze_archive(
                     
                     if other_path.startswith(path + '/'):
                         all_dirs.add(path)
+                        is_dir = True
                         break
+                
+                # If not a directory, it's a file
+                if not is_dir:
+                    all_files.append(ArchiveContentItem(
+                        path=path,
+                        is_dir=False,
+                        size=size
+                    ))
             
             # Also add parent directories
             parts = path.split('/')
@@ -403,6 +427,7 @@ async def analyze_archive(
             has_addons_dir=has_addons_dir,
             root_dirs=sorted(list(root_dirs)),
             all_dirs=sorted(list(all_dirs)),
+            all_files=all_files,
             top_level_items=top_level_items,
             archive_type=archive_type
         )
@@ -734,6 +759,99 @@ async def install_github_plugin(
                 addons_path = find_output.strip()
                 source_dir = addons_path.rsplit('/addons', 1)[0]
                 await progress(f"Found addons/ directory in subdirectory")
+            elif request.custom_install_path:
+                # No addons directory found, but custom install path is specified
+                # Extract to the custom path (e.g., 'addons')
+                safe_custom_path = request.custom_install_path.strip().strip('/')
+                
+                # Validate custom path to prevent path traversal
+                if '..' in safe_custom_path or safe_custom_path.startswith('/'):
+                    await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                    error_msg = "Invalid custom install path specified"
+                    await progress(error_msg, "error")
+                    return GitHubPluginInstallResponse(
+                        success=False,
+                        message=error_msg
+                    )
+                
+                # Build exclusion patterns for files and directories
+                exclude_raw_patterns = []
+                
+                # Exclude specified files (new preferred method)
+                for exclude_file in request.exclude_files:
+                    # Sanitize file path
+                    safe_file = exclude_file.strip().strip('/')
+                    if safe_file and '..' not in safe_file:
+                        exclude_raw_patterns.append(safe_file)
+                
+                # Also support excluding directories for backward compatibility
+                for exclude_dir in request.exclude_dirs:
+                    # Sanitize directory name
+                    safe_dir = exclude_dir.strip().strip('/')
+                    if safe_dir and '..' not in safe_dir:
+                        exclude_raw_patterns.append(safe_dir)
+                        exclude_raw_patterns.append(f'{safe_dir}/')
+                        exclude_raw_patterns.append(f'{safe_dir}/*')
+                
+                if exclude_raw_patterns:
+                    exclude_count = len(request.exclude_files) + len(request.exclude_dirs)
+                    await progress(f"Excluding {exclude_count} item(s) from installation")
+                
+                # Create the target directory structure
+                target_custom_dir = f"{csgo_dir}/{safe_custom_path}"
+                mkdir_cmd = f"mkdir -p {target_custom_dir}"
+                await ssh_manager.execute_command(mkdir_cmd)
+                
+                # Copy with exclusions
+                rsync_check = "command -v rsync"
+                success_check, rsync_path, _ = await ssh_manager.execute_command(rsync_check)
+                
+                if rsync_path.strip():
+                    # Use rsync for better control
+                    rsync_excludes = ''
+                    if exclude_raw_patterns:
+                        for pattern in exclude_raw_patterns:
+                            rsync_excludes += f' --exclude="{pattern}"'
+                        await progress(f"Applying {len(exclude_raw_patterns)} exclusion pattern(s)")
+                    copy_cmd = f'rsync -av{rsync_excludes} "{extract_dir}/" "{target_custom_dir}/"'
+                else:
+                    # Fallback to cp with tar for exclusions
+                    if exclude_raw_patterns:
+                        tar_excludes = ' '.join([f'--exclude="{p}"' for p in exclude_raw_patterns])
+                        copy_cmd = f'cd "{extract_dir}" && tar {tar_excludes} -cf - . | tar -xf - -C "{target_custom_dir}"'
+                        await progress(f"Using tar with {len(exclude_raw_patterns)} exclusion pattern(s)")
+                    else:
+                        copy_cmd = f'cp -r "{extract_dir}"/* "{target_custom_dir}/"'
+                
+                logger.info(f"Custom path copy command: {copy_cmd}")
+                success, _, stderr = await ssh_manager.execute_command(copy_cmd)
+                
+                if not success:
+                    await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                    error_msg = f"Failed to copy files to custom path: {stderr}"
+                    await progress(error_msg, "error")
+                    return GitHubPluginInstallResponse(
+                        success=False,
+                        message=error_msg
+                    )
+                
+                await progress(f"Extracted to custom path: {safe_custom_path}")
+                
+                # Cleanup and return success
+                await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                
+                # Count files after installation
+                count_after_cmd = f"find {csgo_dir}/addons -type f 2>/dev/null | wc -l"
+                _, count_after, _ = await ssh_manager.execute_command(count_after_cmd)
+                count_after = int(count_after.strip()) if count_after.strip().isdigit() else 0
+                
+                await progress(f"Installation complete! Custom path used: {safe_custom_path}", "success")
+                
+                return GitHubPluginInstallResponse(
+                    success=True,
+                    message=f"Plugin installed successfully to custom path: {safe_custom_path}",
+                    installed_files=count_after
+                )
             else:
                 # No addons directory found - reject installation
                 await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
@@ -744,10 +862,17 @@ async def install_github_plugin(
                     message=error_msg
                 )
         
-        # Build exclusion patterns for directories
+        # Build exclusion patterns for files and directories
         exclude_raw_patterns = []
         
-        # Exclude specified directories
+        # Exclude specified files (new preferred method)
+        for exclude_file in request.exclude_files:
+            # Sanitize file path
+            safe_file = exclude_file.strip().strip('/')
+            if safe_file and '..' not in safe_file:
+                exclude_raw_patterns.append(safe_file)
+        
+        # Also support excluding directories for backward compatibility
         for exclude_dir in request.exclude_dirs:
             # Sanitize directory name
             safe_dir = exclude_dir.strip().strip('/')
@@ -757,7 +882,8 @@ async def install_github_plugin(
                 exclude_raw_patterns.append(f'{safe_dir}/*')
         
         if exclude_raw_patterns:
-            await progress(f"Excluding {len(request.exclude_dirs)} director(y/ies) from installation")
+            exclude_count = len(request.exclude_files) + len(request.exclude_dirs)
+            await progress(f"Excluding {exclude_count} item(s) from installation")
         
         # Count files before copy
         count_before_cmd = f"find {csgo_dir}/addons -type f 2>/dev/null | wc -l"
@@ -772,16 +898,23 @@ async def install_github_plugin(
         
         if rsync_path.strip():
             # Use rsync for better control
-            rsync_excludes = ' '.join([f"--exclude='{p}'" for p in exclude_raw_patterns])
-            copy_cmd = f"rsync -av {rsync_excludes} {source_dir}/ {csgo_dir}/"
+            # Build exclude arguments properly for rsync
+            rsync_excludes = ''
+            if exclude_raw_patterns:
+                for pattern in exclude_raw_patterns:
+                    rsync_excludes += f' --exclude="{pattern}"'
+                await progress(f"Applying {len(exclude_raw_patterns)} exclusion pattern(s)")
+            copy_cmd = f'rsync -av{rsync_excludes} "{source_dir}/" "{csgo_dir}/"'
         else:
             # Fallback to cp with tar for exclusions
             if exclude_raw_patterns:
-                tar_excludes = ' '.join([f"--exclude={p}" for p in exclude_raw_patterns])
-                copy_cmd = f"cd {source_dir} && tar {tar_excludes} -cf - . | tar -xf - -C {csgo_dir}"
+                tar_excludes = ' '.join([f'--exclude="{p}"' for p in exclude_raw_patterns])
+                copy_cmd = f'cd "{source_dir}" && tar {tar_excludes} -cf - . | tar -xf - -C "{csgo_dir}"'
+                await progress(f"Using tar with {len(exclude_raw_patterns)} exclusion pattern(s)")
             else:
-                copy_cmd = f"cp -r {source_dir}/* {csgo_dir}/"
+                copy_cmd = f'cp -r "{source_dir}"/* "{csgo_dir}/"'
         
+        logger.info(f"Copy command: {copy_cmd}")
         success, copy_output, stderr = await ssh_manager.execute_command(copy_cmd, timeout=120)
         
         # Count files after copy
@@ -818,6 +951,212 @@ async def install_github_plugin(
         return GitHubPluginInstallResponse(
             success=False,
             message=f"Installation error: {str(e)}"
+        )
+    finally:
+        await ssh_manager.disconnect()
+
+
+@router.get("/servers/{server_id}/analyze-installed-plugins")
+async def analyze_installed_plugins(
+    server_id: int,
+    directory: str = "addons",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Analyze installed plugin files to help users select which files to uninstall.
+    
+    Args:
+        server_id: Server ID
+        directory: Directory to analyze (default: addons, relative to csgo directory)
+    
+    Returns:
+        List of installed files and directories
+    """
+    from modules import InstalledPluginAnalysisResponse, InstalledPluginFile
+    
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    
+    ssh_manager = SSHManager()
+    success, msg = await ssh_manager.connect(server)
+    if not success:
+        return InstalledPluginAnalysisResponse(
+            success=False,
+            error=f"SSH connection failed: {msg}"
+        )
+    
+    try:
+        # Sanitize directory input
+        safe_dir = directory.strip().strip('/')
+        if '..' in safe_dir or safe_dir.startswith('/'):
+            return InstalledPluginAnalysisResponse(
+                success=False,
+                error="Invalid directory path"
+            )
+        
+        csgo_dir = f"{server.game_directory}/cs2/game/csgo"
+        target_dir = f"{csgo_dir}/{safe_dir}"
+        
+        # Check if directory exists
+        check_cmd = f"test -d {target_dir} && echo 'exists'"
+        success, output, _ = await ssh_manager.execute_command(check_cmd)
+        
+        if 'exists' not in output:
+            return InstalledPluginAnalysisResponse(
+                success=False,
+                error=f"Directory {safe_dir} does not exist"
+            )
+        
+        # List all files and directories with sizes
+        # Use find to get all files and directories recursively
+        list_cmd = f"cd {target_dir} && find . -type f -exec ls -l {{}} \\; 2>/dev/null | awk '{{print $5 \" \" $9}}' || find . -type f 2>/dev/null"
+        success, output, stderr = await ssh_manager.execute_command(list_cmd, timeout=30)
+        
+        if not success:
+            return InstalledPluginAnalysisResponse(
+                success=False,
+                error=f"Failed to list files: {stderr}"
+            )
+        
+        files = []
+        total_size = 0
+        
+        if output.strip():
+            for line in output.strip().split('\n'):
+                line = line.strip()
+                if not line or line == '.':
+                    continue
+                
+                # Try to parse size and path
+                parts = line.split(None, 1)
+                if len(parts) == 2 and parts[0].isdigit():
+                    size = int(parts[0])
+                    path = parts[1].strip().lstrip('./')
+                else:
+                    # Fallback if no size info
+                    size = 0
+                    path = line.lstrip('./')
+                
+                if path:
+                    # Make path relative to csgo directory
+                    full_path = f"{safe_dir}/{path}"
+                    files.append(InstalledPluginFile(
+                        path=full_path,
+                        size=size,
+                        is_dir=False
+                    ))
+                    total_size += size
+        
+        # Also get directories
+        dir_cmd = f"cd {target_dir} && find . -type d 2>/dev/null | grep -v '^\\.\\?$' || echo ''"
+        success, dir_output, _ = await ssh_manager.execute_command(dir_cmd, timeout=30)
+        
+        if success and dir_output.strip():
+            for line in dir_output.strip().split('\n'):
+                path = line.strip().lstrip('./')
+                if path:
+                    full_path = f"{safe_dir}/{path}"
+                    # Only add if not already in files list
+                    if not any(f.path == full_path for f in files):
+                        files.append(InstalledPluginFile(
+                            path=full_path,
+                            size=0,
+                            is_dir=True
+                        ))
+        
+        return InstalledPluginAnalysisResponse(
+            success=True,
+            files=files,
+            total_size=total_size
+        )
+        
+    except Exception as e:
+        logger.error(f"Error analyzing installed plugins: {e}")
+        return InstalledPluginAnalysisResponse(
+            success=False,
+            error=f"Error analyzing plugins: {str(e)}"
+        )
+    finally:
+        await ssh_manager.disconnect()
+
+
+@router.post("/servers/{server_id}/uninstall", response_model=PluginUninstallResponse)
+async def uninstall_plugin(
+    server_id: int,
+    request: PluginUninstallRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> PluginUninstallResponse:
+    """
+    Uninstall a plugin by deleting selected files.
+    
+    Args:
+        server_id: Server ID
+        request: Uninstall request with list of files to delete
+    
+    Returns:
+        Uninstallation result
+    """
+    from api.routes.actions import send_deployment_update
+    
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    
+    async def progress(msg: str, msg_type: str = "status"):
+        """Send progress update via WebSocket"""
+        await send_deployment_update(server_id, msg_type, msg)
+    
+    ssh_manager = SSHManager()
+    success, msg = await ssh_manager.connect(server)
+    if not success:
+        await progress(f"SSH connection failed: {msg}", "error")
+        return PluginUninstallResponse(
+            success=False,
+            message=f"SSH connection failed: {msg}"
+        )
+    
+    try:
+        await progress("Starting plugin uninstallation...")
+        
+        csgo_dir = f"{server.game_directory}/cs2/game/csgo"
+        deleted_count = 0
+        failed_files = []
+        
+        for file_path in request.files_to_delete:
+            # Build absolute path
+            full_path = f"{csgo_dir}/{file_path}"
+            
+            # Delete file or directory
+            delete_cmd = f"rm -rf '{full_path}'"
+            success, _, stderr = await ssh_manager.execute_command(delete_cmd)
+            
+            if success:
+                deleted_count += 1
+                await progress(f"Deleted: {file_path}")
+            else:
+                failed_files.append(file_path)
+                await progress(f"Failed to delete: {file_path} - {stderr}", "warning")
+        
+        if failed_files:
+            message = f"Uninstallation completed with errors. Deleted {deleted_count} files, failed {len(failed_files)} files."
+            await progress(message, "warning")
+        else:
+            message = f"Successfully uninstalled plugin. Deleted {deleted_count} files."
+            await progress(message, "complete")
+        
+        return PluginUninstallResponse(
+            success=len(failed_files) == 0,
+            message=message,
+            deleted_files=deleted_count,
+            failed_files=failed_files
+        )
+        
+    except Exception as e:
+        logger.error(f"Error uninstalling plugin: {e}")
+        error_msg = f"Uninstallation error: {str(e)}"
+        await progress(error_msg, "error")
+        return PluginUninstallResponse(
+            success=False,
+            message=error_msg
         )
     finally:
         await ssh_manager.disconnect()

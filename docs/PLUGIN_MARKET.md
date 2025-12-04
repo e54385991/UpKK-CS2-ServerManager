@@ -11,7 +11,7 @@ The Plugin Market module provides a centralized marketplace for CS2 server plugi
 - **Filter by Category**: Filter plugins by category (Game Mode, Entertainment, Utility, Admin, Performance, Library, Other)
 - **One-Click Installation**: Install plugins directly to your server without manual download
 - **Version Selection**: Choose specific plugin versions/releases to install (NEW)
-- **Selective Extraction**: Advanced option to exclude specific directories during installation for safe upgrades (NEW)
+- **Selective Extraction**: Advanced option to exclude specific files during installation for safe upgrades (NEW)
 - **Automatic Dependency Installation**: When installing a plugin, all required dependencies are automatically installed first
 - **Plugin Information**: View detailed information including:
   - Plugin name and description
@@ -109,7 +109,7 @@ Fetch available releases (versions) for a plugin.
 ```
 
 #### GET `/api/plugin-market/plugins/{plugin_id}/analyze-archive`
-Analyze a plugin archive to show directory structure (for selective extraction).
+Analyze a plugin archive to show file structure (for selective extraction).
 
 **Query Parameters:**
 - `server_id` (int, required): Server ID for SSH connection
@@ -122,6 +122,18 @@ Analyze a plugin archive to show directory structure (for selective extraction).
   "has_addons_dir": true,
   "root_dirs": ["addons", "cfg"],
   "all_dirs": ["addons", "addons/counterstrikesharp", "addons/counterstrikesharp/configs", "cfg"],
+  "all_files": [
+    {
+      "path": "addons/counterstrikesharp/plugins/MyPlugin.dll",
+      "is_dir": false,
+      "size": 51200
+    },
+    {
+      "path": "cfg/MyPlugin/config.json",
+      "is_dir": false,
+      "size": 2048
+    }
+  ],
   "archive_type": "zip"
 }
 ```
@@ -132,7 +144,8 @@ Install a plugin to a server.
 **Query Parameters:**
 - `server_id` (int, required): Server ID to install on
 - `download_url` (string, optional): Specific release download URL (uses latest if not provided)
-- `exclude_dirs` (list[string], optional): Directories to exclude from installation
+- `exclude_dirs` (list[string], optional): Directories to exclude from installation (deprecated, use exclude_files)
+- `exclude_files` (list[string], optional): Files to exclude from installation
 - `install_dependencies` (bool, default: true): Whether to automatically install dependencies
 
 **Response:**
@@ -144,7 +157,7 @@ Install a plugin to a server.
 }
 ```
 
-**Note**: When `exclude_dirs` is specified, dependencies are NOT automatically installed unless explicitly set via `install_dependencies=true`.
+**Note**: When `exclude_files` or `exclude_dirs` is specified, dependencies are NOT automatically installed unless explicitly set via `install_dependencies=true`.
 
 #### GET `/api/plugin-market/categories`
 Get list of available plugin categories.
@@ -270,11 +283,11 @@ This mode is useful for upgrading plugins while preserving configuration files.
 8. Advanced options panel appears with warning about dependencies
 9. User clicks "Analyze Plugin Package" button
 10. System downloads and analyzes the archive structure
-11. Directory tree with checkboxes appears
-12. User selects directories to EXCLUDE (e.g., config directories)
+11. File tree with checkboxes appears, showing individual files with sizes
+12. User selects files to EXCLUDE (e.g., config files)
 13. User clicks "Install" button
 14. System installs plugin WITHOUT installing dependencies automatically
-15. System excludes selected directories during extraction
+15. System excludes selected files during extraction
 16. Installation completes with clear messaging
 
 **Important**: In advanced mode:
@@ -300,7 +313,7 @@ The plugin market integrates seamlessly with the existing GitHub plugin installa
 - Supports both direct download and panel proxy modes
 - Respects server-level GitHub proxy settings
 - Provides WebSocket progress updates during installation
-- Supports directory exclusions for updates
+- Supports file and directory exclusions for updates
 
 ## Security Considerations
 

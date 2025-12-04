@@ -208,21 +208,6 @@
       "refreshSuccess": "Disk space refreshed",
       "refreshFailed": "Failed to get disk space"
     },
-    "sshHealth": {
-      "title": "SSH Connectivity",
-      "status": "Status",
-      "healthy": "Healthy",
-      "degraded": "Degraded",
-      "completely_down": "Completely Down",
-      "unknown": "Unknown",
-      "failures": "Failures",
-      "lastCheck": "Last Check",
-      "manualReconnect": "Manual Reconnect",
-      "reconnecting": "Reconnecting...",
-      "reconnectSuccess": "SSH reconnection successful!",
-      "reconnectFailed": "Reconnection failed",
-      "offlineEstimate": "Offline Estimate"
-    },
     "addNewServer": "Add CS2 Server (Ensure New Server Initialization Complete)",
     "serverNameLabel": "Server Name *",
     "hostIP": "Host IP *",
@@ -577,16 +562,7 @@
     "clearDeploymentLock": "Clear Deployment Lock",
     "clearing": "Clearing...",
     "confirmClearDeploymentLock": "Are you sure you want to clear the deployment lock?\n\nOnly do this if no deployment is actually running.",
-    "lowDiskSpaceWarning": "WARNING: Low disk space detected!\n\nAvailable space: {available} GB\nRecommended: {recommended} GB or more\n\nDeploying with low disk space may cause installation failures or server issues.\n\nDo you want to continue anyway?",
-    "metamodWarning": {
-      "title": "Metamod:Source Framework Not Installed",
-      "message": "Metamod:Source framework is required to run CS2 plugins. Please install it from Actions - Plugin Framework Management.",
-      "installButton": "Install Metamod:Source",
-      "checkingStatus": "Checking Metamod status...",
-      "installed": "Metamod:Source is installed",
-      "notInstalled": "Metamod:Source is NOT installed",
-      "installPath": "Installation path: {path}"
-    }
+    "lowDiskSpaceWarning": "WARNING: Low disk space detected!\n\nAvailable space: {available} GB\nRecommended: {recommended} GB or more\n\nDeploying with low disk space may cause installation failures or server issues.\n\nDo you want to continue anyway?"
   },
   "setupWizard": {
     "title": "New Server Initialization",
@@ -744,10 +720,7 @@
     "rename": "Rename",
     "note": "Note",
     "and": " and ",
-    "backToHome": "Back to Home",
-    "selectAll": "Select All",
-    "file": "file",
-    "files": "files"
+    "backToHome": "Back to Home"
   },
   "dashboard": {
     "title": "CS2 Server Manager",
@@ -1063,11 +1036,7 @@
       "installFailed": "Plugin installation failed",
       "enterGithubUrl": "Please enter a GitHub URL first",
       "selectServer": "Please select a server",
-      "fillRequired": "Please fill in all required fields",
-      "uninstallSuccess": "Plugin uninstalled successfully!",
-      "uninstallFailed": "Plugin uninstallation failed",
-      "analyzeSuccess": "Plugin files analyzed successfully",
-      "analyzeFailed": "Failed to analyze plugin files"
+      "fillRequired": "Please fill in all required fields"
     },
     "categories": {
       "game_mode": "Game Mode",
@@ -1093,30 +1062,6 @@
       "deploymentTitle": "⚠️ Deployment Recommendation",
       "deploymentText": "It is strongly recommended to deploy this panel outside of mainland China to avoid GitHub connection issues. If your server is located in mainland China, you can enable \"Use Panel Server Proxy\" in Server Management - Settings - Download Proxy Settings. When enabled, all downloads (SteamCMD, GitHub plugins) will be downloaded to this panel server first, then uploaded to your game server via SFTP with progress display.",
       "proxyFlow": "Proxy Download Flow"
-    },
-    "uninstall": "Uninstall",
-    "uninstallModal": {
-      "title": "Uninstall Plugin",
-      "selectServer": "Select server",
-      "analyzing": "Analyzing installed files...",
-      "selectFiles": "Select files to DELETE:",
-      "selectFilesHelp": "Check the files and directories you want to REMOVE. Unchecked items will be kept.",
-      "filesSelected": "{count} files selected for deletion",
-      "totalSize": "Total size: {size}",
-      "cancel": "Cancel",
-      "uninstallButton": "Uninstall Selected Files",
-      "confirmTitle": "Confirm Uninstallation",
-      "confirmMessage": "Are you sure you want to delete {count} selected files? This action cannot be undone.",
-      "uninstalling": "Uninstalling..."
     }
-  },
-  "githubPlugins": {
-    "uninstall": "Uninstall Plugin",
-    "uninstallButton": "Uninstall",
-    "analyzeFiles": "Analyze Installed Files",
-    "analyzeDirectory": "Directory to analyze",
-    "analyzeDirectoryHelp": "Enter the directory to analyze (default: addons)",
-    "clickAnalyze": "Click \"Analyze Plugin Archive\" to start",
-    "uninstallHelp": "This will analyze the plugin archive from GitHub and show files that can be uninstalled. Make sure you have entered a GitHub repository URL and fetched releases in the install section above."
   }
 }

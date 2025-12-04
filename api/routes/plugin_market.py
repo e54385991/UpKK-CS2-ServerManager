@@ -14,6 +14,7 @@ from modules import (
     MarketPluginCreate, MarketPluginUpdate, MarketPluginResponse,
     MarketPluginListResponse, GitHubRepoInfo, ActionResponse,
     Server, GitHubPluginInstallRequest, GitHubPluginInstallResponse,
+    PluginUninstallRequest,
     DependencyInfo
 )
 from modules.http_helper import http_helper
@@ -371,7 +372,8 @@ async def create_plugin(
         tags=request.tags,
         is_recommended=request.is_recommended,
         icon_url=request.icon_url,
-        dependencies=request.dependencies
+        dependencies=request.dependencies,
+        custom_install_path=request.custom_install_path
     )
     
     db.add(plugin)
@@ -430,6 +432,8 @@ async def update_plugin(
         plugin.is_recommended = request.is_recommended
     if request.icon_url is not None:
         plugin.icon_url = request.icon_url
+    if request.custom_install_path is not None:
+        plugin.custom_install_path = request.custom_install_path
     if request.dependencies is not None:
         # Validate dependencies if provided
         if request.dependencies:
@@ -530,7 +534,8 @@ async def install_plugin(
     plugin_id: int,
     server_id: int = Query(..., description="Server ID to install plugin on"),
     download_url: Optional[str] = Query(None, description="Specific release download URL (if not provided, uses latest)"),
-    exclude_dirs: list[str] = Query(default=[], description="Directories to exclude"),
+    exclude_dirs: list[str] = Query(default=[], description="Directories to exclude (deprecated, use exclude_files)"),
+    exclude_files: list[str] = Query(default=[], description="Files to exclude from installation"),
     install_dependencies: bool = Query(default=True, description="Whether to install dependencies"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -549,7 +554,8 @@ async def install_plugin(
         plugin_id: Plugin ID from market
         server_id: Server ID to install on
         download_url: Optional specific release download URL (if not provided, uses latest)
-        exclude_dirs: Optional directories to exclude from extraction
+        exclude_dirs: Optional directories to exclude from extraction (deprecated)
+        exclude_files: Optional files to exclude from extraction
         install_dependencies: Whether to automatically install dependencies
     
     Returns:
@@ -607,7 +613,8 @@ async def install_plugin(
                         dep_id, 
                         server_id,
                         download_url=None,  # Always use latest version for dependencies to avoid version conflicts
-                        exclude_dirs=exclude_dirs, 
+                        exclude_dirs=exclude_dirs,
+                        exclude_files=exclude_files,
                         install_dependencies=False,  # Don't recursively install dependencies of dependencies
                         db=db, 
                         current_user=current_user
@@ -691,7 +698,9 @@ async def install_plugin(
         
         install_request = GitHubPluginInstallRequest(
             download_url=download_url,
-            exclude_dirs=exclude_dirs
+            exclude_dirs=exclude_dirs,
+            exclude_files=exclude_files,
+            custom_install_path=plugin.custom_install_path
         )
         
         result = await install_github_plugin(server_id, install_request, db, current_user)
@@ -899,3 +908,48 @@ async def fetch_repo_info(
         Repository information
     """
     return await fetch_github_repo_info(github_url)
+
+
+@router.post("/plugins/{plugin_id}/uninstall")
+async def uninstall_market_plugin(
+    plugin_id: int,
+    server_id: int,
+    request: PluginUninstallRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Uninstall a market plugin from a server.
+    
+    This is a wrapper around the GitHub plugin uninstall endpoint that:
+    1. Verifies the plugin exists in the market
+    2. Calls the uninstall function with the provided file list
+    
+    Args:
+        plugin_id: Plugin ID from market
+        server_id: Server ID to uninstall from (query parameter)
+        request: Uninstall request with list of files to delete
+    
+    Returns:
+        Uninstallation result
+    """
+    from api.routes.github_plugins import uninstall_plugin
+    
+    # Get plugin (just to verify it exists)
+    plugin = await MarketPlugin.get_by_id(db, plugin_id)
+    if not plugin:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plugin not found"
+        )
+    
+    # Verify server ownership
+    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Server not found"
+        )
+    
+    # Use the existing uninstall function
+    return await uninstall_plugin(server_id, request, db, current_user)

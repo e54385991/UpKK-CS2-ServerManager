@@ -1362,3 +1362,90 @@ async def reset_reconnect_counter(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reset counter: {str(e)}"
         )
+
+
+@router.get("/servers/{server_id}/metamod-status")
+async def get_metamod_status(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Check if Metamod:Source framework is installed on the server.
+    Uses long-lived cache (1 hour) to avoid frequent SSH checks.
+    
+    Checks for the existence of:
+    /cs2/game/csgo/addons/metamod/bin/linuxsteamrt64/metamod.2.cs2.so
+    
+    Returns:
+        MetamodStatusResponse with installation status
+    """
+    from modules import MetamodStatusResponse
+    
+    # Get server and verify ownership
+    server = await get_server_and_verify_ownership(db, server_id, current_user.id)
+    
+    # Create cache key
+    cache_key = f"metamod_status:server:{server_id}"
+    
+    # Try to get from cache first (1 hour TTL)
+    try:
+        cached_status = await redis_manager.client.get(cache_key)
+        if cached_status:
+            # Parse cached JSON
+            cached_data = json.loads(cached_status)
+            return MetamodStatusResponse(**cached_data)
+    except Exception as e:
+        # Log but continue to check
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to get metamod status from cache: {e}")
+    
+    # Not in cache, check via SSH
+    ssh_manager = SSHManager()
+    success, msg = await ssh_manager.connect(server)
+    
+    if not success:
+        return MetamodStatusResponse(
+            success=False,
+            installed=False,
+            error=f"Failed to connect via SSH: {msg}"
+        )
+    
+    try:
+        # Check for metamod binary
+        metamod_path = f"{server.game_directory}/cs2/game/csgo/addons/metamod/bin/linuxsteamrt64/metamod.2.cs2.so"
+        check_cmd = f"test -f {metamod_path} && echo 'exists'"
+        success, output, _ = await ssh_manager.execute_command(check_cmd)
+        
+        installed = 'exists' in output
+        
+        result = MetamodStatusResponse(
+            success=True,
+            installed=installed,
+            path=metamod_path if installed else None,
+            message="Metamod:Source is installed" if installed else "Metamod:Source is not installed"
+        )
+        
+        # Cache the result for 1 hour (3600 seconds)
+        try:
+            await redis_manager.client.setex(
+                cache_key,
+                3600,  # 1 hour TTL
+                json.dumps(result.model_dump())
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to cache metamod status: {e}")
+        
+        return result
+        
+    except Exception as e:
+        return MetamodStatusResponse(
+            success=False,
+            installed=False,
+            error=f"Error checking metamod status: {str(e)}"
+        )
+    finally:
+        await ssh_manager.disconnect()

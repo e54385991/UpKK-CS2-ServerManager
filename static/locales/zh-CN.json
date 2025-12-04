@@ -208,6 +208,21 @@
       "refreshSuccess": "磁盘空间已刷新",
       "refreshFailed": "获取磁盘空间失败"
     },
+    "sshHealth": {
+      "title": "SSH连接状态",
+      "status": "状态",
+      "healthy": "正常",
+      "degraded": "异常",
+      "completely_down": "完全离线",
+      "unknown": "未知",
+      "failures": "失败次数",
+      "lastCheck": "上次检测",
+      "manualReconnect": "手动重连",
+      "reconnecting": "重连中...",
+      "reconnectSuccess": "SSH重连成功！",
+      "reconnectFailed": "重连失败",
+      "offlineEstimate": "离线估计"
+    },
     "addNewServer": "添加CS2服务器（确保已完成新服务器初始化）",
     "serverNameLabel": "服务器名称 *",
     "hostIP": "主机 IP *",
@@ -497,10 +512,15 @@
     "hasAddonsDir": "包含 addons/ 目录",
     "rootDirectories": "根目录",
     "archiveType": "压缩包类型",
+    "exclusionMode": "排除模式",
+    "byDirectory": "按目录",
+    "byFile": "按文件",
     "selectDirsToExclude": "选择要排除的目录：",
+    "selectFilesToExclude": "选择要排除的文件：",
     "selectedExclusions": "已选择排除：",
     "selectAssetFirst": "请先选择一个文件",
     "noDirsFound": "压缩包中未找到目录",
+    "noItemsFound": "压缩包中未找到项目",
     "downloadingArchive": "正在下载并分析...",
     "noAddonsDir": "未能从压缩包找到 addons 目录，这似乎不是有效的 CS2 插件包。",
     "installPlugin": "安装插件",
@@ -557,7 +577,16 @@
     "clearDeploymentLock": "清除部署锁定",
     "clearing": "清除中...",
     "confirmClearDeploymentLock": "您确定要清除部署锁定吗？\n\n仅在确认没有部署正在运行时执行此操作。",
-    "lowDiskSpaceWarning": "警告：检测到磁盘空间不足！\n\n可用空间：{available} GB\n推荐容量：{recommended} GB 或以上\n\n磁盘空间不足可能导致安装失败或服务器问题。\n\n是否仍要继续？"
+    "lowDiskSpaceWarning": "警告：检测到磁盘空间不足！\n\n可用空间：{available} GB\n推荐容量：{recommended} GB 或以上\n\n磁盘空间不足可能导致安装失败或服务器问题。\n\n是否仍要继续？",
+    "metamodWarning": {
+      "title": "未安装 Metamod:Source 框架",
+      "message": "运行 CS2 插件需要 Metamod:Source 框架。请在 操作 - 插件框架管理 中安装。",
+      "installButton": "安装 Metamod:Source",
+      "checkingStatus": "正在检查 Metamod 状态...",
+      "installed": "Metamod:Source 已安装",
+      "notInstalled": "Metamod:Source 未安装",
+      "installPath": "安装路径: {path}"
+    }
   },
   "setupWizard": {
     "title": "新服务器初始化",
@@ -715,7 +744,10 @@
     "rename": "重命名",
     "note": "备注",
     "and": "和",
-    "backToHome": "返回首页"
+    "backToHome": "返回首页",
+    "selectAll": "全选",
+    "file": "个文件",
+    "files": "个文件"
   },
   "dashboard": {
     "title": "CS2 服务器管理器",
@@ -970,6 +1002,10 @@
       "iconUrl": "图标 URL",
       "tags": "标签（逗号分隔）",
       "tagsPlaceholder": "标签1, 标签2, 标签3",
+      "customInstallPath": "自定义安装路径",
+      "customInstallPathHint": "（用于非标准插件包）",
+      "customInstallPathPlaceholder": "例如：addons",
+      "customInstallPathHelp": "对于没有标准 'addons' 目录的插件，指定内容应解压到哪里（例如：'addons' 将解压到 addons 文件夹）",
       "dependenciesLabel": "依赖项",
       "dependenciesHint": "（从已发布的插件中选择）",
       "searchPlugins": "搜索插件...",
@@ -992,15 +1028,26 @@
       "cancel": "取消",
       "installButton": "安装",
       "selectVersion": "选择版本",
+      "selectVersionPlaceholder": "选择一个版本...",
+      "selectAsset": "选择资源文件",
+      "selectAssetFirst": "请先选择一个资源文件",
       "loadingVersions": "加载版本中...",
       "versionHelp": "默认选择最新版本",
       "advancedOptions": "高级选项（用于更新/升级）",
       "advancedWarning": "警告：",
-      "advancedWarningText": "使用选择性解压时，将先分析插件包。然后您可以选择不解压的目录。使用此模式时，依赖项将不会自动安装。",
+      "advancedWarningText": "使用选择性解压时，将先分析插件包。然后您可以选择不解压的目录或文件。使用此模式时，依赖项将不会自动安装。",
       "analyzePlugin": "分析插件包",
       "analyzing": "正在分析插件包...",
+      "exclusionMode": "排除模式",
+      "byDirectory": "按目录",
+      "byFile": "按文件",
+      "exclusionModeHelp": "选择如何选择要排除的项目",
       "selectExclude": "选择要排除安装的目录：",
+      "selectExcludeDir": "选择要排除安装的目录：",
+      "selectExcludeFile": "选择要排除安装的文件：",
       "excludeHelp": "勾选您想要排除的目录（在更新时保留配置文件很有用）",
+      "excludeDirHelp": "勾选您想要排除的目录（在更新时保留配置文件很有用）",
+      "excludeFileHelp": "勾选您想要排除的文件（在更新时保留特定配置文件很有用）",
       "installDependencies": "自动安装依赖",
       "installDependenciesHelp": "取消勾选后，插件依赖不会自动安装。使用选择性解压时此选项会自动禁用。"
     },
@@ -1016,7 +1063,11 @@
       "installFailed": "插件安装失败",
       "enterGithubUrl": "请先输入 GitHub URL",
       "selectServer": "请选择服务器",
-      "fillRequired": "请填写所有必填字段"
+      "fillRequired": "请填写所有必填字段",
+      "uninstallSuccess": "插件卸载成功！",
+      "uninstallFailed": "插件卸载失败",
+      "analyzeSuccess": "插件文件分析成功",
+      "analyzeFailed": "插件文件分析失败"
     },
     "categories": {
       "game_mode": "游戏模式",
@@ -1042,6 +1093,30 @@
       "deploymentTitle": "⚠️ 部署建议",
       "deploymentText": "强烈建议将此面板部署到境外，避免中国大陆网络GitHub连接困难问题。如果您的服务器位于中国大陆，可在 服务器管理 - 配置 - 下载代理配置 中启用\"使用面板服务器代理\"。启用后，所有下载（SteamCMD、GitHub插件）都将先下载到本面板服务器，然后通过SFTP上传到您的游戏服务器，并显示进度。",
       "proxyFlow": "代理下载流程"
+    },
+    "uninstall": "卸载",
+    "uninstallModal": {
+      "title": "卸载插件",
+      "selectServer": "选择服务器",
+      "analyzing": "正在分析已安装文件...",
+      "selectFiles": "选择要删除的文件：",
+      "selectFilesHelp": "勾选您想要删除的文件和目录。未勾选的项目将被保留。",
+      "filesSelected": "已选择 {count} 个文件待删除",
+      "totalSize": "总大小: {size}",
+      "cancel": "取消",
+      "uninstallButton": "卸载选中文件",
+      "confirmTitle": "确认卸载",
+      "confirmMessage": "确定要删除 {count} 个选中的文件吗？此操作无法撤销。",
+      "uninstalling": "正在卸载..."
     }
+  },
+  "githubPlugins": {
+    "uninstall": "卸载插件",
+    "uninstallButton": "卸载",
+    "analyzeFiles": "分析已安装文件",
+    "analyzeDirectory": "要分析的目录",
+    "analyzeDirectoryHelp": "输入要分析的目录（默认：addons）",
+    "clickAnalyze": "点击\"分析插件压缩包\"开始",
+    "uninstallHelp": "这将分析 GitHub 上的插件压缩包并显示可卸载的文件。请确保您已在上方的安装部分输入了 GitHub 仓库 URL 并获取了发布版本。"
   }
 }

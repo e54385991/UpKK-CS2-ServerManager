@@ -100,6 +100,11 @@ async def startup_event():
     await scheduled_task_service.start()
     print("Scheduled task service started")
     
+    # Start SSH health monitoring daemon
+    from services.ssh_health_monitor import ssh_health_monitor
+    await ssh_health_monitor.start()
+    print("SSH health monitoring daemon started")
+    
     # Start monitoring for servers with panel monitoring enabled
     from modules.database import async_session_maker
     from services.server_monitor import server_monitor
@@ -144,6 +149,10 @@ async def shutdown_event():
     # Stop scheduled task service
     from services.scheduled_task_service import scheduled_task_service
     scheduled_task_service.stop()
+    
+    # Stop SSH health monitoring daemon
+    from services.ssh_health_monitor import ssh_health_monitor
+    ssh_health_monitor.stop()
     
     # Stop all monitoring tasks
     from services.server_monitor import server_monitor

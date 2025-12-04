@@ -474,6 +474,62 @@ async def migrate_db():
         else:
             print("✓ use_panel_proxy column exists")
         
+        # Check if SSH health monitoring daemon columns exist in servers table
+        ssh_health_columns = ['enable_ssh_health_monitoring', 'ssh_health_check_interval_hours', 
+                              'ssh_health_failure_threshold', 'last_ssh_health_check', 'ssh_health_status']
+        for column in ssh_health_columns:
+            result = await conn.execute(
+                text(f"""
+                    SELECT COLUMN_NAME 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_SCHEMA = DATABASE() 
+                    AND TABLE_NAME = 'servers' 
+                    AND COLUMN_NAME = '{column}'
+                """)
+            )
+            column_exists = result.fetchone() is not None
+            
+            if not column_exists:
+                print(f"Adding {column} column to servers table...")
+                if column == 'enable_ssh_health_monitoring':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE servers 
+                            ADD COLUMN enable_ssh_health_monitoring TINYINT(1) DEFAULT 1
+                        """)
+                    )
+                elif column == 'ssh_health_check_interval_hours':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE servers 
+                            ADD COLUMN ssh_health_check_interval_hours INT DEFAULT 2
+                        """)
+                    )
+                elif column == 'ssh_health_failure_threshold':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE servers 
+                            ADD COLUMN ssh_health_failure_threshold INT DEFAULT 84
+                        """)
+                    )
+                elif column == 'last_ssh_health_check':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE servers 
+                            ADD COLUMN last_ssh_health_check TIMESTAMP NULL
+                        """)
+                    )
+                elif column == 'ssh_health_status':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE servers 
+                            ADD COLUMN ssh_health_status VARCHAR(50) DEFAULT 'unknown'
+                        """)
+                    )
+                print(f"✓ Migration completed: {column} column added")
+            else:
+                print(f"✓ {column} column exists")
+        
         # Check if market_plugins table exists
         result = await conn.execute(
             text("""
