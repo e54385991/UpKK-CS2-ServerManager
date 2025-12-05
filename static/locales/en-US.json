@@ -1122,6 +1122,10 @@
       "deploymentText": "It is strongly recommended to deploy this panel outside of mainland China to avoid GitHub connection issues. If your server is located in mainland China, you can enable \"Use Panel Server Proxy\" in Server Management - Settings - Download Proxy Settings. When enabled, all downloads (SteamCMD, GitHub plugins) will be downloaded to this panel server first, then uploaded to your game server via SFTP with progress display.",
       "proxyFlow": "Proxy Download Flow"
     },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next"
+    },
     "uninstall": "Uninstall",
     "uninstallModal": {
       "title": "Uninstall Plugin",

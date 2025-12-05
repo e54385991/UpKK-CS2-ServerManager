@@ -1122,6 +1122,10 @@
       "deploymentText": "强烈建议将此面板部署到境外，避免中国大陆网络GitHub连接困难问题。如果您的服务器位于中国大陆，可在 服务器管理 - 配置 - 下载代理配置 中启用\"使用面板服务器代理\"。启用后，所有下载（SteamCMD、GitHub插件）都将先下载到本面板服务器，然后通过SFTP上传到您的游戏服务器，并显示进度。",
       "proxyFlow": "代理下载流程"
     },
+    "pagination": {
+      "previous": "上一页",
+      "next": "下一页"
+    },
     "uninstall": "卸载",
     "uninstallModal": {
       "title": "卸载插件",

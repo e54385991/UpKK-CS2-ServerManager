@@ -801,10 +801,16 @@ function closeInstallModal() {
 
 // Load user info on page load
 async function loadUserInfo() {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+    
     try {
         const response = await fetch('/api/auth/me', {
             headers: {
-                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+                'Authorization': 'Bearer ' + token
             }
         });
         
@@ -815,9 +821,12 @@ async function loadUserInfo() {
             if (currentUser.is_admin) {
                 document.getElementById('admin-section').style.display = 'block';
             }
+        } else {
+            window.location.href = '/login';
         }
     } catch (error) {
         console.error('Error loading user info:', error);
+        window.location.href = '/login';
     }
 }
 
@@ -991,22 +1000,69 @@ function renderPagination(currentPage, totalPages) {
         return;
     }
     
-    let html = '';
+    // Get translated text
+    const previousText = window.i18n ? window.i18n.t('pluginMarket.pagination.previous') : 'Previous';
+    const nextText = window.i18n ? window.i18n.t('pluginMarket.pagination.next') : 'Next';
+    
+    let html = '<nav aria-label="Plugin pagination"><ul class="pagination mb-0">';
     
     // Previous button
-    html += `<button class="btn btn-outline-primary" ${currentPage === 1 ? 'disabled' : ''} 
-             onclick="loadPlugins(${currentPage - 1})">
-             <i class="bi bi-chevron-left"></i> Previous
-             </button>`;
+    html += `
+        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage === 1 ? 'return false;' : `loadPlugins(${currentPage - 1}); return false;`}">
+                <i class="bi bi-chevron-left"></i> ${previousText}
+            </a>
+        </li>`;
     
-    // Page info
-    html += `<span class="mx-3">Page ${currentPage} of ${totalPages}</span>`;
+    // Calculate page range to show
+    const maxPagesToShow = 7;
+    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+    
+    // Adjust start if we're near the end
+    if (endPage - startPage < maxPagesToShow - 1) {
+        startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+    
+    // First page button if not in range
+    if (startPage > 1) {
+        html += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="event.preventDefault(); loadPlugins(1); return false;">1</a>
+            </li>`;
+        if (startPage > 2) {
+            html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    // Page number buttons
+    for (let i = startPage; i <= endPage; i++) {
+        html += `
+            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="event.preventDefault(); ${i === currentPage ? 'return false;' : `loadPlugins(${i}); return false;`}">${i}</a>
+            </li>`;
+    }
+    
+    // Last page button if not in range
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        html += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="event.preventDefault(); loadPlugins(${totalPages}); return false;">${totalPages}</a>
+            </li>`;
+    }
     
     // Next button
-    html += `<button class="btn btn-outline-primary" ${currentPage === totalPages ? 'disabled' : ''} 
-             onclick="loadPlugins(${currentPage + 1})">
-             Next <i class="bi bi-chevron-right"></i>
-             </button>`;
+    html += `
+        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage === totalPages ? 'return false;' : `loadPlugins(${currentPage + 1}); return false;`}">
+                ${nextText} <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>`;
+    
+    html += '</ul></nav>';
     
     container.innerHTML = html;
 }
@@ -1409,7 +1465,7 @@ async function showInstallModal(pluginId, pluginName) {
     
     // Load user's servers
     try {
-        const response = await fetch('/servers/', {
+        const response = await fetch('/servers', {
             headers: {
                 'Authorization': 'Bearer ' + localStorage.getItem('access_token')
             }
