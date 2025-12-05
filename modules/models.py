@@ -3,7 +3,7 @@ Database models for CS2 Server Manager
 Using SQLModel for seamless FastAPI integration
 """
 from sqlmodel import SQLModel, Field, Column, select
-from sqlalchemy import Text, Enum as SQLEnum, Integer, ForeignKey
+from sqlalchemy import Text, Enum as SQLEnum, Integer, ForeignKey, text
 from sqlalchemy.sql import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
@@ -43,6 +43,8 @@ class User(SQLModel, table=True):
     is_admin: bool = Field(default=False)
     api_key: Optional[str] = Field(default=None, max_length=64, unique=True, index=True)
     steam_api_key: Optional[str] = Field(default=None, max_length=64)
+    google_id: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)  # Google OAuth ID
+    oauth_provider: Optional[str] = Field(default=None, max_length=50)  # OAuth provider (google, etc.)
     created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
     updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
     
@@ -75,6 +77,12 @@ class User(SQLModel, table=True):
     async def get_by_api_key(cls, session: AsyncSession, api_key: str) -> Optional["User"]:
         """Get user by API key"""
         result = await session.execute(select(cls).where(cls.api_key == api_key))
+        return result.scalar_one_or_none()
+    
+    @classmethod
+    async def get_by_google_id(cls, session: AsyncSession, google_id: str) -> Optional["User"]:
+        """Get user by Google ID"""
+        result = await session.execute(select(cls).where(cls.google_id == google_id))
         return result.scalar_one_or_none()
 
 
@@ -631,6 +639,109 @@ class SSHServerSudo(SQLModel, table=True):
             await session.commit()
             await session.refresh(new_record)
             return new_record
+
+
+class SystemSettings(SQLModel, table=True):
+    """System settings model for global configuration"""
+    __tablename__ = "system_settings"
+    
+    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    # Proxy configuration
+    default_proxy_mode: str = Field(default="direct", max_length=50)  # direct, panel, github_url
+    github_proxy_url: Optional[str] = Field(default=None, max_length=500)
+    
+    # Email configuration
+    email_enabled: bool = Field(default=False)
+    email_provider: str = Field(default="gmail", max_length=50)  # gmail, smtp
+    email_from_address: Optional[str] = Field(default=None, max_length=255)
+    email_from_name: Optional[str] = Field(default=None, max_length=255)
+    
+    # Gmail API configuration
+    gmail_credentials_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    gmail_token_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    
+    # SMTP configuration (alternative to Gmail API)
+    smtp_host: Optional[str] = Field(default=None, max_length=255)
+    smtp_port: Optional[int] = Field(default=587)
+    smtp_username: Optional[str] = Field(default=None, max_length=255)
+    smtp_password: Optional[str] = Field(default=None, max_length=255)
+    smtp_use_tls: bool = Field(default=True)
+    
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": func.now()})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": func.now(), "onupdate": func.now()})
+    
+    def __repr__(self):
+        return f"<SystemSettings(id={self.id}, proxy_mode='{self.default_proxy_mode}', email_enabled={self.email_enabled})>"
+    
+    @classmethod
+    async def get_settings(cls, session: AsyncSession) -> Optional["SystemSettings"]:
+        """Get system settings (there should only be one row)"""
+        result = await session.execute(select(cls).limit(1))
+        return result.scalar_one_or_none()
+    
+    @classmethod
+    async def get_or_create_settings(cls, session: AsyncSession) -> "SystemSettings":
+        """Get system settings or create if not exists"""
+        settings = await cls.get_settings(session)
+        if not settings:
+            settings = cls()
+            session.add(settings)
+            await session.commit()
+            await session.refresh(settings)
+        return settings
+
+
+class PasswordResetToken(SQLModel, table=True):
+    """Password reset token model"""
+    __tablename__ = "password_reset_tokens"
+    
+    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+    token: str = Field(max_length=64, unique=True, nullable=False, index=True)
+    expires_at: datetime = Field(nullable=False)
+    used: bool = Field(default=False)
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": func.now()})
+    
+    def __repr__(self):
+        return f"<PasswordResetToken(id={self.id}, user_id={self.user_id}, used={self.used})>"
+    
+    @property
+    def is_expired(self) -> bool:
+        """Check if token is expired"""
+        from modules.utils import get_current_time
+        current_time = get_current_time()
+        
+        # Ensure both datetimes are timezone-aware for comparison
+        expires_at = self.expires_at
+        if expires_at.tzinfo is None:
+            # If expires_at is naive, make it aware using the same timezone as current_time
+            expires_at = expires_at.replace(tzinfo=current_time.tzinfo)
+        
+        return current_time > expires_at
+    
+    @property
+    def is_valid(self) -> bool:
+        """Check if token is valid (not used and not expired)"""
+        return not self.used and not self.is_expired
+    
+    @classmethod
+    async def get_by_token(cls, session: AsyncSession, token: str) -> Optional["PasswordResetToken"]:
+        """Get password reset token by token string"""
+        result = await session.execute(select(cls).where(cls.token == token))
+        return result.scalar_one_or_none()
+    
+    @classmethod
+    async def create_token(cls, session: AsyncSession, user_id: int, token: str, expires_at: datetime) -> "PasswordResetToken":
+        """Create a new password reset token"""
+        reset_token = cls(
+            user_id=user_id,
+            token=token,
+            expires_at=expires_at
+        )
+        session.add(reset_token)
+        await session.commit()
+        await session.refresh(reset_token)
+        return reset_token
 
 
 # For backward compatibility with existing code that uses Base.metadata

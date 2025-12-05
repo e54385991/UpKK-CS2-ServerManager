@@ -455,6 +455,10 @@
                                             data-i18n="serverDetail.cancel">
                                             Cancel
                                         </button>
+                                        <button type="button" class="btn btn-outline-info" @click="applySystemDefaults()"
+                                            :disabled="savingGithubProxy">
+                                            <i class="bi bi-arrow-repeat"></i> <span data-i18n="serverDetail.applySystemDefaults">Apply System Defaults</span>
+                                        </button>
                                         <button type="button" class="btn btn-outline-secondary" @click="clearGithubProxy()"
                                             data-i18n="serverDetail.clearAll">
                                             Clear All

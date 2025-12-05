@@ -908,6 +908,38 @@
             this.githubProxyForm.use_panel_proxy = false;
         },
         
+        async applySystemDefaults() {
+            this.savingGithubProxy = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/apply-system-defaults`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const updated = await response.json();
+                    this.server = updated;
+                    // Update form to reflect the new values
+                    this.githubProxyForm.github_proxy = updated.github_proxy || '';
+                    this.githubProxyForm.use_panel_proxy = updated.use_panel_proxy || false;
+                    this.showGithubProxyEdit = false;
+                    this.addLog('complete', 'System default proxy settings applied successfully');
+                    this.showToast('System default proxy settings applied successfully', 'success');
+                } else {
+                    const error = await response.json();
+                    this.addLog('error', `Failed to apply system defaults: ${error.detail}`);
+                    this.showToast(`Failed to apply system defaults: ${error.detail}`, 'error');
+                }
+            } catch (err) {
+                this.addLog('error', `Error: ${err.message}`);
+                this.showToast(`Error: ${err.message}`, 'error');
+            } finally {
+                this.savingGithubProxy = false;
+            }
+        },
+        
         async executeAction(action) {
             if (this.isActionRunning) return;
 

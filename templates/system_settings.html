@@ -1,0 +1,726 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings - CS2 Server Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title mb-4">
+                    <i class="bi bi-gear"></i> <span data-i18n="systemSettings.title">System Settings</span>
+                    <span class="badge bg-danger ms-2" data-i18n="systemSettings.adminOnly">Admin Only</span>
+                </h2>
+                
+                <div id="error-message" class="alert alert-danger d-none" role="alert"></div>
+                <div id="success-message" class="alert alert-success d-none" role="alert"></div>
+                <div id="loading-message" class="alert alert-info">
+                    <i class="bi bi-hourglass-split"></i> Loading settings...
+                </div>
+                
+                <form id="settings-form" style="display: none;">
+                    <!-- Proxy Settings Section -->
+                    <div class="mb-4">
+                        <h4 class="border-bottom pb-2 mb-3">
+                            <i class="bi bi-cloud-download"></i> <span data-i18n="systemSettings.proxySettings">Download Proxy Settings</span>
+                        </h4>
+                        
+                        <div class="mb-3">
+                            <label for="proxy-mode" class="form-label" data-i18n="systemSettings.proxyMode">Default Proxy Mode</label>
+                            <select class="form-select" id="proxy-mode" name="default_proxy_mode">
+                                <option value="direct" data-i18n="systemSettings.proxyModeDirect">Direct Connection</option>
+                                <option value="panel" data-i18n="systemSettings.proxyModePanel">Use Panel Server Proxy</option>
+                                <option value="github_url" data-i18n="systemSettings.proxyModeGithub">Use GitHub Proxy URL</option>
+                            </select>
+                            <div class="form-text" data-i18n="systemSettings.proxyModeHelp">Choose how servers download resources from GitHub by default</div>
+                        </div>
+                        
+                        <div class="mb-3" id="github-proxy-url-group">
+                            <label for="github-proxy-url" class="form-label" data-i18n="systemSettings.githubProxyUrl">GitHub Proxy URL</label>
+                            <input type="url" class="form-control" id="github-proxy-url" name="github_proxy_url" placeholder="https://ghfast.top">
+                            <div class="form-text" data-i18n="systemSettings.githubProxyUrlHelp">Enter GitHub proxy URL (e.g., https://ghfast.top)</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Email Settings Section -->
+                    <div class="mb-4">
+                        <h4 class="border-bottom pb-2 mb-3">
+                            <i class="bi bi-envelope"></i> <span data-i18n="systemSettings.emailSettings">Email Settings</span>
+                        </h4>
+                        
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="email-enabled" name="email_enabled">
+                                <label class="form-check-label" for="email-enabled" data-i18n="systemSettings.emailEnabled">Enable Email System</label>
+                            </div>
+                        </div>
+                        
+                        <div id="email-config-section">
+                            <div class="mb-3">
+                                <label for="email-provider" class="form-label" data-i18n="systemSettings.emailProvider">Email Provider</label>
+                                <select class="form-select" id="email-provider" name="email_provider">
+                                    <option value="smtp" data-i18n="systemSettings.emailProviderSmtp">SMTP</option>
+                                    <option value="gmail" data-i18n="systemSettings.emailProviderGmail">Gmail API</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="email-from-address" class="form-label" data-i18n="systemSettings.emailFromAddress">From Email Address</label>
+                                <input type="email" class="form-control" id="email-from-address" name="email_from_address" placeholder="noreply@example.com">
+                                <div class="form-text" data-i18n="systemSettings.emailFromAddressHelp">Email address that appears in 'From' field</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="email-from-name" class="form-label" data-i18n="systemSettings.emailFromName">From Name</label>
+                                <input type="text" class="form-control" id="email-from-name" name="email_from_name" placeholder="CS2 Server Manager">
+                                <div class="form-text" data-i18n="systemSettings.emailFromNameHelp">Name that appears in 'From' field</div>
+                            </div>
+                            
+                            <!-- Gmail API Settings -->
+                            <div id="gmail-settings" style="display: none;">
+                                <h5 class="mb-3" data-i18n="systemSettings.gmailApiSettings">Gmail API Settings</h5>
+                                
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> <span data-i18n="systemSettings.gmailApiInfo">Gmail API uses OAuth2 for secure authentication. You'll need to create a project in Google Cloud Console and download credentials.</span>
+                                </div>
+                                
+                                <!-- Setup Tutorial (Collapsible) -->
+                                <div class="accordion mb-3" id="gmailSetupAccordion">
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#gmailSetupGuide">
+                                                <i class="bi bi-book"></i>&nbsp;<span data-i18n="systemSettings.gmailSetupGuide">Gmail API Setup Guide</span>
+                                            </button>
+                                        </h2>
+                                        <div id="gmailSetupGuide" class="accordion-collapse collapse" data-bs-parent="#gmailSetupAccordion">
+                                            <div class="accordion-body">
+                                                <!-- English Guide -->
+                                                <div class="lang-en">
+                                                    <h6 class="fw-bold">Step 1: Create Google Cloud Project</h6>
+                                                    <ol>
+                                                        <li>Visit <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                                                        <li>Create a new project or select an existing one</li>
+                                                        <li>Enable Gmail API:
+                                                            <ul>
+                                                                <li>Go to "APIs & Services" → "Enabled APIs & services"</li>
+                                                                <li>Click "+ ENABLE APIS AND SERVICES"</li>
+                                                                <li>Search for "Gmail API" and enable it</li>
+                                                            </ul>
+                                                        </li>
+                                                    </ol>
+                                                    
+                                                    <h6 class="fw-bold mt-3">Step 2: Create OAuth 2.0 Credentials</h6>
+                                                    <ol>
+                                                        <li>Go to "APIs & Services" → "Credentials"</li>
+                                                        <li>Click "Create Credentials" → "OAuth client ID"</li>
+                                                        <li>Configure consent screen if prompted (choose "External" user type)</li>
+                                                        <li>Application type: <strong>Web application</strong></li>
+                                                        <li>Name: Any name (e.g., "CS2 Server Manager")</li>
+                                                        <li><strong>Authorized redirect URIs</strong>: Add the following URL:
+                                                            <div class="alert alert-warning mt-2">
+                                                                <code id="redirect-uri-en"></code>
+                                                                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyRedirectUri()">
+                                                                    <i class="bi bi-clipboard"></i> Copy
+                                                                </button>
+                                                            </div>
+                                                        </li>
+                                                        <li>Click "Create" and download the credentials JSON file</li>
+                                                    </ol>
+                                                    
+                                                    <h6 class="fw-bold mt-3">Step 3: Configure in System Settings</h6>
+                                                    <ol>
+                                                        <li>Open the downloaded <code>credentials.json</code> file</li>
+                                                        <li>Copy all contents and paste into "Gmail API Credentials JSON" below</li>
+                                                        <li>Click "Upload Credentials"</li>
+                                                        <li>Click "Authorize Gmail API" and complete Google authorization</li>
+                                                        <li>Save settings</li>
+                                                    </ol>
+                                                    
+                                                    <h6 class="fw-bold mt-3">Important Notes</h6>
+                                                    <ul>
+                                                        <li>First-time use: Google may show "This app isn't verified" - click "Advanced" → "Go to [app name] (unsafe)" to continue</li>
+                                                        <li>The redirect URI <strong>must exactly match</strong> your server's address</li>
+                                                        <li>Access tokens refresh automatically - no manual intervention needed</li>
+                                                    </ul>
+                                                </div>
+                                                
+                                                <!-- Chinese Guide -->
+                                                <div class="lang-zh">
+                                                    <h6 class="fw-bold">第一步：创建 Google Cloud 项目</h6>
+                                                    <ol>
+                                                        <li>访问 <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                                                        <li>创建新项目或选择现有项目</li>
+                                                        <li>启用 Gmail API：
+                                                            <ul>
+                                                                <li>转到"API 和服务" → "启用的 API 和服务"</li>
+                                                                <li>点击"+ 启用 API 和服务"</li>
+                                                                <li>搜索"Gmail API"并启用</li>
+                                                            </ul>
+                                                        </li>
+                                                    </ol>
+                                                    
+                                                    <h6 class="fw-bold mt-3">第二步：创建 OAuth 2.0 凭据</h6>
+                                                    <ol>
+                                                        <li>转到"API 和服务" → "凭据"</li>
+                                                        <li>点击"创建凭据" → "OAuth 客户端 ID"</li>
+                                                        <li>如提示配置同意屏幕，选择"外部"用户类型</li>
+                                                        <li>应用类型：<strong>Web 应用</strong></li>
+                                                        <li>名称：任意名称（如"CS2 Server Manager"）</li>
+                                                        <li><strong>已获授权的重定向 URI</strong>：添加以下 URL：
+                                                            <div class="alert alert-warning mt-2">
+                                                                <code id="redirect-uri-zh"></code>
+                                                                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyRedirectUri()">
+                                                                    <i class="bi bi-clipboard"></i> 复制
+                                                                </button>
+                                                            </div>
+                                                        </li>
+                                                        <li>点击"创建"并下载凭据 JSON 文件</li>
+                                                    </ol>
+                                                    
+                                                    <h6 class="fw-bold mt-3">第三步：在系统设置中配置</h6>
+                                                    <ol>
+                                                        <li>打开下载的 <code>credentials.json</code> 文件</li>
+                                                        <li>复制全部内容并粘贴到下方"Gmail API Credentials JSON"</li>
+                                                        <li>点击"上传凭据"</li>
+                                                        <li>点击"授权 Gmail API"并完成 Google 授权</li>
+                                                        <li>保存设置</li>
+                                                    </ol>
+                                                    
+                                                    <h6 class="fw-bold mt-3">重要提示</h6>
+                                                    <ul>
+                                                        <li>首次使用：Google 可能显示"此应用未经验证"警告，点击"高级" → "转到 [应用名称]（不安全）"继续</li>
+                                                        <li>重定向 URI <strong>必须完全匹配</strong>您服务器的实际访问地址</li>
+                                                        <li>访问令牌会自动刷新，无需手动操作</li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="gmail-credentials" class="form-label" data-i18n="systemSettings.gmailCredentials">Gmail API Credentials JSON</label>
+                                    <textarea class="form-control" id="gmail-credentials" rows="5" placeholder='{"web": {"client_id": "..."}}'></textarea>
+                                    <div class="form-text" data-i18n="systemSettings.gmailCredentialsHelp">Paste the contents of credentials.json from Google Cloud Console</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <button type="button" class="btn btn-secondary" id="upload-gmail-credentials">
+                                        <i class="bi bi-upload"></i> <span data-i18n="systemSettings.uploadCredentials">Upload Credentials</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <div id="gmail-status" class="alert alert-secondary">
+                                        <i class="bi bi-clock"></i> <span data-i18n="systemSettings.checkingStatus">Checking status...</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3" id="gmail-authorize-section" style="display: none;">
+                                    <button type="button" class="btn btn-primary" id="authorize-gmail">
+                                        <i class="bi bi-shield-check"></i> <span data-i18n="systemSettings.authorizeGmail">Authorize Gmail API</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="mb-3" id="gmail-revoke-section" style="display: none;">
+                                    <button type="button" class="btn btn-danger" id="revoke-gmail">
+                                        <i class="bi bi-x-circle"></i> <span data-i18n="systemSettings.revokeGmail">Revoke Authorization</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- SMTP Settings -->
+                            <div id="smtp-settings">
+                                <h5 class="mb-3" data-i18n="systemSettings.smtpSettings">SMTP Settings</h5>
+                                
+                                <div class="row">
+                                    <div class="col-md-8 mb-3">
+                                        <label for="smtp-host" class="form-label" data-i18n="systemSettings.smtpHost">SMTP Host</label>
+                                        <input type="text" class="form-control" id="smtp-host" name="smtp_host" placeholder="smtp.gmail.com">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="smtp-port" class="form-label" data-i18n="systemSettings.smtpPort">SMTP Port</label>
+                                        <input type="number" class="form-control" id="smtp-port" name="smtp_port" placeholder="587">
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="smtp-username" class="form-label" data-i18n="systemSettings.smtpUsername">SMTP Username</label>
+                                    <input type="text" class="form-control" id="smtp-username" name="smtp_username" placeholder="user@example.com">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="smtp-password" class="form-label" data-i18n="systemSettings.smtpPassword">SMTP Password</label>
+                                    <input type="password" class="form-control" id="smtp-password" name="smtp_password" placeholder="••••••••">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="smtp-use-tls" name="smtp_use_tls" checked>
+                                        <label class="form-check-label" for="smtp-use-tls" data-i18n="systemSettings.smtpUseTls">Use TLS</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Email Test Button -->
+                        <div class="mb-3">
+                            <label class="form-label"><span data-i18n="systemSettings.testEmail">Test Email Configuration</span></label>
+                            <div class="input-group">
+                                <input type="email" class="form-control" id="test-email-address" placeholder="test@example.com" data-i18n-placeholder="systemSettings.testEmailPlaceholder">
+                                <button type="button" class="btn btn-outline-primary" id="send-test-email-btn">
+                                    <i class="bi bi-envelope-check"></i> <span data-i18n="systemSettings.sendTestEmail">Send Test Email</span>
+                                </button>
+                            </div>
+                            <div class="form-text" data-i18n="systemSettings.testEmailHelp">Send a test email to verify your email configuration is working</div>
+                            <div id="test-email-result" class="mt-2"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary" id="save-btn">
+                            <i class="bi bi-save"></i> <span data-i18n="systemSettings.saveSettings">Save Settings</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Check if user is admin
+async function checkAdminAccess() {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+        return false;
+    }
+    
+    try {
+        const response = await fetch('/api/auth/me', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) {
+            window.location.href = '/login';
+            return false;
+        }
+        
+        const user = await response.json();
+        if (!user.is_admin) {
+            alert('Access denied. Admin privileges required.');
+            window.location.href = '/';
+            return false;
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Error checking admin access:', error);
+        window.location.href = '/login';
+        return false;
+    }
+}
+
+// Load settings
+async function loadSettings() {
+    const token = localStorage.getItem('access_token');
+    
+    try {
+        const response = await fetch('/api/system/settings', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load settings');
+        }
+        
+        const settings = await response.json();
+        
+        // Populate form
+        document.getElementById('proxy-mode').value = settings.default_proxy_mode || 'direct';
+        document.getElementById('github-proxy-url').value = settings.github_proxy_url || '';
+        document.getElementById('email-enabled').checked = settings.email_enabled || false;
+        document.getElementById('email-provider').value = settings.email_provider || 'smtp';
+        document.getElementById('email-from-address').value = settings.email_from_address || '';
+        document.getElementById('email-from-name').value = settings.email_from_name || '';
+        document.getElementById('smtp-host').value = settings.smtp_host || '';
+        document.getElementById('smtp-port').value = settings.smtp_port || 587;
+        document.getElementById('smtp-username').value = settings.smtp_username || '';
+        document.getElementById('smtp-use-tls').checked = settings.smtp_use_tls !== false;
+        
+        // Show/hide GitHub proxy URL field
+        updateProxyFields();
+        updateEmailFields();
+        updateEmailProviderFields();
+        
+        // Hide loading message and show form
+        document.getElementById('loading-message').classList.add('d-none');
+        document.getElementById('settings-form').style.display = 'block';
+    } catch (error) {
+        console.error('Error loading settings:', error);
+        showError('Failed to load settings');
+    }
+}
+
+// Update proxy fields visibility
+function updateProxyFields() {
+    const proxyMode = document.getElementById('proxy-mode').value;
+    const githubProxyUrlGroup = document.getElementById('github-proxy-url-group');
+    
+    if (proxyMode === 'github_url') {
+        githubProxyUrlGroup.style.display = 'block';
+    } else {
+        githubProxyUrlGroup.style.display = 'none';
+    }
+}
+
+// Update email fields visibility
+function updateEmailFields() {
+    const emailEnabled = document.getElementById('email-enabled').checked;
+    const emailConfigSection = document.getElementById('email-config-section');
+    
+    if (emailEnabled) {
+        emailConfigSection.style.display = 'block';
+    } else {
+        emailConfigSection.style.display = 'none';
+    }
+}
+
+// Update email provider fields
+function updateEmailProviderFields() {
+    const emailProvider = document.getElementById('email-provider').value;
+    const smtpSettings = document.getElementById('smtp-settings');
+    const gmailSettings = document.getElementById('gmail-settings');
+    
+    if (emailProvider === 'smtp') {
+        smtpSettings.style.display = 'block';
+        gmailSettings.style.display = 'none';
+    } else if (emailProvider === 'gmail') {
+        smtpSettings.style.display = 'none';
+        gmailSettings.style.display = 'block';
+        checkGmailStatus();
+    }
+}
+
+// Check Gmail OAuth status
+async function checkGmailStatus() {
+    const token = localStorage.getItem('access_token');
+    
+    try {
+        const response = await fetch('/api/gmail-oauth/status', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to check Gmail status');
+        }
+        
+        const status = await response.json();
+        const statusDiv = document.getElementById('gmail-status');
+        const authorizeSection = document.getElementById('gmail-authorize-section');
+        const revokeSection = document.getElementById('gmail-revoke-section');
+        
+        if (status.ready) {
+            statusDiv.className = 'alert alert-success';
+            statusDiv.innerHTML = '<i class="bi bi-check-circle"></i> <span data-i18n="systemSettings.gmailAuthorized">Gmail API authorized and ready</span>';
+            authorizeSection.style.display = 'none';
+            revokeSection.style.display = 'block';
+        } else if (status.credentials_configured) {
+            statusDiv.className = 'alert alert-warning';
+            statusDiv.innerHTML = '<i class="bi bi-exclamation-triangle"></i> <span data-i18n="systemSettings.gmailNeedsAuth">Credentials uploaded. Authorization required.</span>';
+            authorizeSection.style.display = 'block';
+            revokeSection.style.display = 'none';
+        } else {
+            statusDiv.className = 'alert alert-info';
+            statusDiv.innerHTML = '<i class="bi bi-info-circle"></i> <span data-i18n="systemSettings.gmailNeedsCredentials">Upload credentials JSON to begin</span>';
+            authorizeSection.style.display = 'none';
+            revokeSection.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error checking Gmail status:', error);
+    }
+}
+
+// Upload Gmail credentials
+document.getElementById('upload-gmail-credentials')?.addEventListener('click', async () => {
+    const token = localStorage.getItem('access_token');
+    const credentials = document.getElementById('gmail-credentials').value;
+    
+    if (!credentials.trim()) {
+        showError('Please paste your credentials JSON');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/gmail-oauth/upload-credentials', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ credentials_json: credentials })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to upload credentials');
+        }
+        
+        showSuccess(data.message);
+        document.getElementById('gmail-credentials').value = '';
+        await checkGmailStatus();
+    } catch (error) {
+        console.error('Error uploading credentials:', error);
+        showError(error.message);
+    }
+});
+
+// Authorize Gmail
+document.getElementById('authorize-gmail')?.addEventListener('click', async () => {
+    const token = localStorage.getItem('access_token');
+    
+    try {
+        const response = await fetch('/api/gmail-oauth/authorize', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to start authorization');
+        }
+        
+        // Open OAuth consent screen in new window
+        window.open(data.authorization_url, 'Gmail Authorization', 'width=600,height=700');
+        
+        // Poll for status changes
+        const pollInterval = setInterval(async () => {
+            await checkGmailStatus();
+            const status = await fetch('/api/gmail-oauth/status', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            }).then(r => r.json());
+            
+            if (status.ready) {
+                clearInterval(pollInterval);
+                showSuccess('Gmail API authorized successfully!');
+            }
+        }, 3000);
+        
+        // Stop polling after 5 minutes
+        setTimeout(() => clearInterval(pollInterval), 300000);
+    } catch (error) {
+        console.error('Error authorizing Gmail:', error);
+        showError(error.message);
+    }
+});
+
+// Revoke Gmail authorization
+document.getElementById('revoke-gmail')?.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to revoke Gmail authorization?')) {
+        return;
+    }
+    
+    const token = localStorage.getItem('access_token');
+    
+    try {
+        const response = await fetch('/api/gmail-oauth/revoke', {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to revoke authorization');
+        }
+        
+        showSuccess(data.message);
+        await checkGmailStatus();
+    } catch (error) {
+        console.error('Error revoking authorization:', error);
+        showError(error.message);
+    }
+});
+
+// Show error message
+function showError(message) {
+    const errorDiv = document.getElementById('error-message');
+    errorDiv.textContent = message;
+    errorDiv.classList.remove('d-none');
+    setTimeout(() => errorDiv.classList.add('d-none'), 5000);
+}
+
+// Show success message
+function showSuccess(message) {
+    const successDiv = document.getElementById('success-message');
+    successDiv.textContent = message;
+    successDiv.classList.remove('d-none');
+    setTimeout(() => successDiv.classList.add('d-none'), 5000);
+}
+
+// Save settings
+document.getElementById('settings-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const token = localStorage.getItem('access_token');
+    const submitBtn = document.getElementById('save-btn');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span data-i18n="systemSettings.savingSettings">Saving...</span>';
+    
+    try {
+        const formData = {
+            default_proxy_mode: document.getElementById('proxy-mode').value,
+            github_proxy_url: document.getElementById('github-proxy-url').value || null,
+            email_enabled: document.getElementById('email-enabled').checked,
+            email_provider: document.getElementById('email-provider').value,
+            email_from_address: document.getElementById('email-from-address').value || null,
+            email_from_name: document.getElementById('email-from-name').value || null,
+            smtp_host: document.getElementById('smtp-host').value || null,
+            smtp_port: parseInt(document.getElementById('smtp-port').value) || 587,
+            smtp_username: document.getElementById('smtp-username').value || null,
+            smtp_use_tls: document.getElementById('smtp-use-tls').checked
+        };
+        
+        // Only include password if it was changed
+        const smtpPassword = document.getElementById('smtp-password').value;
+        if (smtpPassword) {
+            formData.smtp_password = smtpPassword;
+        }
+        
+        const response = await fetch('/api/system/settings', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to save settings');
+        }
+        
+        showSuccess(i18n.t('systemSettings.settingsSaved'));
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        showError(i18n.t('systemSettings.settingsFailed'));
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
+
+// Get redirect URI
+function getRedirectUri() {
+    return window.location.origin + '/api/gmail-oauth/callback';
+}
+
+// Copy redirect URI to clipboard
+function copyRedirectUri() {
+    const redirectUri = getRedirectUri();
+    navigator.clipboard.writeText(redirectUri).then(() => {
+        showSuccess(i18n.language === 'zh-CN' ? '已复制到剪贴板' : 'Copied to clipboard');
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        showError('Failed to copy to clipboard');
+    });
+}
+
+// Update redirect URI display
+function updateRedirectUriDisplay() {
+    const redirectUri = getRedirectUri();
+    document.getElementById('redirect-uri-en').textContent = redirectUri;
+    document.getElementById('redirect-uri-zh').textContent = redirectUri;
+}
+
+// Toggle language-specific content
+function updateLanguageContent() {
+    const currentLang = i18n.language || 'en-US';
+    const isZh = currentLang.startsWith('zh');
+    
+    document.querySelectorAll('.lang-en').forEach(el => {
+        el.style.display = isZh ? 'none' : 'block';
+    });
+    document.querySelectorAll('.lang-zh').forEach(el => {
+        el.style.display = isZh ? 'block' : 'none';
+    });
+}
+
+// Event listeners
+document.getElementById('proxy-mode').addEventListener('change', updateProxyFields);
+document.getElementById('email-enabled').addEventListener('change', updateEmailFields);
+document.getElementById('email-provider').addEventListener('change', updateEmailProviderFields);
+
+// Test email button
+document.getElementById('send-test-email-btn').addEventListener('click', async () => {
+    const token = localStorage.getItem('access_token');
+    const testEmailInput = document.getElementById('test-email-address');
+    const testEmailResult = document.getElementById('test-email-result');
+    const testBtn = document.getElementById('send-test-email-btn');
+    
+    const testEmail = testEmailInput.value.trim();
+    if (!testEmail) {
+        testEmailResult.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> Please enter an email address</div>';
+        return;
+    }
+    
+    try {
+        testBtn.disabled = true;
+        testBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending...';
+        testEmailResult.innerHTML = '';
+        
+        const response = await fetch('/api/system/settings/test-email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                test_email: testEmail
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to send test email');
+        }
+        
+        testEmailResult.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle"></i> ${data.message}</div>`;
+        
+    } catch (error) {
+        console.error('Error sending test email:', error);
+        testEmailResult.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ${error.message}</div>`;
+    } finally {
+        testBtn.disabled = false;
+        testBtn.innerHTML = '<i class="bi bi-envelope-check"></i> <span data-i18n="systemSettings.sendTestEmail">Send Test Email</span>';
+    }
+});
+
+// Listen for language changes
+window.addEventListener('localeChanged', updateLanguageContent);
+
+// Initialize
+(async () => {
+    const hasAccess = await checkAdminAccess();
+    if (hasAccess) {
+        await loadSettings();
+        updateRedirectUriDisplay();
+        updateLanguageContent();
+    }
+})();
+</script>
+{% endblock %}

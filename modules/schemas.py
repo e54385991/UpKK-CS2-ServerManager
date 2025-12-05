@@ -4,7 +4,7 @@ Using SQLModel for seamless FastAPI integration
 """
 from sqlmodel import SQLModel, Field
 from pydantic import EmailStr, field_validator, model_validator
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Annotated
 from datetime import datetime
 from .models import ServerStatus
 import re
@@ -957,3 +957,82 @@ class MetamodStatusResponse(SQLModel):
     path: Optional[str] = None
     message: Optional[str] = None
     error: Optional[str] = None
+
+
+# System Settings Schemas
+class SystemSettingsResponse(SQLModel):
+    """Schema for system settings response"""
+    id: int
+    default_proxy_mode: str
+    github_proxy_url: Optional[str]
+    email_enabled: bool
+    email_provider: str
+    email_from_address: Optional[str]
+    email_from_name: Optional[str]
+    smtp_host: Optional[str]
+    smtp_port: Optional[int]
+    smtp_username: Optional[str]
+    smtp_use_tls: bool
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+
+class SystemSettingsUpdate(SQLModel):
+    """Schema for updating system settings"""
+    default_proxy_mode: Optional[str] = None
+    github_proxy_url: Optional[str] = None
+    email_enabled: Optional[bool] = None
+    email_provider: Optional[str] = None
+    email_from_address: Optional[str] = None
+    email_from_name: Optional[str] = None
+    gmail_credentials_json: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: Optional[bool] = None
+    
+    @field_validator('default_proxy_mode')
+    @classmethod
+    def validate_proxy_mode(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ('direct', 'panel', 'github_url'):
+            raise ValueError('default_proxy_mode must be one of: direct, panel, github_url')
+        return v
+    
+    @field_validator('email_provider')
+    @classmethod
+    def validate_email_provider(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ('gmail', 'smtp'):
+            raise ValueError('email_provider must be one of: gmail, smtp')
+        return v
+
+
+# Password Reset Schemas
+class ForgotPasswordRequest(SQLModel):
+    """Schema for forgot password request"""
+    email: EmailStr
+    captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
+    captcha_code: str = Field(..., min_length=4, max_length=4, description="User-entered CAPTCHA code")
+
+
+class ResetPasswordRequest(SQLModel):
+    """Schema for reset password request"""
+    token: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6, max_length=100)
+
+
+class GmailCredentialsUploadRequest(SQLModel):
+    """Schema for Gmail OAuth credentials upload"""
+    credentials_json: str = Field(..., min_length=1, description="The contents of the credentials.json file from Google Cloud Console")
+
+
+class EmailTestRequest(SQLModel):
+    """Schema for email test request"""
+    test_email: EmailStr = Field(..., description="Email address to send test email to")
+
+
+class GoogleOAuthRequest(SQLModel):
+    """Schema for Google OAuth login/register"""
+    id_token: str = Field(..., min_length=1, description="Google ID token from frontend")
+    username: Optional[str] = Field(default=None, min_length=3, max_length=100, description="Username for new account (if registering)")
+    password: Optional[str] = Field(default=None, min_length=6, max_length=100, description="Password for new account (if registering)")

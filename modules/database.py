@@ -656,6 +656,51 @@ async def migrate_db():
         else:
             print("✓ ssh_servers_sudo table exists")
         
+        # Check if google_id and oauth_provider columns exist in users table
+        google_columns = ['google_id', 'oauth_provider']
+        for column in google_columns:
+            result = await conn.execute(
+                text(f"""
+                    SELECT COLUMN_NAME 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_SCHEMA = DATABASE() 
+                    AND TABLE_NAME = 'users' 
+                    AND COLUMN_NAME = '{column}'
+                """)
+            )
+            column_exists = result.fetchone() is not None
+            
+            if not column_exists:
+                print(f"Adding {column} column to users table...")
+                if column == 'google_id':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE users 
+                            ADD COLUMN google_id VARCHAR(255) NULL
+                        """)
+                    )
+                    # Add unique index for google_id
+                    try:
+                        await conn.execute(
+                            text("""
+                                CREATE UNIQUE INDEX idx_user_google_id ON users(google_id)
+                            """)
+                        )
+                        print(f"✓ Migration completed: {column} column and index added to users table")
+                    except Exception as index_error:
+                        # Index may already exist, which is fine
+                        print(f"✓ Migration completed: {column} column added to users table (index may already exist): {index_error}")
+                elif column == 'oauth_provider':
+                    await conn.execute(
+                        text("""
+                            ALTER TABLE users 
+                            ADD COLUMN oauth_provider VARCHAR(50) NULL
+                        """)
+                    )
+                    print(f"✓ Migration completed: {column} column added to users table")
+            else:
+                print(f"✓ {column} column exists in users table")
+        
         print("✓ Database schema migration completed")
 
 

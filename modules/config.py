@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     # "both" - Both password and key authentication allowed
     SSH_AUTH_MODE: str = "password"  # Default to password only
     
+    # Google OAuth Configuration
+    GOOGLE_CLIENT_ID: Optional[str] = None  # Google OAuth Client ID from Google Cloud Console
+    # Google CallbackURL = https://your-domain.com/google-callback
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

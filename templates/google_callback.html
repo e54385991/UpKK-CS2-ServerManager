@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Google Sign-In</title>
+</head>
+<body>
+    <script>
+        // Extract ID token from URL fragment
+        const params = new URLSearchParams(window.location.hash.substring(1));
+        const idToken = params.get('id_token');
+        
+        if (idToken && window.opener) {
+            // Send token to parent window
+            window.opener.postMessage({
+                type: 'google-oauth-token',
+                id_token: idToken
+            }, window.location.origin);
+            
+            // Close this popup
+            window.close();
+        } else {
+            document.body.innerHTML = '<p>Authentication failed. Please close this window and try again.</p>';
+        }
+    </script>
+</body>
+</html>

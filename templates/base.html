@@ -74,6 +74,11 @@
                             <i class="bi bi-person-plus"></i> <span data-i18n="nav.register">Register</span>
                         </a>
                     </li>
+                    <li class="nav-item" id="system-settings-nav" style="display: none;">
+                        <a class="nav-link {% if '/system-settings' in request.url.path %}active{% endif %}" href="/system-settings">
+                            <i class="bi bi-gear"></i> <span data-i18n="nav.systemSettings">System Settings</span>
+                        </a>
+                    </li>
                     <li class="nav-item" id="profile-nav" style="display: none;">
                         <a class="nav-link {% if '/profile' in request.url.path %}active{% endif %}" href="/profile">
                             <i class="bi bi-person-circle"></i> <span data-i18n="nav.profile">Profile</span>
@@ -187,6 +192,7 @@
             const registerNav = document.getElementById('register-nav');
             const profileNav = document.getElementById('profile-nav');
             const logoutNav = document.getElementById('logout-nav');
+            const systemSettingsNav = document.getElementById('system-settings-nav');
             
             if (token) {
                 try {
@@ -202,6 +208,14 @@
                         logoutNav.style.display = 'block';
                         loginNav.style.display = 'none';
                         registerNav.style.display = 'none';
+                        
+                        // Show system settings link only for admin users
+                        if (user.is_admin) {
+                            systemSettingsNav.style.display = 'block';
+                        } else {
+                            systemSettingsNav.style.display = 'none';
+                        }
+                        
                         return true;
                     } else {
                         // Token is invalid
@@ -218,6 +232,7 @@
             registerNav.style.display = 'block';
             profileNav.style.display = 'none';
             logoutNav.style.display = 'none';
+            systemSettingsNav.style.display = 'none';
             return false;
         }
         

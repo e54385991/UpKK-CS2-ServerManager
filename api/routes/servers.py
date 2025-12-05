@@ -12,7 +12,7 @@ import shlex
 from modules import (
     Server, ServerCreate, ServerUpdate, ServerResponse, ServerResponseWithUser, AuthType,
     get_db, User, UserResponse, get_current_active_user, get_current_admin_user, get_optional_current_user, generate_api_key,
-    get_current_time
+    get_current_time, SystemSettings
 )
 from services import redis_manager
 from services.captcha_service import captcha_service
@@ -164,6 +164,21 @@ async def create_server(
     # Exclude captcha fields from server creation
     server_dict = server_data.model_dump(exclude={'captcha_token', 'captcha_code'})
     server_dict['auth_type'] = AuthType.PASSWORD  # Always use password authentication
+    
+    # Apply system default proxy settings if not explicitly set by user
+    system_settings = await SystemSettings.get_settings(db)
+    if system_settings:
+        # If user hasn't explicitly set proxy mode, apply system defaults
+        # Check if both proxy fields are in their default state (None/False)
+        if not server_dict.get('use_panel_proxy') and not server_dict.get('github_proxy'):
+            if system_settings.default_proxy_mode == 'panel':
+                server_dict['use_panel_proxy'] = True
+                server_dict['github_proxy'] = None
+            elif system_settings.default_proxy_mode == 'github_url' and system_settings.github_proxy_url:
+                server_dict['use_panel_proxy'] = False
+                server_dict['github_proxy'] = system_settings.github_proxy_url
+            # else: default_proxy_mode is 'direct', keep both as None/False
+    
     server = Server(**server_dict, user_id=current_user.id, api_key=generate_api_key())
     db.add(server)
     await db.commit()
@@ -291,6 +306,43 @@ async def update_server(
     elif not new_monitoring_enabled and old_monitoring_enabled:
         # Monitoring was disabled - stop monitoring
         server_monitor.stop_monitoring(server_id)
+    
+    # Clear cache
+    await redis_manager.clear_server_cache(server_id)
+    
+    return server
+
+
+@router.post("/{server_id}/apply-system-defaults", response_model=ServerResponse)
+async def apply_system_defaults_to_server(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Apply system default proxy settings to a server"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    
+    # Get system settings
+    system_settings = await SystemSettings.get_settings(db)
+    if not system_settings:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="System settings not configured"
+        )
+    
+    # Apply system default proxy mode
+    if system_settings.default_proxy_mode == 'panel':
+        server.use_panel_proxy = True
+        server.github_proxy = None
+    elif system_settings.default_proxy_mode == 'github_url':
+        server.use_panel_proxy = False
+        server.github_proxy = system_settings.github_proxy_url
+    else:  # 'direct'
+        server.use_panel_proxy = False
+        server.github_proxy = None
+    
+    await db.commit()
+    await db.refresh(server)
     
     # Clear cache
     await redis_manager.clear_server_cache(server_id)

@@ -1,16 +1,21 @@
 """
 Authentication routes for user registration and login
 """
+from datetime import timedelta
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from google.auth.transport import requests
+from google.oauth2 import id_token
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from datetime import timedelta
 
 from modules import (
     User, UserCreate, UserLogin, UserResponse, Token,
     PasswordReset, UserProfileUpdate, ApiKeyResponse, ApiKeyGenerate,
     SteamApiKeyResponse, GenerateServerTokenRequest, GenerateServerTokenResponse,
+    ForgotPasswordRequest, ResetPasswordRequest, GoogleOAuthRequest,
     get_db, get_password_hash, verify_password, create_access_token,
     get_current_active_user, settings, generate_api_key
 )
@@ -18,6 +23,15 @@ from services.captcha_service import captcha_service
 from services.steam_api_service import steam_api_service
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
+
+
+@router.get("/google-config")
+async def get_google_config():
+    """Get Google OAuth configuration (public endpoint)"""
+    return {
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "enabled": bool(settings.GOOGLE_CLIENT_ID)
+    }
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -320,3 +334,229 @@ async def generate_server_token(
         success=True,
         login_token=result.get('login_token')
     )
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Request password reset email"""
+    from datetime import timedelta
+    from modules import PasswordResetToken, settings, generate_api_key, get_current_time
+    from services.email_service import email_service
+    
+    # Validate CAPTCHA
+    is_valid = await captcha_service.validate_captcha(request.captcha_token, request.captcha_code)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired CAPTCHA code"
+        )
+    
+    # Find user by email
+    user = await User.get_by_email(db, request.email)
+    
+    # Always return success to prevent email enumeration
+    # Even if user doesn't exist, return success message
+    if not user:
+        return {"success": True, "message": "If an account with this email exists, a password reset link has been sent."}
+    
+    # Generate reset token
+    reset_token = generate_api_key()  # Reuse this function for token generation
+    expires_at = get_current_time() + timedelta(hours=1)
+    
+    # Save token to database
+    await PasswordResetToken.create_token(db, user.id, reset_token, expires_at)
+    
+    # Generate reset link
+    reset_link = f"{settings.BACKEND_URL}/reset-password?token={reset_token}"
+    
+    # Send email
+    html_content, text_content = email_service.get_password_reset_template(reset_link, user.username)
+    email_sent = await email_service.send_email(
+        db,
+        user.email,
+        "Password Reset Request - CS2 Server Manager",
+        html_content,
+        text_content
+    )
+    
+    if not email_sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send password reset email. Please contact administrator."
+        )
+    
+    return {"success": True, "message": "If an account with this email exists, a password reset link has been sent."}
+
+
+@router.post("/reset-password-with-token")
+async def reset_password_with_token(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Reset password using reset token"""
+    from modules import PasswordResetToken
+    
+    # Find token
+    token = await PasswordResetToken.get_by_token(db, request.token)
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token"
+        )
+    
+    if not token.is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token"
+        )
+    
+    # Get user
+    user = await db.get(User, token.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Update password
+    user.hashed_password = get_password_hash(request.new_password)
+    
+    # Mark token as used
+    token.used = True
+    
+    db.add(user)
+    db.add(token)
+    await db.commit()
+    
+    return {"success": True, "message": "Password reset successfully. You can now log in with your new password."}
+
+
+@router.post("/google-oauth", response_model=Token)
+async def google_oauth_login(
+    oauth_data: GoogleOAuthRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Google OAuth login/register endpoint
+    
+    If user exists with this Google ID, log them in.
+    If user doesn't exist, register a new user with username and password from request.
+    Email is auto-bound from Google account.
+    """
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Verify the Google ID token
+        try:
+            # Verify with Google Client ID if configured
+            client_id = settings.GOOGLE_CLIENT_ID
+            if not client_id:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Google OAuth is not configured. Please set GOOGLE_CLIENT_ID in environment variables."
+                )
+            
+            idinfo = id_token.verify_oauth2_token(
+                oauth_data.id_token,
+                requests.Request(),
+                client_id
+            )
+            
+            # Get user info from token
+            google_user_id = idinfo['sub']
+            email = idinfo.get('email')
+            
+            if not email:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email not provided by Google. Please ensure email permission is granted."
+                )
+            
+        except ValueError as e:
+            logger.error(f"Invalid Google token: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Google ID token"
+            )
+        
+        # Check if user exists with this Google ID
+        user = await User.get_by_google_id(db, google_user_id)
+        
+        if user:
+            # User exists, log them in
+            if not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="User account is inactive"
+                )
+            
+            # Create access token
+            access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+            access_token = create_access_token(
+                data={"sub": str(user.id), "username": user.username},
+                expires_delta=access_token_expires
+            )
+            
+            return {"access_token": access_token, "token_type": "bearer"}
+        
+        else:
+            # User doesn't exist, need to register
+            if not oauth_data.username or not oauth_data.password:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username and password required for new Google account registration"
+                )
+            
+            # Check if username already exists
+            existing_user = await User.get_by_username(db, oauth_data.username)
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already taken. Please choose a different username."
+                )
+            
+            # Check if email already exists (from non-Google registration)
+            existing_email = await User.get_by_email(db, email)
+            if existing_email:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="An account with this email already exists. Please use regular login."
+                )
+            
+            # Create new user with Google OAuth
+            hashed_password = get_password_hash(oauth_data.password)
+            new_user = User(
+                username=oauth_data.username,
+                email=email,
+                hashed_password=hashed_password,
+                google_id=google_user_id,
+                oauth_provider="google",
+                is_active=True
+            )
+            db.add(new_user)
+            await db.commit()
+            await db.refresh(new_user)
+            
+            # Create access token for the new user
+            access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+            access_token = create_access_token(
+                data={"sub": str(new_user.id), "username": new_user.username},
+                expires_delta=access_token_expires
+            )
+            
+            return {"access_token": access_token, "token_type": "bearer"}
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Google OAuth login: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Google OAuth login failed: {str(e)}"
+        )
+
+

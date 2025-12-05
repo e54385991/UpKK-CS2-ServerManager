@@ -14,7 +14,7 @@ import logging
 
 from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse, get_optional_current_user, User, setup_logging, _get_log_level
 from services import redis_manager
-from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market
+from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market, system_settings, gmail_oauth
 
 # Initialize logging first (before anything else logs)
 # Get log level from settings
@@ -51,6 +51,8 @@ app.include_router(file_manager.router)
 app.include_router(scheduled_tasks.router)
 app.include_router(github_plugins.router)
 app.include_router(plugin_market.router)
+app.include_router(system_settings.router)
+app.include_router(gmail_oauth.router)
 
 
 @app.on_event("startup")
@@ -188,6 +190,12 @@ async def login_page(request: Request):
 async def register_page(request: Request):
     """Registration page"""
     return templates.TemplateResponse("register.html", {"request": request})
+
+
+@app.get("/google-callback", response_class=HTMLResponse)
+async def google_callback_page(request: Request):
+    """Google OAuth callback page"""
+    return templates.TemplateResponse("google_callback.html", {"request": request})
 
 
 @app.get("/servers-ui", response_class=HTMLResponse)
@@ -331,6 +339,24 @@ async def setup_wizard(request: Request):
 async def profile_page(request: Request):
     """User profile page"""
     return templates.TemplateResponse("profile.html", {"request": request})
+
+
+@app.get("/system-settings", response_class=HTMLResponse)
+async def system_settings_page(request: Request):
+    """System settings page (admin only - auth checked client-side)"""
+    return templates.TemplateResponse("system_settings.html", {"request": request})
+
+
+@app.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(request: Request):
+    """Forgot password page"""
+    return templates.TemplateResponse("forgot_password.html", {"request": request})
+
+
+@app.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_page(request: Request):
+    """Reset password page"""
+    return templates.TemplateResponse("reset_password.html", {"request": request})
 
 
 @app.get("/health")
