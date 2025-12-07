@@ -16,6 +16,7 @@ from modules import (
     Server, DeploymentLog, ServerStatus,
     ServerAction, ActionResponse, DeploymentLogResponse,
     BatchActionRequest, BatchActionResponse, BatchInstallPluginsRequest,
+    BatchSendCommandRequest,
     get_db, User, get_current_active_user, get_current_time
 )
 from modules.database import async_session_maker
@@ -1087,6 +1088,141 @@ async def batch_install_plugins(
     return BatchActionResponse(
         success=True,
         message=f"Installing {plugins_str} on {len(valid_server_ids)} server(s) in background",
+        batch_id=batch_id,
+        server_count=len(valid_server_ids)
+    )
+
+
+async def execute_single_server_command(server_id: int, command: str, user_id: int, is_admin: bool, batch_id: str):
+    """
+    Send a command to a single game server in the background.
+    This function is designed to run as a background task.
+    
+    Args:
+        server_id: Server ID to send command to
+        command: Command to send to the game server
+        user_id: User ID who initiated the command
+        is_admin: Whether the user is an admin
+        batch_id: Batch ID for tracking progress
+    """
+    from modules.database import async_session_maker
+    
+    try:
+        await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Sending command to server...")
+        
+        async with async_session_maker() as db:
+            server = await db.get(Server, server_id)
+            
+            if not server:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
+                return
+            
+            # Verify ownership
+            if not is_admin and server.user_id != user_id:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Access denied")
+                return
+            
+            # Connect to server via SSH
+            ssh_manager = SSHManager()
+            success, msg = await ssh_manager.connect(server)
+            
+            if not success:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", f"SSH connection failed: {msg}")
+                return
+            
+            try:
+                # Check if game server is running
+                screen_name = f"cs2server_{server_id}"
+                check_cmd = f"screen -list | grep {screen_name} || true"
+                
+                success, stdout, stderr = await ssh_manager.execute_command(check_cmd, timeout=10)
+                
+                if not stdout or not stdout.strip() or screen_name not in stdout:
+                    await redis_manager.set_batch_action_status(
+                        batch_id, server_id, "failed", 
+                        "Game server is not running. Please start the server first."
+                    )
+                    return
+                
+                await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", f"Executing command: {command}")
+                
+                # Send command to screen session using stuff command
+                # The "stuff" command sends text to the screen session as if typed
+                # Add newline to execute the command
+                escaped_command = command.replace('"', '\\"')
+                stuff_cmd = f'screen -S {screen_name} -X stuff "{escaped_command}\n"'
+                
+                success, stdout, stderr = await ssh_manager.execute_command(stuff_cmd, timeout=10)
+                
+                if success:
+                    await redis_manager.set_batch_action_status(
+                        batch_id, server_id, "success", 
+                        f"Command sent successfully: {command}"
+                    )
+                else:
+                    await redis_manager.set_batch_action_status(
+                        batch_id, server_id, "failed", 
+                        f"Failed to send command: {stderr or 'Unknown error'}"
+                    )
+                    
+            finally:
+                await ssh_manager.disconnect()
+                
+    except Exception as e:
+        logger.error(f"Error sending command to server {server_id}: {e}")
+        await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(e))
+
+
+@router.post("/servers/batch-send-command", response_model=BatchActionResponse)
+async def batch_send_command(
+    request: BatchSendCommandRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Send a command to multiple game servers asynchronously (non-blocking).
+    
+    This endpoint sends the specified command to all selected game servers.
+    Commands are sent via screen session to running game servers.
+    
+    Use the batch_id returned to check progress via GET /servers/batch-actions/{batch_id}
+    
+    Args:
+        request: BatchSendCommandRequest with server_ids and command
+    
+    Returns:
+        BatchActionResponse with batch_id for tracking progress
+    """
+    # Generate cryptographically secure batch ID (16 bytes = 32 hex chars)
+    batch_id = secrets.token_hex(16)
+    
+    # Validate all servers exist and belong to current user
+    valid_server_ids = []
+    for server_id in request.server_ids:
+        server = await db.get(Server, server_id)
+        
+        if server and server.user_id == current_user.id:
+            valid_server_ids.append(server_id)
+            # Set initial status as pending
+            await redis_manager.set_batch_action_status(batch_id, server_id, "pending", "Queued for command execution")
+    
+    if not valid_server_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid servers found in the request"
+        )
+    
+    # Spawn background tasks for each server - these run in parallel
+    # Tasks are stored to prevent garbage collection
+    for server_id in valid_server_ids:
+        task = asyncio.create_task(
+            execute_single_server_command(server_id, request.command, current_user.id, current_user.is_admin, batch_id)
+        )
+        _store_task(task)
+    
+    return BatchActionResponse(
+        success=True,
+        message=f"Sending command to {len(valid_server_ids)} server(s) in background",
         batch_id=batch_id,
         server_count=len(valid_server_ids)
     )

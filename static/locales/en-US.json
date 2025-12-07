@@ -147,12 +147,22 @@
       "stop": "Stop",
       "update": "Update",
       "installPlugins": "Install Plugins",
+      "sendCommand": "Send Command",
       "started": "{action} started for {count} server(s). Processing in background...",
       "pluginInstallStarted": "Installing {plugins} on {count} server(s). Processing in background...",
       "selectServer": "Please select at least one server",
       "completed": "{action} completed: {succeeded} succeeded, {failed} failed",
       "failedServersList": "Failed servers",
-      "dispatched": "Command dispatched to {count} server(s)"
+      "dispatched": "Command dispatched to {count} server(s)",
+      "commandDispatch": "Command sent to {count} server(s): {command}"
+    },
+    "sendCommand": {
+      "title": "Send Command to Servers",
+      "info": "Enter a command to send to all selected game servers. The command will be sent to running servers only.",
+      "commandLabel": "Command",
+      "examples": "Examples:",
+      "send": "Send Command",
+      "emptyCommand": "Please enter a command"
     },
     "loading": "Loading servers...",
     "error": "Error loading servers",
@@ -932,7 +942,8 @@
     "startingBatchAction": "Error starting batch action",
     "installingPlugins": "Error installing plugins",
     "deletingServer": "Error deleting server",
-    "loadingServerDetails": "Error loading server details"
+    "loadingServerDetails": "Error loading server details",
+    "sendingCommand": "Error sending command"
   },
   "confirmMessages": {
     "deleteServer": "Are you sure you want to delete server \"{serverName}\"?",

@@ -81,6 +81,7 @@ class UserProfileUpdate(SQLModel):
     """Schema for updating user profile"""
     email: Optional[EmailStr] = None
     steam_api_key: Optional[str] = Field(None, max_length=64, description="Steam Web API key for game server management")
+    github_token: Optional[str] = Field(None, max_length=255, description="GitHub Fine-grained personal access token for accessing private repositories and better rate limits")
     captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
     captcha_code: str = Field(..., min_length=4, max_length=4, description="User-entered CAPTCHA code")
     
@@ -95,11 +96,36 @@ class UserProfileUpdate(SQLModel):
         if not re.match(r'^[A-Fa-f0-9]{32}$', v):
             raise ValueError('Steam API key must be a 32-character hexadecimal string')
         return v
+    
+    @field_validator('github_token')
+    @classmethod
+    def validate_github_token(cls, v):
+        """Validate GitHub token format"""
+        if v is None or v.strip() == '':
+            return v
+        # GitHub Fine-grained tokens start with 'github_pat_' followed by alphanumeric characters
+        # Example: [REDACTED]
+        # Classic tokens start with 'ghp_', 'gho_', 'ghu_', 'ghs_', or 'ghr_' followed by alphanumeric characters
+        v = v.strip()
+        # More flexible pattern to match real GitHub tokens
+        # Fine-grained: github_pat_ + base62-like characters (letters, numbers, underscore)
+        # Classic: gh[poushр]_ + base62-like characters
+        if not re.match(r'^(github_pat_[A-Za-z0-9_]+|gh[poushр]_[A-Za-z0-9_]+)$', v):
+            raise ValueError('GitHub token must be a valid Fine-grained or Classic personal access token')
+        return v
 
 
 class SteamApiKeyResponse(SQLModel):
     """Schema for Steam API key response"""
     steam_api_key: Optional[str] = None
+    
+    model_config = {"from_attributes": True}
+
+
+class GitHubTokenStatusResponse(SQLModel):
+    """Schema for GitHub token status response"""
+    has_token: bool
+    token_prefix: Optional[str] = None  # Shows first part like "github_pat_11..." without revealing full token
     
     model_config = {"from_attributes": True}
 
@@ -460,6 +486,21 @@ class BatchActionResponse(SQLModel):
     message: str
     batch_id: str = Field(..., description="Unique batch ID for tracking progress")
     server_count: int = Field(..., description="Number of servers in batch")
+
+
+class BatchSendCommandRequest(SQLModel):
+    """Schema for batch send command to game servers"""
+    server_ids: List[int] = Field(..., min_length=1, description="List of server IDs to send command to")
+    command: str = Field(..., min_length=1, max_length=500, description="Command to send to game servers")
+    
+    @field_validator('command')
+    @classmethod
+    def validate_command(cls, v):
+        """Validate command is not empty and trim whitespace"""
+        v = v.strip()
+        if not v:
+            raise ValueError('Command cannot be empty')
+        return v
 
 
 class ActionResponse(SQLModel):

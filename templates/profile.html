@@ -67,6 +67,31 @@
                     </div>
                     
                     <div class="mb-3">
+                        <label for="profile-github-token" class="form-label">GitHub Personal Access Token</label>
+                        
+                        <!-- Token status indicator -->
+                        <div id="github-token-status" class="d-none mb-2">
+                            <div class="alert alert-success alert-sm py-2">
+                                <i class="bi bi-check-circle-fill"></i>
+                                <strong>Token configured:</strong> 
+                                <code id="github-token-prefix" class="small">Loading...</code>
+                            </div>
+                        </div>
+                        
+                        <input type="password" class="form-control" id="profile-github-token" name="github_token" maxlength="255" placeholder="github_pat_... or ghp_...">
+                        <div class="form-text">
+                            <small>
+                                Get your GitHub Fine-grained personal access token from 
+                                <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener">
+                                    GitHub Token Settings <i class="bi bi-box-arrow-up-right"></i>
+                                </a>
+                                <br>Used for accessing private repositories and better API rate limits when installing GitHub plugins. Leave blank to remove.
+                                <br><strong>Note:</strong> Fine-grained tokens (recommended) start with <code>github_pat_</code>. Classic tokens start with <code>ghp_</code>, <code>gho_</code>, <code>ghu_</code>, <code>ghs_</code>, or <code>ghr_</code>.
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
                         <label for="profile-captcha" class="form-label" data-i18n="profile.captcha">Verification Code</label>
                         <div class="d-flex gap-2 align-items-center">
                             <img id="profile-captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" title="Click to refresh">
@@ -256,6 +281,37 @@ async function loadSteamApiKey() {
     }
 }
 
+// Load GitHub token status
+async function loadGitHubTokenStatus() {
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/auth/github-token-status', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const statusDiv = document.getElementById('github-token-status');
+            const prefixElement = document.getElementById('github-token-prefix');
+            
+            if (data.has_token && data.token_prefix) {
+                // Show the status indicator with token prefix
+                prefixElement.textContent = data.token_prefix;
+                statusDiv.classList.remove('d-none');
+            } else {
+                // Hide the status indicator if no token
+                statusDiv.classList.add('d-none');
+            }
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Failed to load GitHub token status:', error);
+    }
+}
+
 // Load CAPTCHA for profile form
 async function loadProfileCaptcha() {
     try {
@@ -310,6 +366,7 @@ document.getElementById('profile-form').addEventListener('submit', async (e) => 
         const token = localStorage.getItem('access_token');
         const email = document.getElementById('profile-email').value.trim();
         const steamApiKey = document.getElementById('profile-steam-api-key').value.trim();
+        const githubToken = document.getElementById('profile-github-token').value.trim();
         
         const requestBody = {
             captcha_token: document.getElementById('profile-captcha-token').value,
@@ -323,6 +380,9 @@ document.getElementById('profile-form').addEventListener('submit', async (e) => 
         // Always include steam_api_key (even if empty, to allow clearing)
         requestBody.steam_api_key = steamApiKey;
         
+        // Always include github_token (even if empty, to allow clearing)
+        requestBody.github_token = githubToken;
+        
         const response = await fetch('/api/auth/profile', {
             method: 'PUT',
             headers: {
@@ -335,12 +395,18 @@ document.getElementById('profile-form').addEventListener('submit', async (e) => 
         const data = await response.json();
         
         if (response.ok) {
-            const successMsg = window.i18n ? window.i18n.t('profile.updateSuccess') : 'Profile updated successfully';
+            let successMsg = window.i18n ? window.i18n.t('profile.updateSuccess') : 'Profile updated successfully';
+            // Add token confirmation to success message if token was provided
+            if (githubToken) {
+                successMsg += ' GitHub token has been securely saved.';
+            }
             successDiv.textContent = successMsg;
             successDiv.classList.remove('d-none');
             document.getElementById('profile-email').value = '';
+            document.getElementById('profile-github-token').value = ''; // Clear the token field for security
             loadUserInfo();
             loadSteamApiKey(); // Reload Steam API key to reflect changes
+            loadGitHubTokenStatus(); // Reload GitHub token status to show indicator
         } else {
             errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.updateFailed') : 'Failed to update profile');
             errorDiv.classList.remove('d-none');
@@ -637,6 +703,7 @@ document.getElementById('regenerate-apikey-btn').addEventListener('click', gener
 // Load user info and CAPTCHAs on page load
 loadUserInfo();
 loadSteamApiKey();
+loadGitHubTokenStatus();
 loadProfileCaptcha();
 loadPasswordCaptcha();
 loadApiKeyCaptcha();

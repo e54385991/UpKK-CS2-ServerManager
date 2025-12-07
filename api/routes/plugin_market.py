@@ -112,13 +112,14 @@ async def validate_dependencies(db: AsyncSession, dependency_ids: list[int]) -> 
             )
 
 
-async def fetch_github_repo_info(github_url: str, github_proxy: Optional[str] = None) -> GitHubRepoInfo:
+async def fetch_github_repo_info(github_url: str, github_proxy: Optional[str] = None, github_token: Optional[str] = None) -> GitHubRepoInfo:
     """
     Fetch repository information from GitHub API.
     
     Args:
         github_url: GitHub repository URL
         github_proxy: Optional GitHub proxy URL
+        github_token: Optional GitHub personal access token for authentication
     
     Returns:
         GitHubRepoInfo with parsed data
@@ -142,7 +143,8 @@ async def fetch_github_repo_info(github_url: str, github_proxy: Optional[str] = 
         api_url,
         headers=headers,
         timeout=30,
-        proxy=github_proxy
+        proxy=github_proxy,
+        github_token=github_token
     )
     
     if not success:
@@ -161,7 +163,8 @@ async def fetch_github_repo_info(github_url: str, github_proxy: Optional[str] = 
         readme_url,
         headers=headers,
         timeout=30,
-        proxy=github_proxy
+        proxy=github_proxy,
+        github_token=github_token
     )
     
     if readme_success and isinstance(readme_data, dict):
@@ -347,7 +350,9 @@ async def create_plugin(
     author = request.author
     
     if not title or not description:
-        repo_info = await fetch_github_repo_info(request.github_url)
+        # Use current user's GitHub token for authentication if available
+        github_token = current_user.github_token if current_user.has_github_token else None
+        repo_info = await fetch_github_repo_info(request.github_url, github_token=github_token)
         if repo_info.success:
             if not title and repo_info.repo_name:
                 title = repo_info.repo_name
@@ -662,11 +667,15 @@ async def install_plugin(
                 "User-Agent": "CS2-ServerManager"
             }
             
+            # Use current user's GitHub token for authentication if available
+            github_token = current_user.github_token if current_user.has_github_token else None
+            
             success, data, error = await http_helper.get(
                 api_url,
                 headers=headers,
                 timeout=30,
-                proxy=server.github_proxy
+                proxy=server.github_proxy,
+                github_token=github_token
             )
             
             if not success:
@@ -849,11 +858,15 @@ async def analyze_plugin_archive(
                 "User-Agent": "CS2-ServerManager"
             }
             
+            # Use current user's GitHub token for authentication if available
+            github_token = current_user.github_token if current_user.has_github_token else None
+            
             success, data, error = await http_helper.get(
                 api_url,
                 headers=headers,
                 timeout=30,
-                proxy=server.github_proxy
+                proxy=server.github_proxy,
+                github_token=github_token
             )
             
             if not success:
@@ -912,7 +925,9 @@ async def fetch_repo_info(
     Returns:
         Repository information
     """
-    return await fetch_github_repo_info(github_url)
+    # Use current user's GitHub token for authentication if available
+    github_token = current_user.github_token if current_user.has_github_token else None
+    return await fetch_github_repo_info(github_url, github_token=github_token)
 
 
 @router.post("/plugins/{plugin_id}/uninstall")

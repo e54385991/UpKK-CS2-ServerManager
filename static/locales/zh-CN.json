@@ -147,12 +147,22 @@
       "stop": "停止",
       "update": "更新",
       "installPlugins": "安装插件",
+      "sendCommand": "发送命令",
       "started": "正在对 {count} 个服务器执行 {action} 操作，后台处理中...",
       "pluginInstallStarted": "正在 {count} 个服务器上安装 {plugins}，后台处理中...",
       "selectServer": "请至少选择一个服务器",
       "completed": "{action} 完成: 成功 {succeeded} 个, 失败 {failed} 个",
       "failedServersList": "失败服务器",
-      "dispatched": "命令已下发到 {count} 个服务器"
+      "dispatched": "命令已下发到 {count} 个服务器",
+      "commandDispatch": "命令已发送到 {count} 个服务器: {command}"
+    },
+    "sendCommand": {
+      "title": "发送命令到服务器",
+      "info": "输入要发送到所有选定游戏服务器的命令。命令仅会发送到正在运行的服务器。",
+      "commandLabel": "命令",
+      "examples": "示例：",
+      "send": "发送命令",
+      "emptyCommand": "请输入命令"
     },
     "loading": "加载服务器中...",
     "error": "加载服务器时出错",
@@ -932,7 +942,8 @@
     "startingBatchAction": "启动批量操作失败",
     "installingPlugins": "安装插件失败",
     "deletingServer": "删除服务器失败",
-    "loadingServerDetails": "加载服务器详情失败"
+    "loadingServerDetails": "加载服务器详情失败",
+    "sendingCommand": "发送命令失败"
   },
   "confirmMessages": {
     "deleteServer": "确定要删除服务器 \"{serverName}\" 吗？",

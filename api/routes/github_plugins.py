@@ -119,12 +119,16 @@ async def get_github_releases(
         "User-Agent": "CS2-ServerManager"
     }
     
+    # Use user's GitHub token for authentication if available
+    github_token = current_user.github_token if current_user.has_github_token else None
+    
     success, data, error = await http_helper.get(
         api_url,
         headers=headers,
         params={"per_page": count},
         timeout=30,
-        proxy=github_proxy
+        proxy=github_proxy,
+        github_token=github_token
     )
     
     if not success:

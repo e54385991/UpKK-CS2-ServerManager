@@ -82,6 +82,11 @@
                             class="btn btn-sm btn-primary">
                         <i class="bi bi-plugin"></i> <span data-i18n="servers.bulkActions.installPlugins">Install Plugins</span>
                     </button>
+                    <button @click="bulkSendCommand()" 
+                            :disabled="bulkActionRunning"
+                            class="btn btn-sm btn-success">
+                        <i class="bi bi-terminal"></i> <span data-i18n="servers.bulkActions.sendCommand">Send Command</span>
+                    </button>
                 </div>
             </div>
             <div x-show="bulkActionRunning" class="mt-2">
@@ -151,8 +156,8 @@
                                     <!-- Show user info in admin mode -->
                                     <div x-show="adminViewMode && server.user" x-cloak class="text-muted small">
                                         <i class="bi bi-person-badge"></i>
-                                        <span x-text="server.user.username"></span>
-                                        <span x-show="server.user.is_admin" class="badge bg-warning ms-1">Admin</span>
+                                        <span x-text="server.user?.username || 'Unknown'"></span>
+                                        <span x-show="server.user?.is_admin" class="badge bg-warning ms-1">Admin</span>
                                     </div>
                                 </div>
                             </div>
@@ -477,6 +482,47 @@
                 <button type="button" class="btn btn-primary" id="submitAddServerBtn" onclick="submitAddServer()">
                     <i class="bi bi-plus-circle"></i> <span data-i18n="servers.addServerBtn">Add Server</span>
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Send Command Modal -->
+<div class="modal fade" id="sendCommandModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-terminal"></i> <span data-i18n="servers.sendCommand.title">Send Command to Servers</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <span data-i18n="servers.sendCommand.info">Enter a command to send to all selected game servers. The command will be sent to running servers only.</span>
+                </div>
+                <form id="sendCommandForm">
+                    <div class="mb-3">
+                        <label for="commandInput" class="form-label" data-i18n="servers.sendCommand.commandLabel">Command *</label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="commandInput" 
+                               placeholder="e.g., say Server restarting in 5 minutes" 
+                               required 
+                               maxlength="500">
+                        <div class="form-text">
+                            <span data-i18n="servers.sendCommand.examples">Examples:</span>
+                            <ul class="mb-0 mt-1">
+                                <li><code>say Server maintenance in 10 minutes</code></li>
+                                <li><code>mp_restartgame 1</code></li>
+                                <li><code>changelevel de_dust2</code></li>
+                            </ul>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="common.cancel">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="confirmSendCommand()" data-i18n="servers.sendCommand.send">Send Command</button>
             </div>
         </div>
     </div>
@@ -1145,6 +1191,75 @@ function serverManager() {
             }
         },
         
+        async bulkSendCommand() {
+            if (this.selectedServers.length === 0) {
+                const selectServerMsg = window.i18n?.t('servers.bulkActions.selectServer') || 'Please select at least one server';
+                showWarning(selectServerMsg);
+                return;
+            }
+            
+            // Show command input modal
+            const modal = new bootstrap.Modal(document.getElementById('sendCommandModal'));
+            modal.show();
+        },
+        
+        async executeBulkSendCommand(command) {
+            this.bulkActionRunning = true;
+            this.bulkProgress = 0;
+            
+            const total = this.selectedServers.length;
+            
+            try {
+                // Use the new async batch-send-command endpoint - returns immediately
+                const response = await authFetch('/servers/batch-send-command', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        server_ids: this.selectedServers,
+                        command: command
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to send command');
+                }
+                
+                const result = await response.json();
+                const batchId = result.batch_id;
+                
+                // Show dispatch notification
+                const dispatchMsg = window.i18n?.t('servers.bulkActions.commandDispatch', {
+                    count: total,
+                    command: command
+                }) || `Command sent to ${total} server(s): ${command}`;
+                showBatchActionToast(dispatchMsg, 'success');
+                
+                // Clear selection immediately
+                this.clearSelection();
+                
+                // Poll for completion
+                this.pollBatchActionResult(batchId, 'Send Command');
+                
+            } catch (err) {
+                let errorMsg = 'Unknown error';
+                if (err.message) {
+                    errorMsg = err.message;
+                } else if (err.toString && typeof err.toString === 'function') {
+                    errorMsg = err.toString();
+                } else {
+                    errorMsg = String(err);
+                }
+                const errorPrefix = window.i18n?.t('errors.sendingCommand') || 'Error sending command';
+                showError(errorPrefix + ': ' + errorMsg);
+            } finally {
+                this.bulkActionRunning = false;
+                this.bulkProgress = 0;
+            }
+        },
+        
         async showPluginSelectionDialog() {
             return new Promise((resolve) => {
                 const plugins = [];
@@ -1222,6 +1337,32 @@ function serverManager() {
             }
         }
     };
+}
+
+// Confirm and send command to servers
+function confirmSendCommand() {
+    const commandInput = document.getElementById('commandInput');
+    const command = commandInput.value.trim();
+    
+    if (!command) {
+        showWarning(window.i18n?.t('servers.sendCommand.emptyCommand') || 'Please enter a command');
+        return;
+    }
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('sendCommandModal'));
+    if (modal) {
+        modal.hide();
+    }
+    
+    // Get Alpine.js component instance
+    const app = Alpine.$data(document.querySelector('[x-data]'));
+    if (app && app.executeBulkSendCommand) {
+        app.executeBulkSendCommand(command);
+    }
+    
+    // Clear input for next time
+    commandInput.value = '';
 }
 
 function toggleAuthFields() {

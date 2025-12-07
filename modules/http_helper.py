@@ -57,7 +57,8 @@ class HTTPHelper:
         data: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
         timeout: int = 10,
-        proxy: Optional[str] = None
+        proxy: Optional[str] = None,
+        github_token: Optional[str] = None
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
         Make an HTTP request with error handling, retry logic, and connection pooling
@@ -71,6 +72,7 @@ class HTTPHelper:
             json: Optional JSON data
             timeout: Request timeout in seconds (default: 10)
             proxy: Optional proxy URL to use for this request
+            github_token: Optional GitHub personal access token for authentication
             
         Returns:
             Tuple[bool, Optional[Dict], Optional[str]]:
@@ -86,6 +88,12 @@ class HTTPHelper:
                     delay = RETRY_DELAY * (2 ** (attempt - 1))  # Exponential backoff
                     logger.info(f"Retry attempt {attempt + 1}/{MAX_RETRIES} after {delay}s delay...")
                     await asyncio.sleep(delay)
+                
+                # Add GitHub token to headers if provided and URL is a GitHub API request
+                request_headers = headers.copy() if headers else {}
+                if github_token and github_token.strip() and url.startswith(GITHUB_API_PREFIX):
+                    request_headers["Authorization"] = f"Bearer {github_token.strip()}"
+                    logger.debug("Added GitHub token to request headers for authentication")
                 
                 # Apply proxy to URL if provided
                 # IMPORTANT: GitHub proxy services like ghfast.top only work for file downloads,
@@ -107,7 +115,7 @@ class HTTPHelper:
                 response = await client.request(
                     method=method,
                     url=request_url,
-                    headers=headers,
+                    headers=request_headers,
                     params=params,
                     data=data,
                     json=json,
@@ -167,7 +175,8 @@ class HTTPHelper:
         headers: Optional[Dict[str, str]] = None,
         params: Optional[Dict[str, Any]] = None,
         timeout: int = 10,
-        proxy: Optional[str] = None
+        proxy: Optional[str] = None,
+        github_token: Optional[str] = None
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
         Make a GET request
@@ -178,11 +187,12 @@ class HTTPHelper:
             params: Optional query parameters
             timeout: Request timeout in seconds
             proxy: Optional proxy URL to use for this request
+            github_token: Optional GitHub personal access token for authentication
             
         Returns:
             Tuple[bool, Optional[Dict], Optional[str]]: (success, response_data, error_message)
         """
-        return await self.make_request("GET", url, headers=headers, params=params, timeout=timeout, proxy=proxy)
+        return await self.make_request("GET", url, headers=headers, params=params, timeout=timeout, proxy=proxy, github_token=github_token)
     
     async def post(
         self,
@@ -192,7 +202,8 @@ class HTTPHelper:
         data: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
         timeout: int = 10,
-        proxy: Optional[str] = None
+        proxy: Optional[str] = None,
+        github_token: Optional[str] = None
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
         Make a POST request
@@ -205,11 +216,12 @@ class HTTPHelper:
             json: Optional JSON data
             timeout: Request timeout in seconds
             proxy: Optional proxy URL to use for this request
+            github_token: Optional GitHub personal access token for authentication
             
         Returns:
             Tuple[bool, Optional[Dict], Optional[str]]: (success, response_data, error_message)
         """
-        return await self.make_request("POST", url, headers=headers, params=params, data=data, json=json, timeout=timeout, proxy=proxy)
+        return await self.make_request("POST", url, headers=headers, params=params, data=data, json=json, timeout=timeout, proxy=proxy, github_token=github_token)
     
     async def download_file(
         self,

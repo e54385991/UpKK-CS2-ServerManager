@@ -14,7 +14,7 @@ from sqlmodel import select
 from modules import (
     User, UserCreate, UserLogin, UserResponse, Token,
     PasswordReset, UserProfileUpdate, ApiKeyResponse, ApiKeyGenerate,
-    SteamApiKeyResponse, GenerateServerTokenRequest, GenerateServerTokenResponse,
+    SteamApiKeyResponse, GitHubTokenStatusResponse, GenerateServerTokenRequest, GenerateServerTokenResponse,
     ForgotPasswordRequest, ResetPasswordRequest, GoogleOAuthRequest,
     get_db, get_password_hash, verify_password, create_access_token,
     get_current_active_user, settings, generate_api_key
@@ -194,6 +194,14 @@ async def update_profile(
         else:
             current_user.steam_api_key = profile_data.steam_api_key.strip()
     
+    # Update GitHub token if provided
+    if profile_data.github_token is not None:
+        # Allow empty string to clear the GitHub token
+        if profile_data.github_token.strip() == "":
+            current_user.github_token = None
+        else:
+            current_user.github_token = profile_data.github_token.strip()
+    
     await db.commit()
     await db.refresh(current_user)
     
@@ -288,6 +296,24 @@ async def get_steam_api_key(
 ):
     """Get current user's Steam API key"""
     return {"steam_api_key": current_user.steam_api_key}
+
+
+@router.get("/github-token-status", response_model=GitHubTokenStatusResponse)
+async def get_github_token_status(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get GitHub token configuration status (without revealing the full token)"""
+    has_token = current_user.has_github_token
+    token_prefix = None
+    
+    if has_token and current_user.github_token:
+        # Show only the prefix (first 20 chars) to confirm token is set
+        token_prefix = current_user.github_token[:20] + "..."
+    
+    return {
+        "has_token": has_token,
+        "token_prefix": token_prefix
+    }
 
 
 @router.post("/generate-server-token", response_model=GenerateServerTokenResponse)

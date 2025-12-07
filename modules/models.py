@@ -43,6 +43,7 @@ class User(SQLModel, table=True):
     is_admin: bool = Field(default=False)
     api_key: Optional[str] = Field(default=None, max_length=64, unique=True, index=True)
     steam_api_key: Optional[str] = Field(default=None, max_length=64)
+    github_token: Optional[str] = Field(default=None, max_length=255)  # GitHub Fine-grained personal access token
     google_id: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)  # Google OAuth ID
     oauth_provider: Optional[str] = Field(default=None, max_length=50)  # OAuth provider (google, etc.)
     created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
@@ -60,6 +61,11 @@ class User(SQLModel, table=True):
     def has_steam_api_key(self) -> bool:
         """Check if user has a Steam API key configured"""
         return self.steam_api_key is not None
+    
+    @property
+    def has_github_token(self) -> bool:
+        """Check if user has a GitHub token configured"""
+        return self.github_token is not None
     
     @classmethod
     async def get_by_username(cls, session: AsyncSession, username: str) -> Optional["User"]:
