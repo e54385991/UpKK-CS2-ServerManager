@@ -215,7 +215,7 @@ class ServerCreate(SQLModel):
     # Auto-update configuration
     current_game_version: Optional[str] = Field(None, max_length=50, description="Current installed CS2 version")
     enable_auto_update: bool = Field(default=True, description="Enable automatic updates based on Steam API version check")
-    update_check_interval_hours: int = Field(default=1, ge=1, le=24, description="Hours between version checks (1-24)")
+    update_check_interval_hours: float = Field(default=1.0, ge=0.0167, le=24.0, description="Hours between version checks (0.0167-24, where 0.0167≈1 minute)")
     
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(None, max_length=500, description="Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')")
@@ -308,7 +308,7 @@ class ServerUpdate(SQLModel):
     # Auto-update configuration
     current_game_version: Optional[str] = Field(None, max_length=50, description="Current installed CS2 version")
     enable_auto_update: Optional[bool] = Field(None, description="Enable automatic updates based on Steam API version check")
-    update_check_interval_hours: Optional[int] = Field(None, ge=1, le=24, description="Hours between version checks (1-24)")
+    update_check_interval_hours: Optional[float] = Field(None, ge=0.0167, le=24.0, description="Hours between version checks (0.0167-24, where 0.0167≈1 minute)")
     
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(None, max_length=500, description="Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')")
@@ -407,7 +407,7 @@ class ServerResponse(SQLModel):
     # Auto-update configuration
     current_game_version: Optional[str] = None
     enable_auto_update: bool
-    update_check_interval_hours: int
+    update_check_interval_hours: float
     last_update_check: Optional[datetime] = None
     last_update_time: Optional[datetime] = None
     

@@ -701,6 +701,30 @@ async def migrate_db():
             else:
                 print(f"✓ {column} column exists in users table")
         
+        # Migrate update_check_interval_hours from INT to FLOAT to support fractional hours (e.g., 0.0167 = 1 minute)
+        result = await conn.execute(
+            text("""
+                SELECT DATA_TYPE 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'servers' 
+                AND COLUMN_NAME = 'update_check_interval_hours'
+            """)
+        )
+        column_type = result.fetchone()
+        
+        if column_type and column_type[0].upper() in ('INT', 'TINYINT', 'SMALLINT', 'MEDIUMINT', 'BIGINT'):
+            print("Migrating update_check_interval_hours from INT to FLOAT...")
+            await conn.execute(
+                text("""
+                    ALTER TABLE servers 
+                    MODIFY COLUMN update_check_interval_hours FLOAT NOT NULL DEFAULT 1.0
+                """)
+            )
+            print("✓ Migration completed: update_check_interval_hours changed to FLOAT for fractional hour support")
+        else:
+            print("✓ update_check_interval_hours column type is already FLOAT or does not exist")
+        
         print("✓ Database schema migration completed")
 
 

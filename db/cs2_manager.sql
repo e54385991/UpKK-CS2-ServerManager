@@ -11,7 +11,7 @@
  Target Server Version : 80407 (8.4.7)
  File Encoding         : 65001
 
- Date: 07/12/2025 12:08:32
+ Date: 09/12/2025 08:45:28
 */
 
 SET NAMES utf8mb4;
@@ -32,7 +32,7 @@ CREATE TABLE `deployment_logs`  (
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `ix_deployment_logs_server_id`(`server_id` ASC) USING BTREE,
   INDEX `ix_deployment_logs_id`(`id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 413 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 430 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for global_settings
@@ -96,7 +96,7 @@ CREATE TABLE `market_plugins`  (
   UNIQUE INDEX `github_url`(`github_url` ASC) USING BTREE,
   INDEX `idx_market_plugins_github_url`(`github_url` ASC) USING BTREE,
   INDEX `idx_market_plugins_title`(`title` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 17 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 19 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for monitoring_logs
@@ -211,7 +211,7 @@ CREATE TABLE `servers`  (
   `enable_auto_update` tinyint(1) NULL DEFAULT 1 COMMENT 'Enable automatic updates based on Steam API version check',
   `last_update_check` datetime NULL DEFAULT NULL COMMENT 'Last time version was checked against Steam API',
   `last_update_time` datetime NULL DEFAULT NULL COMMENT 'Last time server was updated',
-  `update_check_interval_hours` int NULL DEFAULT 1 COMMENT 'Hours between version checks (1-24)',
+  `update_check_interval_hours` float NOT NULL DEFAULT 1,
   `cpu_affinity` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `github_proxy` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT 'GitHub proxy URL for plugin installation (e.g., https://ghfast.top/https://github.com)',
   `use_panel_proxy` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Use panel server as proxy for all downloads (SteamCMD, GitHub plugins). Mutually exclusive with github_proxy.',

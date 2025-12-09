@@ -21,6 +21,7 @@ from modules import (
 )
 from modules.database import async_session_maker
 from services import SSHManager, redis_manager
+from services.server_monitor import server_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -390,6 +391,8 @@ async def server_action(
                 server.status = ServerStatus.RUNNING
                 log.status = "success"
                 log.output = message
+                # Reset restart history and A2S failure counter after successful manual start
+                server_monitor.reset_restart_history(server_id)
                 await send_deployment_update(server_id, "complete", "Server started successfully")
             else:
                 server.status = ServerStatus.ERROR
@@ -479,6 +482,8 @@ async def server_action(
                 server.status = ServerStatus.RUNNING
                 log.status = "success"
                 log.output = message
+                # Reset restart history and A2S failure counter after successful manual restart
+                server_monitor.reset_restart_history(server_id)
                 await send_deployment_update(server_id, "complete", "Server restarted successfully")
             else:
                 server.status = ServerStatus.ERROR

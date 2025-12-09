@@ -4,7 +4,7 @@ Periodically checks server versions against Steam API and triggers updates when 
 """
 import asyncio
 import logging
-from typing import Optional
+from typing import Optional, Set
 from modules.utils import get_current_time
 
 from services.steam_api_service import steam_api_service
@@ -18,9 +18,11 @@ class AutoUpdateService:
     """Background service to check and update CS2 servers automatically"""
     
     def __init__(self):
-        self.check_interval = 3600  # Check every hour
+        self.check_interval = 60  # Check every minute (configurable, supports debugging)
         self.task: Optional[asyncio.Task] = None
         self.running = False
+        self.updating_servers: Set[int] = set()  # Track servers currently being updated
+        self._update_locks: dict[int, asyncio.Lock] = {}  # Per-server locks to prevent concurrent updates
         
     async def start(self):
         """Start the background auto-update task"""
@@ -65,6 +67,14 @@ class AutoUpdateService:
             # Check and update each server
             # DB session is already closed, so SSH operations won't hold DB connections
             for server in servers:
+                # Skip if server is currently being updated (prevent duplicate runs)
+                if server.id in self.updating_servers:
+                    logger.debug(
+                        f"Skipping server {server.id} ({server.name}) - "
+                        f"update already in progress"
+                    )
+                    continue
+                
                 # Skip servers that are marked as down due to SSH failures
                 if server.should_skip_background_checks():
                     logger.info(f"Skipping auto-update check for server {server.id} ({server.name}) - marked as SSH down for 3+ days")
@@ -167,46 +177,87 @@ class AutoUpdateService:
     
     async def _trigger_server_update(self, server):
         """Trigger update for a server and restart it"""
-        try:
-            logger.info(f"Triggering auto-update for server {server.id} ({server.name})")
-            
-            # Create SSH manager
-            ssh_manager = SSHManager(
-                host=server.host,
-                port=server.ssh_port,
-                username=server.ssh_user,
-                password=server.ssh_password if server.is_password_auth else None,
-                key_path=server.ssh_key_path if server.is_key_auth else None
+        # Get or create lock for this server
+        if server.id not in self._update_locks:
+            self._update_locks[server.id] = asyncio.Lock()
+        
+        lock = self._update_locks[server.id]
+        
+        # Try to acquire lock without blocking - if already locked, skip this update
+        if lock.locked():
+            logger.warning(
+                f"Server {server.id} ({server.name}) update already in progress, "
+                f"skipping duplicate update request"
             )
+            return
+        
+        async with lock:
+            # Mark server as being updated
+            self.updating_servers.add(server.id)
             
-            # Define progress callback
-            async def log_progress(msg: str):
-                logger.info(f"[Server {server.id}] {msg}")
+            # Create deployment log for auto-update
+            from modules.database import async_session_maker
+            from modules.models import DeploymentLog
             
-            # Connect to server
-            connect_success = await ssh_manager.connect()
-            if not connect_success:
-                logger.error(f"Failed to connect to server {server.id} for auto-update")
-                return
-            
+            log_id = None
             try:
-                # Run update command
+                async with async_session_maker() as db:
+                    log = DeploymentLog(
+                        server_id=server.id,
+                        action="auto_update",
+                        status="in_progress"
+                    )
+                    db.add(log)
+                    await db.commit()
+                    await db.refresh(log)
+                    log_id = log.id
+                
+                logger.info(f"Triggering auto-update for server {server.id} ({server.name})")
+                
+                # Create SSH manager
+                ssh_manager = SSHManager()
+                
+                # Collect output messages for the log
+                output_messages = []
+                
+                # Define progress callback
+                async def log_progress(msg: str):
+                    logger.info(f"[Server {server.id}] {msg}")
+                    output_messages.append(msg)
+                
+                await log_progress("Starting auto-update...")
+                
+                # Run update command (this handles connection, update, and restart if server was running)
+                # The update_server method will:
+                # 1. Connect to SSH
+                # 2. Stop server if running
+                # 3. Run SteamCMD update
+                # 4. Restart server if it was running before
+                # 5. Disconnect SSH
                 logger.info(f"Running update on server {server.id}")
                 update_success, update_message = await ssh_manager.update_server(
-                    server.game_directory,
-                    send_progress=log_progress
+                    server,
+                    progress_callback=log_progress
                 )
                 
                 if not update_success:
-                    logger.error(
-                        f"Update failed for server {server.id}: {update_message}"
-                    )
+                    error_msg = f"Update failed: {update_message}"
+                    logger.error(f"Update failed for server {server.id}: {update_message}")
+                    
+                    # Update log as failed
+                    async with async_session_maker() as db:
+                        log_to_update = await db.get(DeploymentLog, log_id)
+                        if log_to_update:
+                            log_to_update.status = "failed"
+                            log_to_update.error_message = error_msg
+                            log_to_update.output = "\n".join(output_messages) if output_messages else None
+                            await db.commit()
                     return
                 
-                logger.info(f"Update successful for server {server.id}")
+                logger.info(f"Auto-update completed successfully for server {server.id}")
+                await log_progress("Auto-update completed successfully")
                 
                 # Update last_update_time in database
-                from modules.database import async_session_maker
                 from sqlalchemy import update as sql_update
                 from modules.models import Server
                 async with async_session_maker() as db:
@@ -217,31 +268,33 @@ class AutoUpdateService:
                     )
                     await db.commit()
                 
-                # Wait a moment before restart
-                await asyncio.sleep(2)
-                
-                # Restart the server
-                logger.info(f"Restarting server {server.id} after update")
-                restart_success, restart_message = await ssh_manager.restart_server(
-                    server.game_directory,
-                    send_progress=log_progress
-                )
-                
-                if restart_success:
-                    logger.info(
-                        f"Auto-update completed successfully for server {server.id}"
-                    )
-                else:
-                    logger.error(
-                        f"Restart failed after update for server {server.id}: "
-                        f"{restart_message}"
-                    )
+                # Update log as success
+                async with async_session_maker() as db:
+                    log_to_update = await db.get(DeploymentLog, log_id)
+                    if log_to_update:
+                        log_to_update.status = "success"
+                        log_to_update.output = "\n".join(output_messages)
+                        await db.commit()
                     
-            finally:
-                await ssh_manager.disconnect()
+            except Exception as e:
+                error_msg = f"Error during auto-update: {str(e)}"
+                logger.error(f"Error triggering update for server {server.id}: {e}")
                 
-        except Exception as e:
-            logger.error(f"Error triggering update for server {server.id}: {e}")
+                # Update log as failed
+                try:
+                    async with async_session_maker() as db:
+                        if log_id:
+                            log_to_update = await db.get(DeploymentLog, log_id)
+                            if log_to_update:
+                                log_to_update.status = "failed"
+                                log_to_update.error_message = error_msg
+                                log_to_update.output = "\n".join(output_messages)
+                                await db.commit()
+                except Exception as log_error:
+                    logger.error(f"Failed to update deployment log: {log_error}")
+            finally:
+                # Remove server from updating set
+                self.updating_servers.discard(server.id)
 
 
 # Global instance

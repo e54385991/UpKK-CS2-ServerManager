@@ -161,6 +161,33 @@
             return displayMessage;
         },
 
+        // Format interval hours to human-readable string
+        formatInterval(hours) {
+            if (!hours) return '1 hour';
+            
+            if (hours < 1) {
+                // Convert to minutes
+                const minutes = Math.round(hours * 60);
+                return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+            } else if (hours === 1) {
+                return '1 hour';
+            } else if (Number.isInteger(hours)) {
+                return `${hours} hours`;
+            } else {
+                // Decimal hours - convert to hours and minutes for clarity
+                const wholeHours = Math.floor(hours);
+                const remainingMinutes = Math.round((hours - wholeHours) * 60);
+                
+                if (wholeHours === 0) {
+                    return `${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+                } else if (remainingMinutes === 0) {
+                    return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''}`;
+                } else {
+                    return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''} ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+                }
+            }
+        },
+
                                             async init() {
             this.loadConfigForm();
             this.loadServerEditForm();

@@ -328,6 +328,9 @@ class ServerMonitor:
                                     await db.commit()
                             
                             if restart_success:
+                                # Reset restart history and A2S failure counter after successful restart
+                                self.reset_restart_history(server_id)
+                                
                                 # Log successful restart to Redis
                                 try:
                                     await redis_manager.append_monitoring_log(

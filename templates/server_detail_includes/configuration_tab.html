@@ -497,8 +497,7 @@
                                             </li>
                                             <li><i class="bi bi-clock-history"></i> <strong
                                                     data-i18n="serverDetail.updateCheckInterval">Update Check Interval:</strong>
-                                                <span x-text="server.update_check_interval_hours || 1"></span> <span
-                                                    data-i18n="serverDetail.hours">hour(s)</span></li>
+                                                <span x-text="formatInterval(server.update_check_interval_hours || 1)"></span></li>
                                             <li><i class="bi bi-code-square"></i> <strong
                                                     data-i18n="serverDetail.currentVersion">Current Version:</strong>
                                                 <span x-text="server.current_game_version || 'Unknown'"></span></li>
@@ -544,12 +543,33 @@
                                             <label class="form-label">
                                                 <span data-i18n="serverDetail.updateCheckInterval">Update Check Interval</span>
                                                 <span class="badge bg-secondary"
-                                                    x-text="autoUpdateForm.update_check_interval_hours + 'h'"></span>
+                                                    x-text="formatInterval(autoUpdateForm.update_check_interval_hours)"></span>
                                             </label>
-                                            <input type="range" class="form-range"
-                                                x-model.number="autoUpdateForm.update_check_interval_hours" min="1"
-                                                max="24" step="1">
-                                            <small class="text-muted" data-i18n="serverDetail.updateCheckIntervalHint">How often to check for updates (1-24 hours)</small>
+                                            <select class="form-select mb-2" x-model.number="autoUpdateForm.update_check_interval_hours">
+                                                <optgroup label="Minutes (for testing/debugging)">
+                                                    <option value="0.0167">1 minute</option>
+                                                    <option value="0.0333">2 minutes</option>
+                                                    <option value="0.05">3 minutes</option>
+                                                    <option value="0.0833">5 minutes</option>
+                                                    <option value="0.1667">10 minutes</option>
+                                                    <option value="0.25">15 minutes</option>
+                                                    <option value="0.5">30 minutes</option>
+                                                </optgroup>
+                                                <optgroup label="Hours">
+                                                    <option value="1">1 hour</option>
+                                                    <option value="2">2 hours</option>
+                                                    <option value="3">3 hours</option>
+                                                    <option value="4">4 hours</option>
+                                                    <option value="6">6 hours</option>
+                                                    <option value="8">8 hours</option>
+                                                    <option value="12">12 hours</option>
+                                                    <option value="24">24 hours</option>
+                                                </optgroup>
+                                            </select>
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle"></i>
+                                                <span data-i18n="serverDetail.updateCheckIntervalHint">How often to check for updates. Use shorter intervals for testing.</span>
+                                            </small>
                                         </div>
 
                                         <div class="col-12">

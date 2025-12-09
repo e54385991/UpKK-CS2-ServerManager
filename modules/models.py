@@ -153,7 +153,7 @@ class Server(SQLModel, table=True):
     # Auto-update configuration
     current_game_version: Optional[str] = Field(default=None, max_length=50)
     enable_auto_update: bool = Field(default=True)
-    update_check_interval_hours: int = Field(default=1)
+    update_check_interval_hours: float = Field(default=1.0)  # Support fractional hours (e.g., 0.0167 = 1 minute)
     last_update_check: Optional[datetime] = Field(default=None)
     last_update_time: Optional[datetime] = Field(default=None)
     
