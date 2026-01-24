@@ -185,7 +185,6 @@ CREATE TABLE `servers`  (
   `rcon_password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `default_map` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT 'de_dust2',
   `max_players` int NULL DEFAULT 32,
-  `tickrate` int NULL DEFAULT 128,
   `game_mode` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT 'competitive',
   `game_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '0',
   `additional_parameters` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL,

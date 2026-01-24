@@ -119,7 +119,6 @@ class Server(SQLModel, table=True):
     steam_account_token: Optional[str] = Field(default=None, max_length=255)
     default_map: str = Field(default="de_dust2", max_length=100)
     max_players: int = Field(default=32)
-    tickrate: int = Field(default=128)
     game_mode: str = Field(default="competitive", max_length=50)
     game_type: str = Field(default="0", max_length=50)
     

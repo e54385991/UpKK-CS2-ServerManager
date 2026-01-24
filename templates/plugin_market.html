@@ -467,6 +467,19 @@
                             </small>
                         </div>
                         
+                        <!-- Upgrade Mode - Simple one-click option -->
+                        <div class="alert alert-info mb-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="upgrade-mode-checkbox" onchange="onUpgradeModeChanged()">
+                                <label class="form-check-label fw-bold" for="upgrade-mode-checkbox">
+                                    <i class="bi bi-arrow-up-circle"></i> <span data-i18n="pluginMarket.installModal.upgradeMode">Upgrade Mode (Recommended for Updates)</span>
+                                </label>
+                            </div>
+                            <small class="text-muted d-block mt-1" data-i18n="pluginMarket.installModal.upgradeModeHelp">
+                                Automatically preserves all configuration files (.ini, .cfg, .json, .yaml, .xml, etc.) during installation. No file selection needed.
+                            </small>
+                        </div>
+                        
                         <!-- Advanced Options -->
                         <div class="card bg-light">
                             <div class="card-header">
@@ -1463,6 +1476,9 @@ async function showInstallModal(pluginId, pluginName) {
     document.getElementById('install-dependencies-checkbox').checked = true;
     document.getElementById('install-dependencies-checkbox').disabled = false;
     
+    // Reset upgrade mode checkbox
+    document.getElementById('upgrade-mode-checkbox').checked = false;
+    
     // Load user's servers
     try {
         const response = await fetch('/servers', {
@@ -1679,8 +1695,35 @@ function toggleAdvancedOptions() {
         document.getElementById('directory-exclusion-section').style.display = 'none';
         document.getElementById('file-exclusion-section').style.display = 'none';
         document.getElementById('analysis-loading').style.display = 'none';
-        // Re-enable dependency checkbox when advanced options disabled
-        document.getElementById('install-dependencies-checkbox').disabled = false;
+        // Re-enable dependency checkbox when advanced options disabled (if upgrade mode is not enabled)
+        if (!document.getElementById('upgrade-mode-checkbox').checked) {
+            document.getElementById('install-dependencies-checkbox').disabled = false;
+        }
+    }
+}
+
+// Handle upgrade mode checkbox changes
+function onUpgradeModeChanged() {
+    const upgradeModeEnabled = document.getElementById('upgrade-mode-checkbox').checked;
+    const dependencyCheckbox = document.getElementById('install-dependencies-checkbox');
+    
+    if (upgradeModeEnabled) {
+        // When upgrade mode is enabled, disable dependency installation
+        // (to avoid overwriting dependency configs during upgrade)
+        dependencyCheckbox.checked = false;
+        dependencyCheckbox.disabled = true;
+    } else {
+        // Re-enable if no other exclusions are active
+        const currentMode = document.querySelector('input[name="exclusion-mode"]:checked')?.value || 'directory';
+        let hasManualExclusions = false;
+        if (currentMode === 'directory') {
+            hasManualExclusions = getExcludedDirectories().length > 0;
+        } else {
+            hasManualExclusions = getExcludedFiles().length > 0;
+        }
+        if (!hasManualExclusions) {
+            dependencyCheckbox.disabled = false;
+        }
     }
 }
 
@@ -1967,11 +2010,15 @@ async function submitInstallPlugin() {
     // Get dependency installation preference from checkbox
     const installDependencies = document.getElementById('install-dependencies-checkbox').checked;
     
+    // Check if upgrade mode is enabled
+    const upgradeMode = document.getElementById('upgrade-mode-checkbox').checked;
+    
     try {
         // Build query parameters
         const params = new URLSearchParams({
             server_id: serverId,
-            install_dependencies: installDependencies
+            install_dependencies: installDependencies,
+            upgrade_mode: upgradeMode
         });
         
         // Add download_url if a specific version is selected
@@ -1979,12 +2026,12 @@ async function submitInstallPlugin() {
             params.append('download_url', downloadUrl);
         }
         
-        // Add exclude_dirs if any
+        // Add exclude_dirs if any (can be combined with upgrade_mode)
         excludeDirs.forEach(dir => {
             params.append('exclude_dirs', dir);
         });
         
-        // Add exclude_files if any
+        // Add exclude_files if any (can be combined with upgrade_mode)
         excludeFiles.forEach(file => {
             params.append('exclude_files', file);
         });

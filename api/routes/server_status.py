@@ -162,7 +162,6 @@ async def get_server_config(
         "game_port": server.game_port,
         "default_map": server.default_map,
         "max_players": server.max_players,
-        "tickrate": server.tickrate,
         "game_mode": server.game_mode,
         "game_type": server.game_type
     }

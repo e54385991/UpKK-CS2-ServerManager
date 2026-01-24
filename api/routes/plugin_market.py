@@ -549,6 +549,14 @@ async def get_plugin_releases(
     )
 
 
+# Common configuration file extensions to exclude during upgrade mode
+# These files are typically user-configured and should be preserved
+CONFIG_FILE_EXTENSIONS = [
+    '.ini', '.cfg', '.json', '.yaml', '.yml', '.xml', '.conf', '.toml', '.txt',
+    '.config', '.properties', '.env', '.local', '.user'
+]
+
+
 @router.post("/plugins/{plugin_id}/install", response_model=GitHubPluginInstallResponse)
 async def install_plugin(
     plugin_id: int,
@@ -557,6 +565,7 @@ async def install_plugin(
     exclude_dirs: list[str] = Query(default=[], description="Directories to exclude (deprecated, use exclude_files)"),
     exclude_files: list[str] = Query(default=[], description="Files to exclude from installation"),
     install_dependencies: bool = Query(default=True, description="Whether to install dependencies"),
+    upgrade_mode: bool = Query(default=False, description="Enable upgrade mode to auto-exclude config files"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> GitHubPluginInstallResponse:
@@ -577,6 +586,7 @@ async def install_plugin(
         exclude_dirs: Optional directories to exclude from extraction (deprecated)
         exclude_files: Optional files to exclude from extraction
         install_dependencies: Whether to automatically install dependencies
+        upgrade_mode: When enabled, auto-excludes common config files (.ini, .cfg, .json, etc.)
     
     Returns:
         Installation result
@@ -715,10 +725,19 @@ async def install_plugin(
         # Use existing installation logic
         from api.routes.github_plugins import install_github_plugin
         
+        # If upgrade_mode is enabled, add config file extension patterns to exclude_files
+        final_exclude_files = list(exclude_files)  # Make a copy
+        if upgrade_mode:
+            # Add wildcard patterns for common config file extensions
+            for ext in CONFIG_FILE_EXTENSIONS:
+                # Add pattern that matches files with this extension anywhere in the archive
+                final_exclude_files.append(f"*{ext}")
+            logger.info(f"Upgrade mode enabled: auto-excluding config files with extensions {CONFIG_FILE_EXTENSIONS}")
+        
         install_request = GitHubPluginInstallRequest(
             download_url=download_url,
             exclude_dirs=exclude_dirs,
-            exclude_files=exclude_files,
+            exclude_files=final_exclude_files,
             custom_install_path=plugin.custom_install_path
         )
         

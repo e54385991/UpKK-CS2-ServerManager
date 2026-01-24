@@ -1145,7 +1145,6 @@ class SSHManager:
             # Get configuration with safe defaults
             default_map = server.default_map or "de_dust2"
             max_players = server.max_players or 32
-            tickrate = server.tickrate or 128
             server_name = server.server_name or f"CS2 Server {server.id}"
             
             # Game mode mapping: convert string names to numeric values
@@ -1192,12 +1191,12 @@ class SSHManager:
                 game_type = server.game_type or "0"
             
             # Core parameters
+            # Note: -tickrate is no longer supported in CS2
             params = [
                 "-dedicated",
                 f"-port {server.game_port}",
                 f"+map {default_map}",
                 f"-maxplayers {max_players}",
-                f"-tickrate {tickrate}",
                 f'+hostname "{server_name}"',
             ]
             
@@ -1339,7 +1338,6 @@ class SSHManager:
             await send_progress(f"Port: {server.game_port}")
             await send_progress(f"Map: {default_map}")
             await send_progress(f"Max Players: {max_players}")
-            await send_progress(f"Tickrate: {tickrate}")
             await send_progress(f"Game Mode: {game_mode_str} (game_type: {game_type}, game_mode: {game_mode})")
             await send_progress("=" * 60)
             await send_progress("Startup Command:")

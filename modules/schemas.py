@@ -183,7 +183,6 @@ class ServerCreate(SQLModel):
     steam_account_token: Optional[str] = Field(None, max_length=255, description="Steam game server login token (GSLT)")
     default_map: str = Field(default="de_dust2", max_length=100)
     max_players: int = Field(default=32, ge=1, le=64)
-    tickrate: int = Field(default=128, ge=64, le=128)
     game_mode: str = Field(default="competitive", max_length=50)
     game_type: str = Field(default="0", max_length=50)
     
@@ -276,7 +275,6 @@ class ServerUpdate(SQLModel):
     steam_account_token: Optional[str] = Field(None, max_length=255, description="Steam game server login token (GSLT)")
     default_map: Optional[str] = Field(None, max_length=100)
     max_players: Optional[int] = Field(None, ge=1, le=64)
-    tickrate: Optional[int] = Field(None, ge=64, le=128)
     game_mode: Optional[str] = Field(None, max_length=50)
     game_type: Optional[str] = Field(None, max_length=50)
     
@@ -373,7 +371,6 @@ class ServerResponse(SQLModel):
     steam_account_token: Optional[str] = None
     default_map: str
     max_players: int
-    tickrate: int
     game_mode: str
     game_type: str
     
