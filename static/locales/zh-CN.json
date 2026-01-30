@@ -856,7 +856,10 @@
     "extractPending": "等待中...",
     "extractRunning": "正在解压...",
     "statusCheckFailed": "无法检查解压状态。解压可能仍在后台进行。",
-    "archive": "压缩包"
+    "archive": "压缩包",
+    "copyPath": "复制路径",
+    "pathCopied": "路径已复制到剪贴板",
+    "errorCopyingPath": "复制路径失败"
   },
   "scheduledTasks": {
     "title": "计划任务",
@@ -1073,7 +1076,7 @@
       "versionHelp": "默认选择最新版本",
       "advancedOptions": "高级选项（用于更新/升级）",
       "upgradeMode": "升级模式（推荐用于更新）",
-      "upgradeModeHelp": "自动保留所有配置文件（.ini, .cfg, .json, .yaml, .xml 等）。无需手动选择文件。",
+      "upgradeModeHelp": "自动保留所有配置文件（.ini, .cfg, .json, .yaml, .xml 等）。依赖项也会自动安装并保护其配置文件。一键完全升级。",
       "advancedWarning": "警告：",
       "advancedWarningText": "使用选择性解压时，将先分析插件包。然后您可以选择不解压的目录或文件。使用此模式时，依赖项将不会自动安装。",
       "analyzePlugin": "分析插件包",

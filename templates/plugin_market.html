@@ -476,7 +476,7 @@
                                 </label>
                             </div>
                             <small class="text-muted d-block mt-1" data-i18n="pluginMarket.installModal.upgradeModeHelp">
-                                Automatically preserves all configuration files (.ini, .cfg, .json, .yaml, .xml, etc.) during installation. No file selection needed.
+                                Automatically preserves all configuration files (.ini, .cfg, .json, .yaml, .xml, etc.) during installation. Dependencies will also be installed with config files protected. One-click complete upgrade.
                             </small>
                         </div>
                         
@@ -1708,10 +1708,11 @@ function onUpgradeModeChanged() {
     const dependencyCheckbox = document.getElementById('install-dependencies-checkbox');
     
     if (upgradeModeEnabled) {
-        // When upgrade mode is enabled, disable dependency installation
-        // (to avoid overwriting dependency configs during upgrade)
-        dependencyCheckbox.checked = false;
-        dependencyCheckbox.disabled = true;
+        // When upgrade mode is enabled, keep dependency installation enabled
+        // Dependencies will also be installed with upgrade_mode to protect their config files
+        // This allows one-click complete upgrade with all dependencies
+        dependencyCheckbox.checked = true;
+        dependencyCheckbox.disabled = false;
     } else {
         // Re-enable if no other exclusions are active
         const currentMode = document.querySelector('input[name="exclusion-mode"]:checked')?.value || 'directory';
@@ -1767,9 +1768,15 @@ function updateDependencyCheckboxState() {
     }
     
     const dependencyCheckbox = document.getElementById('install-dependencies-checkbox');
+    const upgradeModeEnabled = document.getElementById('upgrade-mode-checkbox').checked;
     
-    if (hasExclusions) {
-        // Force uncheck and disable when items are excluded
+    // When upgrade mode is enabled, always keep dependencies enabled
+    // since upgrade_mode is passed to dependencies for config protection
+    if (upgradeModeEnabled) {
+        dependencyCheckbox.checked = true;
+        dependencyCheckbox.disabled = false;
+    } else if (hasExclusions) {
+        // Force uncheck and disable when items are excluded (only if upgrade mode is not enabled)
         dependencyCheckbox.checked = false;
         dependencyCheckbox.disabled = true;
     } else if (document.getElementById('advanced-options-toggle').checked) {

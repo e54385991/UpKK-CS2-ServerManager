@@ -2268,6 +2268,29 @@
                     }
                 },
 
+                async copyFilePath(file) {
+                    try {
+                        await navigator.clipboard.writeText(file.path);
+                        showSuccess(window.i18n?.t('fileManager.pathCopied') || 'Path copied to clipboard');
+                    } catch (error) {
+                        console.error('Error copying path:', error);
+                        // Fallback for older browsers
+                        const textArea = document.createElement('textarea');
+                        textArea.value = file.path;
+                        textArea.style.position = 'fixed';
+                        textArea.style.left = '-9999px';
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        try {
+                            document.execCommand('copy');
+                            showSuccess(window.i18n?.t('fileManager.pathCopied') || 'Path copied to clipboard');
+                        } catch (err) {
+                            showError(window.i18n?.t('fileManager.errorCopyingPath') || 'Failed to copy path');
+                        }
+                        document.body.removeChild(textArea);
+                    }
+                },
+
                 async createFolder() {
                     if (!this.newFolderName.trim()) return;
 
@@ -2599,7 +2622,7 @@
                 isTextFile(filename) {
                     // Only allow specific text file types for viewing and editing
                     const textExtensions = [
-                        '.txt', '.log', '.cfg', '.conf', '.ini', '.json', '.xml', '.yml', '.yaml',
+                        '.txt', '.log', '.cfg', '.conf', '.ini', '.json', '.jsonc', '.xml', '.yml', '.yaml',
                         '.sh', '.bash', '.md', '.html', '.css', '.js', '.py', '.php', '.c', '.cpp',
                         '.h', '.hpp', '.java', '.cs', '.go', '.rs', '.lua', '.sql', '.env', '.gitignore',
                         '.properties', '.toml'
@@ -2626,6 +2649,7 @@
                         '.conf': 'bi-gear-fill text-primary',
                         '.ini': 'bi-gear-fill text-primary',
                         '.json': 'bi-file-code text-warning',
+                        '.jsonc': 'bi-file-code text-warning',
                         '.xml': 'bi-file-code text-warning',
                         '.yml': 'bi-file-code text-warning',
                         '.yaml': 'bi-file-code text-warning',

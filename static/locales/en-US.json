@@ -856,7 +856,10 @@
     "extractPending": "Pending...",
     "extractRunning": "Running...",
     "statusCheckFailed": "Failed to check extraction status. The extraction may still complete in the background.",
-    "archive": "Archive"
+    "archive": "Archive",
+    "copyPath": "Copy Path",
+    "pathCopied": "Path copied to clipboard",
+    "errorCopyingPath": "Failed to copy path"
   },
   "scheduledTasks": {
     "title": "Scheduled Tasks",
@@ -1073,7 +1076,7 @@
       "versionHelp": "Latest version is selected by default",
       "advancedOptions": "Advanced Options (For Updates/Upgrades)",
       "upgradeMode": "Upgrade Mode (Recommended for Updates)",
-      "upgradeModeHelp": "Automatically preserves all configuration files (.ini, .cfg, .json, .yaml, .xml, etc.) during installation. No file selection needed.",
+      "upgradeModeHelp": "Automatically preserves all configuration files (.ini, .cfg, .json, .yaml, .xml, etc.) during installation. Dependencies will also be installed with config files protected. One-click complete upgrade.",
       "advancedWarning": "Warning:",
       "advancedWarningText": "When using selective extraction, the plugin package will be analyzed first. You can then choose which directories or files to exclude from installation. Dependencies will NOT be automatically installed when using this mode.",
       "analyzePlugin": "Analyze Plugin Package",

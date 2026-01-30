@@ -172,6 +172,10 @@
                                                                 class="btn btn-outline-info" title="Extract">
                                                                 <i class="bi bi-file-zip"></i>
                                                             </button>
+                                                            <button @click.stop="copyFilePath(file)"
+                                                                class="btn btn-outline-success" title="Copy Path">
+                                                                <i class="bi bi-clipboard"></i>
+                                                            </button>
                                                             <button @click.stop="showRenameModal(file)"
                                                                 class="btn btn-outline-warning" title="Rename">
                                                                 <i class="bi bi-pencil-square"></i>
