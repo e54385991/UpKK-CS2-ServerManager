@@ -336,9 +336,29 @@ async def auto_setup_server(
         else:
             await add_log(f"⚠ 包列表更新失败 (继续): {stderr[:100]}")
         
+        # Install sudo if not available (Debian 12 clean install does not include sudo by default)
+        await add_log("检查 sudo 是否已安装...")
+        result = await conn.run("which sudo", check=False)
+        if result.exit_status != 0:
+            await add_log("sudo 未安装，正在安装 sudo...")
+            if not needs_sudo:
+                result = await conn.run("DEBIAN_FRONTEND=noninteractive apt-get install -y sudo", check=False)
+                exit_code = result.exit_status
+                stderr = result.stderr
+            else:
+                stdout, stderr, exit_code = await run_sudo_command(
+                    conn, "DEBIAN_FRONTEND=noninteractive apt-get install -y sudo", sudo_pass
+                )
+            if exit_code == 0:
+                await add_log("✓ sudo 安装成功")
+            else:
+                await add_log(f"⚠ sudo 安装失败: {stderr[:100]}")
+        else:
+            await add_log("✓ sudo 已安装")
+        
         # Install required packages
-        await add_log("安装系统依赖 (lib32gcc-s1, lib32stdc++6, screen, curl, wget, p7zip-full, bzip2)...")
-        packages = "lib32gcc-s1 lib32stdc++6 screen curl wget unzip p7zip-full bzip2"
+        await add_log("安装系统依赖 (lib32gcc-s1, lib32stdc++6, screen, curl, wget, p7zip-full, bzip2, libicu-dev)...")
+        packages = "lib32gcc-s1 lib32stdc++6 screen curl wget unzip p7zip-full bzip2 libicu-dev"
         install_cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages}"
         
         if needs_sudo:
@@ -472,6 +492,22 @@ async def auto_setup_server(
             await add_log("✓ 密码设置成功")
         else:
             await add_log(f"⚠ 密码设置可能失败: {stderr[:100]}")
+        
+        # Add CS2 user to sudo group
+        await add_log(f"将用户 {setup_req.cs2_username} 添加到 sudo 组...")
+        add_sudo_cmd = f"usermod -aG sudo {setup_req.cs2_username}"
+        
+        if needs_sudo:
+            stdout, stderr, exit_code = await run_sudo_command(conn, add_sudo_cmd, sudo_pass)
+        else:
+            result = await conn.run(add_sudo_cmd, check=False)
+            exit_code = result.exit_status
+            stderr = result.stderr
+        
+        if exit_code == 0:
+            await add_log(f"✓ 用户 {setup_req.cs2_username} 已添加到 sudo 组")
+        else:
+            await add_log(f"⚠ 添加用户到 sudo 组可能失败: {stderr[:100]}")
         
         # Create game directory
         game_dir = f"/home/{setup_req.cs2_username}/cs2"

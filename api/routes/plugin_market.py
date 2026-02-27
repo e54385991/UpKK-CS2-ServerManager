@@ -594,7 +594,6 @@ CONFIG_FILE_EXTENSIONS = [
     '.override',     # 有些框架用來覆蓋預設
     
     # 其他偶爾出現但真實存在的
-    '.txt',          # 極簡配置或腳本內嵌
     '.md',           # 極少，但有些人把配置寫在 markdown 裡（不推薦）
     '.yaml.tpl',     # Helm chart 的模板
     '.j2',           # Ansible Jinja2 模板（雖然是模板但常被掃描）

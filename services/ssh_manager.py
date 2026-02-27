@@ -1424,6 +1424,19 @@ class SSHManager:
                     
                     server_monitor.record_restart(server.id)
                     
+                    # Log auto-restart to Redis for monitoring audit trail
+                    # Local import to avoid circular dependency with services/__init__.py
+                    try:
+                        from services import redis_manager
+                        await redis_manager.append_monitoring_log(
+                            server_id=server.id,
+                            event_type='auto_restart',
+                            status='info',
+                            message='Auto-restart triggered after immediate crash detection during start_server'
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to log auto-restart to Redis: {e}")
+                    
                     # Wait a bit before restart
                     await asyncio.sleep(2)
                     

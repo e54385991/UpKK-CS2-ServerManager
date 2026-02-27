@@ -1517,6 +1517,21 @@ async def reconnect_ssh(
     try:
         success, conn, msg = await ssh_connection_pool.manual_reconnect(server)
         if success:
+            # Update ssh_health_status to healthy after successful reconnection
+            now = get_current_time()
+            await db.execute(
+                sql_update(Server)
+                .where(Server.id == server_id)
+                .values(
+                    ssh_health_status="healthy",
+                    is_ssh_down=False,
+                    consecutive_ssh_failures=0,
+                    last_ssh_success=now,
+                    last_ssh_health_check=now
+                )
+            )
+            await db.commit()
+            
             return {
                 "success": True,
                 "message": msg
