@@ -1,7 +1,7 @@
 """
 File manager routes for server file operations
 """
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Header, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +16,9 @@ import uuid
 import time
 import logging
 from urllib.parse import quote
+from jose import JWTError, jwt
 
-from modules import Server, get_db, User, get_current_active_user
+from modules import Server, get_db, User, get_current_active_user, settings
 from services import SSHManager
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 EXTRACTION_TASK_COMPLETED_CLEANUP_SECONDS = 3600  # 1 hour
 EXTRACTION_TASK_ABANDONED_CLEANUP_SECONDS = 7200  # 2 hours
 STREAMING_DOWNLOAD_THRESHOLD_BYTES = 3 * 1024 * 1024  # 3MB
+DOWNLOAD_TICKET_TTL_SECONDS = 60
 
 # In-memory storage for extraction task status
 # Key: task_id, Value: dict with status, archive_path, destination_path, 
@@ -39,6 +41,11 @@ _extraction_task_refs: Dict[str, asyncio.Task] = {}
 
 # Lock for thread-safe access to extraction_tasks and _extraction_task_refs
 extraction_tasks_lock = asyncio.Lock()
+
+# Short-lived one-time tickets let browser-native downloads authenticate
+# without exposing the long-lived JWT in a URL.
+download_tickets: Dict[str, Dict[str, Any]] = {}
+download_tickets_lock = asyncio.Lock()
 
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 
@@ -68,6 +75,11 @@ class FileContentRequest(SQLModel):
 class CreateDirectoryRequest(SQLModel):
     """Create directory request"""
     name: str
+
+
+class DownloadTicketRequest(SQLModel):
+    """Create a short-lived browser download ticket"""
+    path: str
 
 
 class DeleteRequest(SQLModel):
@@ -101,6 +113,89 @@ async def get_server_for_user(server_id: int, db: AsyncSession, current_user: Us
             detail=f"Server not found"
         )
     return server
+
+
+async def _create_download_ticket(user_id: int, server_id: int, path: str) -> str:
+    """Create a short-lived one-time ticket bound to a user, server and path."""
+    now = time.monotonic()
+    async with download_tickets_lock:
+        expired_tickets = [
+            ticket for ticket, info in download_tickets.items()
+            if info["expires_at"] <= now
+        ]
+        for ticket in expired_tickets:
+            download_tickets.pop(ticket, None)
+
+        ticket = uuid.uuid4().hex
+        download_tickets[ticket] = {
+            "user_id": user_id,
+            "server_id": server_id,
+            "path": path,
+            "expires_at": now + DOWNLOAD_TICKET_TTL_SECONDS,
+        }
+        return ticket
+
+
+async def _consume_download_ticket(ticket: str, server_id: int, path: str) -> Optional[int]:
+    """Consume and validate a one-time download ticket."""
+    now = time.monotonic()
+    async with download_tickets_lock:
+        ticket_info = download_tickets.pop(ticket, None)
+
+    if not ticket_info:
+        return None
+    if ticket_info["expires_at"] <= now:
+        return None
+    if ticket_info["server_id"] != server_id or ticket_info["path"] != path:
+        return None
+    return int(ticket_info["user_id"])
+
+
+async def get_current_active_user_for_download(
+    server_id: int,
+    path: str,
+    ticket: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    """Authenticate downloads with a one-time ticket or a normal bearer token."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    user_id: Optional[int] = None
+
+    if ticket:
+        user_id = await _consume_download_ticket(ticket, server_id, path)
+        if user_id is None:
+            raise credentials_exception
+    elif authorization:
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            raise credentials_exception
+
+        try:
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+            user_id_str = payload.get("sub")
+            if user_id_str is None:
+                raise credentials_exception
+            user_id = int(user_id_str)
+        except (JWTError, ValueError):
+            raise credentials_exception
+    else:
+        raise credentials_exception
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+
+    return user
 
 
 def is_path_safe(base_path: str, requested_path: str) -> bool:
@@ -302,7 +397,7 @@ async def download_file(
     server_id: int,
     path: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user_for_download)
 ):
     """Download file from server"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -369,6 +464,26 @@ async def download_file(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error downloading file: {str(e)}"
         )
+
+
+@router.post("/download-ticket")
+async def create_download_ticket(
+    server_id: int,
+    request: DownloadTicketRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create a short-lived one-time ticket for browser-native downloads."""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    if not is_path_safe(server.game_directory, request.path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside server directory"
+        )
+
+    ticket = await _create_download_ticket(current_user.id, server_id, request.path)
+    return {"ticket": ticket, "expires_in": DOWNLOAD_TICKET_TTL_SECONDS}
 
 
 @router.post("/mkdir")

@@ -2243,25 +2243,36 @@
 
                 async downloadFile(file) {
                     try {
-                        const response = await fetch(`/servers/{{ server.id }}/files/download?path=${encodeURIComponent(file.path)}`, {
-                            headers: {
-                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-                            }
-                        });
-
-                        if (!response.ok) {
-                            throw new Error(await response.text());
+                        const token = localStorage.getItem('access_token');
+                        if (!token) {
+                            throw new Error('Authentication token not found');
                         }
 
-                        const blob = await response.blob();
-                        const url = window.URL.createObjectURL(blob);
+                        const ticketResponse = await fetch(`/servers/{{ server.id }}/files/download-ticket`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ path: file.path })
+                        });
+
+                        if (!ticketResponse.ok) {
+                            throw new Error(await ticketResponse.text());
+                        }
+
+                        const { ticket } = await ticketResponse.json();
+                        const downloadUrl = new URL(`/servers/{{ server.id }}/files/download`, window.location.origin);
+                        downloadUrl.searchParams.set('path', file.path);
+                        downloadUrl.searchParams.set('ticket', ticket);
+
                         const a = document.createElement('a');
-                        a.href = url;
+                        a.href = downloadUrl.toString();
                         a.download = file.name;
+                        a.style.display = 'none';
                         document.body.appendChild(a);
                         a.click();
-                        window.URL.revokeObjectURL(url);
-                        document.body.removeChild(a);
+                        setTimeout(() => document.body.removeChild(a), 1000);
                     } catch (error) {
                         console.error('Error downloading file:', error);
                         showError(this.formatSSHError(error.message, 'errors.errorDownloadingFile'));
