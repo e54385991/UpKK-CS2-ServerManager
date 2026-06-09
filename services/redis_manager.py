@@ -26,7 +26,6 @@ class RedisManager:
             password=settings.REDIS_PASSWORD if settings.REDIS_PASSWORD else None,
             db=settings.REDIS_DB,
             max_connections=settings.REDIS_POOL_SIZE,
-            retry_on_timeout=settings.REDIS_RETRY_ON_TIMEOUT,
             health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
             socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
             socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
@@ -79,13 +78,23 @@ class RedisManager:
         """Clear all cache for a server"""
         pattern = f"server:{server_id}:*"
         try:
-            keys = await self.client.keys(pattern)
-            if keys:
-                await self.client.delete(*keys)
+            await self.delete_by_pattern(pattern)
             return True
         except Exception as e:
             print(f"Redis clear cache error: {e}")
             return False
+    
+    async def delete_by_pattern(self, pattern: str, count: int = 100) -> int:
+        """Delete keys matching a pattern without blocking Redis."""
+        deleted = 0
+        cursor = 0
+        while True:
+            cursor, keys = await self.client.scan(cursor, match=pattern, count=count)
+            if keys:
+                deleted += await self.client.delete(*keys)
+            if cursor == 0:
+                break
+        return deleted
     
     async def ping(self) -> bool:
         """Check Redis connection"""

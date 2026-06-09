@@ -2,7 +2,7 @@
 
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.120+-009688.svg?style=flat&logo=FastAPI)](https://fastapi.tiangolo.com)
-[![Python](https://img.shields.io/badge/Python-3.13+-blue.svg?style=flat&logo=python)](https://www.python.org)
+[![Python](https://img.shields.io/badge/Python-3.14+-blue.svg?style=flat&logo=python)](https://www.python.org)
 [![Redis](https://img.shields.io/badge/Redis-Async-DC382D.svg?style=flat&logo=redis)](https://redis.io)
 
 
@@ -101,7 +101,7 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 ### 📋 系统要求
 
 #### 管理端环境要求 (运行 Web 界面 您可使用[1Panel](https://github.com/1Panel-dev/1Panel)来快捷部署)
-- **Python**: 3.13+ (推荐 3.13 或更高版本，支持 Python 3.14)
+- **Python**: 3.14+ (推荐 Python 3.14 或更高版本)
 - **MySQL**: 8.0+
 - **Redis**: 7.0+
 
@@ -298,7 +298,7 @@ For details: [Panel Proxy Documentation](docs/GITHUB_PROXY.md)
 ### 📋 System Requirements
 
 #### Manager Host (Running Web Interface - You can use [1Panel](https://github.com/1Panel-dev/1Panel) for quick deployment)
-- **Python**: 3.13+ (Recommended 3.13 or higher, supports Python 3.14)
+- **Python**: 3.14+ (Recommended Python 3.14 or higher)
 - **MySQL**: 8.0+
 - **Redis**: 7.0+
 

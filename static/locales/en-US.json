@@ -472,6 +472,8 @@
     "notDeployedMessage": "This server has not been deployed yet. Deploy it to install CS2 and start using it.",
     "deployNow": "Deploy Now",
     "confirmRedeploy": "This server has already been deployed. Are you sure you want to redeploy?\n\nRedeploying will reinstall CS2 server files.",
+    "restartRequiredMessage": "Settings that affect the startup command have been changed. The server needs to be restarted for changes to take effect.\n\nRestart now?",
+    "startupCommand": "Startup Command",
     "operationSubmitted": "Operation Submitted",
     "checkConsoleForDetails": "Please check Console & Logs tab to view details",
     "deploymentCommandSent": "Deployment command sent to server. Please check the console and logs for progress.",
@@ -622,7 +624,9 @@
     "metamodCardDescription": "Plugin loader for Source 2 engine.",
     "metamodEssential": "Almost all plugins require this!",
     "cssDescription": "Write CS2 plugins in C#",
-    "cssCardDescription": "Write CS2 server plugins in C#. Requires Metamod:Source."
+    "cssCardDescription": "Write CS2 server plugins in C#. Requires Metamod:Source.",
+    "swiftlyDescription": "C#/Lua plugin framework for CS2",
+    "swiftlyCardDescription": "C#/Lua plugin framework for CS2. Standalone loader, no Metamod dependency."
   },
   "setupWizard": {
     "title": "New Server Initialization",

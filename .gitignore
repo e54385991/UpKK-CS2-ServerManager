@@ -34,6 +34,8 @@ MANIFEST
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
+*.crdownload
+*.bak
 
 # Unit test / coverage reports
 htmlcov/

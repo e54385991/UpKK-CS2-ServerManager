@@ -13,7 +13,7 @@
                                             :class="loading ? 'bi-arrow-repeat spin' : 'bi-arrow-clockwise'"></i>
                                         <span data-i18n="common.refresh">Refresh</span>
                                     </button>
-                                    <button @click="showCreateFolderModal = true"
+                                    <button @click="openCreateFolderModal()"
                                         class="btn btn-sm btn-outline-success">
                                         <i class="bi bi-folder-plus"></i>
                                         <span data-i18n="fileManager.newFolder">New Folder</span>
@@ -232,23 +232,21 @@
                     </div>
 
                     <!-- Create Folder Modal -->
-                    <div class="modal fade" id="createFolderModal" tabindex="-1" x-show="showCreateFolderModal"
-                        @click.self="showCreateFolderModal = false">
+                    <div class="modal fade" id="createFolderModal" tabindex="-1">
                         <div class="modal-dialog">
                             <div class="modal-content">
                                 <div class="modal-header">
                                     <h5 class="modal-title" data-i18n="fileManager.newFolder">New Folder</h5>
-                                    <button type="button" class="btn-close"
-                                        @click="showCreateFolderModal = false"></button>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                 </div>
                                 <div class="modal-body">
                                     <label class="form-label" data-i18n="fileManager.folderName">Folder Name</label>
-                                    <input type="text" class="form-control" x-model="newFolderName"
-                                        @keyup.enter="createFolder()">
+                                    <input type="text" class="form-control" id="createFolderName"
+                                        x-model.trim="newFolderName" @keyup.enter="createFolder()">
                                 </div>
                                 <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary"
-                                        @click="showCreateFolderModal = false" data-i18n="common.cancel">Cancel</button>
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                                        data-i18n="common.cancel">Cancel</button>
                                     <button type="button" class="btn btn-primary" @click="createFolder()"
                                         data-i18n="common.create">Create</button>
                                 </div>

@@ -3,16 +3,19 @@ File manager routes for server file operations
 """
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, SQLModel
 from typing import List, Optional, Dict, Any
 import os
+import posixpath
 import tempfile
 import shutil
 import asyncio
 import uuid
 import time
 import logging
+from urllib.parse import quote
 
 from modules import Server, get_db, User, get_current_active_user
 from services import SSHManager
@@ -22,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Constants for extraction task cleanup
 EXTRACTION_TASK_COMPLETED_CLEANUP_SECONDS = 3600  # 1 hour
 EXTRACTION_TASK_ABANDONED_CLEANUP_SECONDS = 7200  # 2 hours
+STREAMING_DOWNLOAD_THRESHOLD_BYTES = 3 * 1024 * 1024  # 3MB
 
 # In-memory storage for extraction task status
 # Key: task_id, Value: dict with status, archive_path, destination_path, 
@@ -104,12 +108,41 @@ def is_path_safe(base_path: str, requested_path: str) -> bool:
     Verify that the requested path is within the server's directory
     Prevents path traversal attacks
     """
-    # Normalize paths
-    base = os.path.normpath(base_path)
-    requested = os.path.normpath(requested_path)
+    # Remote game servers use POSIX paths even when the panel runs on Windows.
+    base = posixpath.normpath(base_path)
+    requested = posixpath.normpath(requested_path)
     
-    # Check if requested path starts with base path
-    return requested.startswith(base)
+    # Check if requested path is the base path or a child of it
+    return requested == base or requested.startswith(base.rstrip("/") + "/")
+
+
+def remote_join(*parts: str) -> str:
+    """Join remote server paths using POSIX separators."""
+    return posixpath.normpath(posixpath.join(*parts))
+
+
+def _cleanup_temp_file(path: str) -> None:
+    """Remove a temporary file after FileResponse finishes sending it."""
+    try:
+        if os.path.exists(path):
+            os.unlink(path)
+    except OSError:
+        logger.warning("Failed to clean up temporary download file: %s", path, exc_info=True)
+
+
+def _download_headers(filename: str, file_size: Optional[int] = None) -> Dict[str, str]:
+    """Build attachment headers with UTF-8 filename support."""
+    ascii_filename = filename.encode("ascii", "ignore").decode("ascii") or "download"
+    ascii_filename = ascii_filename.replace("\\", "_").replace('"', "_")
+    headers = {
+        "Content-Disposition": (
+            f'attachment; filename="{ascii_filename}"; '
+            f"filename*=UTF-8''{quote(filename)}"
+        )
+    }
+    if file_size is not None:
+        headers["Content-Length"] = str(file_size)
+    return headers
 
 
 @router.get("", response_model=DirectoryListResponse)
@@ -219,7 +252,7 @@ async def upload_file(
     server = await get_server_for_user(server_id, db, current_user)
     
     # Construct remote path
-    remote_path = os.path.join(path, file.filename)
+    remote_path = remote_join(path, file.filename)
     
     # Security check
     if not is_path_safe(server.game_directory, remote_path):
@@ -281,40 +314,61 @@ async def download_file(
             detail="Access denied: path is outside server directory"
         )
     
-    # Download to temp location
-    temp_file = None
+    filename = posixpath.basename(path) or "download"
+    ssh_manager = SSHManager()
+
     try:
-        # Create temporary file
+        size_success, file_size, size_error = await ssh_manager.get_file_size(path, server)
+        if not size_success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=size_error
+            )
+
+        if file_size is None or file_size > STREAMING_DOWNLOAD_THRESHOLD_BYTES:
+            async def remote_file_iterator():
+                try:
+                    async for chunk in ssh_manager.stream_file(path, server):
+                        yield chunk
+                finally:
+                    await ssh_manager.disconnect()
+
+            return StreamingResponse(
+                remote_file_iterator(),
+                media_type="application/octet-stream",
+                headers=_download_headers(filename, file_size)
+            )
+
         temp_fd, temp_path = tempfile.mkstemp()
         os.close(temp_fd)
-        temp_file = temp_path
-        
-        # Download from server using SSH
-        ssh_manager = SSHManager()
+
         success, error = await ssh_manager.download_file(path, temp_path, server)
-        
         if not success:
+            _cleanup_temp_file(temp_path)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=error
             )
-        
-        # Get filename for download
-        filename = os.path.basename(path)
-        
-        # Return file as download
+
+        await ssh_manager.disconnect()
+
         return FileResponse(
             path=temp_path,
             filename=filename,
-            media_type='application/octet-stream',
-            background=None  # Don't delete temp file yet
+            media_type="application/octet-stream",
+            headers=_download_headers(filename, file_size),
+            background=BackgroundTask(_cleanup_temp_file, temp_path)
         )
-    
-    except Exception as e:
-        # Clean up on error
-        if temp_file and os.path.exists(temp_file):
-            os.unlink(temp_file)
+
+    except HTTPException:
+        await ssh_manager.disconnect()
         raise
+    except Exception as e:
+        await ssh_manager.disconnect()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error downloading file: {str(e)}"
+        )
 
 
 @router.post("/mkdir")
@@ -329,7 +383,7 @@ async def create_directory(
     server = await get_server_for_user(server_id, db, current_user)
     
     # Construct full path
-    new_dir_path = os.path.join(path, request.name)
+    new_dir_path = remote_join(path, request.name)
     
     # Security check
     if not is_path_safe(server.game_directory, new_dir_path):
@@ -369,7 +423,7 @@ async def delete_path(
         )
     
     # Don't allow deleting the root game directory
-    if os.path.normpath(path) == os.path.normpath(server.game_directory):
+    if posixpath.normpath(path) == posixpath.normpath(server.game_directory):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot delete server root directory"
@@ -400,8 +454,8 @@ async def rename_file_or_directory(
     server = await get_server_for_user(server_id, db, current_user)
     
     # Construct full paths
-    old_path = os.path.join(path, request.old_name)
-    new_path = os.path.join(path, request.new_name)
+    old_path = remote_join(path, request.old_name)
+    new_path = remote_join(path, request.new_name)
     
     # Security check - both paths must be within server directory
     if not is_path_safe(server.game_directory, old_path):
@@ -417,7 +471,7 @@ async def rename_file_or_directory(
         )
     
     # Don't allow renaming the root game directory
-    if os.path.normpath(old_path) == os.path.normpath(server.game_directory):
+    if posixpath.normpath(old_path) == posixpath.normpath(server.game_directory):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot rename server root directory"
@@ -523,7 +577,7 @@ async def extract_archive(
     archive_path = request.archive_path
     # If no destination specified or empty string, extract to the same directory as the archive
     if not request.destination_path or request.destination_path.strip() == '':
-        destination_path = os.path.dirname(archive_path)
+        destination_path = posixpath.dirname(archive_path)
     else:
         destination_path = request.destination_path
     

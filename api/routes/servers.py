@@ -7,13 +7,15 @@ from sqlmodel import select
 from typing import List, Dict, Any
 import asyncio
 import asyncssh
+import re
 import shlex
 
 from modules import (
     Server, ServerCreate, ServerUpdate, ServerResponse, ServerResponseWithUser, AuthType,
     get_db, User, UserResponse, get_current_active_user, get_current_admin_user, get_optional_current_user, generate_api_key,
-    get_current_time, SystemSettings
+    get_current_time, SystemSettings, ServerStatus
 )
+from modules.config import settings as app_settings
 from services import redis_manager
 from services.captcha_service import captcha_service
 from services.ssh_manager import SSHManager
@@ -282,6 +284,20 @@ async def update_server(
     """Update server - admins can update any server, users can only update their own"""
     server = await get_server_with_permission(server_id, current_user, db)
     
+    # Fields that affect the startup command - changes require server restart to take effect
+    startup_affecting_fields = {
+        'game_port', 'game_directory', 'server_name', 'default_map',
+        'max_players', 'game_mode', 'game_type', 'server_password',
+        'rcon_password', 'steam_account_token', 'tv_enable', 'tv_port',
+        'additional_parameters', 'ip_address', 'client_port', 'cpu_affinity'
+    }
+    
+    # Track old values for startup-affecting fields
+    old_values = {}
+    for field in startup_affecting_fields:
+        if hasattr(server, field):
+            old_values[field] = getattr(server, field)
+    
     # Track if monitoring status changed
     old_monitoring_enabled = server.enable_panel_monitoring
     
@@ -289,6 +305,14 @@ async def update_server(
     update_data = server_data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(server, key, value)
+    
+    # Check if any startup-affecting fields changed while server is running
+    restart_required = False
+    if server.status == ServerStatus.RUNNING:
+        for field in startup_affecting_fields:
+            if field in update_data and old_values.get(field) != getattr(server, field):
+                restart_required = True
+                break
     
     await db.commit()
     await db.refresh(server)
@@ -310,7 +334,10 @@ async def update_server(
     # Clear cache
     await redis_manager.clear_server_cache(server_id)
     
-    return server
+    # Build response with restart_required flag
+    response = ServerResponse.model_validate(server)
+    response.restart_required = restart_required
+    return response
 
 
 @router.post("/{server_id}/apply-system-defaults", response_model=ServerResponse)
@@ -767,4 +794,134 @@ async def get_ssh_health_status(
         "check_interval_hours": server.ssh_health_check_interval_hours or 2,
         "offline_duration_estimate": offline_duration_estimate,
         "monitoring_enabled": server.enable_ssh_health_monitoring
+    }
+
+
+@router.get("/{server_id}/startup-command")
+async def get_startup_command(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Generate a preview of the startup command based on current server settings.
+    This mirrors the logic in ssh_manager.start_server() but does not require SSH.
+    Sensitive values (passwords, tokens) are masked.
+    """
+    server = await get_server_with_permission(server_id, current_user, db)
+
+    # Config with safe defaults (mirrors start_server logic)
+    default_map = server.default_map or "de_dust2"
+    max_players = server.max_players or 32
+    server_name = server.server_name or f"CS2 Server {server.id}"
+
+    # Game mode mapping
+    game_mode_str = server.game_mode or "competitive"
+    mode_mapping = {
+        "casual": ("0", "0"),
+        "competitive": ("0", "1"),
+        "wingman": ("0", "2"),
+        "arms_race": ("1", "0"),
+        "armsrace": ("1", "0"),
+        "demolition": ("1", "1"),
+        "deathmatch": ("2", "0"),
+        "custom": ("3", "0"),
+    }
+
+    if game_mode_str:
+        game_mode_lower = game_mode_str.lower()
+        if game_mode_lower in mode_mapping:
+            mapped_game_type, mapped_game_mode = mode_mapping[game_mode_lower]
+            game_mode = mapped_game_mode
+            game_type = server.game_type if server.game_type else mapped_game_type
+        elif game_mode_str.isdigit():
+            game_mode = game_mode_str
+            game_type = server.game_type or "0"
+        else:
+            game_mode = "1"
+            game_type = "0"
+    else:
+        game_mode = "1"
+        game_type = server.game_type or "0"
+
+    # Build parameters (same as start_server)
+    params = [
+        "-dedicated",
+        f"-port {server.game_port}",
+        f"+map {default_map}",
+        f"-maxplayers {max_players}",
+        f'+hostname "{server_name}"',
+    ]
+
+    if server.ip_address:
+        params.append(f"-ip {server.ip_address}")
+
+    if server.client_port:
+        params.append(f"+clientport {server.client_port}")
+    elif server.game_port:
+        params.append(f"+clientport {server.game_port + 1}")
+
+    if server.steam_account_token:
+        params.append('+sv_setsteamaccount "***STEAM_TOKEN***"')
+
+    if server.server_password:
+        params.append('+sv_password "***PASSWORD***"')
+
+    if server.rcon_password:
+        params.append('+rcon_password "***RCON_PASSWORD***"')
+
+    params.append(f"+game_mode {game_mode}")
+    params.append(f"+game_type {game_type}")
+
+    if server.tv_enable and server.tv_port:
+        params.extend([
+            "+tv_enable 1",
+            f"+tv_port {server.tv_port}",
+            '+tv_name "GOTV"',
+        ])
+
+    if server.additional_parameters:
+        params.append(server.additional_parameters.strip())
+
+    params_str = " ".join(params)
+
+    # Build paths
+    game_bin_dir = f"{server.game_directory}/cs2/game/bin/linuxsteamrt64"
+    cs2_executable = "./cs2"
+
+    cs2_start_cmd = (
+        f"cd {game_bin_dir} && "
+        f"export LD_LIBRARY_PATH='{game_bin_dir}:${{LD_LIBRARY_PATH}}' && "
+        f"{cs2_executable} {params_str}"
+    )
+
+    # CPU affinity prefix
+    cpu_affinity_prefix = ""
+    if server.cpu_affinity and re.match(r'^[\d,\-\s]+$', server.cpu_affinity.strip()):
+        cpu_affinity_prefix = f"taskset -c {server.cpu_affinity.strip()} "
+
+    # Build full command with screen wrapper (autorestart variant)
+    autorestart_script_path = f"{server.game_directory}/cs2_autorestart.sh"
+    api_key = server.api_key or ""
+    backend_url = server.backend_url or app_settings.BACKEND_URL
+
+    if api_key:
+        start_cmd = (
+            f"{cpu_affinity_prefix}screen -dmS cs2server_{server.id} "
+            f"bash {autorestart_script_path} "
+            f"{server.id} '***API_KEY***' '{backend_url}' '{server.game_directory}' "
+            f"'{cs2_start_cmd}'"
+        )
+    else:
+        start_cmd = (
+            f"cd {game_bin_dir} && "
+            f"export LD_LIBRARY_PATH=\"{game_bin_dir}:$LD_LIBRARY_PATH\" && "
+            f"{cpu_affinity_prefix}screen -dmS cs2server_{server.id} "
+            f"bash -c '{cs2_executable} {params_str} 2>&1 | tee {server.game_directory}/cs2/game/csgo/console.log'"
+        )
+
+    return {
+        "startup_command": start_cmd,
+        "cs2_command": f"{cs2_executable} {params_str}",
+        "game_mode_resolved": f"{game_mode_str} (game_type: {game_type}, game_mode: {game_mode})"
     }

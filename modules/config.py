@@ -3,12 +3,13 @@ Configuration module for CS2 Server Manager
 Handles Redis, MySQL connections and other basic settings
 Connection pool configurations are used by SQLAlchemy engine (which powers SQLModel)
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
     
     # MySQL Configuration
     MYSQL_HOST: str = "1Panel-mysql-KZBC"
@@ -35,7 +36,6 @@ class Settings(BaseSettings):
     # Redis Connection Pool Configuration
     # These settings optimize Redis connection management for better performance
     REDIS_POOL_SIZE: int = 10  # Maximum number of connections in the pool
-    REDIS_RETRY_ON_TIMEOUT: bool = True  # Retry operation on timeout
     REDIS_HEALTH_CHECK_INTERVAL: int = 30  # Seconds between health checks
     REDIS_SOCKET_CONNECT_TIMEOUT: int = 5  # Seconds for socket connection timeout
     REDIS_SOCKET_TIMEOUT: int = 5  # Seconds for socket read/write timeout
@@ -67,10 +67,6 @@ class Settings(BaseSettings):
     # Google OAuth Configuration
     GOOGLE_CLIENT_ID: Optional[str] = None  # Google OAuth Client ID from Google Cloud Console
     # Google CallbackURL = https://your-domain.com/google-callback
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
     
     @property
     def mysql_url(self) -> str:

@@ -2291,6 +2291,21 @@
                     }
                 },
 
+                openCreateFolderModal() {
+                    this.newFolderName = '';
+                    this.showCreateFolderModal = true;
+
+                    const modalElement = document.getElementById('createFolderModal');
+                    if (!modalElement) return;
+
+                    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+                    modal.show();
+
+                    setTimeout(() => {
+                        document.getElementById('createFolderName')?.focus();
+                    }, 150);
+                },
+
                 async createFolder() {
                     if (!this.newFolderName.trim()) return;
 

@@ -81,7 +81,7 @@
                                     <h6 class="card-title mb-3"><i class="bi bi-ui-checks"></i> <span
                                             data-i18n="serverDetail.batchInstallation">Batch Installation</span></h6>
                                     <div class="row mb-3">
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <div class="form-check">
                                                 <input class="form-check-input" type="checkbox"
                                                     x-model="pluginSelection.metamod" id="selectMetamod">
@@ -91,13 +91,23 @@
                                                 </label>
                                             </div>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <div class="form-check">
                                                 <input class="form-check-input" type="checkbox"
                                                     x-model="pluginSelection.counterstrikesharp" id="selectCSS">
                                                 <label class="form-check-label" for="selectCSS">
                                                     <strong>CounterStrikeSharp</strong>
                                                     <small class="d-block text-muted" data-i18n="pluginFrameworkManagement.cssDescription">Write CS2 plugins in C#</small>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox"
+                                                    x-model="pluginSelection.swiftly" id="selectSwiftly">
+                                                <label class="form-check-label" for="selectSwiftly">
+                                                    <strong>SwiftlyS2</strong>
+                                                    <small class="d-block text-muted" data-i18n="pluginFrameworkManagement.swiftlyDescription">C#/Lua plugin framework for CS2</small>
                                                 </label>
                                             </div>
                                         </div>
@@ -108,7 +118,7 @@
                                     </div>
                                     <div class="d-grid">
                                         <button @click="installSelectedPlugins()"
-                                            :disabled="isActionRunning || (!pluginSelection.metamod && !pluginSelection.counterstrikesharp)"
+                                            :disabled="isActionRunning || (!pluginSelection.metamod && !pluginSelection.counterstrikesharp && !pluginSelection.swiftly)"
                                             class="btn btn-success">
                                             <i class="bi bi-cloud-download"></i> <span
                                                 data-i18n="serverDetail.installSelectedFrameworks">Install Selected
@@ -120,7 +130,7 @@
 
                             <!-- Individual Plugin Cards -->
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <div class="card h-100 border border-warning">
                                         <div class="card-body">
                                             <h6 class="card-title"><i class="bi bi-box-seam"></i> Metamod:Source</h6>
@@ -145,7 +155,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <div class="card h-100 border">
                                         <div class="card-body">
                                             <h6 class="card-title"><i class="bi bi-box-seam"></i> CounterStrikeSharp
@@ -168,12 +178,34 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="col-md-4">
+                                    <div class="card h-100 border">
+                                        <div class="card-body">
+                                            <h6 class="card-title"><i class="bi bi-box-seam"></i> SwiftlyS2</h6>
+                                            <p class="card-text small text-muted" data-i18n="pluginFrameworkManagement.swiftlyCardDescription">
+                                                C#/Lua plugin framework for CS2. Standalone loader, no Metamod dependency.
+                                            </p>
+                                            <div class="d-grid gap-2">
+                                                <button @click="executeAction('install_swiftly')"
+                                                    :disabled="isActionRunning" class="btn btn-primary btn-sm">
+                                                    <i class="bi bi-download"></i> <span
+                                                        data-i18n="serverDetail.install">Install</span>
+                                                </button>
+                                                <button @click="executeAction('update_swiftly')"
+                                                    :disabled="isActionRunning" class="btn btn-outline-primary btn-sm">
+                                                    <i class="bi bi-arrow-repeat"></i> <span
+                                                        data-i18n="serverDetail.update">Update</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div class="mt-3">
                                 <small class="text-muted">
                                     <i class="bi bi-lightbulb"></i> <strong>Tip:</strong> After installing plugins,
                                     restart your server for changes to take effect.
-                                    Use console commands <code>meta list</code> and <code>css_plugins list</code> to
+                                    Use console commands <code>meta list</code>, <code>css_plugins list</code>, or <code>sw</code> to
                                     verify installation.
                                 </small>
                             </div>

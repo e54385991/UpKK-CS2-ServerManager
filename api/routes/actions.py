@@ -654,6 +654,38 @@ async def server_action(
                 log.error_message = message
                 await send_deployment_update(server_id, "error", f"CS2Fixes update failed: {message}")
         
+        elif action == "install_swiftly":
+            await send_deployment_update(server_id, "status", "Installing SwiftlyS2...")
+            success, message = await ssh_manager.install_swiftly(server,
+                                                                lambda msg: asyncio.create_task(
+                                                                    send_deployment_update(server_id, "output", msg)
+                                                                ))
+            
+            if success:
+                log.status = "success"
+                log.output = message
+                await send_deployment_update(server_id, "complete", "SwiftlyS2 installed successfully")
+            else:
+                log.status = "failed"
+                log.error_message = message
+                await send_deployment_update(server_id, "error", f"SwiftlyS2 installation failed: {message}")
+        
+        elif action == "update_swiftly":
+            await send_deployment_update(server_id, "status", "Updating SwiftlyS2...")
+            success, message = await ssh_manager.update_swiftly(server,
+                                                               lambda msg: asyncio.create_task(
+                                                                   send_deployment_update(server_id, "output", msg)
+                                                               ))
+            
+            if success:
+                log.status = "success"
+                log.output = message
+                await send_deployment_update(server_id, "complete", "SwiftlyS2 updated successfully")
+            else:
+                log.status = "failed"
+                log.error_message = message
+                await send_deployment_update(server_id, "error", f"SwiftlyS2 update failed: {message}")
+        
         elif action == "backup_plugins":
             await send_deployment_update(server_id, "status", "Backing up plugins...")
             success, message = await ssh_manager.backup_plugins(server,

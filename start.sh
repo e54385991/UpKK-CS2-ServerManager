@@ -3,39 +3,58 @@
 # CS2 Server Manager - Startup Script
 # This script starts the CS2 Server Manager application
 
+set -e
 
 echo "=========================================="
-echo "CS2 Server Manager - Starting Application x"
+echo "CS2 Server Manager - Starting Application"
 echo "=========================================="
 echo ""
-sudo apt-get install python3-venv -y
+
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [ -z "$PYTHON_BIN" ]; then
+    if command -v python3.14 >/dev/null 2>&1; then
+        PYTHON_BIN="python3.14"
+    elif command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN="python3"
+    else
+        echo "Error: Python 3.14 or newer is required"
+        exit 1
+    fi
+fi
+
+if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)'; then
+    echo "Error: Python 3.14 or newer is required"
+    echo "Current interpreter: $($PYTHON_BIN --version 2>&1)"
+    exit 1
+fi
 
 # Check if virtual environment exists, create if not
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
-    python3 -m venv venv
+    "$PYTHON_BIN" -m venv venv
     if [ $? -ne 0 ]; then
         echo "Error: Failed to create virtual environment"
-        echo "Please ensure python3-venv is installed: sudo apt-get install python3-venv"
+        echo "Please ensure the Python 3.14 venv package is installed."
         exit 1
     fi
-    
-    # Activate virtual environment
-    echo "Activating virtual environment..."
-    source venv/bin/activate
-    
-    # Upgrade pip in the virtual environment
-    echo "Upgrading pip..."
-    python -m pip install --upgrade pip
-else
-    # Activate existing virtual environment
-    echo "Activating virtual environment..."
-    source venv/bin/activate
 fi
+
+echo "Activating virtual environment..."
+source venv/bin/activate
+
+if ! python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)'; then
+    echo "Error: Existing venv is not using Python 3.14+"
+    echo "Current venv interpreter: $(python --version 2>&1)"
+    echo "Remove the venv directory and run this script again."
+    exit 1
+fi
+
+echo "Upgrading pip..."
+python -m pip install --upgrade pip
 
 # Install/Update dependencies
 echo "Installing dependencies..."
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 echo ""
 echo "Starting CS2 Server Manager..."
@@ -46,4 +65,4 @@ echo "=========================================="
 echo ""
 
 # Start the application
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload

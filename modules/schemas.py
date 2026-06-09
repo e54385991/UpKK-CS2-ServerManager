@@ -14,7 +14,9 @@ import re
 ALLOWED_SERVER_ACTIONS = [
     "deploy", "start", "stop", "restart", "status", "update", "validate",
     "install_metamod", "install_counterstrikesharp", "install_cs2fixes",
+    "install_swiftly",
     "update_metamod", "update_counterstrikesharp", "update_cs2fixes",
+    "update_swiftly",
     "backup_plugins"
 ]
 SERVER_ACTION_PATTERN = f"^({'|'.join(ALLOWED_SERVER_ACTIONS)})$"
@@ -416,6 +418,9 @@ class ServerResponse(SQLModel):
     
     # Panel proxy mode
     use_panel_proxy: bool
+    
+    # Restart required flag (set by update endpoint when startup-affecting settings change)
+    restart_required: bool = False
     
     model_config = {"from_attributes": True}
 

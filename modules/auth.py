@@ -3,8 +3,8 @@ Authentication utilities for user management
 """
 from datetime import timedelta
 from typing import Optional
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,13 +16,8 @@ from .schemas import TokenData
 from .database import get_db
 from .utils import get_current_time
 
-# Password hashing - configure bcrypt to handle long passwords automatically
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__ident="2b",  # Use bcrypt 2b format
-    bcrypt__rounds=12  # Security rounds
-)
+BCRYPT_ROUNDS = 12
+BCRYPT_MAX_PASSWORD_BYTES = 72
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -32,20 +27,29 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 optional_oauth2_scheme = HTTPBearer(auto_error=False)
 
 
+def _bcrypt_password_bytes(password: str) -> bytes:
+    """Bcrypt only accepts the first 72 password bytes."""
+    return password.encode("utf-8")[:BCRYPT_MAX_PASSWORD_BYTES]
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a hash"""
-    # Ensure password is not longer than 72 characters (bcrypt limit)
-    if len(plain_password) > 72:
-        plain_password = plain_password[:72]
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return bcrypt.checkpw(
+            _bcrypt_password_bytes(plain_password),
+            hashed_password.encode("utf-8")
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 def get_password_hash(password: str) -> str:
     """Hash a password"""
-    # Ensure password is not longer than 72 characters (bcrypt limit)
-    if len(password) > 72:
-        password = password[:72]
-    return pwd_context.hash(password)
+    password_hash = bcrypt.hashpw(
+        _bcrypt_password_bytes(password),
+        bcrypt.gensalt(rounds=BCRYPT_ROUNDS, prefix=b"2b")
+    )
+    return password_hash.decode("utf-8")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

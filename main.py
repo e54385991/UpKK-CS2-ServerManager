@@ -3,16 +3,16 @@ FastAPI application for CS2 Server Manager
 Main entry point with organized structure
 Using SQLModel for seamless FastAPI integration
 """
-from fastapi import FastAPI, Request, HTTPException, Depends
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 import os
 import logging
 
-from modules import init_db, migrate_db, settings, Server, get_db, ServerResponse, get_optional_current_user, User, setup_logging, _get_log_level
+from modules import init_db, migrate_db, settings, Server, ServerResponse, setup_logging, _get_log_level
 from services import redis_manager
 from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market, system_settings, gmail_oauth
 
@@ -22,40 +22,6 @@ log_level = _get_log_level(settings.LOG_LEVEL)
 setup_logging(level=log_level, asyncssh_level=settings.ASYNCSSH_LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
-app = FastAPI(
-    title="CS2 Server Manager",
-    description="Manage multiple CS2 servers via FastAPI + Redis + MySQL with WebSocket support",
-    version="1.0.0"
-)
-
-# Mount static files
-if os.path.exists("static"):
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Setup Jinja2 templates
-templates = Jinja2Templates(directory="templates")
-
-# Include routers
-# PUBLIC ROUTER FIRST - no authentication, no prefix
-app.include_router(public.router)
-# CAPTCHA ROUTER - no authentication required for generation
-app.include_router(captcha.router)
-# Then authenticated routers
-app.include_router(auth.router)
-app.include_router(servers.router)
-app.include_router(actions.router)
-app.include_router(setup.router)
-app.include_router(server_status.router)
-app.include_router(file_manager.router)
-app.include_router(scheduled_tasks.router)
-app.include_router(github_plugins.router)
-app.include_router(plugin_market.router)
-app.include_router(system_settings.router)
-app.include_router(gmail_oauth.router)
-
-
-@app.on_event("startup")
 async def startup_event():
     """Initialize database and start monitoring on startup"""
     # Run migrations first to add any missing columns to existing tables
@@ -72,11 +38,9 @@ async def startup_event():
     from services.redis_manager import redis_manager
     print("Clearing old A2S cache...")
     try:
-        # Get all a2s cache keys
-        keys = await redis_manager.client.keys("a2s:server:*")
-        if keys:
-            await redis_manager.client.delete(*keys)
-            print(f"Cleared {len(keys)} old A2S cache entries")
+        deleted = await redis_manager.delete_by_pattern("a2s:server:*")
+        if deleted:
+            print(f"Cleared {deleted} old A2S cache entries")
         else:
             print("No old A2S cache entries to clear")
     except Exception as e:
@@ -127,7 +91,6 @@ async def startup_event():
     print("CS2 Server Manager started successfully!")
 
 
-@app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
     # Stop SSH connection pool cleanup task and close all connections
@@ -168,40 +131,84 @@ async def shutdown_event():
     print("CS2 Server Manager shutdown complete!")
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application startup and shutdown lifecycle."""
+    await startup_event()
+    try:
+        yield
+    finally:
+        await shutdown_event()
+
+
+# Create FastAPI app
+app = FastAPI(
+    title="CS2 Server Manager",
+    description="Manage multiple CS2 servers via FastAPI + Redis + MySQL with WebSocket support",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Mount static files
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Setup Jinja2 templates
+templates = Jinja2Templates(directory="templates")
+
+# Include routers
+# PUBLIC ROUTER FIRST - no authentication, no prefix
+app.include_router(public.router)
+# CAPTCHA ROUTER - no authentication required for generation
+app.include_router(captcha.router)
+# Then authenticated routers
+app.include_router(auth.router)
+app.include_router(servers.router)
+app.include_router(actions.router)
+app.include_router(setup.router)
+app.include_router(server_status.router)
+app.include_router(file_manager.router)
+app.include_router(scheduled_tasks.router)
+app.include_router(github_plugins.router)
+app.include_router(plugin_market.router)
+app.include_router(system_settings.router)
+app.include_router(gmail_oauth.router)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Root endpoint - serve home page"""
-    return templates.TemplateResponse("home.html", {"request": request})
+    return templates.TemplateResponse(request, "home.html")
 
 
 @app.get("/deployment-tutorial", response_class=HTMLResponse)
 async def deployment_tutorial_page(request: Request):
     """Deployment tutorial page"""
-    return templates.TemplateResponse("deployment_tutorial.html", {"request": request})
+    return templates.TemplateResponse(request, "deployment_tutorial.html")
 
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Login page"""
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html")
 
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     """Registration page"""
-    return templates.TemplateResponse("register.html", {"request": request})
+    return templates.TemplateResponse(request, "register.html")
 
 
 @app.get("/google-callback", response_class=HTMLResponse)
 async def google_callback_page(request: Request):
     """Google OAuth callback page"""
-    return templates.TemplateResponse("google_callback.html", {"request": request})
+    return templates.TemplateResponse(request, "google_callback.html")
 
 
 @app.get("/servers-ui", response_class=HTMLResponse)
 async def servers_ui(request: Request):
     """Servers management UI"""
-    return templates.TemplateResponse("servers.html", {"request": request})
+    return templates.TemplateResponse(request, "servers.html")
 
 
 @app.get("/servers-ui/{server_id}", response_class=HTMLResponse)
@@ -220,8 +227,7 @@ async def server_detail_ui(request: Request, server_id: int):
         # Create a JSON string for the JavaScript code
         server_json = server_data.model_dump_json()
         
-        return templates.TemplateResponse("server_detail.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "server_detail.html", {
             "server": server,  # Pass original SQLAlchemy object for template attribute access
             "server_json": server_json  # Pass JSON string for JavaScript
         })
@@ -238,8 +244,7 @@ async def console_popup(request: Request, server_id: int, console_type: str):
         if not server:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
     
-    return templates.TemplateResponse("console_popup.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "console_popup.html", {
         "server_id": server_id,
         "console_type": console_type.upper()
     })
@@ -248,7 +253,7 @@ async def console_popup(request: Request, server_id: int, console_type: str):
 @app.get("/plugin-market", response_class=HTMLResponse)
 async def plugin_market_page(request: Request):
     """Plugin market page"""
-    return templates.TemplateResponse("plugin_market.html", {"request": request})
+    return templates.TemplateResponse(request, "plugin_market.html")
 
 
 @app.get("/servers/{server_id}/ssh-console", response_class=HTMLResponse)
@@ -262,8 +267,7 @@ async def ssh_console(request: Request, server_id: int):
         if not server:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
     
-    return templates.TemplateResponse("ssh_console.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "ssh_console.html", {
         "server_id": server_id
     })
 
@@ -279,8 +283,7 @@ async def game_console(request: Request, server_id: int):
         if not server:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
     
-    return templates.TemplateResponse("game_console.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "game_console.html", {
         "server_id": server_id
     })
 
@@ -319,8 +322,7 @@ async def file_editor_popup(request: Request, server_id: int, file_path: str, fi
     finally:
         await ssh_manager.disconnect()
     
-    return templates.TemplateResponse("file_editor_popup.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "file_editor_popup.html", {
         "server_id": server_id,
         "file_path": file_path,
         "file_name": file_name,
@@ -331,32 +333,32 @@ async def file_editor_popup(request: Request, server_id: int, file_path: str, fi
 @app.get("/setup-wizard", response_class=HTMLResponse)
 async def setup_wizard(request: Request):
     """Server setup wizard UI - authentication checked client-side"""
-    return templates.TemplateResponse("server_setup_wizard.html", {"request": request})
+    return templates.TemplateResponse(request, "server_setup_wizard.html")
 
 
 
 @app.get("/profile", response_class=HTMLResponse)
 async def profile_page(request: Request):
     """User profile page"""
-    return templates.TemplateResponse("profile.html", {"request": request})
+    return templates.TemplateResponse(request, "profile.html")
 
 
 @app.get("/system-settings", response_class=HTMLResponse)
 async def system_settings_page(request: Request):
     """System settings page (admin only - auth checked client-side)"""
-    return templates.TemplateResponse("system_settings.html", {"request": request})
+    return templates.TemplateResponse(request, "system_settings.html")
 
 
 @app.get("/forgot-password", response_class=HTMLResponse)
 async def forgot_password_page(request: Request):
     """Forgot password page"""
-    return templates.TemplateResponse("forgot_password.html", {"request": request})
+    return templates.TemplateResponse(request, "forgot_password.html")
 
 
 @app.get("/reset-password", response_class=HTMLResponse)
 async def reset_password_page(request: Request):
     """Reset password page"""
-    return templates.TemplateResponse("reset_password.html", {"request": request})
+    return templates.TemplateResponse(request, "reset_password.html")
 
 
 @app.get("/health")

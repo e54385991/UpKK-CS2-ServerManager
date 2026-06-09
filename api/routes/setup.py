@@ -12,11 +12,10 @@ import string
 import time
 import shlex
 import uuid
-from datetime import datetime
 
 from services.captcha_service import captcha_service
 from services.redis_manager import redis_manager
-from modules import get_current_active_user, User, SSHServerSudo, get_db
+from modules import get_current_active_user, User, SSHServerSudo, get_db, get_current_time
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
@@ -164,7 +163,7 @@ async def send_setup_progress(session_id: Optional[str], log_message: str):
             await setup_ws.send_message(session_id, {
                 "type": "log",
                 "message": log_message,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": get_current_time().isoformat()
             })
         except Exception:
             # WebSocket failures should not break the main setup flow
@@ -193,7 +192,7 @@ async def setup_progress_websocket(websocket: WebSocket, session_id: str):
         await websocket.send_json({
             "type": "info",
             "message": "WebSocket 连接已建立，等待设置开始...",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": get_current_time().isoformat()
         })
         
         while True:

@@ -472,6 +472,8 @@
     "notDeployedMessage": "此服务器尚未部署。请部署以安装 CS2 并开始使用。",
     "deployNow": "立即部署",
     "confirmRedeploy": "此服务器已部署完成，请确认是否要重新部署？\n\n重新部署将重新安装 CS2 服务器文件。",
+    "restartRequiredMessage": "影响启动命令的设置已更改，需要重启服务器才能使更改生效。\n\n是否立即重启？",
+    "startupCommand": "启动命令",
     "operationSubmitted": "操作已提交",
     "checkConsoleForDetails": "请点击控制台和日志查看详情",
     "deploymentCommandSent": "已向服务器发送部署命令，请注意查看控制台和日志。",
@@ -622,7 +624,9 @@
     "metamodCardDescription": "Source 2 引擎的插件加载器。",
     "metamodEssential": "几乎所有插件都需要此框架！",
     "cssDescription": "使用 C# 编写 CS2 插件",
-    "cssCardDescription": "使用 C# 编写 CS2 服务器插件。需要 Metamod:Source。"
+    "cssCardDescription": "使用 C# 编写 CS2 服务器插件。需要 Metamod:Source。",
+    "swiftlyDescription": "CS2 的 C#/Lua 插件框架",
+    "swiftlyCardDescription": "CS2 的 C#/Lua 插件框架。独立加载器，无需依赖 Metamod。"
   },
   "setupWizard": {
     "title": "新服务器初始化",

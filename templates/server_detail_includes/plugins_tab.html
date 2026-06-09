@@ -1,0 +1,436 @@
+                <div class="tab-pane fade" id="plugins" role="tabpanel">
+                    <!-- Plugins Management Card -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-puzzle"></i> 
+                                <span data-i18n="plugins.title">CounterStrikeSharp Plugins</span>
+                            </h5>
+                            <div>
+                                <button @click="showUploadPluginModal()" class="btn btn-sm btn-primary me-2" x-show="isAdmin">
+                                    <i class="bi bi-cloud-upload"></i>
+                                    <span data-i18n="plugins.uploadPlugin">Upload Plugin</span>
+                                </button>
+                                <button @click="refreshPlugins()" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                    <span data-i18n="common.refresh">Refresh</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <!-- Category Filter Sidebar -->
+                                <div class="col-md-3">
+                                    <div class="card mb-3">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">
+                                                <i class="bi bi-funnel"></i>
+                                                <span data-i18n="plugins.categories">Categories</span>
+                                            </h6>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <div class="list-group list-group-flush">
+                                                <button 
+                                                    type="button" 
+                                                    class="list-group-item list-group-item-action"
+                                                    :class="{'active': pluginFilter.category === null}"
+                                                    @click="filterPluginsByCategory(null)">
+                                                    <i class="bi bi-collection"></i>
+                                                    <span data-i18n="plugins.allPlugins">All Plugins</span>
+                                                    <span class="badge bg-primary rounded-pill float-end" x-text="pluginStats.total"></span>
+                                                </button>
+                                                <template x-for="category in pluginCategories" :key="category.value">
+                                                    <button 
+                                                        type="button" 
+                                                        class="list-group-item list-group-item-action"
+                                                        :class="{'active': pluginFilter.category === category.value}"
+                                                        @click="filterPluginsByCategory(category.value)">
+                                                        <i class="bi" :class="`bi-${getCategoryIcon(category.value)}`"></i>
+                                                        <span x-text="category.label"></span>
+                                                    </button>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Installed Plugins -->
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">
+                                                <i class="bi bi-check-circle"></i>
+                                                <span data-i18n="plugins.installed">Installed Plugins</span>
+                                            </h6>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <div class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto;">
+                                                <template x-if="installedPlugins.length === 0">
+                                                    <div class="list-group-item text-muted text-center">
+                                                        <small data-i18n="plugins.noInstalled">No plugins installed</small>
+                                                    </div>
+                                                </template>
+                                                <template x-for="installed in installedPlugins" :key="installed.id">
+                                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <small class="fw-bold" x-text="installed.plugin?.display_name || 'Unknown'"></small>
+                                                            <br>
+                                                            <small class="text-muted" x-text="`v${installed.version}`"></small>
+                                                        </div>
+                                                        <button 
+                                                            @click="uninstallPlugin(installed.id, installed.plugin?.display_name)"
+                                                            class="btn btn-sm btn-outline-danger"
+                                                            :disabled="isActionRunning">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Plugin Catalog -->
+                                <div class="col-md-9">
+                                    <!-- Loading State -->
+                                    <template x-if="pluginLoading">
+                                        <div class="text-center py-5">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <p class="mt-2 text-muted">Loading plugins...</p>
+                                        </div>
+                                    </template>
+                                    
+                                    <!-- Plugin Grid -->
+                                    <template x-if="!pluginLoading">
+                                        <div>
+                                            <div class="row row-cols-1 row-cols-md-2 g-3">
+                                                <template x-for="plugin in availablePlugins" :key="plugin.id">
+                                                    <div class="col">
+                                                        <div class="card h-100 border" :class="{'border-success': isPluginInstalled(plugin.id)}">
+                                                            <div class="card-body">
+                                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                                                    <h6 class="card-title mb-0" x-text="plugin.display_name"></h6>
+                                                                    <span class="badge" :class="`bg-${getCategoryColor(plugin.category)}`" x-text="plugin.category"></span>
+                                                                </div>
+                                                                <p class="card-text small text-muted" x-text="plugin.description"></p>
+                                                                <div class="mb-2">
+                                                                    <small class="text-muted">
+                                                                        <i class="bi bi-tag"></i> Version: <span x-text="plugin.version"></span>
+                                                                    </small>
+                                                                    <template x-if="plugin.author">
+                                                                        <small class="text-muted ms-2">
+                                                                            <i class="bi bi-person"></i> <span x-text="plugin.author"></span>
+                                                                        </small>
+                                                                    </template>
+                                                                </div>
+                                                                
+                                                                <!-- Dependencies -->
+                                                                <template x-if="plugin.dependencies">
+                                                                    <div class="mb-2">
+                                                                        <small class="text-warning">
+                                                                            <i class="bi bi-exclamation-triangle"></i>
+                                                                            <span data-i18n="plugins.hasDependencies">Has dependencies</span>
+                                                                        </small>
+                                                                    </div>
+                                                                </template>
+                                                                
+                                                                <div class="d-grid gap-2">
+                                                                    <template x-if="!isPluginInstalled(plugin.id)">
+                                                                        <button 
+                                                                            @click="showInstallPluginModal(plugin)"
+                                                                            class="btn btn-sm btn-success"
+                                                                            :disabled="isActionRunning">
+                                                                            <i class="bi bi-download"></i>
+                                                                            <span data-i18n="plugins.install">Install</span>
+                                                                        </button>
+                                                                    </template>
+                                                                    <template x-if="isPluginInstalled(plugin.id)">
+                                                                        <button class="btn btn-sm btn-outline-success" disabled>
+                                                                            <i class="bi bi-check-circle"></i>
+                                                                            <span data-i18n="plugins.installed">Installed</span>
+                                                                        </button>
+                                                                    </template>
+                                                                    <template x-if="plugin.homepage">
+                                                                        <a :href="plugin.homepage" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary">
+                                                                            <i class="bi bi-box-arrow-up-right"></i>
+                                                                            <span data-i18n="plugins.homepage">Homepage</span>
+                                                                        </a>
+                                                                    </template>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                            
+                                            <!-- Pagination -->
+                                            <template x-if="pluginPagination.total_pages > 1">
+                                                <nav class="mt-4" aria-label="Plugin pagination">
+                                                    <ul class="pagination justify-content-center">
+                                                        <li class="page-item" :class="{'disabled': pluginPagination.page === 1}">
+                                                            <button class="page-link" @click="changePluginPage(pluginPagination.page - 1)">
+                                                                <span data-i18n="common.previous">Previous</span>
+                                                            </button>
+                                                        </li>
+                                                        <template x-for="pageNum in getPageNumbers()" :key="pageNum">
+                                                            <li class="page-item" :class="{'active': pageNum === pluginPagination.page}">
+                                                                <button class="page-link" @click="changePluginPage(pageNum)" x-text="pageNum"></button>
+                                                            </li>
+                                                        </template>
+                                                        <li class="page-item" :class="{'disabled': pluginPagination.page === pluginPagination.total_pages}">
+                                                            <button class="page-link" @click="changePluginPage(pluginPagination.page + 1)">
+                                                                <span data-i18n="common.next">Next</span>
+                                                            </button>
+                                                        </li>
+                                                    </ul>
+                                                </nav>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Install Plugin Modal -->
+                <div class="modal fade" id="installPluginModal" tabindex="-1" aria-labelledby="installPluginModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="installPluginModalLabel">
+                                    <i class="bi bi-download"></i>
+                                    <span data-i18n="plugins.installPlugin">Install Plugin</span>
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <template x-if="selectedPlugin">
+                                    <div>
+                                        <h6 x-text="selectedPlugin.display_name"></h6>
+                                        <p class="text-muted" x-text="selectedPlugin.description"></p>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">
+                                                <span data-i18n="plugins.customUrl">Custom Download URL (Optional)</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                class="form-control" 
+                                                x-model="installPluginForm.custom_url"
+                                                placeholder="Leave empty to use default URL">
+                                            <small class="text-muted">
+                                                <span data-i18n="plugins.customUrlHelp">Override the default download URL with a custom one</span>
+                                            </small>
+                                        </div>
+                                        
+                                        <template x-if="selectedPlugin.config_required">
+                                            <div class="mb-3">
+                                                <label class="form-label">
+                                                    <span data-i18n="plugins.configuration">Configuration (JSON)</span>
+                                                </label>
+                                                <textarea 
+                                                    class="form-control font-monospace" 
+                                                    rows="4"
+                                                    x-model="installPluginForm.config_data"
+                                                    placeholder='{"key": "value"}'></textarea>
+                                                <small class="text-muted">
+                                                    <span data-i18n="plugins.configHelp">Enter plugin configuration in JSON format</span>
+                                                </small>
+                                            </div>
+                                        </template>
+                                        
+                                        <template x-if="selectedPlugin.dependencies">
+                                            <div class="alert alert-warning">
+                                                <i class="bi bi-exclamation-triangle"></i>
+                                                <span data-i18n="plugins.dependencyWarning">This plugin has dependencies that will be installed automatically if not already present.</span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                    <span data-i18n="common.cancel">Cancel</span>
+                                </button>
+                                <button 
+                                    type="button" 
+                                    class="btn btn-success"
+                                    @click="installPlugin()"
+                                    :disabled="isActionRunning">
+                                    <i class="bi" :class="isActionRunning ? 'bi-arrow-repeat spin' : 'bi-download'"></i>
+                                    <span x-show="!isActionRunning" data-i18n="plugins.install">Install</span>
+                                    <span x-show="isActionRunning" data-i18n="plugins.installing">Installing...</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload Plugin Modal -->
+                <div class="modal fade" id="uploadPluginModal" tabindex="-1" aria-labelledby="uploadPluginModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="uploadPluginModalLabel">
+                                    <i class="bi bi-cloud-upload"></i>
+                                    <span data-i18n="plugins.uploadPlugin">Upload Plugin</span>
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="uploadPluginForm" @submit.prevent="uploadPlugin()">
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            <span data-i18n="plugins.pluginFile">Plugin File (.tar.gz)</span>
+                                            <span class="text-danger">*</span>
+                                        </label>
+                                        <input 
+                                            type="file" 
+                                            class="form-control" 
+                                            accept=".tar.gz"
+                                            x-ref="pluginFileInput"
+                                            required>
+                                        <small class="text-muted">
+                                            <span data-i18n="plugins.uploadFileHelp">Upload a tar.gz archive containing your plugin</span>
+                                        </small>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">
+                                                <span data-i18n="plugins.pluginName">Plugin Name</span>
+                                                <span class="text-danger">*</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                class="form-control" 
+                                                x-model="uploadPluginForm.name"
+                                                pattern="[a-zA-Z0-9_-]+"
+                                                placeholder="my_plugin"
+                                                required>
+                                            <small class="text-muted">
+                                                <span data-i18n="plugins.nameHelp">Alphanumeric, dashes, and underscores only</span>
+                                            </small>
+                                        </div>
+                                        
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">
+                                                <span data-i18n="plugins.displayName">Display Name</span>
+                                                <span class="text-danger">*</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                class="form-control" 
+                                                x-model="uploadPluginForm.display_name"
+                                                placeholder="My Plugin"
+                                                required>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            <span data-i18n="plugins.description">Description</span>
+                                            <span class="text-danger">*</span>
+                                        </label>
+                                        <textarea 
+                                            class="form-control" 
+                                            rows="3"
+                                            x-model="uploadPluginForm.description"
+                                            placeholder="Describe what this plugin does..."
+                                            required></textarea>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">
+                                                <span data-i18n="plugins.category">Category</span>
+                                                <span class="text-danger">*</span>
+                                            </label>
+                                            <select class="form-select" x-model="uploadPluginForm.category" required>
+                                                <option value="">Select category...</option>
+                                                <template x-for="cat in pluginCategories" :key="cat.value">
+                                                    <option :value="cat.value" x-text="cat.label"></option>
+                                                </template>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">
+                                                <span data-i18n="plugins.version">Version</span>
+                                                <span class="text-danger">*</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                class="form-control" 
+                                                x-model="uploadPluginForm.version"
+                                                placeholder="1.0.0"
+                                                required>
+                                        </div>
+                                        
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">
+                                                <span data-i18n="plugins.author">Author</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                class="form-control" 
+                                                x-model="uploadPluginForm.author"
+                                                placeholder="Your name">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            <span data-i18n="plugins.homepage">Homepage URL</span>
+                                        </label>
+                                        <input 
+                                            type="url" 
+                                            class="form-control" 
+                                            x-model="uploadPluginForm.homepage"
+                                            placeholder="https://github.com/...">
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            <span data-i18n="plugins.installPath">Install Path</span>
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            class="form-control" 
+                                            x-model="uploadPluginForm.install_path"
+                                            placeholder="addons/counterstrikesharp/plugins">
+                                        <small class="text-muted">
+                                            <span data-i18n="plugins.installPathHelp">Relative to game/csgo/ directory</span>
+                                        </small>
+                                    </div>
+                                    
+                                    <div class="form-check mb-3">
+                                        <input 
+                                            type="checkbox" 
+                                            class="form-check-input" 
+                                            id="configRequired"
+                                            x-model="uploadPluginForm.config_required">
+                                        <label class="form-check-label" for="configRequired">
+                                            <span data-i18n="plugins.requiresConfiguration">This plugin requires configuration</span>
+                                        </label>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                    <span data-i18n="common.cancel">Cancel</span>
+                                </button>
+                                <button 
+                                    type="button" 
+                                    class="btn btn-primary"
+                                    @click="uploadPlugin()"
+                                    :disabled="isActionRunning">
+                                    <i class="bi" :class="isActionRunning ? 'bi-arrow-repeat spin' : 'bi-cloud-upload'"></i>
+                                    <span x-show="!isActionRunning" data-i18n="plugins.upload">Upload</span>
+                                    <span x-show="isActionRunning" data-i18n="plugins.uploading">Uploading...</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
