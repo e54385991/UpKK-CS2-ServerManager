@@ -102,6 +102,14 @@ class SSHManager:
     STEAMCMD_MAX_RETRIES = 5  # Maximum number of retry attempts (not counting the initial attempt)
     STEAMCMD_RETRY_DELAY = 5  # Initial delay in seconds between retries (will use exponential backoff)
     
+    # Metamod:Source CS2 dev builds live on the sourcemm dev page and GitHub prereleases.
+    METAMOD_DOWNLOADS_URL = "https://www.sourcemm.net/downloads.php?branch=dev"
+    METAMOD_GITHUB_RELEASES_API = "https://api.github.com/repos/alliedmodders/metamod-source/releases?per_page=50"
+    METAMOD_LINUX_DOWNLOAD_PATTERN = (
+        r"https://github\.com/alliedmodders/metamod-source/releases/download/"
+        r"2\.0\.0\.[0-9]+/mmsource-2\.0\.0-git[0-9]+-linux\.tar\.gz"
+    )
+    
     # SteamCMD retryable error patterns
     # These error keywords indicate temporary issues that are worth retrying
     STEAMCMD_RETRYABLE_ERRORS = [
@@ -164,6 +172,74 @@ class SSHManager:
                     logger.error(f"[SSH Manager] Reconnection failed: {reconnect_msg}")
                     raise Exception(f"连接失败 | Connection failed: {reconnect_msg}")
         raise error
+    
+    @staticmethod
+    def _apply_github_download_proxy(download_url: str, github_proxy: Optional[str]) -> str:
+        """Apply a configured GitHub download proxy to release asset URLs."""
+        if not github_proxy or not github_proxy.strip():
+            return download_url
+        
+        if not download_url.startswith("https://github.com/"):
+            return download_url
+        
+        proxy_base = github_proxy.strip().rstrip("/")
+        github_prefix = "https://github.com"
+        if proxy_base.endswith(github_prefix):
+            return f"{proxy_base}{download_url[len(github_prefix):]}"
+        
+        return f"{proxy_base}/{download_url}"
+    
+    async def _fetch_latest_metamod_url(self, progress_callback=None) -> Tuple[bool, str]:
+        """
+        Fetch the latest Metamod:Source 2.0 Linux dev build URL.
+        
+        GitHub marks stable 1.12 releases as latest, so this intentionally
+        reads the sourcemm dev page first and falls back to the GitHub releases
+        list filtered to 2.0.0 dev assets.
+        """
+        async def send_progress(message: str):
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(message)
+                else:
+                    progress_callback(message)
+        
+        pattern = self.METAMOD_LINUX_DOWNLOAD_PATTERN
+        downloads_url = shlex.quote(self.METAMOD_DOWNLOADS_URL)
+        releases_api = shlex.quote(self.METAMOD_GITHUB_RELEASES_API)
+        
+        sourcemm_cmd = (
+            f"page=$(curl -fsSL {downloads_url} 2>/dev/null); "
+            f"latest=$(printf '%s' \"$page\" | grep -Eo '{pattern}' | sort -V | tail -n 1); "
+            "if [ -n \"$latest\" ]; then printf '%s\\n' \"$latest\"; exit 0; fi; "
+            "build=$(printf '%s' \"$page\" | sed -n 's/.*Latest downloads for version 2\\.0 - build \\([0-9][0-9]*\\).*/\\1/p' | head -n 1); "
+            "if [ -n \"$build\" ]; then "
+            "printf 'https://github.com/alliedmodders/metamod-source/releases/download/2.0.0.%s/mmsource-2.0.0-git%s-linux.tar.gz\\n' \"$build\" \"$build\"; "
+            "exit 0; fi; "
+            "exit 1"
+        )
+        
+        github_cmd = (
+            f"latest=$(curl -fsSL {releases_api} 2>/dev/null | grep -Eo '{pattern}' | sort -V | tail -n 1); "
+            "if [ -n \"$latest\" ]; then printf '%s\\n' \"$latest\"; exit 0; fi; "
+            "exit 1"
+        )
+        
+        for source_name, command in (
+            ("sourcemm dev downloads page", sourcemm_cmd),
+            ("GitHub releases API", github_cmd),
+        ):
+            success, url, _ = await self.execute_command(command, timeout=30)
+            metamod_url = url.strip().splitlines()[-1].strip() if url.strip() else ""
+            
+            if success and metamod_url and re.fullmatch(pattern, metamod_url):
+                await send_progress(f"Found latest Metamod dev build from {source_name}: {metamod_url}")
+                return True, metamod_url
+        
+        return False, (
+            "Failed to determine the latest Metamod:Source 2.0 dev build. "
+            "Please check access to sourcemm.net and api.github.com."
+        )
     
     async def _fetch_github_release_url(self, repo: str, pattern: str, progress_callback=None, github_proxy: Optional[str] = None) -> Tuple[bool, str]:
         """
@@ -2203,25 +2279,15 @@ class SSHManager:
             
             await send_progress("✓ CS2 server directory found")
             
-            # Get latest Metamod version from the web
-            await send_progress("Fetching latest Metamod:Source version...")
+            # Get latest Metamod dev build from sourcemm/GitHub.
+            await send_progress("Fetching latest Metamod:Source dev build...")
+            fetch_success, metamod_url = await self._fetch_latest_metamod_url(send_progress)
             
-            # Scrape the latest version from sourcemm.net downloads page
-            # The page lists dev builds at https://www.sourcemm.net/downloads.php?branch=master
-            get_latest_cmd = (
-                "curl -sL 'https://www.sourcemm.net/downloads.php?branch=master' | "
-                "grep -o 'https://mms.alliedmods.net/mmsdrop/2.0/mmsource-2.0.0-git[0-9]*-linux.tar.gz' | "
-                "head -1"
-            )
-            success, metamod_url, stderr = await self.execute_command(get_latest_cmd, timeout=30)
+            if not fetch_success:
+                return False, metamod_url
             
-            if not success or not metamod_url.strip():
-                # Fallback to a known recent version
-                await send_progress("⚠ Could not fetch latest version, using fallback URL...")
-                metamod_url = "https://mms.alliedmods.net/mmsdrop/2.0/mmsource-2.0.0-git1374-linux.tar.gz"
-            else:
-                metamod_url = metamod_url.strip()
-                await send_progress(f"✓ Found latest version: {metamod_url}")
+            metamod_url = metamod_url.strip()
+            await send_progress(f"✓ Found latest version: {metamod_url}")
             
             # Create temp directory for download
             temp_dir = f"/tmp/metamod_install_{server.id}"
@@ -2260,8 +2326,12 @@ class SSHManager:
                                 total_mb = total_bytes / (1024 * 1024)
                                 await send_progress(f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)")
                     
+                    actual_download_url = self._apply_github_download_proxy(metamod_url, server.github_proxy)
+                    if actual_download_url != metamod_url:
+                        await send_progress("Using GitHub proxy for download")
+                    
                     success_download, error = await http_helper.download_file(
-                        metamod_url,
+                        actual_download_url,
                         panel_archive_path,
                         timeout=180,
                         progress_callback=download_progress_callback
@@ -2322,10 +2392,15 @@ class SSHManager:
                             logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
             else:
                 # Original Mode: Download directly on remote server
+                actual_download_url = self._apply_github_download_proxy(metamod_url, server.github_proxy)
+                if actual_download_url != metamod_url:
+                    await send_progress("Using GitHub proxy for download")
+                
                 # Download Metamod
                 await send_progress(f"Downloading Metamod from {metamod_url}...")
                 # Use curl as fallback if wget doesn't work well, with better error handling
-                download_cmd = f"curl -L -o {temp_dir}/metamod.tar.gz {metamod_url} || wget --no-check-certificate -O {temp_dir}/metamod.tar.gz {metamod_url}"
+                download_url_arg = shlex.quote(actual_download_url)
+                download_cmd = f"curl -L -o {temp_dir}/metamod.tar.gz {download_url_arg} || wget --no-check-certificate -O {temp_dir}/metamod.tar.gz {download_url_arg}"
                 success, stdout, stderr = await self.execute_command_streaming(
                     download_cmd,
                     output_callback=send_progress,
