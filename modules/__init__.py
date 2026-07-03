@@ -2,7 +2,7 @@
 Core modules for CS2 Server Manager
 """
 from .config import settings, Settings
-from .models import Base, Server, DeploymentLog, MonitoringLog, ServerStatus, AuthType, User, InitializedServer, ScheduledTask, MarketPlugin, PluginCategory, SSHServerSudo, SystemSettings, PasswordResetToken
+from .models import Base, Server, DeploymentLog, MonitoringLog, ServerStatus, AuthType, User, InitializedServer, ScheduledTask, CustomCommand, MarketPlugin, PluginCategory, SSHServerSudo, SystemSettings, PasswordResetToken
 from .schemas import (
     ServerCreate, ServerUpdate, ServerResponse, ServerResponseWithUser,
     ServerAction, ActionResponse, DeploymentLogResponse,
@@ -16,6 +16,7 @@ from .schemas import (
     A2SServerInfo, A2SPlayerInfo, A2SCachedData, A2SCacheResponse,
     InitializedServerCreate, InitializedServerResponse, InitializedServerListItem,
     ScheduledTaskCreate, ScheduledTaskUpdate, ScheduledTaskResponse,
+    CustomCommandCreate, CustomCommandUpdate, CustomCommandExecuteRequest, CustomCommandResponse,
     GitHubReleaseAsset, GitHubRelease, GitHubReleasesResponse,
     ArchiveContentItem, ArchiveAnalysisResponse,
     GitHubPluginInstallRequest, GitHubPluginInstallResponse,
@@ -48,6 +49,7 @@ __all__ = [
     'User',
     'InitializedServer',
     'ScheduledTask',
+    'CustomCommand',
     'MarketPlugin',
     'PluginCategory',
     'SSHServerSudo',
@@ -93,6 +95,10 @@ __all__ = [
     'ScheduledTaskCreate',
     'ScheduledTaskUpdate',
     'ScheduledTaskResponse',
+    'CustomCommandCreate',
+    'CustomCommandUpdate',
+    'CustomCommandExecuteRequest',
+    'CustomCommandResponse',
     'GitHubReleaseAsset',
     'GitHubRelease',
     'GitHubReleasesResponse',

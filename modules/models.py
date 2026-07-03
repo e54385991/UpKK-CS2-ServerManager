@@ -468,6 +468,58 @@ class ScheduledTask(SQLModel, table=True):
         return result.scalars().all()
 
 
+class CustomCommand(SQLModel, table=True):
+    """Saved quick command for a server"""
+    __tablename__ = "custom_commands"
+
+    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    user_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    )
+    server_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True)
+    )
+    name: str = Field(max_length=255, nullable=False)
+    target: str = Field(default="host", max_length=30, nullable=False)
+    commands: str = Field(sa_column=Column(Text, nullable=False))
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+
+    def __repr__(self):
+        return f"<CustomCommand(id={self.id}, server_id={self.server_id}, name='{self.name}', target='{self.target}')>"
+
+    @classmethod
+    async def get_all_by_server_and_user(
+        cls,
+        session: AsyncSession,
+        server_id: int,
+        user_id: int
+    ) -> List["CustomCommand"]:
+        result = await session.execute(
+            select(cls)
+            .where(cls.server_id == server_id, cls.user_id == user_id)
+            .order_by(cls.created_at.desc(), cls.id.desc())
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def get_by_id_server_and_user(
+        cls,
+        session: AsyncSession,
+        command_id: int,
+        server_id: int,
+        user_id: int
+    ) -> Optional["CustomCommand"]:
+        result = await session.execute(
+            select(cls).where(
+                cls.id == command_id,
+                cls.server_id == server_id,
+                cls.user_id == user_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+
 class InitializedServer(SQLModel, table=True):
     """Initialized server configuration from setup wizard"""
     __tablename__ = "initialized_servers"

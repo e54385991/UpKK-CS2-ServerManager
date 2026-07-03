@@ -137,6 +137,18 @@
         loadingS3Backups: false,
         restoringS3Backup: false,
         s3BackupError: '',
+        customCommands: [],
+        loadingCustomCommands: false,
+        savingCustomCommand: false,
+        executingCustomCommand: false,
+        customCommandError: '',
+        customCommandResult: null,
+        customCommandForm: {
+            id: null,
+            name: '',
+            target: 'host',
+            commands: ''
+        },
 
         // Helper function to format SSH error messages with i18n support
         formatSSHError(errorMessage, defaultPrefixKey) {
@@ -202,6 +214,7 @@
             this.connectWebSocket();
             await this.loadHistory();
             await this.loadS3Backups();
+            await this.loadCustomCommands();
             
             // Check actual deployment status
             await this.checkDeploymentStatus();
@@ -1405,6 +1418,194 @@
             const gameDir = this.server.game_directory.replace(/\/$/, ''); // Remove trailing slash
             
             return `${gameDir}/backups/<timestamp>.tar.gz`;
+        },
+
+        customCommandLineCount(commands) {
+            if (!commands) return 0;
+            return commands.split(/\r?\n/).map(line => line.trim()).filter(Boolean).length;
+        },
+
+        customCommandTargetLabel(target) {
+            if (target === 'game_process') {
+                return window.i18n?.t('serverDetail.customCommandTargetGame') || 'Game process';
+            }
+            return window.i18n?.t('serverDetail.customCommandTargetHost') || 'Server host';
+        },
+
+        resetCustomCommandForm() {
+            this.customCommandForm = {
+                id: null,
+                name: '',
+                target: 'host',
+                commands: ''
+            };
+            this.customCommandError = '';
+            this.customCommandResult = null;
+        },
+
+        editCustomCommand(command) {
+            this.customCommandForm = {
+                id: command.id,
+                name: command.name,
+                target: command.target,
+                commands: command.commands
+            };
+            this.customCommandError = '';
+            this.customCommandResult = null;
+        },
+
+        async loadCustomCommands() {
+            this.loadingCustomCommands = true;
+            this.customCommandError = '';
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/custom-commands`);
+                if (response.ok) {
+                    this.customCommands = await response.json();
+                } else {
+                    const error = await response.json().catch(() => ({}));
+                    this.customCommandError = error.detail || (window.i18n?.t('serverDetail.customCommandLoadFailed') || 'Failed to load quick commands');
+                }
+            } catch (err) {
+                this.customCommandError = `${window.i18n?.t('serverDetail.customCommandLoadFailed') || 'Failed to load quick commands'}: ${err.message}`;
+            } finally {
+                this.loadingCustomCommands = false;
+            }
+        },
+
+        async saveCustomCommand() {
+            const lineCount = this.customCommandLineCount(this.customCommandForm.commands);
+            if (!this.customCommandForm.name.trim() || lineCount === 0) {
+                this.customCommandError = window.i18n?.t('serverDetail.customCommandNameAndCommandsRequired') || 'Name and at least one command are required.';
+                return;
+            }
+
+            this.savingCustomCommand = true;
+            this.customCommandError = '';
+
+            try {
+                const isEditing = !!this.customCommandForm.id;
+                const response = await authFetch(
+                    isEditing
+                        ? `/servers/${this.serverId}/custom-commands/${this.customCommandForm.id}`
+                        : `/servers/${this.serverId}/custom-commands`,
+                    {
+                        method: isEditing ? 'PUT' : 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: this.customCommandForm.name.trim(),
+                            target: this.customCommandForm.target,
+                            commands: this.customCommandForm.commands
+                        })
+                    }
+                );
+
+                const result = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    this.showToast(window.i18n?.t('serverDetail.customCommandSaved') || 'Quick command saved', 'success');
+                    this.resetCustomCommandForm();
+                    await this.loadCustomCommands();
+                } else {
+                    this.customCommandError = result.detail || (window.i18n?.t('serverDetail.customCommandSaveFailed') || 'Failed to save quick command');
+                }
+            } catch (err) {
+                this.customCommandError = `${window.i18n?.t('serverDetail.customCommandSaveFailed') || 'Failed to save quick command'}: ${err.message}`;
+            } finally {
+                this.savingCustomCommand = false;
+            }
+        },
+
+        async deleteCustomCommand(command) {
+            const confirmMsg = window.i18n?.t('serverDetail.confirmDeleteCustomCommand', { name: command.name }) ||
+                `Delete quick command "${command.name}"?`;
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/custom-commands/${command.id}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    this.showToast(result.message || (window.i18n?.t('serverDetail.customCommandDeleted') || 'Quick command deleted'), 'success');
+                    if (this.customCommandForm.id === command.id) {
+                        this.resetCustomCommandForm();
+                    }
+                    await this.loadCustomCommands();
+                } else {
+                    showError(result.detail || result.message || (window.i18n?.t('serverDetail.customCommandDeleteFailed') || 'Failed to delete quick command'));
+                }
+            } catch (err) {
+                showError(`${window.i18n?.t('serverDetail.customCommandDeleteFailed') || 'Failed to delete quick command'}: ${err.message}`);
+            }
+        },
+
+        formatCustomCommandResult(result) {
+            if (!result || !Array.isArray(result.results)) return '';
+            return result.results.map((item) => {
+                const status = item.success ? '[OK]' : '[FAIL]';
+                const chunks = [`${status} #${item.index}: ${item.command}`];
+                if (item.stdout && item.stdout.trim()) {
+                    chunks.push(`stdout:\n${item.stdout.trim()}`);
+                }
+                if (item.stderr && item.stderr.trim()) {
+                    chunks.push(`stderr:\n${item.stderr.trim()}`);
+                }
+                return chunks.join('\n');
+            }).join('\n\n');
+        },
+
+        async executeCustomCommand(command = null) {
+            const payload = command
+                ? { target: command.target, commands: command.commands }
+                : {
+                    target: this.customCommandForm.target,
+                    commands: this.customCommandForm.commands
+                };
+            const lineCount = this.customCommandLineCount(payload.commands);
+            if (lineCount === 0) {
+                this.customCommandError = window.i18n?.t('serverDetail.customCommandCommandsRequired') || 'Please enter at least one command.';
+                return;
+            }
+
+            const targetLabel = this.customCommandTargetLabel(payload.target);
+            const confirmMsg = window.i18n?.t('serverDetail.confirmExecuteCustomCommand', { count: lineCount, target: targetLabel }) ||
+                `Execute ${lineCount} command(s) on ${targetLabel}?`;
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            this.executingCustomCommand = true;
+            this.customCommandError = '';
+            this.customCommandResult = null;
+
+            try {
+                const response = await authFetch(
+                    command
+                        ? `/servers/${this.serverId}/custom-commands/${command.id}/execute`
+                        : `/servers/${this.serverId}/custom-commands/execute`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: command ? undefined : JSON.stringify(payload)
+                    }
+                );
+
+                const result = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    this.customCommandResult = result.data || null;
+                    const toastType = result.success ? 'success' : 'error';
+                    this.showToast(result.message || (window.i18n?.t('serverDetail.customCommandExecuted') || 'Quick command executed'), toastType);
+                    await this.loadHistory();
+                } else {
+                    this.customCommandError = result.detail || result.message || (window.i18n?.t('serverDetail.customCommandExecuteFailed') || 'Failed to execute quick command');
+                }
+            } catch (err) {
+                this.customCommandError = `${window.i18n?.t('serverDetail.customCommandExecuteFailed') || 'Failed to execute quick command'}: ${err.message}`;
+            } finally {
+                this.executingCustomCommand = false;
+            }
         },
 
         async loadS3Backups() {

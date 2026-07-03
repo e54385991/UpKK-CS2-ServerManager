@@ -63,6 +63,153 @@
                         </div>
                     </div>
 
+                    <!-- Custom Quick Commands Card -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-terminal"></i>
+                                    <span data-i18n="serverDetail.customQuickCommands">Custom Quick Commands</span>
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @click="loadCustomCommands()" :disabled="loadingCustomCommands">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                    <span data-i18n="serverDetail.refresh">Refresh</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3" data-i18n="serverDetail.customQuickCommandsDesc">
+                                Save reusable multi-line commands, or send one-time commands directly to the game process or server host.
+                            </p>
+
+                            <div x-show="customCommandError" class="alert alert-danger py-2" x-text="customCommandError"></div>
+
+                            <div class="row g-3">
+                                <div class="col-lg-4">
+                                    <label class="form-label" for="custom-command-name" data-i18n="serverDetail.customCommandName">Name</label>
+                                    <input id="custom-command-name" type="text" class="form-control"
+                                        x-model="customCommandForm.name"
+                                        data-i18n-placeholder="serverDetail.customCommandNamePlaceholder"
+                                        placeholder="Clear execstack">
+                                </div>
+                                <div class="col-lg-4">
+                                    <label class="form-label" for="custom-command-target" data-i18n="serverDetail.customCommandTarget">Send mode</label>
+                                    <select id="custom-command-target" class="form-select" x-model="customCommandForm.target">
+                                        <option value="host" data-i18n="serverDetail.customCommandTargetHost">Server host</option>
+                                        <option value="game_process" data-i18n="serverDetail.customCommandTargetGame">Game process</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-4 d-flex align-items-end">
+                                    <div class="text-muted small">
+                                        <i class="bi bi-list-ol"></i>
+                                        <span data-i18n="serverDetail.customCommandLineCount">Lines</span>:
+                                        <span x-text="customCommandLineCount(customCommandForm.commands)"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <label class="form-label" for="custom-command-commands" data-i18n="serverDetail.customCommandCommands">Commands</label>
+                                <textarea id="custom-command-commands" class="form-control font-monospace" rows="5"
+                                    x-model="customCommandForm.commands"
+                                    data-i18n-placeholder="serverDetail.customCommandCommandsPlaceholder"
+                                    placeholder="patchelf --clear-execstack /home/cs2server/cs2ze/cs2/game/csgo/addons/counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so"></textarea>
+                                <div class="form-text" data-i18n="serverDetail.customCommandCommandsHint">
+                                    One command per line. Host mode runs commands over SSH; game process mode sends commands to the CS2 screen session.
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2 mt-3">
+                                <button type="button" class="btn btn-primary"
+                                    @click="executeCustomCommand()"
+                                    :disabled="executingCustomCommand || customCommandLineCount(customCommandForm.commands) === 0">
+                                    <i class="bi bi-send"></i>
+                                    <span data-i18n="serverDetail.customCommandSendOnce">Send Once</span>
+                                </button>
+                                <button type="button" class="btn btn-success"
+                                    @click="saveCustomCommand()"
+                                    :disabled="savingCustomCommand || !customCommandForm.name.trim() || customCommandLineCount(customCommandForm.commands) === 0">
+                                    <i class="bi bi-save"></i>
+                                    <span x-show="!customCommandForm.id" data-i18n="serverDetail.customCommandSave">Save Shortcut</span>
+                                    <span x-show="customCommandForm.id" data-i18n="serverDetail.customCommandUpdate">Update Shortcut</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary"
+                                    x-show="customCommandForm.id"
+                                    @click="resetCustomCommandForm()">
+                                    <i class="bi bi-x-circle"></i>
+                                    <span data-i18n="serverDetail.cancel">Cancel</span>
+                                </button>
+                            </div>
+
+                            <div x-show="customCommandResult" class="alert mt-3"
+                                :class="customCommandResult && customCommandResult.success ? 'alert-success' : 'alert-warning'">
+                                <div class="fw-semibold mb-2" x-text="customCommandResult ? customCommandResult.message : ''"></div>
+                                <pre class="mb-0 small" style="white-space: pre-wrap;" x-text="formatCustomCommandResult(customCommandResult)"></pre>
+                            </div>
+
+                            <hr>
+
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0" data-i18n="serverDetail.savedCustomCommands">Saved Shortcuts</h6>
+                                <span class="badge bg-secondary" x-text="customCommands.length"></span>
+                            </div>
+
+                            <div x-show="loadingCustomCommands" class="text-muted small">
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                <span data-i18n="common.loading">Loading...</span>
+                            </div>
+
+                            <div x-show="!loadingCustomCommands && customCommands.length === 0" class="text-muted small" data-i18n="serverDetail.noCustomCommands">
+                                No saved quick commands yet.
+                            </div>
+
+                            <div x-show="!loadingCustomCommands && customCommands.length > 0" class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th data-i18n="serverDetail.customCommandName">Name</th>
+                                            <th data-i18n="serverDetail.customCommandTarget">Send mode</th>
+                                            <th data-i18n="serverDetail.customCommandCommands">Commands</th>
+                                            <th class="text-end" data-i18n="common.actions">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="command in customCommands" :key="command.id">
+                                            <tr>
+                                                <td class="fw-semibold" x-text="command.name"></td>
+                                                <td>
+                                                    <span class="badge"
+                                                        :class="command.target === 'host' ? 'bg-dark' : 'bg-primary'"
+                                                        x-text="customCommandTargetLabel(command.target)"></span>
+                                                </td>
+                                                <td>
+                                                    <pre class="mb-0 small text-break" style="white-space: pre-wrap; max-height: 80px; overflow: auto;" x-text="command.commands"></pre>
+                                                </td>
+                                                <td class="text-end">
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button type="button" class="btn btn-outline-primary"
+                                                            @click="executeCustomCommand(command)"
+                                                            :disabled="executingCustomCommand || isActionRunning">
+                                                            <i class="bi bi-play-fill"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-secondary"
+                                                            @click="editCustomCommand(command)">
+                                                            <i class="bi bi-pencil"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-danger"
+                                                            @click="deleteCustomCommand(command)">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Plugin Management Card -->
                     <div class="card mb-4">
                         <div class="card-header">

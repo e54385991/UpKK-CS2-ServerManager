@@ -737,6 +737,56 @@ async def migrate_db():
             else:
                 print(f"{column} column exists in users table")
 
+        # Create custom_commands table for saved quick command shortcuts
+        result = await conn.execute(
+            text("""
+                SELECT TABLE_NAME
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'custom_commands'
+            """)
+        )
+        custom_commands_exists = result.fetchone() is not None
+
+        if not custom_commands_exists:
+            result = await conn.execute(
+                text("""
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME IN ('users', 'servers')
+                """)
+            )
+            required_tables_count = result.scalar() or 0
+
+            if required_tables_count >= 2:
+                print("Creating custom_commands table...")
+                await conn.execute(
+                    text("""
+                        CREATE TABLE custom_commands (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            user_id INT NOT NULL,
+                            server_id INT NOT NULL,
+                            name VARCHAR(255) NOT NULL,
+                            target VARCHAR(30) NOT NULL DEFAULT 'host',
+                            commands TEXT NOT NULL,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                            INDEX idx_custom_commands_user_server (user_id, server_id),
+                            INDEX idx_custom_commands_server (server_id),
+                            CONSTRAINT fk_custom_commands_user_id
+                                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                            CONSTRAINT fk_custom_commands_server_id
+                                FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+                        )
+                    """)
+                )
+                print("Migration completed: custom_commands table created")
+            else:
+                print("custom_commands table will be created during database initialization")
+        else:
+            print("custom_commands table exists")
+
         # Migrate update_check_interval_hours from INT to FLOAT to support fractional hours (e.g., 0.0167 = 1 minute)
         result = await conn.execute(
             text("""

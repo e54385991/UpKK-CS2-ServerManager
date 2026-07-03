@@ -584,6 +584,121 @@ class BatchSendCommandRequest(SQLModel):
         return v
 
 
+CUSTOM_COMMAND_TARGETS = ["game_process", "host"]
+
+
+def _validate_custom_command_text(v: str) -> str:
+    v = v.strip()
+    if not v:
+        raise ValueError('Commands cannot be empty')
+    if '\x00' in v:
+        raise ValueError('Commands contain invalid null characters')
+    command_lines = [line.strip() for line in v.splitlines() if line.strip()]
+    if not command_lines:
+        raise ValueError('At least one command line is required')
+    if len(command_lines) > 100:
+        raise ValueError('At most 100 command lines are allowed')
+    for line in command_lines:
+        if len(line) > 2000:
+            raise ValueError('Each command line must be at most 2000 characters')
+    return "\n".join(command_lines)
+
+
+class CustomCommandCreate(SQLModel):
+    """Schema for creating a saved quick command"""
+    name: str = Field(..., min_length=1, max_length=255)
+    target: str = Field(default="host", description="Send target: game_process or host")
+    commands: str = Field(..., min_length=1, max_length=20000)
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError('Name cannot be empty')
+        return v
+
+    @field_validator('target')
+    @classmethod
+    def validate_target(cls, v):
+        v = v.strip()
+        if v not in CUSTOM_COMMAND_TARGETS:
+            raise ValueError(f'Target must be one of: {", ".join(CUSTOM_COMMAND_TARGETS)}')
+        return v
+
+    @field_validator('commands')
+    @classmethod
+    def validate_commands(cls, v):
+        return _validate_custom_command_text(v)
+
+
+class CustomCommandUpdate(SQLModel):
+    """Schema for updating a saved quick command"""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    target: Optional[str] = Field(None, description="Send target: game_process or host")
+    commands: Optional[str] = Field(None, min_length=1, max_length=20000)
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError('Name cannot be empty')
+        return v
+
+    @field_validator('target')
+    @classmethod
+    def validate_target(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if v not in CUSTOM_COMMAND_TARGETS:
+            raise ValueError(f'Target must be one of: {", ".join(CUSTOM_COMMAND_TARGETS)}')
+        return v
+
+    @field_validator('commands')
+    @classmethod
+    def validate_commands(cls, v):
+        if v is None:
+            return v
+        return _validate_custom_command_text(v)
+
+
+class CustomCommandExecuteRequest(SQLModel):
+    """Schema for one-time custom command execution"""
+    target: str = Field(default="host", description="Send target: game_process or host")
+    commands: str = Field(..., min_length=1, max_length=20000)
+
+    @field_validator('target')
+    @classmethod
+    def validate_target(cls, v):
+        v = v.strip()
+        if v not in CUSTOM_COMMAND_TARGETS:
+            raise ValueError(f'Target must be one of: {", ".join(CUSTOM_COMMAND_TARGETS)}')
+        return v
+
+    @field_validator('commands')
+    @classmethod
+    def validate_commands(cls, v):
+        return _validate_custom_command_text(v)
+
+
+class CustomCommandResponse(SQLModel):
+    """Schema for saved quick command response"""
+    id: int
+    user_id: int
+    server_id: int
+    name: str
+    target: str
+    commands: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ActionResponse(SQLModel):
     """Schema for action response"""
     success: bool

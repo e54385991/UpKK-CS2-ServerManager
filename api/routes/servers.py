@@ -16,6 +16,8 @@ import uuid
 
 from modules import (
     Server, ServerCreate, ServerUpdate, ServerResponse, ServerResponseWithUser, AuthType,
+    DeploymentLog, CustomCommand, CustomCommandCreate, CustomCommandUpdate,
+    CustomCommandExecuteRequest, CustomCommandResponse, ActionResponse,
     S3BackupItem, S3RestoreRequest,
     get_db, User, UserResponse, get_current_active_user, get_current_admin_user, get_optional_current_user, generate_api_key,
     get_current_time, SystemSettings, ServerStatus
@@ -64,6 +66,146 @@ async def get_server_owner_user(db: AsyncSession, server: Server, current_user: 
             detail="Server owner not found"
         )
     return owner
+
+
+async def get_custom_command_or_404(
+    db: AsyncSession,
+    server_id: int,
+    command_id: int,
+    current_user: User,
+) -> CustomCommand:
+    custom_command = await CustomCommand.get_by_id_server_and_user(
+        db,
+        command_id,
+        server_id,
+        current_user.id,
+    )
+    if not custom_command:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Custom command not found"
+        )
+    return custom_command
+
+
+def parse_custom_command_lines(commands: str) -> List[str]:
+    return [line.strip() for line in commands.splitlines() if line.strip()]
+
+
+def format_custom_command_log(target: str, command_results: List[Dict[str, Any]]) -> str:
+    lines = [f"Target: {target}", ""]
+    for result in command_results:
+        status_text = "OK" if result.get("success") else "FAIL"
+        lines.append(f"[{status_text}] #{result.get('index')}: {result.get('command')}")
+        stdout = (result.get("stdout") or "").strip()
+        stderr = (result.get("stderr") or "").strip()
+        if stdout:
+            lines.append(f"stdout:\n{stdout}")
+        if stderr:
+            lines.append(f"stderr:\n{stderr}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+async def execute_custom_commands(
+    server: Server,
+    target: str,
+    commands: str,
+) -> Dict[str, Any]:
+    command_lines = parse_custom_command_lines(commands)
+    if not command_lines:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one command line is required"
+        )
+
+    ssh_manager = SSHManager()
+    connect_success, connect_message = await ssh_manager.connect(server)
+    if not connect_success:
+        return {
+            "success": False,
+            "message": f"SSH connection failed: {connect_message}",
+            "target": target,
+            "results": [],
+        }
+
+    results: List[Dict[str, Any]] = []
+    try:
+        if target == "game_process":
+            screen_name = f"cs2server_{server.id}"
+            check_cmd = f"screen -list | grep -F {shlex.quote(screen_name)} || true"
+            _, stdout, _ = await ssh_manager.execute_command(check_cmd, timeout=10)
+            if not stdout or screen_name not in stdout:
+                return {
+                    "success": False,
+                    "message": "Game server is not running. Please start the server first.",
+                    "target": target,
+                    "results": [],
+                }
+
+            for index, command in enumerate(command_lines, start=1):
+                stuff_cmd = f"screen -S {shlex.quote(screen_name)} -X stuff {shlex.quote(command + chr(10))}"
+                success, stdout, stderr = await ssh_manager.execute_command(stuff_cmd, timeout=10)
+                results.append({
+                    "index": index,
+                    "command": command,
+                    "success": success,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                })
+        elif target == "host":
+            for index, command in enumerate(command_lines, start=1):
+                success, stdout, stderr = await ssh_manager.execute_command(command, timeout=300)
+                results.append({
+                    "index": index,
+                    "command": command,
+                    "success": success,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                })
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid custom command target"
+            )
+    finally:
+        await ssh_manager.disconnect()
+
+    failed_count = len([result for result in results if not result["success"]])
+    total_count = len(results)
+    success = failed_count == 0
+    message = (
+        f"Executed {total_count} command(s) successfully"
+        if success
+        else f"Executed {total_count} command(s), {failed_count} failed"
+    )
+    return {
+        "success": success,
+        "message": message,
+        "target": target,
+        "results": results,
+    }
+
+
+async def execute_and_log_custom_commands(
+    db: AsyncSession,
+    server: Server,
+    target: str,
+    commands: str,
+    name: str = "One-time custom command",
+) -> Dict[str, Any]:
+    result = await execute_custom_commands(server, target, commands)
+    output = format_custom_command_log(target, result.get("results", []))
+    log = DeploymentLog(
+        server_id=server.id,
+        action=f"custom_command_{target}",
+        status="success" if result["success"] else "failed",
+        output=f"{name}\n\n{output}".strip(),
+        error_message=None if result["success"] else result["message"],
+    )
+    db.add(log)
+    await db.commit()
+    return result
 
 
 @router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
@@ -394,6 +536,114 @@ async def restore_server_s3_backup(
         except Exception:
             pass
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@router.get("/{server_id}/custom-commands", response_model=List[CustomCommandResponse])
+async def list_custom_commands(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """List saved quick commands for this server and current user"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    return await CustomCommand.get_all_by_server_and_user(db, server.id, current_user.id)
+
+
+@router.post("/{server_id}/custom-commands", response_model=CustomCommandResponse, status_code=status.HTTP_201_CREATED)
+async def create_custom_command(
+    server_id: int,
+    command_data: CustomCommandCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create a saved quick command for this server"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    custom_command = CustomCommand(
+        user_id=current_user.id,
+        server_id=server.id,
+        name=command_data.name,
+        target=command_data.target,
+        commands=command_data.commands,
+    )
+    db.add(custom_command)
+    await db.commit()
+    await db.refresh(custom_command)
+    return custom_command
+
+
+@router.put("/{server_id}/custom-commands/{command_id}", response_model=CustomCommandResponse)
+async def update_custom_command(
+    server_id: int,
+    command_id: int,
+    command_data: CustomCommandUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Update a saved quick command"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    custom_command = await get_custom_command_or_404(db, server.id, command_id, current_user)
+
+    update_data = command_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(custom_command, key, value)
+
+    db.add(custom_command)
+    await db.commit()
+    await db.refresh(custom_command)
+    return custom_command
+
+
+@router.delete("/{server_id}/custom-commands/{command_id}", response_model=ActionResponse)
+async def delete_custom_command(
+    server_id: int,
+    command_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Delete a saved quick command"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    custom_command = await get_custom_command_or_404(db, server.id, command_id, current_user)
+    await db.delete(custom_command)
+    await db.commit()
+    return ActionResponse(success=True, message="Custom command deleted successfully")
+
+
+@router.post("/{server_id}/custom-commands/execute", response_model=ActionResponse)
+async def execute_one_time_custom_command(
+    server_id: int,
+    command_data: CustomCommandExecuteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Execute one-time custom commands without saving them"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    result = await execute_and_log_custom_commands(
+        db,
+        server,
+        command_data.target,
+        command_data.commands,
+    )
+    return ActionResponse(success=result["success"], message=result["message"], data=result)
+
+
+@router.post("/{server_id}/custom-commands/{command_id}/execute", response_model=ActionResponse)
+async def execute_saved_custom_command(
+    server_id: int,
+    command_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Execute a saved quick command"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    custom_command = await get_custom_command_or_404(db, server.id, command_id, current_user)
+    result = await execute_and_log_custom_commands(
+        db,
+        server,
+        custom_command.target,
+        custom_command.commands,
+        name=custom_command.name,
+    )
+    return ActionResponse(success=result["success"], message=result["message"], data=result)
 
 
 @router.put("/{server_id}", response_model=ServerResponse)
