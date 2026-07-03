@@ -110,6 +110,100 @@
             </div>
         </div>
         
+        <!-- S3 Storage Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cloud-arrow-up"></i> <span data-i18n="profile.s3Storage">S3 Storage</span></h5>
+            </div>
+            <div class="card-body">
+                <div id="s3-error-message" class="alert alert-danger d-none" role="alert"></div>
+                <div id="s3-success-message" class="alert alert-success d-none" role="alert"></div>
+
+                <div id="s3-config-status" class="alert alert-secondary py-2">
+                    <i class="bi bi-info-circle"></i>
+                    <span id="s3-config-status-text" data-i18n="profile.s3NotConfigured">S3 storage is not configured</span>
+                </div>
+
+                <form id="s3-form">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="s3-enabled">
+                        <label class="form-check-label" for="s3-enabled" data-i18n="profile.s3Enabled">Enable S3 backups</label>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="s3-endpoint-url" class="form-label" data-i18n="profile.s3Endpoint">Endpoint URL</label>
+                            <input type="url" class="form-control" id="s3-endpoint-url" placeholder="https://s3.amazonaws.com">
+                            <div class="form-text" data-i18n="profile.s3EndpointHint">Optional for AWS S3; required for MinIO, R2, OSS S3-compatible endpoints.</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="s3-region" class="form-label" data-i18n="profile.s3Region">Region</label>
+                            <input type="text" class="form-control" id="s3-region" placeholder="us-east-1">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="s3-bucket" class="form-label" data-i18n="profile.s3Bucket">Bucket</label>
+                            <input type="text" class="form-control" id="s3-bucket" maxlength="255">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="s3-prefix" class="form-label" data-i18n="profile.s3Prefix">Prefix</label>
+                            <input type="text" class="form-control" id="s3-prefix" maxlength="255" placeholder="cs2-backups">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="s3-retention-count" class="form-label" data-i18n="profile.s3RetentionCount">Max backups per server</label>
+                            <input type="number" class="form-control" id="s3-retention-count" min="0" max="10000" step="1" placeholder="0">
+                            <div class="form-text" data-i18n="profile.s3RetentionHint">0 or blank keeps all S3 backups. Cleanup runs after each successful upload.</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="s3-access-key-id" class="form-label" data-i18n="profile.s3AccessKey">Access Key ID</label>
+                            <input type="text" class="form-control" id="s3-access-key-id" maxlength="255">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="s3-secret-access-key" class="form-label" data-i18n="profile.s3SecretKey">Secret Access Key</label>
+                            <input type="password" class="form-control" id="s3-secret-access-key" maxlength="255" placeholder="Leave blank to keep existing secret">
+                            <div id="s3-secret-status" class="form-text"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="s3-use-ssl" checked>
+                        <label class="form-check-label" for="s3-use-ssl" data-i18n="profile.s3UseSsl">Use SSL</label>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="s3-clear-secret">
+                        <label class="form-check-label" for="s3-clear-secret" data-i18n="profile.s3ClearSecret">Clear saved secret key</label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="s3-captcha" class="form-label" data-i18n="profile.captcha">Verification Code</label>
+                        <div class="d-flex gap-2 align-items-center">
+                            <img id="s3-captcha-image" src="" alt="CAPTCHA" class="border" style="height: 80px; cursor: pointer;" title="Click to refresh">
+                            <input type="text" class="form-control" id="s3-captcha" maxlength="4" required placeholder="Enter code" style="max-width: 120px;">
+                            <button type="button" class="btn btn-outline-secondary" id="s3-refresh-captcha" title="Refresh CAPTCHA">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <input type="hidden" id="s3-captcha-token">
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="s3-submit-btn">
+                            <i class="bi bi-check-circle"></i> <span data-i18n="profile.s3Save">Save S3 Settings</span>
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" id="s3-test-btn">
+                            <i class="bi bi-wifi"></i> <span data-i18n="profile.s3Test">Test S3 Access</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Reset Password Card -->
         <div class="card shadow-sm mb-4">
             <div class="card-header">
@@ -312,6 +406,70 @@ async function loadGitHubTokenStatus() {
     }
 }
 
+// Load S3 settings
+async function loadS3Settings() {
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/auth/s3-settings', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            document.getElementById('s3-enabled').checked = !!data.enabled;
+            document.getElementById('s3-endpoint-url').value = data.endpoint_url || '';
+            document.getElementById('s3-region').value = data.region || '';
+            document.getElementById('s3-bucket').value = data.bucket || '';
+            document.getElementById('s3-prefix').value = data.prefix || '';
+            document.getElementById('s3-retention-count').value = data.retention_count || '';
+            document.getElementById('s3-access-key-id').value = data.access_key_id || '';
+            document.getElementById('s3-use-ssl').checked = data.use_ssl !== false;
+            document.getElementById('s3-secret-access-key').value = '';
+            document.getElementById('s3-clear-secret').checked = false;
+
+            const statusBox = document.getElementById('s3-config-status');
+            const statusText = document.getElementById('s3-config-status-text');
+            const secretStatus = document.getElementById('s3-secret-status');
+
+            if (data.is_configured) {
+                statusBox.className = 'alert alert-success py-2';
+                statusText.textContent = window.i18n ? window.i18n.t('profile.s3Configured') : 'S3 storage is configured';
+            } else if (data.enabled) {
+                statusBox.className = 'alert alert-warning py-2';
+                statusText.textContent = window.i18n ? window.i18n.t('profile.s3Incomplete') : 'S3 storage is enabled but incomplete';
+            } else {
+                statusBox.className = 'alert alert-secondary py-2';
+                statusText.textContent = window.i18n ? window.i18n.t('profile.s3NotConfigured') : 'S3 storage is not configured';
+            }
+
+            secretStatus.textContent = data.has_secret
+                ? (window.i18n ? window.i18n.t('profile.s3SecretSaved') : 'Secret key is saved. Leave blank to keep it.')
+                : (window.i18n ? window.i18n.t('profile.s3SecretMissing') : 'No secret key saved.');
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Failed to load S3 settings:', error);
+    }
+}
+
+// Load CAPTCHA for S3 settings
+async function loadS3Captcha() {
+    try {
+        const response = await fetch('/api/captcha/image/new');
+        const token = response.headers.get('X-Captcha-Token');
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+
+        document.getElementById('s3-captcha-image').src = imageUrl;
+        document.getElementById('s3-captcha-token').value = token;
+    } catch (error) {
+        console.error('Failed to load S3 CAPTCHA:', error);
+    }
+}
+
 // Load CAPTCHA for profile form
 async function loadProfileCaptcha() {
     try {
@@ -347,6 +505,8 @@ document.getElementById('profile-refresh-captcha').addEventListener('click', loa
 document.getElementById('profile-captcha-image').addEventListener('click', loadProfileCaptcha);
 document.getElementById('password-refresh-captcha').addEventListener('click', loadPasswordCaptcha);
 document.getElementById('password-captcha-image').addEventListener('click', loadPasswordCaptcha);
+document.getElementById('s3-refresh-captcha').addEventListener('click', loadS3Captcha);
+document.getElementById('s3-captcha-image').addEventListener('click', loadS3Captcha);
 
 // Handle profile update
 document.getElementById('profile-form').addEventListener('submit', async (e) => {
@@ -420,6 +580,122 @@ document.getElementById('profile-form').addEventListener('submit', async (e) => 
         const updateText = window.i18n ? window.i18n.t('profile.updateButton') : 'Update Profile';
         submitBtn.innerHTML = `<i class="bi bi-check-circle"></i> ${updateText}`;
         loadProfileCaptcha();
+    }
+});
+
+// Handle S3 settings update
+document.getElementById('s3-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const submitBtn = document.getElementById('s3-submit-btn');
+    const errorDiv = document.getElementById('s3-error-message');
+    const successDiv = document.getElementById('s3-success-message');
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> ${window.i18n ? window.i18n.t('common.saving') : 'Saving...'}`;
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+
+    try {
+        const token = localStorage.getItem('access_token');
+        const retentionValue = document.getElementById('s3-retention-count').value.trim();
+        const response = await fetch('/api/auth/s3-settings', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                enabled: document.getElementById('s3-enabled').checked,
+                endpoint_url: document.getElementById('s3-endpoint-url').value.trim(),
+                region: document.getElementById('s3-region').value.trim(),
+                bucket: document.getElementById('s3-bucket').value.trim(),
+                prefix: document.getElementById('s3-prefix').value.trim(),
+                retention_count: retentionValue === '' ? 0 : Number.parseInt(retentionValue, 10),
+                access_key_id: document.getElementById('s3-access-key-id').value.trim(),
+                secret_access_key: document.getElementById('s3-secret-access-key').value.trim(),
+                use_ssl: document.getElementById('s3-use-ssl').checked,
+                clear_secret: document.getElementById('s3-clear-secret').checked,
+                captcha_token: document.getElementById('s3-captcha-token').value,
+                captcha_code: document.getElementById('s3-captcha').value
+            })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            successDiv.textContent = window.i18n ? window.i18n.t('profile.s3SaveSuccess') : 'S3 settings saved successfully';
+            successDiv.classList.remove('d-none');
+            await loadS3Settings();
+        } else {
+            errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.s3SaveFailed') : 'Failed to save S3 settings');
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (error) {
+        const errorMsg = window.i18n ? window.i18n.t('profile.s3SaveFailed') : 'Failed to save S3 settings';
+        errorDiv.textContent = `${errorMsg}: ${error.message}`;
+        errorDiv.classList.remove('d-none');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<i class="bi bi-check-circle"></i> ${window.i18n ? window.i18n.t('profile.s3Save') : 'Save S3 Settings'}`;
+        document.getElementById('s3-captcha').value = '';
+        loadS3Captcha();
+    }
+});
+
+// Handle S3 connection test
+document.getElementById('s3-test-btn').addEventListener('click', async () => {
+    const testBtn = document.getElementById('s3-test-btn');
+    const errorDiv = document.getElementById('s3-error-message');
+    const successDiv = document.getElementById('s3-success-message');
+
+    testBtn.disabled = true;
+    testBtn.innerHTML = `<i class="bi bi-hourglass-split"></i> ${window.i18n ? window.i18n.t('profile.s3Testing') : 'Testing...'}`;
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+    errorDiv.style.whiteSpace = 'pre-line';
+    successDiv.style.whiteSpace = 'pre-line';
+
+    const formatS3TestMessage = (data, fallback) => {
+        const lines = [data.message || fallback];
+        if (Array.isArray(data.steps) && data.steps.length > 0) {
+            lines.push('');
+            data.steps.forEach((step) => {
+                const marker = step.status === 'success' ? '[OK]' : '[FAIL]';
+                lines.push(`${marker} ${step.name}: ${step.message}`);
+            });
+        }
+        return lines.join('\n');
+    };
+
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/api/auth/s3-settings/test', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            successDiv.textContent = formatS3TestMessage(
+                data,
+                window.i18n ? window.i18n.t('profile.s3TestSuccess') : 'S3 access test succeeded'
+            );
+            successDiv.classList.remove('d-none');
+        } else {
+            errorDiv.textContent = formatS3TestMessage(
+                data,
+                data.detail || (window.i18n ? window.i18n.t('profile.s3TestFailed') : 'S3 access test failed')
+            );
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (error) {
+        const errorMsg = window.i18n ? window.i18n.t('profile.s3TestFailed') : 'S3 access test failed';
+        errorDiv.textContent = `${errorMsg}: ${error.message}`;
+        errorDiv.classList.remove('d-none');
+    } finally {
+        testBtn.disabled = false;
+        testBtn.innerHTML = `<i class="bi bi-wifi"></i> ${window.i18n ? window.i18n.t('profile.s3Test') : 'Test S3 Access'}`;
     }
 });
 
@@ -704,8 +980,10 @@ document.getElementById('regenerate-apikey-btn').addEventListener('click', gener
 loadUserInfo();
 loadSteamApiKey();
 loadGitHubTokenStatus();
+loadS3Settings();
 loadProfileCaptcha();
 loadPasswordCaptcha();
+loadS3Captcha();
 loadApiKeyCaptcha();
 loadApiKey();
 </script>

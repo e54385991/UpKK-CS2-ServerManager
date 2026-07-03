@@ -7,17 +7,23 @@ from sqlmodel import select
 from typing import List, Dict, Any
 import asyncio
 import asyncssh
+import os
 import re
+import shutil
 import shlex
+import tempfile
+import uuid
 
 from modules import (
     Server, ServerCreate, ServerUpdate, ServerResponse, ServerResponseWithUser, AuthType,
+    S3BackupItem, S3RestoreRequest,
     get_db, User, UserResponse, get_current_active_user, get_current_admin_user, get_optional_current_user, generate_api_key,
     get_current_time, SystemSettings, ServerStatus
 )
 from modules.config import settings as app_settings
 from services import redis_manager
 from services.captcha_service import captcha_service
+from services.s3_backup_service import s3_backup_service
 from services.ssh_manager import SSHManager
 
 router = APIRouter(prefix="/servers", tags=["servers"])
@@ -44,6 +50,20 @@ async def get_server_with_permission(
         )
     
     return server
+
+
+async def get_server_owner_user(db: AsyncSession, server: Server, current_user: User) -> User:
+    """Get the server owner's user record, including when an admin is acting."""
+    if current_user.id == server.user_id:
+        return current_user
+
+    owner = await db.get(User, server.user_id)
+    if not owner:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Server owner not found"
+        )
+    return owner
 
 
 @router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
@@ -272,6 +292,108 @@ async def get_server(
     """Get server by ID - admins can access any server, users can only access their own"""
     server = await get_server_with_permission(server_id, current_user, db)
     return server
+
+
+@router.get("/{server_id}/s3-backups", response_model=List[S3BackupItem])
+async def list_server_s3_backups(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """List S3 plugin backups for this server"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    owner = await get_server_owner_user(db, server, current_user)
+
+    success, backups, error = await s3_backup_service.list_backups(owner, server)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error
+        )
+    return backups
+
+
+@router.post("/{server_id}/s3-restore")
+async def restore_server_s3_backup(
+    server_id: int,
+    restore_data: S3RestoreRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Restore a selected S3 plugin backup to this server"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    owner = await get_server_owner_user(db, server, current_user)
+
+    if not s3_backup_service.validate_object_key(owner, server, restore_data.object_key):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Selected S3 backup does not belong to this server"
+        )
+
+    temp_dir = tempfile.mkdtemp(prefix="cs2_s3_restore_")
+    local_path = os.path.join(
+        temp_dir,
+        s3_backup_service.safe_object_filename(restore_data.object_key)
+    )
+    ssh_manager = SSHManager()
+
+    try:
+        download_success, download_error = await s3_backup_service.download_backup(
+            owner,
+            server,
+            restore_data.object_key,
+            local_path,
+        )
+        if not download_success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=download_error
+            )
+
+        safety_success, safety_message = await ssh_manager.backup_plugins(server)
+        if not safety_success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to create safety backup before restore: {safety_message}"
+            )
+
+        game_dir = server.game_directory.rstrip("/")
+        filename = s3_backup_service.safe_object_filename(restore_data.object_key)
+        remote_restore_path = f"{game_dir}/backups/s3-restore-{uuid.uuid4().hex[:8]}-{filename}"
+
+        upload_success, upload_error = await ssh_manager.upload_file(local_path, remote_restore_path, server)
+        if not upload_success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to upload restore archive to server: {upload_error}"
+            )
+
+        csgo_dir = f"{game_dir}/cs2/game/csgo"
+        extract_success, extract_error = await ssh_manager.extract_archive(
+            remote_restore_path,
+            csgo_dir,
+            server,
+            overwrite=True,
+        )
+        if not extract_success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to extract restore archive: {extract_error}"
+            )
+
+        return {
+            "success": True,
+            "message": "S3 plugin backup restored successfully",
+            "restored_from": restore_data.object_key,
+            "remote_archive_path": remote_restore_path,
+            "safety_backup": getattr(ssh_manager, "last_plugin_backup", None),
+        }
+    finally:
+        try:
+            await ssh_manager.disconnect()
+        except Exception:
+            pass
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 @router.put("/{server_id}", response_model=ServerResponse)

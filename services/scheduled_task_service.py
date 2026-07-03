@@ -10,9 +10,10 @@ import re
 
 from modules.utils import get_current_time
 from modules.database import async_session_maker
-from modules.models import ScheduledTask, Server
+from modules.models import ScheduledTask, Server, User
 from sqlmodel import select, update as sql_update
 from services.ssh_manager import SSHManager
+from services.s3_backup_service import s3_backup_service
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +190,33 @@ class ScheduledTaskService:
                 return await ssh_manager.update_server(server, progress_callback=log_progress)
             elif action == "validate":
                 return await ssh_manager.validate_server(server, progress_callback=log_progress)
+            elif action == "backup_plugins":
+                success, message = await ssh_manager.backup_plugins(server, progress_callback=log_progress)
+                if not success:
+                    return success, message
+
+                async with async_session_maker() as db:
+                    owner = await db.get(User, server.user_id)
+
+                if not owner or not s3_backup_service.is_configured(owner):
+                    return True, message
+
+                backup_info = getattr(ssh_manager, "last_plugin_backup", None)
+                backup_path = backup_info.get("path") if backup_info else None
+                if not backup_path:
+                    return False, "Plugin backup completed locally, but the archive path was not captured for S3 upload."
+
+                upload_success, upload_message, _ = await s3_backup_service.upload_remote_backup(
+                    ssh_manager,
+                    server,
+                    owner,
+                    backup_path,
+                    progress_callback=log_progress,
+                )
+                if not upload_success:
+                    return False, f"{message}\n{upload_message}"
+
+                return True, f"{message}\n{upload_message}"
             else:
                 return False, f"Unknown action: {action}"
                 

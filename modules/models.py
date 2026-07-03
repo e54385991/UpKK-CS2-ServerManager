@@ -44,6 +44,15 @@ class User(SQLModel, table=True):
     api_key: Optional[str] = Field(default=None, max_length=64, unique=True, index=True)
     steam_api_key: Optional[str] = Field(default=None, max_length=64)
     github_token: Optional[str] = Field(default=None, max_length=255)  # GitHub Fine-grained personal access token
+    s3_enabled: bool = Field(default=False)
+    s3_endpoint_url: Optional[str] = Field(default=None, max_length=500)
+    s3_region: Optional[str] = Field(default=None, max_length=100)
+    s3_bucket: Optional[str] = Field(default=None, max_length=255)
+    s3_access_key_id: Optional[str] = Field(default=None, max_length=255)
+    s3_secret_access_key: Optional[str] = Field(default=None, max_length=255)
+    s3_prefix: Optional[str] = Field(default=None, max_length=255)
+    s3_use_ssl: bool = Field(default=True)
+    s3_retention_count: Optional[int] = Field(default=None)
     google_id: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)  # Google OAuth ID
     oauth_provider: Optional[str] = Field(default=None, max_length=50)  # OAuth provider (google, etc.)
     created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
@@ -66,6 +75,16 @@ class User(SQLModel, table=True):
     def has_github_token(self) -> bool:
         """Check if user has a GitHub token configured"""
         return self.github_token is not None
+
+    @property
+    def has_s3_config(self) -> bool:
+        """Check if user has enough S3 settings for backup operations"""
+        return bool(
+            self.s3_enabled
+            and self.s3_bucket
+            and self.s3_access_key_id
+            and self.s3_secret_access_key
+        )
     
     @classmethod
     async def get_by_username(cls, session: AsyncSession, username: str) -> Optional["User"]:

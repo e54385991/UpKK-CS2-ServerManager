@@ -133,6 +133,10 @@
         githubArchiveDirs: [],
         githubArchiveFiles: [],
         githubExclusionMode: 'directory',  // Default to directory mode
+        s3Backups: [],
+        loadingS3Backups: false,
+        restoringS3Backup: false,
+        s3BackupError: '',
 
         // Helper function to format SSH error messages with i18n support
         formatSSHError(errorMessage, defaultPrefixKey) {
@@ -197,6 +201,7 @@
             this.loadGithubProxyForm();
             this.connectWebSocket();
             await this.loadHistory();
+            await this.loadS3Backups();
             
             // Check actual deployment status
             await this.checkDeploymentStatus();
@@ -1402,9 +1407,75 @@
             return `${gameDir}/backups/<timestamp>.tar.gz`;
         },
 
+        async loadS3Backups() {
+            this.loadingS3Backups = true;
+            this.s3BackupError = '';
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/s3-backups`);
+                if (response.ok) {
+                    this.s3Backups = await response.json();
+                } else {
+                    const error = await response.json().catch(() => ({}));
+                    this.s3Backups = [];
+                    this.s3BackupError = error.detail || (window.i18n?.t('serverDetail.s3BackupLoadFailed') || 'Failed to load S3 backups');
+                }
+            } catch (err) {
+                this.s3Backups = [];
+                this.s3BackupError = `${window.i18n?.t('serverDetail.s3BackupLoadFailed') || 'Failed to load S3 backups'}: ${err.message}`;
+            } finally {
+                this.loadingS3Backups = false;
+            }
+        },
+
+        formatS3BackupDate(dateStr) {
+            if (!dateStr) return '-';
+            return new Date(dateStr).toLocaleString();
+        },
+
+        async restoreS3Backup(backup) {
+            const confirmMsg = window.i18n?.t('serverDetail.confirmRestoreS3Backup', { name: backup.filename }) ||
+                `Restore S3 backup "${backup.filename}"?\n\nA local safety backup will be created first, then the selected archive will overwrite plugin files.`;
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            this.restoringS3Backup = true;
+            this.s3BackupError = '';
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/s3-restore`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ object_key: backup.key })
+                });
+
+                const result = await response.json().catch(() => ({}));
+                if (response.ok && result.success) {
+                    showSuccess(result.message || (window.i18n?.t('serverDetail.s3RestoreSuccess') || 'S3 backup restored successfully'));
+                    await this.loadHistory();
+                    await this.loadS3Backups();
+                } else {
+                    const message = result.detail || result.message || (window.i18n?.t('serverDetail.s3RestoreFailed') || 'Failed to restore S3 backup');
+                    this.s3BackupError = message;
+                    showError(message);
+                }
+            } catch (err) {
+                const message = `${window.i18n?.t('serverDetail.s3RestoreFailed') || 'Failed to restore S3 backup'}: ${err.message}`;
+                this.s3BackupError = message;
+                showError(message);
+            } finally {
+                this.restoringS3Backup = false;
+            }
+        },
+
         // Execute backup plugins with confirmation
         async executeBackupPlugins() {
             await this.executeAction('backup_plugins');
+            await this.loadS3Backups();
         },
         
         // GitHub Plugin Installation Methods

@@ -21,6 +21,7 @@ from modules import (
 )
 from modules.database import async_session_maker
 from services import SSHManager, redis_manager
+from services.s3_backup_service import s3_backup_service
 from services.server_monitor import server_monitor
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,47 @@ async def get_server_and_verify_ownership(
         )
     
     return server
+
+
+async def get_server_owner(db: AsyncSession, server: Server, current_user: User) -> User:
+    """Get the account that owns the server, even when an admin is operating it."""
+    if current_user.id == server.user_id:
+        return current_user
+
+    owner = await db.get(User, server.user_id)
+    if not owner:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Server owner not found"
+        )
+    return owner
+
+
+async def upload_latest_plugin_backup_to_s3(
+    db: AsyncSession,
+    server: Server,
+    current_user: User,
+    ssh_manager: SSHManager,
+    progress_callback=None,
+) -> tuple[bool, str]:
+    """Upload the most recent plugin backup produced by SSHManager, if S3 is configured."""
+    owner = await get_server_owner(db, server, current_user)
+    if not s3_backup_service.is_configured(owner):
+        return True, ""
+
+    backup_info = getattr(ssh_manager, "last_plugin_backup", None)
+    backup_path = backup_info.get("path") if backup_info else None
+    if not backup_path:
+        return False, "Plugin backup completed locally, but the archive path was not captured for S3 upload."
+
+    upload_success, upload_message, _ = await s3_backup_service.upload_remote_backup(
+        ssh_manager,
+        server,
+        owner,
+        backup_path,
+        progress_callback=progress_callback,
+    )
+    return upload_success, upload_message
 
 
 def _store_task(task: asyncio.Task) -> None:
@@ -688,15 +730,31 @@ async def server_action(
         
         elif action == "backup_plugins":
             await send_deployment_update(server_id, "status", "Backing up plugins...")
-            success, message = await ssh_manager.backup_plugins(server,
-                                                               lambda msg: asyncio.create_task(
-                                                                   send_deployment_update(server_id, "output", msg)
-                                                               ))
+            progress_callback = lambda msg: asyncio.create_task(
+                send_deployment_update(server_id, "output", msg)
+            )
+            success, message = await ssh_manager.backup_plugins(server, progress_callback)
             
             if success:
-                log.status = "success"
-                log.output = message
-                await send_deployment_update(server_id, "complete", "Plugins backed up successfully")
+                s3_success, s3_message = await upload_latest_plugin_backup_to_s3(
+                    db,
+                    server,
+                    current_user,
+                    ssh_manager,
+                    progress_callback=progress_callback,
+                )
+                if s3_success:
+                    if s3_message:
+                        message = f"{message}\n{s3_message}"
+                    log.status = "success"
+                    log.output = message
+                    await send_deployment_update(server_id, "complete", "Plugins backed up successfully")
+                else:
+                    success = False
+                    message = f"{message}\n{s3_message}"
+                    log.status = "failed"
+                    log.error_message = message
+                    await send_deployment_update(server_id, "error", f"Plugin backup S3 upload failed: {s3_message}")
             else:
                 log.status = "failed"
                 log.error_message = message

@@ -15,14 +15,31 @@ from modules import (
     User, UserCreate, UserLogin, UserResponse, Token,
     PasswordReset, UserProfileUpdate, ApiKeyResponse, ApiKeyGenerate,
     SteamApiKeyResponse, GitHubTokenStatusResponse, GenerateServerTokenRequest, GenerateServerTokenResponse,
+    S3SettingsResponse, S3SettingsUpdate,
     ForgotPasswordRequest, ResetPasswordRequest, GoogleOAuthRequest,
     get_db, get_password_hash, verify_password, create_access_token,
     get_current_active_user, settings, generate_api_key
 )
 from services.captcha_service import captcha_service
+from services.s3_backup_service import s3_backup_service
 from services.steam_api_service import steam_api_service
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
+
+
+def _build_s3_settings_response(user: User) -> S3SettingsResponse:
+    return S3SettingsResponse(
+        enabled=bool(user.s3_enabled),
+        endpoint_url=user.s3_endpoint_url,
+        region=user.s3_region,
+        bucket=user.s3_bucket,
+        access_key_id=user.s3_access_key_id,
+        prefix=user.s3_prefix,
+        use_ssl=bool(user.s3_use_ssl),
+        retention_count=user.s3_retention_count,
+        has_secret=bool(user.s3_secret_access_key),
+        is_configured=s3_backup_service.is_configured(user),
+    )
 
 
 @router.get("/google-config")
@@ -314,6 +331,65 @@ async def get_github_token_status(
         "has_token": has_token,
         "token_prefix": token_prefix
     }
+
+
+@router.get("/s3-settings", response_model=S3SettingsResponse)
+async def get_s3_settings(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get current user's S3 backup settings without revealing the secret key"""
+    return _build_s3_settings_response(current_user)
+
+
+@router.put("/s3-settings", response_model=S3SettingsResponse)
+async def update_s3_settings(
+    settings_data: S3SettingsUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update current user's S3 backup settings"""
+    is_valid = await captcha_service.validate_captcha(settings_data.captcha_token, settings_data.captcha_code)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired CAPTCHA code"
+        )
+
+    if settings_data.enabled is not None:
+        current_user.s3_enabled = settings_data.enabled
+    if settings_data.endpoint_url is not None:
+        current_user.s3_endpoint_url = settings_data.endpoint_url or None
+    if settings_data.region is not None:
+        current_user.s3_region = settings_data.region or None
+    if settings_data.bucket is not None:
+        current_user.s3_bucket = settings_data.bucket or None
+    if settings_data.access_key_id is not None:
+        current_user.s3_access_key_id = settings_data.access_key_id or None
+    if settings_data.prefix is not None:
+        current_user.s3_prefix = settings_data.prefix or None
+    if settings_data.use_ssl is not None:
+        current_user.s3_use_ssl = settings_data.use_ssl
+    if settings_data.retention_count is not None:
+        current_user.s3_retention_count = settings_data.retention_count or None
+
+    if settings_data.clear_secret:
+        current_user.s3_secret_access_key = None
+    elif settings_data.secret_access_key is not None and settings_data.secret_access_key.strip() != "":
+        current_user.s3_secret_access_key = settings_data.secret_access_key.strip()
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    return _build_s3_settings_response(current_user)
+
+
+@router.post("/s3-settings/test")
+async def test_s3_settings(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Test the saved S3 backup settings"""
+    success, message, steps = await s3_backup_service.test_connection(current_user)
+    return {"success": success, "message": message, "steps": steps}
 
 
 @router.post("/generate-server-token", response_model=GenerateServerTokenResponse)

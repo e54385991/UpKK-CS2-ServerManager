@@ -129,6 +129,7 @@ class SSHManager:
         self.conn: Optional[asyncssh.SSHClientConnection] = None
         self.use_pool = use_pool
         self.current_server: Optional[Server] = None
+        self.last_plugin_backup: Optional[Dict[str, Any]] = None
     
     async def _handle_sftp_error_with_reconnect(self, error: Exception, server: Server, operation_name: str, retry_func):
         """
@@ -491,7 +492,7 @@ class SSHManager:
                     await progress_callback(message)
                 else:
                     progress_callback(message)
-        
+
         success, msg = await self.connect(server)
         if not success:
             return False, f"Connection failed: {msg}"
@@ -2182,7 +2183,7 @@ class SSHManager:
                     await progress_callback(message)
                 else:
                     progress_callback(message)
-        
+
         success, msg = await self.connect(server)
         if not success:
             return False, f"Connection failed: {msg}"
@@ -3409,6 +3410,8 @@ class SSHManager:
                     await progress_callback(message)
                 else:
                     progress_callback(message)
+
+        self.last_plugin_backup = None
         
         success, msg = await self.connect(server)
         if not success:
@@ -3459,6 +3462,7 @@ class SSHManager:
             
             backup_filename = f"{timestamp}.tar.gz"
             backup_path = f"{backups_dir}/{backup_filename}"
+            file_size = None
             
             await send_progress(f"Backup will be saved to: {backup_path}")
             
@@ -3585,6 +3589,14 @@ class SSHManager:
             await send_progress("✓ Plugin backup completed successfully!")
             await send_progress(f"Backup saved to: {backup_path}")
             await send_progress("=" * 60)
+
+            self.last_plugin_backup = {
+                "path": backup_path,
+                "filename": backup_filename,
+                "size": file_size,
+                "backups_dir": backups_dir,
+                "created_at": timestamp,
+            }
             
             return True, f"Plugin backup completed successfully. Saved to: {backup_path}"
         

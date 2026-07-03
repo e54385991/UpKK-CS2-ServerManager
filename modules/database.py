@@ -701,6 +701,42 @@ async def migrate_db():
             else:
                 print(f"✓ {column} column exists in users table")
         
+        # Check if S3 backup configuration columns exist in users table
+        s3_columns = {
+            's3_enabled': 'TINYINT(1) DEFAULT 0',
+            's3_endpoint_url': 'VARCHAR(500) NULL',
+            's3_region': 'VARCHAR(100) NULL',
+            's3_bucket': 'VARCHAR(255) NULL',
+            's3_access_key_id': 'VARCHAR(255) NULL',
+            's3_secret_access_key': 'VARCHAR(255) NULL',
+            's3_prefix': 'VARCHAR(255) NULL',
+            's3_use_ssl': 'TINYINT(1) DEFAULT 1',
+            's3_retention_count': 'INT NULL',
+        }
+        for column, definition in s3_columns.items():
+            result = await conn.execute(
+                text(f"""
+                    SELECT COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'users'
+                    AND COLUMN_NAME = '{column}'
+                """)
+            )
+            column_exists = result.fetchone() is not None
+
+            if not column_exists:
+                print(f"Adding {column} column to users table...")
+                await conn.execute(
+                    text(f"""
+                        ALTER TABLE users
+                        ADD COLUMN {column} {definition}
+                    """)
+                )
+                print(f"Migration completed: {column} column added to users table")
+            else:
+                print(f"{column} column exists in users table")
+
         # Migrate update_check_interval_hours from INT to FLOAT to support fractional hours (e.g., 0.0167 = 1 minute)
         result = await conn.execute(
             text("""

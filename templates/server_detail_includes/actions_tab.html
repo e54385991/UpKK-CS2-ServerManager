@@ -450,6 +450,64 @@
                                     <i class="bi bi-archive"></i> <span data-i18n="serverDetail.backupPlugins">Backup Plugins</span>
                                 </button>
                             </div>
+
+                            <hr>
+
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-cloud-arrow-down"></i>
+                                    <span data-i18n="serverDetail.s3Backups">S3 Backups</span>
+                                </h6>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @click="loadS3Backups()" :disabled="loadingS3Backups">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                    <span data-i18n="serverDetail.refresh">Refresh</span>
+                                </button>
+                            </div>
+
+                            <div x-show="s3BackupError" class="alert alert-warning py-2" x-text="s3BackupError"></div>
+
+                            <div x-show="loadingS3Backups" class="text-muted small">
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                <span data-i18n="common.loading">Loading...</span>
+                            </div>
+
+                            <div x-show="!loadingS3Backups && s3Backups.length === 0" class="text-muted small" data-i18n="serverDetail.noS3Backups">
+                                No S3 backups found.
+                            </div>
+
+                            <div x-show="!loadingS3Backups && s3Backups.length > 0" class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th data-i18n="serverDetail.backupFile">File</th>
+                                            <th data-i18n="serverDetail.backupSize">Size</th>
+                                            <th data-i18n="serverDetail.backupTime">Time</th>
+                                            <th class="text-end" data-i18n="common.actions">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="backup in s3Backups" :key="backup.key">
+                                            <tr>
+                                                <td>
+                                                    <span class="text-break" x-text="backup.filename"></span>
+                                                </td>
+                                                <td x-text="formatFileSize(backup.size)"></td>
+                                                <td>
+                                                    <small class="text-muted" x-text="formatS3BackupDate(backup.last_modified)"></small>
+                                                </td>
+                                                <td class="text-end">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                                        @click="restoreS3Backup(backup)"
+                                                        :disabled="restoringS3Backup || isActionRunning">
+                                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                                        <span data-i18n="serverDetail.restore">Restore</span>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 

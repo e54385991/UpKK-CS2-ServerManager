@@ -23,7 +23,7 @@ SERVER_ACTION_PATTERN = f"^({'|'.join(ALLOWED_SERVER_ACTIONS)})$"
 
 # Scheduled task action constants (subset of server actions that can be automated)
 ALLOWED_SCHEDULED_TASK_ACTIONS = [
-    "start", "stop", "restart", "update", "validate"
+    "start", "stop", "restart", "update", "validate", "backup_plugins"
 ]
 SCHEDULED_TASK_ACTION_PATTERN = f"^({'|'.join(ALLOWED_SCHEDULED_TASK_ACTIONS)})$"
 
@@ -130,6 +130,85 @@ class GitHubTokenStatusResponse(SQLModel):
     token_prefix: Optional[str] = None  # Shows first part like "github_pat_11..." without revealing full token
     
     model_config = {"from_attributes": True}
+
+
+class S3SettingsResponse(SQLModel):
+    """Schema for S3 backup settings without exposing the secret key"""
+    enabled: bool
+    endpoint_url: Optional[str] = None
+    region: Optional[str] = None
+    bucket: Optional[str] = None
+    access_key_id: Optional[str] = None
+    prefix: Optional[str] = None
+    use_ssl: bool = True
+    retention_count: Optional[int] = None
+    has_secret: bool = False
+    is_configured: bool = False
+
+
+class S3SettingsUpdate(SQLModel):
+    """Schema for updating S3 backup settings"""
+    enabled: Optional[bool] = None
+    endpoint_url: Optional[str] = Field(None, max_length=500)
+    region: Optional[str] = Field(None, max_length=100)
+    bucket: Optional[str] = Field(None, max_length=255)
+    access_key_id: Optional[str] = Field(None, max_length=255)
+    secret_access_key: Optional[str] = Field(None, max_length=255)
+    prefix: Optional[str] = Field(None, max_length=255)
+    use_ssl: Optional[bool] = None
+    retention_count: Optional[int] = Field(None, ge=0, le=10000)
+    clear_secret: bool = False
+    captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
+    captcha_code: str = Field(..., min_length=4, max_length=4, description="User-entered CAPTCHA code")
+
+    @field_validator('endpoint_url', 'region', 'bucket', 'access_key_id', 'secret_access_key', 'prefix')
+    @classmethod
+    def strip_optional_strings(cls, v):
+        if v is None:
+            return v
+        return v.strip()
+
+    @field_validator('bucket')
+    @classmethod
+    def validate_bucket(cls, v):
+        if v is None or v == "":
+            return v
+        if "/" in v or "\\" in v:
+            raise ValueError("S3 bucket name cannot contain slashes")
+        return v
+
+    @field_validator('prefix')
+    @classmethod
+    def validate_prefix(cls, v):
+        if v is None or v == "":
+            return v
+        if any(char in v for char in ['\\', '\n', '\r']):
+            raise ValueError("S3 prefix contains invalid characters")
+        return v.strip("/")
+
+
+class S3BackupItem(SQLModel):
+    """Schema for a listed S3 backup object"""
+    key: str
+    filename: str
+    size: int
+    last_modified: Optional[datetime] = None
+    etag: Optional[str] = None
+
+
+class S3RestoreRequest(SQLModel):
+    """Schema for restoring a selected S3 backup"""
+    object_key: str = Field(..., min_length=1, max_length=1024)
+
+    @field_validator('object_key')
+    @classmethod
+    def validate_object_key(cls, v):
+        key = v.strip()
+        if not key or key.startswith("/") or "\\" in key:
+            raise ValueError("Invalid S3 object key")
+        if any(char in key for char in ['\n', '\r', '\x00']):
+            raise ValueError("S3 object key contains invalid characters")
+        return key
 
 
 class GenerateServerTokenRequest(SQLModel):
@@ -617,7 +696,7 @@ class InitializedServerResponse(SQLModel):
 class ScheduledTaskCreate(SQLModel):
     """Schema for creating a scheduled task"""
     name: str = Field(..., min_length=1, max_length=255, description="Task name/description")
-    action: str = Field(..., description="Action to perform (restart, start, stop, update, validate)")
+    action: str = Field(..., description="Action to perform (restart, start, stop, update, validate, backup_plugins)")
     enabled: bool = Field(default=True, description="Whether the task is active")
     schedule_type: str = Field(..., description="Schedule type: daily, weekly, interval, cron")
     schedule_value: str = Field(..., min_length=1, max_length=255, description="Time (HH:MM), day+time (MON:14:30), interval (3600), or cron expression")
