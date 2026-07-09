@@ -192,6 +192,8 @@ class Server(SQLModel, table=True):
     discord_notify_manual_updates: bool = Field(default=True)
     discord_notify_plugin_updates: bool = Field(default=True)
     discord_notify_s3_backups: bool = Field(default=True)
+    discord_notify_crash_restarts: bool = Field(default=True)
+    discord_crash_restart_min_interval_minutes: int = Field(default=10)
     
     # SSH connection health tracking
     last_ssh_success: Optional[datetime] = Field(default=None)

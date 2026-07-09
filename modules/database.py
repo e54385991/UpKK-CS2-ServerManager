@@ -483,6 +483,8 @@ async def migrate_db():
             'discord_notify_manual_updates': 'TINYINT(1) DEFAULT 1',
             'discord_notify_plugin_updates': 'TINYINT(1) DEFAULT 1',
             'discord_notify_s3_backups': 'TINYINT(1) DEFAULT 1',
+            'discord_notify_crash_restarts': 'TINYINT(1) DEFAULT 1',
+            'discord_crash_restart_min_interval_minutes': 'INT DEFAULT 10',
         }
         for column, definition in discord_columns.items():
             result = await conn.execute(

@@ -27,6 +27,7 @@ EVENT_AUTO_UPDATE = "auto_update"
 EVENT_MANUAL_UPDATE = "manual_update"
 EVENT_PLUGIN_UPDATE = "plugin_update"
 EVENT_S3_BACKUP = "s3_backup"
+EVENT_CRASH_RESTART = "crash_restart"
 
 SUCCESS_COLOR = 0x2ECC71
 ERROR_COLOR = 0xE74C3C
@@ -43,6 +44,7 @@ class DiscordNotificationService:
 
     def __init__(self) -> None:
         self._background_tasks: Set[asyncio.Task] = set()
+        self._rate_limit_last_sent: Dict[Tuple[int, str, str], Any] = {}
 
     def validate_webhook_url(self, webhook_url: Optional[str]) -> Tuple[bool, str]:
         """Validate that a URL is a Discord webhook URL."""
@@ -81,6 +83,8 @@ class DiscordNotificationService:
             return bool(server.discord_notify_plugin_updates)
         if event_type == EVENT_S3_BACKUP:
             return bool(server.discord_notify_s3_backups)
+        if event_type == EVENT_CRASH_RESTART:
+            return bool(server.discord_notify_crash_restarts)
         return False
 
     def queue_notify(
@@ -93,9 +97,14 @@ class DiscordNotificationService:
         *,
         title: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
+        rate_limit_minutes: Optional[int] = None,
+        rate_limit_scope: Optional[str] = None,
     ) -> bool:
         """Queue a Discord notification without waiting for network I/O."""
         if not self.should_notify(server, event_type):
+            return False
+
+        if self._is_rate_limited(server, event_type, action, rate_limit_minutes, rate_limit_scope):
             return False
 
         webhook_url = server.discord_webhook_url or ""
@@ -133,6 +142,37 @@ class DiscordNotificationService:
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
         return True
+
+    def _is_rate_limited(
+        self,
+        server: Server,
+        event_type: str,
+        action: str,
+        rate_limit_minutes: Optional[int],
+        rate_limit_scope: Optional[str],
+    ) -> bool:
+        if not rate_limit_minutes or rate_limit_minutes <= 0:
+            return False
+
+        server_id = int(server.id or 0)
+        key = (server_id, event_type, rate_limit_scope or action)
+        now = get_current_time()
+        last_sent = self._rate_limit_last_sent.get(key)
+        if last_sent:
+            elapsed_seconds = (now - last_sent).total_seconds()
+            if elapsed_seconds < rate_limit_minutes * 60:
+                remaining_seconds = int(rate_limit_minutes * 60 - elapsed_seconds)
+                logger.info(
+                    "Discord notification suppressed by rate limit for server %s, event %s, action %s. Remaining: %ss",
+                    server.id,
+                    event_type,
+                    action,
+                    remaining_seconds,
+                )
+                return True
+
+        self._rate_limit_last_sent[key] = now
+        return False
 
     async def notify(
         self,
@@ -295,6 +335,7 @@ class DiscordNotificationService:
             EVENT_MANUAL_UPDATE: "Server update",
             EVENT_PLUGIN_UPDATE: "Plugin update",
             EVENT_S3_BACKUP: "S3 backup upload",
+            EVENT_CRASH_RESTART: "Crash / auto-restart",
         }.get(event_type, "Server notification")
 
     def _server_label(self, server: Server) -> str:

@@ -7,6 +7,7 @@ from modules.models import AuthType, Server
 from services.discord_notification_service import (
     ERROR_COLOR,
     EVENT_AUTO_UPDATE,
+    EVENT_CRASH_RESTART,
     EVENT_MANUAL_UPDATE,
     EVENT_PLUGIN_UPDATE,
     EVENT_S3_BACKUP,
@@ -205,6 +206,52 @@ def test_queue_notify_returns_before_background_delivery_and_respects_s3_switch(
     asyncio.run(run_test())
 
 
+def test_queue_notify_rate_limits_crash_restart_notifications():
+    service = DiscordNotificationService()
+    calls = []
+
+    async def fake_post(webhook_url, payload):
+        calls.append((webhook_url, payload))
+        return True, None
+
+    async def run_test():
+        service._post_payload = fake_post
+        server = make_server(
+            discord_webhook_url=VALID_WEBHOOK,
+            discord_notifications_enabled=True,
+            discord_notify_crash_restarts=True,
+            discord_crash_restart_min_interval_minutes=10,
+        )
+
+        first = service.queue_notify(
+            server,
+            EVENT_CRASH_RESTART,
+            "auto_restart",
+            True,
+            "Auto-restart completed",
+            rate_limit_minutes=server.discord_crash_restart_min_interval_minutes,
+            rate_limit_scope="auto_restart",
+        )
+        second = service.queue_notify(
+            server,
+            EVENT_CRASH_RESTART,
+            "auto_restart",
+            False,
+            "Auto-restart failed",
+            rate_limit_minutes=server.discord_crash_restart_min_interval_minutes,
+            rate_limit_scope="auto_restart",
+        )
+
+        assert first is True
+        assert second is False
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert len(calls) == 1
+        assert calls[0][1]["embeds"][0]["title"] == "Crash / auto-restart: Success"
+
+    asyncio.run(run_test())
+
+
 def test_send_test_uses_test_color_and_safe_mentions():
     service = DiscordNotificationService()
     calls = []
@@ -235,10 +282,13 @@ def test_settings_response_does_not_expose_webhook_url():
         discord_notifications_enabled=True,
         discord_channel_name="#updates",
     )
+    server.discord_crash_restart_min_interval_minutes = None
 
     response = build_discord_settings_response(server)
     data = response.model_dump()
 
     assert data["webhook_configured"] is True
     assert data["discord_channel_name"] == "#updates"
+    assert data["discord_notify_crash_restarts"] is True
+    assert data["discord_crash_restart_min_interval_minutes"] == 10
     assert "discord_webhook_url" not in data

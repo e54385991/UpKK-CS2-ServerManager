@@ -82,6 +82,8 @@ def build_discord_settings_response(server: Server) -> DiscordSettingsResponse:
         discord_notify_manual_updates=server.discord_notify_manual_updates,
         discord_notify_plugin_updates=server.discord_notify_plugin_updates,
         discord_notify_s3_backups=server.discord_notify_s3_backups,
+        discord_notify_crash_restarts=server.discord_notify_crash_restarts,
+        discord_crash_restart_min_interval_minutes=server.discord_crash_restart_min_interval_minutes or 10,
     )
 
 
@@ -517,6 +519,12 @@ async def update_discord_settings(
         server.discord_notify_plugin_updates = bool(update_data["discord_notify_plugin_updates"])
     if "discord_notify_s3_backups" in update_data:
         server.discord_notify_s3_backups = bool(update_data["discord_notify_s3_backups"])
+    if "discord_notify_crash_restarts" in update_data:
+        server.discord_notify_crash_restarts = bool(update_data["discord_notify_crash_restarts"])
+    if "discord_crash_restart_min_interval_minutes" in update_data:
+        server.discord_crash_restart_min_interval_minutes = int(
+            update_data["discord_crash_restart_min_interval_minutes"] or 10
+        )
 
     await db.commit()
     await db.refresh(server)

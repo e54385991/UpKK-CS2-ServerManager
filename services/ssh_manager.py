@@ -1522,7 +1522,19 @@ class SSHManager:
                     await asyncio.sleep(2)
                     
                     # Retry starting the server (recursive call with same callback)
-                    return await self.start_server(server, progress_callback)
+                    restart_success, restart_result_msg = await self.start_server(server, progress_callback)
+                    server_monitor.queue_restart_notification(
+                        server,
+                        success=restart_success,
+                        title=f"Immediate crash auto-restart {'completed' if restart_success else 'failed'}",
+                        message=restart_result_msg,
+                        trigger="immediate crash detection during start_server",
+                        details={
+                            "Detected Issues": "\n".join(error_analysis) if error_analysis else "Process exited during initialization",
+                            "Restart Status": restart_msg,
+                        },
+                    )
+                    return restart_success, restart_result_msg
                 
                 # If auto-restart not available or not applicable, return error
                 error_msg = "Server failed to start - process exited during initialization.\n\n"
@@ -1533,6 +1545,17 @@ class SSHManager:
                 elif not auto_restart_possible:
                     error_msg += "Auto-restart: Disabled due to configuration issues detected\n\n"
                 error_msg += f"Console output (last 150 lines):\n{immediate_log[:3000]}"
+                server_monitor.queue_restart_notification(
+                    server,
+                    success=False,
+                    title="Immediate crash detected",
+                    message=error_msg,
+                    trigger="immediate crash detection during start_server",
+                    details={
+                        "Detected Issues": "\n".join(error_analysis) if error_analysis else "Process exited during initialization",
+                        "Restart Status": restart_msg,
+                    },
+                )
                 return False, error_msg
             
             # Wait 1 second and check if server is still alive (detect immediate crashes)
@@ -1553,6 +1576,16 @@ class SSHManager:
                 crash_info += f"=== Console Log (last 100 lines) ===\n{crash_log[:3000]}\n\n"
                 if 'No core dump' not in core_output:
                     crash_info += f"=== Core Dump Found ===\n{core_output}\n"
+                server_monitor.queue_restart_notification(
+                    server,
+                    success=False,
+                    title="Immediate crash detected",
+                    message=crash_info,
+                    trigger="post-start quick check",
+                    details={
+                        "Core Dump": "Detected" if 'No core dump' not in core_output else "Not detected",
+                    },
+                )
                 return False, crash_info
             
             # Wait additional time for server to fully initialize (CS2 can take time)

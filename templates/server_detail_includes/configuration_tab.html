@@ -635,6 +635,14 @@
                                                 <span class="badge mt-1"
                                                     :class="discordSettings.discord_notify_s3_backups ? 'bg-success' : 'bg-secondary'"
                                                     data-i18n="serverDetail.discordS3Backups">S3 Backup Uploads</span>
+                                                <span class="badge mt-1"
+                                                    :class="discordSettings.discord_notify_crash_restarts ? 'bg-success' : 'bg-secondary'"
+                                                    data-i18n="serverDetail.discordCrashRestarts">Crash / Auto Restart</span>
+                                            </li>
+                                            <li class="mt-2">
+                                                <i class="bi bi-hourglass-split"></i>
+                                                <strong data-i18n="serverDetail.discordCrashRestartCooldown">Crash Restart Cooldown:</strong>
+                                                <span x-text="(discordSettings.discord_crash_restart_min_interval_minutes || 10) + ' min'"></span>
                                             </li>
                                         </ul>
                                     </div>
@@ -724,8 +732,28 @@
                                                             data-i18n="serverDetail.discordS3Backups">S3 Backup Uploads</label>
                                                     </div>
                                                 </div>
+                                                <div class="col-md-3">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox"
+                                                            id="discordCrashRestarts"
+                                                            x-model="discordSettingsForm.discord_notify_crash_restarts">
+                                                        <label class="form-check-label" for="discordCrashRestarts"
+                                                            data-i18n="serverDetail.discordCrashRestarts">Crash / Auto Restart</label>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <small class="text-muted" data-i18n="serverDetail.discordEventsHint">Covers auto updates, manual update/validate tasks, framework/plugin installs, GitHub plugin installs, scheduled update/backup tasks, plugin backups, and S3 backup uploads.</small>
+                                            <small class="text-muted" data-i18n="serverDetail.discordEventsHint">Covers auto updates, manual update/validate tasks, framework/plugin installs, GitHub plugin installs, scheduled update/backup tasks, plugin backups, S3 backup uploads, and crash auto-restarts.</small>
+                                        </div>
+
+                                        <div class="col-md-4" x-show="discordSettingsForm.discord_notify_crash_restarts">
+                                            <label class="form-label" data-i18n="serverDetail.discordCrashRestartCooldown">Crash Restart Cooldown</label>
+                                            <div class="input-group">
+                                                <input type="number" class="form-control"
+                                                    x-model.number="discordSettingsForm.discord_crash_restart_min_interval_minutes"
+                                                    min="1" max="1440" step="1">
+                                                <span class="input-group-text" data-i18n="serverDetail.minutes">minutes</span>
+                                            </div>
+                                            <small class="text-muted" data-i18n="serverDetail.discordCrashRestartCooldownHint">Suppress repeated crash/auto-restart notifications for this server during the cooldown window.</small>
                                         </div>
 
                                         <div class="col-12" x-show="discordSettings.webhook_configured">

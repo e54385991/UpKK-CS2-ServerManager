@@ -1347,6 +1347,8 @@ class DiscordSettingsResponse(SQLModel):
     discord_notify_manual_updates: bool
     discord_notify_plugin_updates: bool
     discord_notify_s3_backups: bool
+    discord_notify_crash_restarts: bool
+    discord_crash_restart_min_interval_minutes: int
 
 
 class DiscordSettingsUpdate(SQLModel):
@@ -1358,6 +1360,8 @@ class DiscordSettingsUpdate(SQLModel):
     discord_notify_manual_updates: Optional[bool] = None
     discord_notify_plugin_updates: Optional[bool] = None
     discord_notify_s3_backups: Optional[bool] = None
+    discord_notify_crash_restarts: Optional[bool] = None
+    discord_crash_restart_min_interval_minutes: Optional[int] = Field(default=None, ge=1, le=1440)
     clear_webhook: bool = False
 
     @field_validator('discord_channel_name')

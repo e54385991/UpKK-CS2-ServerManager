@@ -101,7 +101,9 @@
             discord_notify_auto_updates: true,
             discord_notify_manual_updates: true,
             discord_notify_plugin_updates: true,
-            discord_notify_s3_backups: true
+            discord_notify_s3_backups: true,
+            discord_notify_crash_restarts: true,
+            discord_crash_restart_min_interval_minutes: 10
         },
         discordSettingsForm: {
             discord_notifications_enabled: false,
@@ -111,6 +113,8 @@
             discord_notify_manual_updates: true,
             discord_notify_plugin_updates: true,
             discord_notify_s3_backups: true,
+            discord_notify_crash_restarts: true,
+            discord_crash_restart_min_interval_minutes: 10,
             clear_webhook: false
         },
         // CPU Affinity
@@ -649,7 +653,9 @@
                 discord_notify_auto_updates: true,
                 discord_notify_manual_updates: true,
                 discord_notify_plugin_updates: true,
-                discord_notify_s3_backups: true
+                discord_notify_s3_backups: true,
+                discord_notify_crash_restarts: true,
+                discord_crash_restart_min_interval_minutes: 10
             };
         },
 
@@ -662,6 +668,8 @@
                 discord_notify_manual_updates: this.discordSettings.discord_notify_manual_updates !== false,
                 discord_notify_plugin_updates: this.discordSettings.discord_notify_plugin_updates !== false,
                 discord_notify_s3_backups: this.discordSettings.discord_notify_s3_backups !== false,
+                discord_notify_crash_restarts: this.discordSettings.discord_notify_crash_restarts !== false,
+                discord_crash_restart_min_interval_minutes: this.discordSettings.discord_crash_restart_min_interval_minutes || 10,
                 clear_webhook: false
             };
         },

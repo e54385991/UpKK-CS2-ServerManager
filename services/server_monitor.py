@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 import logging
 from modules.utils import get_current_time
+from services.discord_notification_service import EVENT_CRASH_RESTART, discord_notification_service
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,36 @@ class ServerMonitor:
             "can_restart": can_restart,
             "recent_restarts": [ts.isoformat() for ts in recent_restarts]
         }
+
+    def queue_restart_notification(
+        self,
+        server,
+        *,
+        success: bool,
+        title: str,
+        message: str,
+        trigger: str,
+        details=None,
+    ) -> bool:
+        """Queue a rate-limited Discord notification for crash recovery events."""
+        notify_details = {
+            "Trigger": trigger,
+            "Cooldown": f"{server.discord_crash_restart_min_interval_minutes or 10} minute(s)",
+        }
+        if details:
+            notify_details.update(details)
+
+        return discord_notification_service.queue_notify(
+            server,
+            EVENT_CRASH_RESTART,
+            "auto_restart",
+            success,
+            message,
+            title=title,
+            details=notify_details,
+            rate_limit_minutes=server.discord_crash_restart_min_interval_minutes or 10,
+            rate_limit_scope="auto_restart",
+        )
     
     async def monitor_server(self, server_id: int, ssh_manager, progress_callback=None):
         """
@@ -339,6 +370,16 @@ class ServerMonitor:
                                     await db.commit()
                             
                             if restart_success:
+                                self.queue_restart_notification(
+                                    server,
+                                    success=True,
+                                    title="Auto-restart completed",
+                                    message=restart_msg or "Auto-restart completed successfully",
+                                    trigger=restart_trigger,
+                                    details={
+                                        "Health Check": check_message,
+                                    },
+                                )
                                 # Reset restart history and A2S failure counter after successful restart
                                 self.reset_restart_history(server_id)
                                 
@@ -353,6 +394,16 @@ class ServerMonitor:
                                 except Exception as e:
                                     logger.error(f"Failed to log restart success to Redis: {e}")
                             else:
+                                self.queue_restart_notification(
+                                    server,
+                                    success=False,
+                                    title="Auto-restart failed",
+                                    message=restart_msg or "Auto-restart failed",
+                                    trigger=restart_trigger,
+                                    details={
+                                        "Health Check": check_message,
+                                    },
+                                )
                                 # Log failed restart to Redis
                                 try:
                                     await redis_manager.append_monitoring_log(
@@ -365,6 +416,16 @@ class ServerMonitor:
                                     logger.error(f"Failed to log restart failure to Redis: {e}")
                         except Exception as e:
                             logger.error(f"Exception during auto-restart of server {server_id}: {e}")
+                            self.queue_restart_notification(
+                                server,
+                                success=False,
+                                title="Auto-restart failed",
+                                message=f"Auto-restart error: {str(e)}",
+                                trigger=restart_trigger,
+                                details={
+                                    "Health Check": check_message,
+                                },
+                            )
                             
                             # Update server status in database
                             async with async_session_maker() as db:
@@ -385,6 +446,16 @@ class ServerMonitor:
                                 logger.error(f"Failed to log restart error to Redis: {redis_e}")
                     else:
                         logger.warning(f"Cannot auto-restart server {server_id}: {reason}")
+                        self.queue_restart_notification(
+                            server,
+                            success=False,
+                            title="Auto-restart blocked",
+                            message=reason,
+                            trigger="restart loop protection",
+                            details={
+                                "Health Check": check_message,
+                            },
+                        )
                         
                         # Update server status in database
                         async with async_session_maker() as db:
@@ -405,6 +476,17 @@ class ServerMonitor:
                             logger.error(f"Failed to log blocked restart to Redis: {e}")
                 elif is_down:
                     logger.info(f"Server {server_id} is down but auto-restart is disabled")
+                    self.queue_restart_notification(
+                        server,
+                        success=False,
+                        title="Server down, auto-restart disabled",
+                        message=check_message,
+                        trigger="monitoring detected server down",
+                        details={
+                            "Auto Restart": "Disabled",
+                            "Monitor": "A2S" if server.enable_a2s_monitoring else "Panel process check",
+                        },
+                    )
                     # Update server status in database
                     async with async_session_maker() as db:
                         server_to_update = await db.get(Server, server_id)
