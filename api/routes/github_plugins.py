@@ -23,6 +23,7 @@ from modules import (
 )
 from modules.http_helper import http_helper
 from services import SSHManager
+from services.discord_notification_service import EVENT_PLUGIN_UPDATE, discord_notification_service
 
 router = APIRouter(prefix="/api/github-plugins", tags=["github-plugins"])
 
@@ -481,11 +482,33 @@ async def install_github_plugin(
     async def progress(msg: str, msg_type: str = "status"):
         """Send progress update via WebSocket"""
         await send_deployment_update(server_id, msg_type, msg)
+
+    async def notify_install_result(
+        success: bool,
+        message: str,
+        installed_files: Optional[int] = None,
+    ) -> None:
+        details = {
+            "Download URL": request.download_url,
+        }
+        if installed_files is not None:
+            details["Installed Files"] = installed_files
+
+        discord_notification_service.queue_notify(
+            server,
+            EVENT_PLUGIN_UPDATE,
+            "install_github_plugin",
+            success,
+            message,
+            title=f"GitHub plugin install {'completed' if success else 'failed'}",
+            details=details,
+        )
     
     ssh_manager = SSHManager()
     success, msg = await ssh_manager.connect(server)
     if not success:
         await progress(f"SSH connection failed: {msg}", "error")
+        await notify_install_result(False, f"SSH connection failed: {msg}")
         return GitHubPluginInstallResponse(
             success=False,
             message=f"SSH connection failed: {msg}"
@@ -504,6 +527,7 @@ async def install_github_plugin(
         
         if not success or 'exists' not in check_output:
             await progress("CS2 server not found. Please deploy the server first.", "error")
+            await notify_install_result(False, "CS2 server not found. Please deploy the server first.")
             return GitHubPluginInstallResponse(
                 success=False,
                 message="CS2 server not found. Please deploy the server first."
@@ -572,6 +596,7 @@ async def install_github_plugin(
                 
                 if not success:
                     await progress(f"Failed to download to panel server: {error}", "error")
+                    await notify_install_result(False, f"Failed to download to panel server: {error}")
                     return GitHubPluginInstallResponse(
                         success=False,
                         message=f"Failed to download to panel server: {error}"
@@ -580,6 +605,7 @@ async def install_github_plugin(
                 # Verify download
                 if not os.path.exists(panel_archive_path):
                     await progress("Downloaded file not found", "error")
+                    await notify_install_result(False, "Downloaded file not found")
                     return GitHubPluginInstallResponse(
                         success=False,
                         message="Downloaded file not found"
@@ -588,6 +614,7 @@ async def install_github_plugin(
                 file_size = os.path.getsize(panel_archive_path)
                 if file_size < 1000:
                     await progress("Downloaded file is too small or empty", "error")
+                    await notify_install_result(False, "Downloaded file is too small or empty")
                     return GitHubPluginInstallResponse(
                         success=False,
                         message="Downloaded file is too small or empty"
@@ -630,6 +657,7 @@ async def install_github_plugin(
                 
                 if not success:
                     await progress(f"Failed to upload to server: {error}", "error")
+                    await notify_install_result(False, f"Failed to upload to server: {error}")
                     return GitHubPluginInstallResponse(
                         success=False,
                         message=f"Failed to upload to server: {error}"
@@ -673,6 +701,7 @@ async def install_github_plugin(
             if not success:
                 await ssh_manager.execute_command(f"rm -rf {temp_dir}")
                 await progress(f"Failed to download plugin: {stderr}", "error")
+                await notify_install_result(False, f"Failed to download plugin: {stderr}")
                 return GitHubPluginInstallResponse(
                     success=False,
                     message=f"Failed to download plugin: {stderr}"
@@ -693,6 +722,7 @@ async def install_github_plugin(
             if not success or not size_output.strip():
                 await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
                 await progress("Downloaded file is invalid", "error")
+                await notify_install_result(False, "Downloaded file is invalid")
                 return GitHubPluginInstallResponse(
                     success=False,
                     message="Downloaded file is invalid"
@@ -702,6 +732,7 @@ async def install_github_plugin(
             if file_size < 1000:
                 await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
                 await progress("Downloaded file is too small or empty", "error")
+                await notify_install_result(False, "Downloaded file is too small or empty")
                 return GitHubPluginInstallResponse(
                     success=False,
                     message="Downloaded file is too small or empty"
@@ -741,6 +772,7 @@ async def install_github_plugin(
         if not success:
             await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
             await progress(f"Failed to extract archive: {stderr}", "error")
+            await notify_install_result(False, f"Failed to extract archive: {stderr}")
             return GitHubPluginInstallResponse(
                 success=False,
                 message=f"Failed to extract archive: {stderr}"
@@ -778,6 +810,7 @@ async def install_github_plugin(
                     await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
                     error_msg = "Invalid custom install path specified"
                     await progress(error_msg, "error")
+                    await notify_install_result(False, error_msg)
                     return GitHubPluginInstallResponse(
                         success=False,
                         message=error_msg
@@ -839,6 +872,7 @@ async def install_github_plugin(
                     await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
                     error_msg = f"Failed to copy files to custom path: {stderr}"
                     await progress(error_msg, "error")
+                    await notify_install_result(False, error_msg)
                     return GitHubPluginInstallResponse(
                         success=False,
                         message=error_msg
@@ -855,6 +889,11 @@ async def install_github_plugin(
                 count_after = int(count_after.strip()) if count_after.strip().isdigit() else 0
                 
                 await progress(f"Installation complete! Custom path used: {safe_custom_path}", "success")
+                await notify_install_result(
+                    True,
+                    f"Plugin installed successfully to custom path: {safe_custom_path}",
+                    count_after,
+                )
                 
                 return GitHubPluginInstallResponse(
                     success=True,
@@ -866,6 +905,7 @@ async def install_github_plugin(
                 await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
                 error_msg = "No addons/ directory found in archive. This does not appear to be a valid CS2 plugin package."
                 await progress(error_msg, "error")
+                await notify_install_result(False, error_msg)
                 return GitHubPluginInstallResponse(
                     success=False,
                     message=error_msg
@@ -939,6 +979,7 @@ async def install_github_plugin(
         
         if not success:
             await progress(f"Failed to copy files: {stderr}", "error")
+            await notify_install_result(False, f"Failed to copy files: {stderr}", installed_files)
             return GitHubPluginInstallResponse(
                 success=False,
                 message=f"Failed to copy files: {stderr}",
@@ -947,6 +988,7 @@ async def install_github_plugin(
         
         success_msg = f"Plugin installed successfully! {installed_files} files installed. Restart server to apply changes."
         await progress(success_msg, "complete")
+        await notify_install_result(True, success_msg, installed_files)
         
         return GitHubPluginInstallResponse(
             success=True,
@@ -957,6 +999,7 @@ async def install_github_plugin(
     except Exception as e:
         logger.error(f"Error installing plugin: {e}")
         await progress(f"Installation error: {str(e)}", "error")
+        await notify_install_result(False, f"Installation error: {str(e)}")
         return GitHubPluginInstallResponse(
             success=False,
             message=f"Installation error: {str(e)}"

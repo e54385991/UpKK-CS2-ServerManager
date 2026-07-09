@@ -22,6 +22,11 @@
                                                     savingMonitoring: false,
                                                         showAutoUpdateEdit: false,
                                                             savingAutoUpdate: false,
+                                                                showDiscordEdit: false,
+                                                                    savingDiscordSettings: false,
+                                                                        testingDiscordSettings: false,
+                                                                            discordSettingsError: '',
+                                                                                discordTestMessage: '',
                                                                 statusCheckLogs: [],
                                                                     autoRestartLogs: [],
                                                                         a2sCheckLogs: [],
@@ -88,6 +93,25 @@
         autoUpdateForm: {
             enable_auto_update: true,
             update_check_interval_hours: 1
+        },
+        discordSettings: {
+            discord_notifications_enabled: false,
+            discord_channel_name: '',
+            webhook_configured: false,
+            discord_notify_auto_updates: true,
+            discord_notify_manual_updates: true,
+            discord_notify_plugin_updates: true,
+            discord_notify_s3_backups: true
+        },
+        discordSettingsForm: {
+            discord_notifications_enabled: false,
+            discord_webhook_url: '',
+            discord_channel_name: '',
+            discord_notify_auto_updates: true,
+            discord_notify_manual_updates: true,
+            discord_notify_plugin_updates: true,
+            discord_notify_s3_backups: true,
+            clear_webhook: false
         },
         // CPU Affinity
         showCpuAffinityEdit: false,
@@ -213,6 +237,7 @@
             this.loadServerEditForm();
             this.loadMonitoringForm();
             this.loadAutoUpdateForm();
+            await this.loadDiscordSettings();
             this.loadA2SConfigForm();
             this.loadCpuAffinityForm();
             this.loadGithubProxyForm();
@@ -614,6 +639,125 @@
             } finally {
                 this.savingAutoUpdate = false;
             }
+        },
+
+        defaultDiscordSettings() {
+            return {
+                discord_notifications_enabled: false,
+                discord_channel_name: '',
+                webhook_configured: false,
+                discord_notify_auto_updates: true,
+                discord_notify_manual_updates: true,
+                discord_notify_plugin_updates: true,
+                discord_notify_s3_backups: true
+            };
+        },
+
+        loadDiscordSettingsForm() {
+            this.discordSettingsForm = {
+                discord_notifications_enabled: this.discordSettings.discord_notifications_enabled || false,
+                discord_webhook_url: '',
+                discord_channel_name: this.discordSettings.discord_channel_name || '',
+                discord_notify_auto_updates: this.discordSettings.discord_notify_auto_updates !== false,
+                discord_notify_manual_updates: this.discordSettings.discord_notify_manual_updates !== false,
+                discord_notify_plugin_updates: this.discordSettings.discord_notify_plugin_updates !== false,
+                discord_notify_s3_backups: this.discordSettings.discord_notify_s3_backups !== false,
+                clear_webhook: false
+            };
+        },
+
+        async loadDiscordSettings() {
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/discord-settings`);
+                if (response.ok) {
+                    this.discordSettings = await response.json();
+                } else {
+                    this.discordSettings = this.defaultDiscordSettings();
+                }
+            } catch (err) {
+                console.error(`Error loading Discord settings: ${err.message}`);
+                this.discordSettings = this.defaultDiscordSettings();
+            } finally {
+                this.loadDiscordSettingsForm();
+            }
+        },
+
+        async saveDiscordSettings() {
+            this.savingDiscordSettings = true;
+            this.discordSettingsError = '';
+            this.discordTestMessage = '';
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/discord-settings`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.discordSettingsForm)
+                });
+
+                if (response.ok) {
+                    this.discordSettings = await response.json();
+                    this.loadDiscordSettingsForm();
+                    this.showDiscordEdit = false;
+                    this.addLog('complete', 'Discord notification settings saved successfully');
+                    this.showToast('Discord notification settings saved successfully', 'success');
+                } else {
+                    const error = await response.json().catch(() => ({}));
+                    const detail = error.detail || 'Failed to save Discord notification settings';
+                    this.discordSettingsError = detail;
+                    this.addLog('error', `Failed to save Discord notification settings: ${detail}`);
+                    this.showToast(`Failed to save Discord notification settings: ${detail}`, 'error');
+                }
+            } catch (err) {
+                this.discordSettingsError = err.message;
+                this.addLog('error', `Error: ${err.message}`);
+                this.showToast(`Error: ${err.message}`, 'error');
+            } finally {
+                this.savingDiscordSettings = false;
+            }
+        },
+
+        async testDiscordSettings() {
+            this.testingDiscordSettings = true;
+            this.discordSettingsError = '';
+            this.discordTestMessage = '';
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/discord-settings/test`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: 'This is a test notification from CS2 Server Manager.'
+                    })
+                });
+
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    this.discordTestMessage = data.message || 'Discord test notification sent successfully';
+                    this.addLog('complete', this.discordTestMessage);
+                    this.showToast(this.discordTestMessage, 'success');
+                } else {
+                    const detail = data.detail || 'Failed to send Discord test notification';
+                    this.discordSettingsError = detail;
+                    this.addLog('error', `Discord test failed: ${detail}`);
+                    this.showToast(`Discord test failed: ${detail}`, 'error');
+                }
+            } catch (err) {
+                this.discordSettingsError = err.message;
+                this.addLog('error', `Error: ${err.message}`);
+                this.showToast(`Error: ${err.message}`, 'error');
+            } finally {
+                this.testingDiscordSettings = false;
+            }
+        },
+
+        clearDiscordWebhook() {
+            this.discordSettingsForm.discord_webhook_url = '';
+            this.discordSettingsForm.clear_webhook = true;
+            this.discordSettingsForm.discord_notifications_enabled = false;
         },
         
         async loadMonitoringLogs(eventType) {

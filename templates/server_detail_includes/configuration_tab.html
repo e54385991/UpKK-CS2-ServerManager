@@ -586,6 +586,195 @@
                         </div>
                     </div>
 
+                    <!-- Discord Notifications Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-discord"></i> <span
+                                    data-i18n="serverDetail.discordNotifications">Discord Notifications</span></h5>
+                            <button @click="showDiscordEdit = !showDiscordEdit; if (showDiscordEdit) loadDiscordSettingsForm()"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> <span
+                                    x-text="showDiscordEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- View Mode -->
+                            <div x-show="!showDiscordEdit" x-cloak>
+                                <div class="row">
+                                    <div class="col-md-7">
+                                        <h6 class="text-muted" data-i18n="serverDetail.discordNotificationSettings">Notification Settings</h6>
+                                        <ul class="list-unstyled mb-0">
+                                            <li>
+                                                <i :class="discordSettings.discord_notifications_enabled ? 'bi bi-check-circle text-success' : 'bi bi-x-circle text-secondary'"></i>
+                                                <strong data-i18n="serverDetail.discordNotificationsLabel">Discord Notifications:</strong>
+                                                <span
+                                                    x-text="discordSettings.discord_notifications_enabled ? (window.i18n?.t('serverDetail.enabled') || 'Enabled') : (window.i18n?.t('serverDetail.disabled') || 'Disabled')"
+                                                    :class="discordSettings.discord_notifications_enabled ? 'text-success fw-bold' : 'text-secondary'"></span>
+                                            </li>
+                                            <li>
+                                                <i :class="discordSettings.webhook_configured ? 'bi bi-shield-check text-success' : 'bi bi-shield-x text-warning'"></i>
+                                                <strong data-i18n="serverDetail.discordWebhook">Webhook:</strong>
+                                                <span
+                                                    x-text="discordSettings.webhook_configured ? (window.i18n?.t('serverDetail.configured') || 'Configured') : (window.i18n?.t('serverDetail.notConfigured') || 'Not configured')"></span>
+                                            </li>
+                                            <li>
+                                                <i class="bi bi-hash"></i>
+                                                <strong data-i18n="serverDetail.discordChannelNote">Channel Note:</strong>
+                                                <span x-text="discordSettings.discord_channel_name || (window.i18n?.t('serverDetail.webhookDefaultChannel') || 'Webhook default channel')"></span>
+                                            </li>
+                                            <li class="mt-2">
+                                                <span class="badge me-1"
+                                                    :class="discordSettings.discord_notify_auto_updates ? 'bg-success' : 'bg-secondary'"
+                                                    data-i18n="serverDetail.discordAutoUpdates">Auto Updates</span>
+                                                <span class="badge me-1"
+                                                    :class="discordSettings.discord_notify_manual_updates ? 'bg-success' : 'bg-secondary'"
+                                                    data-i18n="serverDetail.discordManualUpdates">Manual Updates</span>
+                                                <span class="badge"
+                                                    :class="discordSettings.discord_notify_plugin_updates ? 'bg-success' : 'bg-secondary'"
+                                                    data-i18n="serverDetail.discordPluginUpdates">Plugin Updates</span>
+                                                <span class="badge mt-1"
+                                                    :class="discordSettings.discord_notify_s3_backups ? 'bg-success' : 'bg-secondary'"
+                                                    data-i18n="serverDetail.discordS3Backups">S3 Backup Uploads</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <div class="alert alert-info mb-0" role="alert">
+                                            <i class="bi bi-info-circle"></i>
+                                            <strong data-i18n="serverDetail.discordTemplateTitle">Preset Embed Template:</strong>
+                                            <small class="d-block" data-i18n="serverDetail.discordTemplateInfo">Sends clean Discord embeds with server, action, result, details, timestamp, and panel signature. Webhook URLs are saved but never displayed.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Edit Mode -->
+                            <div x-show="showDiscordEdit" x-cloak>
+                                <form @submit.prevent="saveDiscordSettings()">
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox"
+                                                    id="enableDiscordNotifications"
+                                                    x-model="discordSettingsForm.discord_notifications_enabled">
+                                                <label class="form-check-label" for="enableDiscordNotifications">
+                                                    <strong data-i18n="serverDetail.enableDiscordNotifications">Enable Discord Notifications</strong>
+                                                    <small class="d-block text-muted" data-i18n="serverDetail.discordEnableHint">Notifications are sent only after this switch is enabled and a webhook is configured.</small>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-8">
+                                            <label class="form-label" data-i18n="serverDetail.discordWebhookUrl">Discord Webhook URL</label>
+                                            <input type="password" class="form-control"
+                                                x-model="discordSettingsForm.discord_webhook_url"
+                                                data-i18n-placeholder="serverDetail.discordWebhookPlaceholder"
+                                                placeholder="Leave blank to keep saved webhook">
+                                            <small class="text-muted">
+                                                <span x-show="discordSettings.webhook_configured" data-i18n="serverDetail.discordWebhookSaved">A webhook is saved. Leave blank to keep it.</span>
+                                                <span x-show="!discordSettings.webhook_configured" data-i18n="serverDetail.discordWebhookMissing">No webhook saved yet.</span>
+                                            </small>
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label class="form-label" data-i18n="serverDetail.discordChannelNote">Channel Note</label>
+                                            <input type="text" class="form-control"
+                                                x-model="discordSettingsForm.discord_channel_name"
+                                                data-i18n-placeholder="serverDetail.discordChannelPlaceholder"
+                                                placeholder="#updates">
+                                            <small class="text-muted" data-i18n="serverDetail.discordChannelHint">For display only. The webhook decides the real channel.</small>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <label class="form-label" data-i18n="serverDetail.discordEventTypes">Notify Events</label>
+                                            <div class="row g-2">
+                                                <div class="col-md-3">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox"
+                                                            id="discordAutoUpdates"
+                                                            x-model="discordSettingsForm.discord_notify_auto_updates">
+                                                        <label class="form-check-label" for="discordAutoUpdates"
+                                                            data-i18n="serverDetail.discordAutoUpdates">Auto Updates</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox"
+                                                            id="discordManualUpdates"
+                                                            x-model="discordSettingsForm.discord_notify_manual_updates">
+                                                        <label class="form-check-label" for="discordManualUpdates"
+                                                            data-i18n="serverDetail.discordManualUpdates">Manual Updates</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox"
+                                                            id="discordPluginUpdates"
+                                                            x-model="discordSettingsForm.discord_notify_plugin_updates">
+                                                        <label class="form-check-label" for="discordPluginUpdates"
+                                                            data-i18n="serverDetail.discordPluginUpdates">Plugin Updates</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox"
+                                                            id="discordS3Backups"
+                                                            x-model="discordSettingsForm.discord_notify_s3_backups">
+                                                        <label class="form-check-label" for="discordS3Backups"
+                                                            data-i18n="serverDetail.discordS3Backups">S3 Backup Uploads</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <small class="text-muted" data-i18n="serverDetail.discordEventsHint">Covers auto updates, manual update/validate tasks, framework/plugin installs, GitHub plugin installs, scheduled update/backup tasks, plugin backups, and S3 backup uploads.</small>
+                                        </div>
+
+                                        <div class="col-12" x-show="discordSettings.webhook_configured">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox"
+                                                    id="clearDiscordWebhook"
+                                                    x-model="discordSettingsForm.clear_webhook"
+                                                    @change="if (discordSettingsForm.clear_webhook) discordSettingsForm.discord_notifications_enabled = false">
+                                                <label class="form-check-label" for="clearDiscordWebhook"
+                                                    data-i18n="serverDetail.discordClearWebhook">Clear saved webhook</label>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-12" x-show="discordSettingsError">
+                                            <div class="alert alert-danger mb-0" x-text="discordSettingsError"></div>
+                                        </div>
+                                        <div class="col-12" x-show="discordTestMessage">
+                                            <div class="alert alert-success mb-0" x-text="discordTestMessage"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 d-flex flex-wrap gap-2">
+                                        <button type="submit" class="btn btn-primary" :disabled="savingDiscordSettings || testingDiscordSettings">
+                                            <span x-show="!savingDiscordSettings"><i class="bi bi-save"></i> <span data-i18n="serverDetail.saveDiscordSettings">Save Discord Settings</span></span>
+                                            <span x-show="savingDiscordSettings"><span class="spinner-border spinner-border-sm"></span> <span data-i18n="serverDetail.saving">Saving...</span></span>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-success"
+                                            @click="testDiscordSettings()"
+                                            :disabled="savingDiscordSettings || testingDiscordSettings || !discordSettings.webhook_configured">
+                                            <span x-show="!testingDiscordSettings"><i class="bi bi-send"></i> <span data-i18n="serverDetail.testDiscordNotification">Send Test</span></span>
+                                            <span x-show="testingDiscordSettings"><span class="spinner-border spinner-border-sm"></span> <span data-i18n="serverDetail.testing">Testing...</span></span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary"
+                                            @click="showDiscordEdit = false; discordSettingsError = ''; discordTestMessage = ''; loadDiscordSettingsForm()"
+                                            data-i18n="serverDetail.cancel">
+                                            Cancel
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger"
+                                            x-show="discordSettings.webhook_configured"
+                                            @click="clearDiscordWebhook()"
+                                            data-i18n="serverDetail.clearWebhook">
+                                            Clear Webhook
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
                 
                 <!-- Steam Token Generator Modal -->

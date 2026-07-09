@@ -1338,6 +1338,50 @@ class EmailTestRequest(SQLModel):
     test_email: EmailStr = Field(..., description="Email address to send test email to")
 
 
+class DiscordSettingsResponse(SQLModel):
+    """Schema for Discord settings without exposing the webhook URL"""
+    discord_notifications_enabled: bool
+    discord_channel_name: Optional[str] = None
+    webhook_configured: bool
+    discord_notify_auto_updates: bool
+    discord_notify_manual_updates: bool
+    discord_notify_plugin_updates: bool
+    discord_notify_s3_backups: bool
+
+
+class DiscordSettingsUpdate(SQLModel):
+    """Schema for updating per-server Discord notification settings"""
+    discord_notifications_enabled: Optional[bool] = None
+    discord_webhook_url: Optional[str] = Field(default=None, max_length=1000)
+    discord_channel_name: Optional[str] = Field(default=None, max_length=255)
+    discord_notify_auto_updates: Optional[bool] = None
+    discord_notify_manual_updates: Optional[bool] = None
+    discord_notify_plugin_updates: Optional[bool] = None
+    discord_notify_s3_backups: Optional[bool] = None
+    clear_webhook: bool = False
+
+    @field_validator('discord_channel_name')
+    @classmethod
+    def normalize_channel_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        return v or None
+
+    @field_validator('discord_webhook_url')
+    @classmethod
+    def normalize_webhook_url(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        return v or None
+
+
+class DiscordTestRequest(SQLModel):
+    """Schema for sending a Discord test notification"""
+    message: Optional[str] = Field(default=None, max_length=500)
+
+
 class GoogleOAuthRequest(SQLModel):
     """Schema for Google OAuth login/register"""
     id_token: str = Field(..., min_length=1, description="Google ID token from frontend")

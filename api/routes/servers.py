@@ -20,6 +20,7 @@ from modules import (
     CustomCommandExecuteRequest, CustomCommandResponse, ActionResponse,
     S3BackupItem, S3RestoreRequest,
     CleanupScanResponse, CleanupDeleteRequest, CleanupDeleteResponse,
+    DiscordSettingsResponse, DiscordSettingsUpdate, DiscordTestRequest,
     get_db, User, UserResponse, get_current_active_user, get_current_admin_user, get_optional_current_user, generate_api_key,
     get_current_time, SystemSettings, ServerStatus
 )
@@ -29,6 +30,7 @@ from services.captcha_service import captcha_service
 from services.game_cleanup_service import game_cleanup_service
 from services.s3_backup_service import s3_backup_service
 from services.ssh_manager import SSHManager
+from services.discord_notification_service import discord_notification_service
 
 router = APIRouter(prefix="/servers", tags=["servers"])
 
@@ -68,6 +70,19 @@ async def get_server_owner_user(db: AsyncSession, server: Server, current_user: 
             detail="Server owner not found"
         )
     return owner
+
+
+def build_discord_settings_response(server: Server) -> DiscordSettingsResponse:
+    """Build a Discord settings response without exposing the webhook URL."""
+    return DiscordSettingsResponse(
+        discord_notifications_enabled=server.discord_notifications_enabled,
+        discord_channel_name=server.discord_channel_name,
+        webhook_configured=discord_notification_service.webhook_configured(server),
+        discord_notify_auto_updates=server.discord_notify_auto_updates,
+        discord_notify_manual_updates=server.discord_notify_manual_updates,
+        discord_notify_plugin_updates=server.discord_notify_plugin_updates,
+        discord_notify_s3_backups=server.discord_notify_s3_backups,
+    )
 
 
 async def get_custom_command_or_404(
@@ -436,6 +451,96 @@ async def get_server(
     """Get server by ID - admins can access any server, users can only access their own"""
     server = await get_server_with_permission(server_id, current_user, db)
     return server
+
+
+@router.get("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
+async def get_discord_settings(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get per-server Discord notification settings without exposing the webhook URL."""
+    server = await get_server_with_permission(server_id, current_user, db)
+    return build_discord_settings_response(server)
+
+
+@router.put("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
+async def update_discord_settings(
+    server_id: int,
+    settings_data: DiscordSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Update per-server Discord notification settings."""
+    server = await get_server_with_permission(server_id, current_user, db)
+    update_data = settings_data.model_dump(exclude_unset=True)
+
+    new_webhook = update_data.get("discord_webhook_url")
+    if new_webhook:
+        valid, error = discord_notification_service.validate_webhook_url(new_webhook)
+        if not valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error
+            )
+
+    final_webhook = server.discord_webhook_url
+    if settings_data.clear_webhook:
+        final_webhook = None
+    elif new_webhook:
+        final_webhook = new_webhook
+
+    final_enabled = update_data.get(
+        "discord_notifications_enabled",
+        server.discord_notifications_enabled,
+    )
+    if final_enabled and not final_webhook:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Discord webhook URL is required before enabling notifications"
+        )
+
+    if settings_data.clear_webhook:
+        server.discord_webhook_url = None
+    elif new_webhook:
+        server.discord_webhook_url = new_webhook
+
+    if "discord_notifications_enabled" in update_data:
+        server.discord_notifications_enabled = bool(update_data["discord_notifications_enabled"])
+    if "discord_channel_name" in update_data:
+        server.discord_channel_name = update_data["discord_channel_name"]
+    if "discord_notify_auto_updates" in update_data:
+        server.discord_notify_auto_updates = bool(update_data["discord_notify_auto_updates"])
+    if "discord_notify_manual_updates" in update_data:
+        server.discord_notify_manual_updates = bool(update_data["discord_notify_manual_updates"])
+    if "discord_notify_plugin_updates" in update_data:
+        server.discord_notify_plugin_updates = bool(update_data["discord_notify_plugin_updates"])
+    if "discord_notify_s3_backups" in update_data:
+        server.discord_notify_s3_backups = bool(update_data["discord_notify_s3_backups"])
+
+    await db.commit()
+    await db.refresh(server)
+    await redis_manager.clear_server_cache(server_id)
+
+    return build_discord_settings_response(server)
+
+
+@router.post("/{server_id}/discord-settings/test")
+async def test_discord_settings(
+    server_id: int,
+    request: DiscordTestRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Send a Discord test notification using the saved webhook."""
+    server = await get_server_with_permission(server_id, current_user, db)
+    success, message = await discord_notification_service.send_test(server, request.message)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+    return {"success": True, "message": message}
 
 
 @router.get("/{server_id}/cleanup/scan", response_model=CleanupScanResponse)

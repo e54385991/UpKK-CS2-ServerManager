@@ -29,6 +29,7 @@ from .schemas import (
     MetamodStatusResponse,
     SystemSettingsResponse, SystemSettingsUpdate,
     ForgotPasswordRequest, ResetPasswordRequest,
+    DiscordSettingsResponse, DiscordSettingsUpdate, DiscordTestRequest,
     GmailCredentialsUploadRequest, EmailTestRequest,
     GoogleOAuthRequest
 )
@@ -128,6 +129,9 @@ __all__ = [
     'MetamodStatusResponse',
     'SystemSettingsResponse',
     'SystemSettingsUpdate',
+    'DiscordSettingsResponse',
+    'DiscordSettingsUpdate',
+    'DiscordTestRequest',
     'ForgotPasswordRequest',
     'ResetPasswordRequest',
     'GmailCredentialsUploadRequest',

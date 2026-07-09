@@ -10,6 +10,7 @@ from modules.utils import get_current_time
 from services.steam_api_service import steam_api_service
 from services.ssh_manager import SSHManager
 from services.steam_inf_service import steam_inf_service
+from services.discord_notification_service import EVENT_AUTO_UPDATE, discord_notification_service
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +166,12 @@ class AutoUpdateService:
                 )
                 
                 # Trigger update
-                await self._trigger_server_update(server)
+                await self._trigger_server_update(
+                    server,
+                    current_version=current_version,
+                    required_version=required_version,
+                    version_source=version_source,
+                )
             
             # Apply timeout to prevent blocking the event loop
             await asyncio.wait_for(_do_check(), timeout=60)
@@ -175,7 +181,13 @@ class AutoUpdateService:
         except Exception as e:
             logger.error(f"Error checking/updating server {server.id}: {e}")
     
-    async def _trigger_server_update(self, server):
+    async def _trigger_server_update(
+        self,
+        server,
+        current_version: Optional[str] = None,
+        required_version: Optional[str] = None,
+        version_source: Optional[str] = None,
+    ):
         """Trigger update for a server and restart it"""
         # Get or create lock for this server
         if server.id not in self._update_locks:
@@ -200,6 +212,12 @@ class AutoUpdateService:
             from modules.models import DeploymentLog
             
             log_id = None
+            output_messages = []
+            notification_details = {
+                "Current Version": current_version or "Unknown",
+                "Required Version": required_version or "Unknown",
+                "Version Source": version_source or "Unknown",
+            }
             try:
                 async with async_session_maker() as db:
                     log = DeploymentLog(
@@ -216,9 +234,6 @@ class AutoUpdateService:
                 
                 # Create SSH manager
                 ssh_manager = SSHManager()
-                
-                # Collect output messages for the log
-                output_messages = []
                 
                 # Define progress callback
                 async def log_progress(msg: str):
@@ -252,6 +267,15 @@ class AutoUpdateService:
                             log_to_update.error_message = error_msg
                             log_to_update.output = "\n".join(output_messages) if output_messages else None
                             await db.commit()
+                    discord_notification_service.queue_notify(
+                        server,
+                        EVENT_AUTO_UPDATE,
+                        "auto_update",
+                        False,
+                        error_msg,
+                        title="Automatic update failed",
+                        details=notification_details,
+                    )
                     return
                 
                 logger.info(f"Auto-update completed successfully for server {server.id}")
@@ -275,6 +299,16 @@ class AutoUpdateService:
                         log_to_update.status = "success"
                         log_to_update.output = "\n".join(output_messages)
                         await db.commit()
+
+                discord_notification_service.queue_notify(
+                    server,
+                    EVENT_AUTO_UPDATE,
+                    "auto_update",
+                    True,
+                    "Auto-update completed successfully",
+                    title="Automatic update completed",
+                    details=notification_details,
+                )
                     
             except Exception as e:
                 error_msg = f"Error during auto-update: {str(e)}"
@@ -292,6 +326,15 @@ class AutoUpdateService:
                                 await db.commit()
                 except Exception as log_error:
                     logger.error(f"Failed to update deployment log: {log_error}")
+                discord_notification_service.queue_notify(
+                    server,
+                    EVENT_AUTO_UPDATE,
+                    "auto_update",
+                    False,
+                    error_msg,
+                    title="Automatic update failed",
+                    details=notification_details,
+                )
             finally:
                 # Remove server from updating set
                 self.updating_servers.discard(server.id)

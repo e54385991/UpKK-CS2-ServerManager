@@ -183,6 +183,15 @@ class Server(SQLModel, table=True):
     
     # Panel proxy mode - download via panel server first (mutually exclusive with github_proxy)
     use_panel_proxy: bool = Field(default=False)
+
+    # Discord notification configuration
+    discord_notifications_enabled: bool = Field(default=False)
+    discord_webhook_url: Optional[str] = Field(default=None, max_length=1000)
+    discord_channel_name: Optional[str] = Field(default=None, max_length=255)
+    discord_notify_auto_updates: bool = Field(default=True)
+    discord_notify_manual_updates: bool = Field(default=True)
+    discord_notify_plugin_updates: bool = Field(default=True)
+    discord_notify_s3_backups: bool = Field(default=True)
     
     # SSH connection health tracking
     last_ssh_success: Optional[datetime] = Field(default=None)

@@ -474,6 +474,40 @@ async def migrate_db():
         else:
             print("✓ use_panel_proxy column exists")
         
+        # Check if Discord notification columns exist in servers table
+        discord_columns = {
+            'discord_notifications_enabled': 'TINYINT(1) DEFAULT 0',
+            'discord_webhook_url': 'VARCHAR(1000) NULL',
+            'discord_channel_name': 'VARCHAR(255) NULL',
+            'discord_notify_auto_updates': 'TINYINT(1) DEFAULT 1',
+            'discord_notify_manual_updates': 'TINYINT(1) DEFAULT 1',
+            'discord_notify_plugin_updates': 'TINYINT(1) DEFAULT 1',
+            'discord_notify_s3_backups': 'TINYINT(1) DEFAULT 1',
+        }
+        for column, definition in discord_columns.items():
+            result = await conn.execute(
+                text(f"""
+                    SELECT COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'servers'
+                    AND COLUMN_NAME = '{column}'
+                """)
+            )
+            column_exists = result.fetchone() is not None
+
+            if not column_exists:
+                print(f"Adding {column} column to servers table...")
+                await conn.execute(
+                    text(f"""
+                        ALTER TABLE servers
+                        ADD COLUMN {column} {definition}
+                    """)
+                )
+                print(f"Migration completed: {column} column added to servers table")
+            else:
+                print(f"{column} column exists in servers table")
+
         # Check if SSH health monitoring daemon columns exist in servers table
         ssh_health_columns = ['enable_ssh_health_monitoring', 'ssh_health_check_interval_hours', 
                               'ssh_health_failure_threshold', 'last_ssh_health_check', 'ssh_health_status']

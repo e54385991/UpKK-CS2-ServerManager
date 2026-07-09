@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSoc
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from typing import List, Set
+from typing import List, Optional, Set
 import asyncio
 import json
 import uuid
@@ -22,6 +22,12 @@ from modules import (
 from modules.database import async_session_maker
 from services import SSHManager, redis_manager
 from services.s3_backup_service import s3_backup_service
+from services.discord_notification_service import (
+    EVENT_MANUAL_UPDATE,
+    EVENT_PLUGIN_UPDATE,
+    EVENT_S3_BACKUP,
+    discord_notification_service,
+)
 from services.server_monitor import server_monitor
 
 logger = logging.getLogger(__name__)
@@ -34,6 +40,21 @@ DEPLOYMENT_PROGRESS_CLEANUP_DELAY = 300  # 5 minutes - allows clients to fetch f
 # Store for background tasks to prevent garbage collection
 # Tasks are automatically removed when completed via callback
 _background_tasks: Set[asyncio.Task] = set()
+
+DISCORD_ACTION_EVENT_TYPES = {
+    "update": EVENT_MANUAL_UPDATE,
+    "validate": EVENT_MANUAL_UPDATE,
+    "install_metamod": EVENT_PLUGIN_UPDATE,
+    "install_counterstrikesharp": EVENT_PLUGIN_UPDATE,
+    "install_cs2fixes": EVENT_PLUGIN_UPDATE,
+    "install_swiftly": EVENT_PLUGIN_UPDATE,
+    "update_metamod": EVENT_PLUGIN_UPDATE,
+    "update_counterstrikesharp": EVENT_PLUGIN_UPDATE,
+    "update_cs2fixes": EVENT_PLUGIN_UPDATE,
+    "update_swiftly": EVENT_PLUGIN_UPDATE,
+    "backup_plugins": EVENT_PLUGIN_UPDATE,
+    "batch_install_plugins": EVENT_PLUGIN_UPDATE,
+}
 
 
 async def get_server_and_verify_ownership(
@@ -87,14 +108,35 @@ async def upload_latest_plugin_backup_to_s3(
     backup_info = getattr(ssh_manager, "last_plugin_backup", None)
     backup_path = backup_info.get("path") if backup_info else None
     if not backup_path:
-        return False, "Plugin backup completed locally, but the archive path was not captured for S3 upload."
+        message = "Plugin backup completed locally, but the archive path was not captured for S3 upload."
+        discord_notification_service.queue_notify(
+            server,
+            EVENT_S3_BACKUP,
+            "s3_backup_upload",
+            False,
+            message,
+            title="S3 backup upload failed",
+        )
+        return False, message
 
-    upload_success, upload_message, _ = await s3_backup_service.upload_remote_backup(
+    upload_success, upload_message, object_key = await s3_backup_service.upload_remote_backup(
         ssh_manager,
         server,
         owner,
         backup_path,
         progress_callback=progress_callback,
+    )
+    details = {"Backup Archive": backup_path}
+    if object_key:
+        details["Object Key"] = object_key
+    discord_notification_service.queue_notify(
+        server,
+        EVENT_S3_BACKUP,
+        "s3_backup_upload",
+        upload_success,
+        upload_message,
+        title=f"S3 backup upload {'completed' if upload_success else 'failed'}",
+        details=details,
     )
     return upload_success, upload_message
 
@@ -103,6 +145,33 @@ def _store_task(task: asyncio.Task) -> None:
     """Store a task to prevent garbage collection and remove when done."""
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
+
+
+async def send_discord_action_notification(
+    server: Optional[Server],
+    action: str,
+    success: bool,
+    message: str,
+    *,
+    details: dict | None = None,
+) -> None:
+    """Send Discord notifications for update-related actions."""
+    if server is None:
+        return
+
+    event_type = DISCORD_ACTION_EVENT_TYPES.get(action)
+    if not event_type:
+        return
+
+    discord_notification_service.queue_notify(
+        server,
+        event_type,
+        action,
+        success,
+        message,
+        title=f"{action.replace('_', ' ').title()} {'completed' if success else 'failed'}",
+        details=details,
+    )
 
 
 class DeploymentWebSocket:
@@ -779,6 +848,8 @@ async def server_action(
         
         # Update cache
         await redis_manager.set_server_status(server_id, server.status.value)
+
+        await send_discord_action_notification(server, action, success, message)
         
         return ActionResponse(
             success=success,
@@ -793,6 +864,7 @@ async def server_action(
         await db.commit()
         
         await send_deployment_update(server_id, "error", f"Action failed: {str(e)}")
+        await send_discord_action_notification(server, action, False, str(e))
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -855,6 +927,7 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
     """
     import logging
     logger = logging.getLogger(__name__)
+    server = None
     
     try:
         # Update status to in_progress
@@ -931,10 +1004,25 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
                 await redis_manager.set_batch_action_status(batch_id, server_id, "success", message)
             else:
                 await redis_manager.set_batch_action_status(batch_id, server_id, "failed", message)
+
+            await send_discord_action_notification(
+                server,
+                action,
+                success,
+                message,
+                details={"Batch ID": batch_id},
+            )
                 
         except Exception as e:
             logger.error(f"Error executing action {action} on server {server_id}: {e}")
             await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(e))
+            await send_discord_action_notification(
+                server,
+                action,
+                False,
+                str(e),
+                details={"Batch ID": batch_id},
+            )
             
     except Exception as e:
         logger.error(f"Background task error for server {server_id}: {e}")
@@ -1054,6 +1142,7 @@ async def execute_single_server_plugins(server_id: int, plugins: List[str], user
     """
     import logging
     logger = logging.getLogger(__name__)
+    server = None
     
     try:
         # Update status to in_progress
@@ -1125,10 +1214,32 @@ async def execute_single_server_plugins(server_id: int, plugins: List[str], user
             await redis_manager.set_batch_action_status(batch_id, server_id, "success", summary)
         else:
             await redis_manager.set_batch_action_status(batch_id, server_id, "failed", summary)
+
+        await send_discord_action_notification(
+            server,
+            "batch_install_plugins",
+            overall_success,
+            summary,
+            details={
+                "Batch ID": batch_id,
+                "Plugins": ", ".join(plugins),
+            },
+        )
                 
     except Exception as e:
         logger.error(f"Background task error for server {server_id}: {e}")
         await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(e))
+        if server:
+            await send_discord_action_notification(
+                server,
+                "batch_install_plugins",
+                False,
+                str(e),
+                details={
+                    "Batch ID": batch_id,
+                    "Plugins": ", ".join(plugins),
+                },
+            )
 
 
 @router.post("/servers/batch-install-plugins", response_model=BatchActionResponse)

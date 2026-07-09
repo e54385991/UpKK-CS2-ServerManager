@@ -6,6 +6,7 @@ from .ssh_connection_pool import ssh_connection_pool, SSHConnectionPool
 from .redis_manager import RedisManager, redis_manager
 from .a2s_query import a2s_service, A2SQueryService
 from .a2s_cache_service import a2s_cache_service, A2SCacheService
+from .discord_notification_service import discord_notification_service, DiscordNotificationService
 
 __all__ = [
     'SSHManager',
@@ -17,4 +18,6 @@ __all__ = [
     'A2SQueryService',
     'a2s_cache_service',
     'A2SCacheService',
+    'discord_notification_service',
+    'DiscordNotificationService',
 ]

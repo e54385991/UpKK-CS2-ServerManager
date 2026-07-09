@@ -14,8 +14,20 @@ from modules.models import ScheduledTask, Server, User
 from sqlmodel import select, update as sql_update
 from services.ssh_manager import SSHManager
 from services.s3_backup_service import s3_backup_service
+from services.discord_notification_service import (
+    EVENT_MANUAL_UPDATE,
+    EVENT_PLUGIN_UPDATE,
+    EVENT_S3_BACKUP,
+    discord_notification_service,
+)
 
 logger = logging.getLogger(__name__)
+
+DISCORD_SCHEDULED_EVENT_TYPES = {
+    "update": EVENT_MANUAL_UPDATE,
+    "validate": EVENT_MANUAL_UPDATE,
+    "backup_plugins": EVENT_PLUGIN_UPDATE,
+}
 
 
 class ScheduledTaskService:
@@ -93,6 +105,7 @@ class ScheduledTaskService:
     
     async def _execute_task(self, task: ScheduledTask):
         """Execute a single scheduled task"""
+        server = None
         try:
             # Get the server
             async with async_session_maker() as db:
@@ -129,6 +142,12 @@ class ScheduledTaskService:
                     "failed",
                     f"Failed to connect to server: {connect_msg}"
                 )
+                await self._notify_task_result(
+                    server,
+                    task,
+                    False,
+                    f"Failed to connect to server: {connect_msg}",
+                )
                 return
             
             try:
@@ -145,6 +164,8 @@ class ScheduledTaskService:
                 else:
                     logger.error(f"Task {task.id} failed: {message}")
                     await self._update_task_status(task.id, "failed", message)
+
+                await self._notify_task_result(server, task, success, message)
                     
             finally:
                 await ssh_manager.disconnect()
@@ -152,10 +173,36 @@ class ScheduledTaskService:
         except Exception as e:
             logger.error(f"Error executing task {task.id}: {e}")
             await self._update_task_status(task.id, "failed", str(e))
+            if server:
+                await self._notify_task_result(server, task, False, str(e))
         finally:
             # Remove from running tasks
             if task.id in self.running_tasks:
                 del self.running_tasks[task.id]
+
+    async def _notify_task_result(
+        self,
+        server: Server,
+        task: ScheduledTask,
+        success: bool,
+        message: str,
+    ) -> None:
+        event_type = DISCORD_SCHEDULED_EVENT_TYPES.get(task.action)
+        if not event_type:
+            return
+
+        discord_notification_service.queue_notify(
+            server,
+            event_type,
+            task.action,
+            success,
+            message,
+            title=f"Scheduled {task.action.replace('_', ' ')} {'completed' if success else 'failed'}",
+            details={
+                "Task": task.name,
+                "Task ID": task.id,
+            },
+        )
     
     async def _execute_action(self, ssh_manager: SSHManager, server: Server, action: str):
         """Execute the specified action on the server"""
@@ -204,14 +251,41 @@ class ScheduledTaskService:
                 backup_info = getattr(ssh_manager, "last_plugin_backup", None)
                 backup_path = backup_info.get("path") if backup_info else None
                 if not backup_path:
-                    return False, "Plugin backup completed locally, but the archive path was not captured for S3 upload."
+                    upload_message = "Plugin backup completed locally, but the archive path was not captured for S3 upload."
+                    discord_notification_service.queue_notify(
+                        server,
+                        EVENT_S3_BACKUP,
+                        "s3_backup_upload",
+                        False,
+                        upload_message,
+                        title="S3 backup upload failed",
+                        details={
+                            "Task": "Scheduled backup_plugins",
+                        },
+                    )
+                    return False, upload_message
 
-                upload_success, upload_message, _ = await s3_backup_service.upload_remote_backup(
+                upload_success, upload_message, object_key = await s3_backup_service.upload_remote_backup(
                     ssh_manager,
                     server,
                     owner,
                     backup_path,
                     progress_callback=log_progress,
+                )
+                details = {
+                    "Task": "Scheduled backup_plugins",
+                    "Backup Archive": backup_path,
+                }
+                if object_key:
+                    details["Object Key"] = object_key
+                discord_notification_service.queue_notify(
+                    server,
+                    EVENT_S3_BACKUP,
+                    "s3_backup_upload",
+                    upload_success,
+                    upload_message,
+                    title=f"S3 backup upload {'completed' if upload_success else 'failed'}",
+                    details=details,
                 )
                 if not upload_success:
                     return False, f"{message}\n{upload_message}"
