@@ -52,7 +52,7 @@ class User(SQLModel, table=True):
     s3_secret_access_key: Optional[str] = Field(default=None, max_length=255)
     s3_prefix: Optional[str] = Field(default=None, max_length=255)
     s3_use_ssl: bool = Field(default=True)
-    s3_retention_count: Optional[int] = Field(default=None)
+    s3_retention_count: Optional[int] = Field(default=10)
     google_id: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)  # Google OAuth ID
     oauth_provider: Optional[str] = Field(default=None, max_length=50)  # OAuth provider (google, etc.)
     created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})

@@ -89,6 +89,7 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 - 🔄 **自动重启保护**: 服务器崩溃时自动重启，具有崩溃循环保护机制 ([查看文档](docs/AUTO_RESTART_GUIDE.md))
 - 🔔 **实时状态上报**: 服务器通过 API 向管理端上报崩溃、重启等事件
 - 🔌 **插件框架安装**: 一键安装 Metamod:Source 和 CounterStrikeSharp，支持批量安装和更新
+- ☁️ **S3 兼容备份**: 插件备份可上传到 AWS S3、Cloudflare R2、MinIO、阿里云 OSS S3 API 等兼容存储，并按策略保留（默认每台服务器 10 份）防止无限增长
 - 🌐 **面板服务器代理**: **推荐将管理端部署到海外**，启用面板代理模式实现所有下载（SteamCMD、GitHub 插件、框架）通过面板中转，完美解决网络限制问题 ([查看文档](docs/GITHUB_PROXY.md))
 - 🔗 **GitHub URL 代理**: 服务器级 GitHub URL 代理支持（如 ghfast.top），与面板代理二选一
 - 📊 **状态监控**: 实时查看服务器状态
@@ -256,6 +257,7 @@ A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + My
 - 🔄 **Auto-Restart Protection**: Automatic restart on crash with crash loop protection ([View Docs](docs/AUTO_RESTART_GUIDE.md))
 - 🔔 **Real-time Status Reporting**: Servers report crash and restart events to the manager via API
 - 🔌 **Plugin Framework Installation**: One-click install for Metamod:Source and CounterStrikeSharp, supports batch install and update
+- ☁️ **S3-Compatible Backups**: Upload plugin backups to AWS S3, Cloudflare R2, MinIO, Aliyun OSS S3 API, and other compatible storage with retention enforcement (10 per server by default)
 - 🌐 **Panel Server Proxy**: **Recommended to deploy manager overseas**, enable panel proxy mode for all downloads (SteamCMD, GitHub plugins, frameworks) to bypass network restrictions ([View Docs](docs/GITHUB_PROXY.md))
 - 🔗 **GitHub URL Proxy**: Server-level GitHub URL proxy support (e.g., ghfast.top), choose one between panel proxy and URL proxy
 - 📊 **Status Monitoring**: Real-time server status monitoring

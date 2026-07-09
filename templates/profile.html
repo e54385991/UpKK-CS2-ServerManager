@@ -113,7 +113,7 @@
         <!-- S3 Storage Card -->
         <div class="card shadow-sm mb-4">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-cloud-arrow-up"></i> <span data-i18n="profile.s3Storage">S3 Storage</span></h5>
+                <h5 class="mb-0"><i class="bi bi-cloud-arrow-up"></i> <span data-i18n="profile.s3Storage">S3-Compatible Storage</span></h5>
             </div>
             <div class="card-body">
                 <div id="s3-error-message" class="alert alert-danger d-none" role="alert"></div>
@@ -121,24 +121,29 @@
 
                 <div id="s3-config-status" class="alert alert-secondary py-2">
                     <i class="bi bi-info-circle"></i>
-                    <span id="s3-config-status-text" data-i18n="profile.s3NotConfigured">S3 storage is not configured</span>
+                    <span id="s3-config-status-text" data-i18n="profile.s3NotConfigured">S3-compatible storage is not configured</span>
+                </div>
+
+                <div class="alert alert-info py-2 small" data-i18n="profile.s3CompatibleHint">
+                    Use AWS S3 or compatible storage such as Cloudflare R2, MinIO, Aliyun OSS S3 API, and more. For R2, set Endpoint URL to https://&lt;account_id&gt;.r2.cloudflarestorage.com and Region to auto.
                 </div>
 
                 <form id="s3-form">
                     <div class="form-check form-switch mb-3">
                         <input class="form-check-input" type="checkbox" id="s3-enabled">
-                        <label class="form-check-label" for="s3-enabled" data-i18n="profile.s3Enabled">Enable S3 backups</label>
+                        <label class="form-check-label" for="s3-enabled" data-i18n="profile.s3Enabled">Enable S3-compatible backups</label>
                     </div>
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="s3-endpoint-url" class="form-label" data-i18n="profile.s3Endpoint">Endpoint URL</label>
-                            <input type="url" class="form-control" id="s3-endpoint-url" placeholder="https://s3.amazonaws.com">
-                            <div class="form-text" data-i18n="profile.s3EndpointHint">Optional for AWS S3; required for MinIO, R2, OSS S3-compatible endpoints.</div>
+                            <input type="url" class="form-control" id="s3-endpoint-url" placeholder="https://&lt;account_id&gt;.r2.cloudflarestorage.com" data-i18n-placeholder="profile.s3EndpointPlaceholder">
+                            <div class="form-text" data-i18n="profile.s3EndpointHint">Leave blank for AWS S3. Required for Cloudflare R2, MinIO, OSS, and other S3-compatible endpoints.</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="s3-region" class="form-label" data-i18n="profile.s3Region">Region</label>
-                            <input type="text" class="form-control" id="s3-region" placeholder="us-east-1">
+                            <input type="text" class="form-control" id="s3-region" placeholder="auto" data-i18n-placeholder="profile.s3RegionPlaceholder">
+                            <div class="form-text" data-i18n="profile.s3RegionHint">Use auto for Cloudflare R2, or the provider region for AWS S3 and other services.</div>
                         </div>
                     </div>
 
@@ -153,8 +158,8 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="s3-retention-count" class="form-label" data-i18n="profile.s3RetentionCount">Max backups per server</label>
-                            <input type="number" class="form-control" id="s3-retention-count" min="0" max="10000" step="1" placeholder="0">
-                            <div class="form-text" data-i18n="profile.s3RetentionHint">0 or blank keeps all S3 backups. Cleanup runs after each successful upload.</div>
+                            <input type="number" class="form-control" id="s3-retention-count" min="1" max="10000" step="1" placeholder="10">
+                            <div class="form-text" data-i18n="profile.s3RetentionHint">Defaults to 10. After each successful upload, older backups beyond this limit are deleted.</div>
                         </div>
                     </div>
 
@@ -165,7 +170,7 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="s3-secret-access-key" class="form-label" data-i18n="profile.s3SecretKey">Secret Access Key</label>
-                            <input type="password" class="form-control" id="s3-secret-access-key" maxlength="255" placeholder="Leave blank to keep existing secret">
+                            <input type="password" class="form-control" id="s3-secret-access-key" maxlength="255" placeholder="Leave blank to keep existing secret" data-i18n-placeholder="profile.s3SecretPlaceholder">
                             <div id="s3-secret-status" class="form-text"></div>
                         </div>
                     </div>
@@ -194,10 +199,10 @@
 
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary" id="s3-submit-btn">
-                            <i class="bi bi-check-circle"></i> <span data-i18n="profile.s3Save">Save S3 Settings</span>
+                            <i class="bi bi-check-circle"></i> <span data-i18n="profile.s3Save">Save Storage Settings</span>
                         </button>
                         <button type="button" class="btn btn-outline-primary" id="s3-test-btn">
-                            <i class="bi bi-wifi"></i> <span data-i18n="profile.s3Test">Test S3 Access</span>
+                            <i class="bi bi-wifi"></i> <span data-i18n="profile.s3Test">Test Storage Access</span>
                         </button>
                     </div>
                 </form>
@@ -423,7 +428,7 @@ async function loadS3Settings() {
             document.getElementById('s3-region').value = data.region || '';
             document.getElementById('s3-bucket').value = data.bucket || '';
             document.getElementById('s3-prefix').value = data.prefix || '';
-            document.getElementById('s3-retention-count').value = data.retention_count || '';
+            document.getElementById('s3-retention-count').value = data.retention_count ?? 10;
             document.getElementById('s3-access-key-id').value = data.access_key_id || '';
             document.getElementById('s3-use-ssl').checked = data.use_ssl !== false;
             document.getElementById('s3-secret-access-key').value = '';
@@ -435,13 +440,13 @@ async function loadS3Settings() {
 
             if (data.is_configured) {
                 statusBox.className = 'alert alert-success py-2';
-                statusText.textContent = window.i18n ? window.i18n.t('profile.s3Configured') : 'S3 storage is configured';
+                statusText.textContent = window.i18n ? window.i18n.t('profile.s3Configured') : 'S3-compatible storage is configured';
             } else if (data.enabled) {
                 statusBox.className = 'alert alert-warning py-2';
-                statusText.textContent = window.i18n ? window.i18n.t('profile.s3Incomplete') : 'S3 storage is enabled but incomplete';
+                statusText.textContent = window.i18n ? window.i18n.t('profile.s3Incomplete') : 'S3-compatible storage is enabled but incomplete';
             } else {
                 statusBox.className = 'alert alert-secondary py-2';
-                statusText.textContent = window.i18n ? window.i18n.t('profile.s3NotConfigured') : 'S3 storage is not configured';
+                statusText.textContent = window.i18n ? window.i18n.t('profile.s3NotConfigured') : 'S3-compatible storage is not configured';
             }
 
             secretStatus.textContent = data.has_secret
@@ -611,7 +616,7 @@ document.getElementById('s3-form').addEventListener('submit', async (e) => {
                 region: document.getElementById('s3-region').value.trim(),
                 bucket: document.getElementById('s3-bucket').value.trim(),
                 prefix: document.getElementById('s3-prefix').value.trim(),
-                retention_count: retentionValue === '' ? 0 : Number.parseInt(retentionValue, 10),
+                retention_count: retentionValue === '' ? 10 : Number.parseInt(retentionValue, 10),
                 access_key_id: document.getElementById('s3-access-key-id').value.trim(),
                 secret_access_key: document.getElementById('s3-secret-access-key').value.trim(),
                 use_ssl: document.getElementById('s3-use-ssl').checked,
@@ -623,20 +628,20 @@ document.getElementById('s3-form').addEventListener('submit', async (e) => {
 
         const data = await response.json();
         if (response.ok) {
-            successDiv.textContent = window.i18n ? window.i18n.t('profile.s3SaveSuccess') : 'S3 settings saved successfully';
+            successDiv.textContent = window.i18n ? window.i18n.t('profile.s3SaveSuccess') : 'Storage settings saved successfully';
             successDiv.classList.remove('d-none');
             await loadS3Settings();
         } else {
-            errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.s3SaveFailed') : 'Failed to save S3 settings');
+            errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.s3SaveFailed') : 'Failed to save storage settings');
             errorDiv.classList.remove('d-none');
         }
     } catch (error) {
-        const errorMsg = window.i18n ? window.i18n.t('profile.s3SaveFailed') : 'Failed to save S3 settings';
+        const errorMsg = window.i18n ? window.i18n.t('profile.s3SaveFailed') : 'Failed to save storage settings';
         errorDiv.textContent = `${errorMsg}: ${error.message}`;
         errorDiv.classList.remove('d-none');
     } finally {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = `<i class="bi bi-check-circle"></i> ${window.i18n ? window.i18n.t('profile.s3Save') : 'Save S3 Settings'}`;
+        submitBtn.innerHTML = `<i class="bi bi-check-circle"></i> ${window.i18n ? window.i18n.t('profile.s3Save') : 'Save Storage Settings'}`;
         document.getElementById('s3-captcha').value = '';
         loadS3Captcha();
     }
@@ -679,23 +684,23 @@ document.getElementById('s3-test-btn').addEventListener('click', async () => {
         if (response.ok && data.success) {
             successDiv.textContent = formatS3TestMessage(
                 data,
-                window.i18n ? window.i18n.t('profile.s3TestSuccess') : 'S3 access test succeeded'
+                window.i18n ? window.i18n.t('profile.s3TestSuccess') : 'Storage access test succeeded'
             );
             successDiv.classList.remove('d-none');
         } else {
             errorDiv.textContent = formatS3TestMessage(
                 data,
-                data.detail || (window.i18n ? window.i18n.t('profile.s3TestFailed') : 'S3 access test failed')
+                data.detail || (window.i18n ? window.i18n.t('profile.s3TestFailed') : 'Storage access test failed')
             );
             errorDiv.classList.remove('d-none');
         }
     } catch (error) {
-        const errorMsg = window.i18n ? window.i18n.t('profile.s3TestFailed') : 'S3 access test failed';
+        const errorMsg = window.i18n ? window.i18n.t('profile.s3TestFailed') : 'Storage access test failed';
         errorDiv.textContent = `${errorMsg}: ${error.message}`;
         errorDiv.classList.remove('d-none');
     } finally {
         testBtn.disabled = false;
-        testBtn.innerHTML = `<i class="bi bi-wifi"></i> ${window.i18n ? window.i18n.t('profile.s3Test') : 'Test S3 Access'}`;
+        testBtn.innerHTML = `<i class="bi bi-wifi"></i> ${window.i18n ? window.i18n.t('profile.s3Test') : 'Test Storage Access'}`;
     }
 });
 

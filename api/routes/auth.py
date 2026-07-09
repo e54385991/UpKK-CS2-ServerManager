@@ -36,7 +36,7 @@ def _build_s3_settings_response(user: User) -> S3SettingsResponse:
         access_key_id=user.s3_access_key_id,
         prefix=user.s3_prefix,
         use_ssl=bool(user.s3_use_ssl),
-        retention_count=user.s3_retention_count,
+        retention_count=s3_backup_service.get_retention_count(user),
         has_secret=bool(user.s3_secret_access_key),
         is_configured=s3_backup_service.is_configured(user),
     )
@@ -370,7 +370,7 @@ async def update_s3_settings(
     if settings_data.use_ssl is not None:
         current_user.s3_use_ssl = settings_data.use_ssl
     if settings_data.retention_count is not None:
-        current_user.s3_retention_count = settings_data.retention_count or None
+        current_user.s3_retention_count = settings_data.retention_count
 
     if settings_data.clear_secret:
         current_user.s3_secret_access_key = None

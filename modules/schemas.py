@@ -141,7 +141,7 @@ class S3SettingsResponse(SQLModel):
     access_key_id: Optional[str] = None
     prefix: Optional[str] = None
     use_ssl: bool = True
-    retention_count: Optional[int] = None
+    retention_count: int = 10
     has_secret: bool = False
     is_configured: bool = False
 
@@ -156,7 +156,7 @@ class S3SettingsUpdate(SQLModel):
     secret_access_key: Optional[str] = Field(None, max_length=255)
     prefix: Optional[str] = Field(None, max_length=255)
     use_ssl: Optional[bool] = None
-    retention_count: Optional[int] = Field(None, ge=0, le=10000)
+    retention_count: Optional[int] = Field(None, ge=1, le=10000)
     clear_secret: bool = False
     captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
     captcha_code: str = Field(..., min_length=4, max_length=4, description="User-entered CAPTCHA code")

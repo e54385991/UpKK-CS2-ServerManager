@@ -21,6 +21,10 @@ except Exception:  # pragma: no cover - handled at runtime with a clear message
     ClientError = Exception
 
 
+DEFAULT_S3_RETENTION_COUNT = 10
+MAX_S3_RETENTION_COUNT = 10000
+
+
 class S3BackupService:
     """Upload, list, and download plugin backup archives from S3-compatible storage."""
 
@@ -58,11 +62,26 @@ class S3BackupService:
                 safe_chars.append("_")
         return "".join(safe_chars)[:255] or "backup.tar.gz"
 
-    def get_retention_count(self, user: User) -> Optional[int]:
+    def get_retention_count(self, user: User) -> int:
         count = getattr(user, "s3_retention_count", None)
-        if not count or count <= 0:
-            return None
-        return count
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            return DEFAULT_S3_RETENTION_COUNT
+        if count <= 0:
+            return DEFAULT_S3_RETENTION_COUNT
+        return min(count, MAX_S3_RETENTION_COUNT)
+
+    def _get_region_name(self, user: User) -> Optional[str]:
+        region = (user.s3_region or "").strip()
+        if region:
+            return region
+
+        endpoint_url = (user.s3_endpoint_url or "").strip().lower()
+        if "r2.cloudflarestorage.com" in endpoint_url:
+            return "auto"
+
+        return None
 
     def _sort_backups_newest_first(self, items: List[Dict[str, Any]]) -> None:
         def sort_key(item: Dict[str, Any]):
@@ -101,8 +120,9 @@ class S3BackupService:
             "use_ssl": bool(user.s3_use_ssl),
         }
 
-        if user.s3_region:
-            client_kwargs["region_name"] = user.s3_region
+        region_name = self._get_region_name(user)
+        if region_name:
+            client_kwargs["region_name"] = region_name
         if user.s3_endpoint_url:
             client_kwargs["endpoint_url"] = user.s3_endpoint_url
 
@@ -133,8 +153,8 @@ class S3BackupService:
             })
 
         if not self.is_configured(user):
-            add_step("configuration", "failed", "S3 storage is not fully configured.")
-            return False, "S3 storage is not fully configured.", steps
+            add_step("configuration", "failed", "S3-compatible storage is not fully configured.")
+            return False, "S3-compatible storage is not fully configured.", steps
 
         uploaded = False
         test_key = self.build_test_key(user)
@@ -199,7 +219,7 @@ class S3BackupService:
 
             if failure_message:
                 return False, failure_message, steps
-            return True, "S3 test succeeded: list, upload, download, and delete all passed.", steps
+            return True, "S3-compatible storage test succeeded: list, upload, download, and delete all passed.", steps
         except (BotoCoreError, ClientError, RuntimeError) as exc:
             add_step("connection", "failed", str(exc))
             return False, f"S3 connection test failed: {exc}", steps
@@ -213,7 +233,7 @@ class S3BackupService:
         progress_callback=None,
     ) -> Tuple[bool, str, Optional[str]]:
         if not self.is_configured(user):
-            return True, "S3 upload skipped because S3 storage is not configured.", None
+            return True, "S3 upload skipped because S3-compatible storage is not configured.", None
 
         temp_dir = tempfile.mkdtemp(prefix="cs2_s3_backup_")
         local_path = os.path.join(temp_dir, os.path.basename(backup_path))
@@ -261,7 +281,7 @@ class S3BackupService:
 
     async def list_backups(self, user: User, server: Server) -> Tuple[bool, List[Dict[str, Any]], str]:
         if not self.is_configured(user):
-            return True, [], "S3 storage is not configured."
+            return True, [], "S3-compatible storage is not configured."
 
         try:
             client = self._get_client(user)
@@ -281,8 +301,6 @@ class S3BackupService:
         progress_callback=None,
     ) -> Tuple[bool, str, int]:
         retention_count = self.get_retention_count(user)
-        if retention_count is None:
-            return True, "", 0
 
         if not self.is_configured(user):
             return True, "", 0
@@ -321,7 +339,10 @@ class S3BackupService:
 
             deleted_count = await asyncio.to_thread(_cleanup)
             if deleted_count:
-                message = f"S3 retention cleanup deleted {deleted_count} older backup(s)."
+                message = (
+                    f"S3 retention cleanup kept the newest {retention_count} backup(s) "
+                    f"and deleted {deleted_count} older backup(s)."
+                )
                 await send_progress(message)
                 return True, message, deleted_count
             return True, "", 0
@@ -336,7 +357,7 @@ class S3BackupService:
         local_path: str,
     ) -> Tuple[bool, str]:
         if not self.is_configured(user):
-            return False, "S3 storage is not configured."
+            return False, "S3-compatible storage is not configured."
         if not self.validate_object_key(user, server, object_key):
             return False, "S3 backup object is outside this server's backup prefix."
 
