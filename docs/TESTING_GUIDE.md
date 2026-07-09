@@ -4,14 +4,14 @@
 
 1. Database (MySQL) running
 2. Redis running
-3. Python dependencies installed (`pip install -r requirements.txt`)
+3. Python dependencies installed (`pip install uv && uv sync --locked`)
 4. CS2 server configured in the system
 
 ## Step 1: Start the Application
 
 ```bash
 cd /home/runner/work/CS2-ServerManager/CS2-ServerManager
-python main.py
+uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 The application should start on `http://localhost:8000` (or configured port).

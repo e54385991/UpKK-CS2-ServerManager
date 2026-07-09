@@ -211,6 +211,76 @@ class S3RestoreRequest(SQLModel):
         return key
 
 
+class CleanupItem(SQLModel):
+    """Schema for a game directory cleanup candidate"""
+    path: str
+    name: str
+    type: str
+    size: int = 0
+    modified: Optional[float] = None
+    category: str
+    reason: str
+    danger_level: str
+
+
+class CleanupWorkshopSummary(SQLModel):
+    """Schema for Steam Workshop cleanup summary"""
+    path: str
+    item_count: int = 0
+    size: int = 0
+    items: List[CleanupItem] = Field(default_factory=list)
+
+
+class CleanupScanResponse(SQLModel):
+    """Schema for game directory cleanup scan response"""
+    safe_items: List[CleanupItem] = Field(default_factory=list)
+    archive_items: List[CleanupItem] = Field(default_factory=list)
+    workshop_summary: CleanupWorkshopSummary
+    total_size: int = 0
+
+
+class CleanupDeleteRequest(SQLModel):
+    """Schema for deleting cleanup candidates"""
+    mode: str = Field(..., description="Cleanup mode: safe, archives, or workshop")
+    paths: List[str] = Field(default_factory=list)
+    confirmation_text: Optional[str] = None
+
+    @field_validator('mode')
+    @classmethod
+    def validate_mode(cls, v):
+        mode = v.strip()
+        allowed_modes = ["safe", "archives", "workshop"]
+        if mode not in allowed_modes:
+            raise ValueError(f"Cleanup mode must be one of: {', '.join(allowed_modes)}")
+        return mode
+
+    @field_validator('paths')
+    @classmethod
+    def validate_paths(cls, v):
+        clean_paths = []
+        for path in v:
+            path = path.strip()
+            if not path or "\x00" in path or "\n" in path or "\r" in path:
+                raise ValueError("Cleanup paths contain invalid characters")
+            clean_paths.append(path)
+        return clean_paths
+
+
+class CleanupFailedItem(SQLModel):
+    """Schema for a cleanup deletion failure"""
+    path: str
+    error: str
+
+
+class CleanupDeleteResponse(SQLModel):
+    """Schema for cleanup delete response"""
+    success: bool
+    message: str
+    deleted_count: int = 0
+    freed_bytes_estimate: int = 0
+    failed_items: List[CleanupFailedItem] = Field(default_factory=list)
+
+
 class GenerateServerTokenRequest(SQLModel):
     """Schema for generating game server login token"""
     server_name: Optional[str] = Field(None, max_length=255, description="Optional memo/description for the server")

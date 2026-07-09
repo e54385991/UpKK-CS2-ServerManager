@@ -658,4 +658,161 @@
                         </div>
                     </div>
 
+                    <!-- Game Directory Cleanup Card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-stars"></i>
+                                <span data-i18n="serverDetail.cleanupTitle">Log & Junk Cleanup</span>
+                            </h5>
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                @click="scanCleanup()" :disabled="loadingCleanup || deletingCleanup">
+                                <span x-show="!loadingCleanup">
+                                    <i class="bi bi-search"></i>
+                                    <span data-i18n="serverDetail.cleanupScan">Scan</span>
+                                </span>
+                                <span x-show="loadingCleanup">
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                    <span data-i18n="serverDetail.cleanupScanning">Scanning...</span>
+                                </span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3" data-i18n="serverDetail.cleanupDescription">
+                                Scan the game directory for safe logs, leftover archives, and Steam Workshop content before deleting anything.
+                            </p>
+
+                            <div x-show="cleanupError" class="alert alert-danger py-2" style="white-space: pre-line;" x-text="cleanupError"></div>
+
+                            <div x-show="!cleanupScan && !loadingCleanup" class="text-muted small">
+                                <i class="bi bi-info-circle"></i>
+                                <span data-i18n="serverDetail.cleanupScanHint">Run a scan to preview cleanup candidates.</span>
+                            </div>
+
+                            <div x-show="cleanupScan" class="row g-3">
+                                <div class="col-12">
+                                    <div class="alert alert-secondary py-2 mb-0">
+                                        <i class="bi bi-hdd"></i>
+                                        <span data-i18n="serverDetail.cleanupTotalEstimate">Estimated cleanup size:</span>
+                                        <strong x-text="formatFileSize(cleanupScan?.total_size || 0)"></strong>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-4">
+                                    <div class="border rounded p-3 h-100">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-shield-check text-success"></i>
+                                            <span data-i18n="serverDetail.cleanupSafeTitle">Safe logs/temp files</span>
+                                        </h6>
+                                        <p class="small text-muted mb-2" data-i18n="serverDetail.cleanupSafeDescription">
+                                            Logs and temporary files that can be safely removed after preview.
+                                        </p>
+                                        <div class="small mb-3">
+                                            <span data-i18n="serverDetail.cleanupItems">Items:</span>
+                                            <strong x-text="cleanupScan?.safe_items?.length || 0"></strong>
+                                            <span class="ms-2" data-i18n="serverDetail.cleanupSize">Size:</span>
+                                            <strong x-text="formatFileSize((cleanupScan?.safe_items || []).reduce((sum, item) => sum + (item.size || 0), 0))"></strong>
+                                        </div>
+                                        <div class="small text-muted mb-3" style="max-height: 160px; overflow:auto;">
+                                            <template x-for="item in (cleanupScan?.safe_items || []).slice(0, 20)" :key="item.path">
+                                                <div class="text-break">
+                                                    <i class="bi bi-dot"></i>
+                                                    <span x-text="item.path"></span>
+                                                </div>
+                                            </template>
+                                            <div x-show="(cleanupScan?.safe_items?.length || 0) > 20">
+                                                <span data-i18n="serverDetail.cleanupMoreItems">More items are hidden in this preview.</span>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-success w-100"
+                                            @click="deleteCleanup('safe')"
+                                            :disabled="deletingCleanup || !(cleanupScan?.safe_items?.length)">
+                                            <i class="bi bi-trash"></i>
+                                            <span data-i18n="serverDetail.cleanupSafeButton">Clean Safe Items</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-4">
+                                    <div class="border rounded p-3 h-100">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-file-earmark-zip text-warning"></i>
+                                            <span data-i18n="serverDetail.cleanupArchivesTitle">Leftover archives</span>
+                                        </h6>
+                                        <p class="small text-muted mb-2" data-i18n="serverDetail.cleanupArchivesDescription">
+                                            Select common archive files to delete after checking the list.
+                                        </p>
+                                        <div class="small mb-2">
+                                            <span data-i18n="serverDetail.cleanupItems">Items:</span>
+                                            <strong x-text="cleanupScan?.archive_items?.length || 0"></strong>
+                                            <span class="ms-2" data-i18n="serverDetail.cleanupSelected">Selected:</span>
+                                            <strong x-text="selectedArchivePaths.length"></strong>
+                                        </div>
+                                        <div class="form-check small mb-2">
+                                            <input class="form-check-input" type="checkbox" id="cleanup-select-all-archives"
+                                                :checked="areAllCleanupArchivesSelected()"
+                                                :disabled="deletingCleanup || !(cleanupScan?.archive_items?.length)"
+                                                @change="toggleAllCleanupArchives($event.target.checked)">
+                                            <label class="form-check-label" for="cleanup-select-all-archives"
+                                                data-i18n="serverDetail.cleanupSelectAllArchives">Select all archives</label>
+                                        </div>
+                                        <div class="table-responsive mb-3" style="max-height: 220px; overflow:auto;">
+                                            <table class="table table-sm align-middle mb-0">
+                                                <tbody>
+                                                    <template x-for="item in (cleanupScan?.archive_items || [])" :key="item.path">
+                                                        <tr>
+                                                            <td style="width: 32px;">
+                                                                <input class="form-check-input" type="checkbox"
+                                                                    :checked="selectedArchivePaths.includes(item.path)"
+                                                                    @change="toggleCleanupArchive(item.path, $event.target.checked)">
+                                                            </td>
+                                                            <td>
+                                                                <div class="text-break small" x-text="item.path"></div>
+                                                                <small class="text-muted" x-text="formatFileSize(item.size || 0)"></small>
+                                                            </td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <button type="button" class="btn btn-warning w-100"
+                                            @click="deleteCleanup('archives')"
+                                            :disabled="deletingCleanup || selectedArchivePaths.length === 0">
+                                            <i class="bi bi-trash"></i>
+                                            <span data-i18n="serverDetail.cleanupArchivesButton">Delete Selected Archives</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-4">
+                                    <div class="border border-danger rounded p-3 h-100">
+                                        <h6 class="mb-2 text-danger">
+                                            <i class="bi bi-exclamation-triangle"></i>
+                                            <span data-i18n="serverDetail.cleanupWorkshopTitle">Steam Workshop content</span>
+                                        </h6>
+                                        <p class="small text-muted mb-2" data-i18n="serverDetail.cleanupWorkshopDescription">
+                                            Dangerous cleanup. This deletes all content inside the Steam Workshop directory but keeps the directory itself.
+                                        </p>
+                                        <div class="small mb-2">
+                                            <span data-i18n="serverDetail.cleanupPath">Path:</span>
+                                            <code class="text-break d-block" x-text="cleanupScan?.workshop_summary?.path || '-'"></code>
+                                        </div>
+                                        <div class="small mb-3">
+                                            <span data-i18n="serverDetail.cleanupItems">Items:</span>
+                                            <strong x-text="cleanupScan?.workshop_summary?.item_count || 0"></strong>
+                                            <span class="ms-2" data-i18n="serverDetail.cleanupSize">Size:</span>
+                                            <strong x-text="formatFileSize(cleanupScan?.workshop_summary?.size || 0)"></strong>
+                                        </div>
+                                        <button type="button" class="btn btn-danger w-100"
+                                            @click="deleteCleanup('workshop')"
+                                            :disabled="deletingCleanup || !(cleanupScan?.workshop_summary?.item_count)">
+                                            <i class="bi bi-trash3"></i>
+                                            <span data-i18n="serverDetail.cleanupWorkshopButton">Delete Workshop Contents</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>

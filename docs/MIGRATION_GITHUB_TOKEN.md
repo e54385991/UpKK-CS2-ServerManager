@@ -74,8 +74,8 @@ sudo systemctl status cs2-server-manager
 
 # If using 1Panel, restart from the control panel
 
-# If using direct uvicorn
-uvicorn main:app --host 0.0.0.0 --port 8000
+# If using uv directly
+uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ### 7. Verify Application

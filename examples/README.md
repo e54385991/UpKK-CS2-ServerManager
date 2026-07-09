@@ -19,7 +19,7 @@ python examples/examples.py
 **Note:** Make sure the API server is running first:
 
 ```bash
-python main.py
+uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 The examples script will output sample API requests and curl commands that you can use to interact with the server.

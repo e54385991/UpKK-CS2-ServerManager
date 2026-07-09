@@ -1,7 +1,7 @@
 # CS2 Server Manager | CS2 服务器管理器
 
 
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.120+-009688.svg?style=flat&logo=FastAPI)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.139+-009688.svg?style=flat&logo=FastAPI)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.14+-blue.svg?style=flat&logo=python)](https://www.python.org)
 [![Redis](https://img.shields.io/badge/Redis-Async-DC382D.svg?style=flat&logo=redis)](https://redis.io)
 
@@ -168,7 +168,7 @@ JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"  # 至少 
 使用 uvicorn 启动应用([1Panel](https://github.com/1Panel-dev/1Panel) 启动命令相同)：
 
 ```bash
-pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 #### 步骤 5: 访问应用
@@ -328,7 +328,7 @@ cd CS2-ServerManager
 #### Step 3: Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install uv && uv sync --locked
 ```
 
 #### Step 4: Configure Database and Redis
@@ -376,7 +376,7 @@ JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"  # At leas
 Start the application using uvicorn (same command for 1Panel startup):
 
 ```bash
-pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 #### Step 6: Access Application

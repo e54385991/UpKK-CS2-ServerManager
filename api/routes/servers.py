@@ -19,12 +19,14 @@ from modules import (
     DeploymentLog, CustomCommand, CustomCommandCreate, CustomCommandUpdate,
     CustomCommandExecuteRequest, CustomCommandResponse, ActionResponse,
     S3BackupItem, S3RestoreRequest,
+    CleanupScanResponse, CleanupDeleteRequest, CleanupDeleteResponse,
     get_db, User, UserResponse, get_current_active_user, get_current_admin_user, get_optional_current_user, generate_api_key,
     get_current_time, SystemSettings, ServerStatus
 )
 from modules.config import settings as app_settings
 from services import redis_manager
 from services.captcha_service import captcha_service
+from services.game_cleanup_service import game_cleanup_service
 from services.s3_backup_service import s3_backup_service
 from services.ssh_manager import SSHManager
 
@@ -434,6 +436,63 @@ async def get_server(
     """Get server by ID - admins can access any server, users can only access their own"""
     server = await get_server_with_permission(server_id, current_user, db)
     return server
+
+
+@router.get("/{server_id}/cleanup/scan", response_model=CleanupScanResponse)
+async def scan_server_cleanup(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Scan approved game directory cleanup candidates for this server"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    ssh_manager = SSHManager()
+
+    try:
+        success, data, error = await game_cleanup_service.scan(ssh_manager, server)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error
+            )
+        return data
+    finally:
+        try:
+            await ssh_manager.disconnect()
+        except Exception:
+            pass
+
+
+@router.post("/{server_id}/cleanup/delete", response_model=CleanupDeleteResponse)
+async def delete_server_cleanup_items(
+    server_id: int,
+    cleanup_data: CleanupDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Delete approved game directory cleanup candidates for this server"""
+    server = await get_server_with_permission(server_id, current_user, db)
+    ssh_manager = SSHManager()
+
+    try:
+        success, result, error = await game_cleanup_service.delete(
+            ssh_manager,
+            server,
+            cleanup_data.mode,
+            paths=cleanup_data.paths,
+            confirmation_text=cleanup_data.confirmation_text,
+        )
+        if error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error
+            )
+        return result
+    finally:
+        try:
+            await ssh_manager.disconnect()
+        except Exception:
+            pass
 
 
 @router.get("/{server_id}/s3-backups", response_model=List[S3BackupItem])

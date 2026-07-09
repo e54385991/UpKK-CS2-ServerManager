@@ -137,6 +137,11 @@
         loadingS3Backups: false,
         restoringS3Backup: false,
         s3BackupError: '',
+        cleanupScan: null,
+        loadingCleanup: false,
+        deletingCleanup: false,
+        selectedArchivePaths: [],
+        cleanupError: '',
         customCommands: [],
         loadingCustomCommands: false,
         savingCustomCommand: false,
@@ -1677,6 +1682,120 @@
         async executeBackupPlugins() {
             await this.executeAction('backup_plugins');
             await this.loadS3Backups();
+        },
+
+        toggleCleanupArchive(path, checked) {
+            if (checked) {
+                if (!this.selectedArchivePaths.includes(path)) {
+                    this.selectedArchivePaths.push(path);
+                }
+            } else {
+                this.selectedArchivePaths = this.selectedArchivePaths.filter((item) => item !== path);
+            }
+        },
+
+        cleanupArchivePaths() {
+            return (this.cleanupScan?.archive_items || [])
+                .map((item) => item.path)
+                .filter(Boolean);
+        },
+
+        areAllCleanupArchivesSelected() {
+            const archivePaths = this.cleanupArchivePaths();
+            return archivePaths.length > 0
+                && archivePaths.every((path) => this.selectedArchivePaths.includes(path));
+        },
+
+        toggleAllCleanupArchives(checked) {
+            const archivePaths = this.cleanupArchivePaths();
+            if (checked) {
+                this.selectedArchivePaths = Array.from(new Set([...this.selectedArchivePaths, ...archivePaths]));
+                return;
+            }
+
+            const archivePathSet = new Set(archivePaths);
+            this.selectedArchivePaths = this.selectedArchivePaths.filter((path) => !archivePathSet.has(path));
+        },
+
+        async scanCleanup() {
+            this.loadingCleanup = true;
+            this.cleanupError = '';
+            this.cleanupScan = null;
+            this.selectedArchivePaths = [];
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/cleanup/scan`);
+                const data = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    this.cleanupScan = data;
+                } else {
+                    this.cleanupError = data.detail || (window.i18n?.t('serverDetail.cleanupScanFailed') || 'Failed to scan cleanup candidates');
+                }
+            } catch (err) {
+                this.cleanupError = `${window.i18n?.t('serverDetail.cleanupScanFailed') || 'Failed to scan cleanup candidates'}: ${err.message}`;
+            } finally {
+                this.loadingCleanup = false;
+            }
+        },
+
+        async deleteCleanup(mode) {
+            if (mode === 'archives' && this.selectedArchivePaths.length === 0) {
+                this.cleanupError = window.i18n?.t('serverDetail.cleanupSelectArchive') || 'Please select at least one archive to delete.';
+                return;
+            }
+
+            const payload = { mode };
+            if (mode === 'archives') {
+                const confirmMsg = window.i18n?.t('serverDetail.cleanupConfirmArchives', { count: this.selectedArchivePaths.length }) ||
+                    `Delete ${this.selectedArchivePaths.length} selected archive file(s)?`;
+                if (!confirm(confirmMsg)) {
+                    return;
+                }
+                payload.paths = this.selectedArchivePaths;
+            }
+
+            if (mode === 'workshop') {
+                const confirmMsg = window.i18n?.t('serverDetail.cleanupConfirmWorkshop') ||
+                    'This will delete all Steam Workshop content for this server. Continue?';
+                if (!confirm(confirmMsg)) {
+                    return;
+                }
+                const typed = prompt(
+                    window.i18n?.t('serverDetail.cleanupWorkshopPrompt') ||
+                    'Type DELETE WORKSHOP to confirm deletion of all Steam Workshop content:'
+                );
+                if (typed !== 'DELETE WORKSHOP') {
+                    this.cleanupError = window.i18n?.t('serverDetail.cleanupWorkshopPromptFailed') || 'Workshop cleanup confirmation text did not match.';
+                    return;
+                }
+                payload.confirmation_text = typed;
+            }
+
+            this.deletingCleanup = true;
+            this.cleanupError = '';
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/cleanup/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json().catch(() => ({}));
+                if (response.ok) {
+                    const toastType = result.success ? 'success' : 'error';
+                    this.showToast(result.message || (window.i18n?.t('serverDetail.cleanupDeleteComplete') || 'Cleanup completed'), toastType);
+                    if (!result.success && Array.isArray(result.failed_items) && result.failed_items.length > 0) {
+                        this.cleanupError = result.failed_items.map((item) => `${item.path}: ${item.error}`).join('\n');
+                    }
+                    await this.scanCleanup();
+                } else {
+                    this.cleanupError = result.detail || (window.i18n?.t('serverDetail.cleanupDeleteFailed') || 'Cleanup failed');
+                }
+            } catch (err) {
+                this.cleanupError = `${window.i18n?.t('serverDetail.cleanupDeleteFailed') || 'Cleanup failed'}: ${err.message}`;
+            } finally {
+                this.deletingCleanup = false;
+            }
         },
         
         // GitHub Plugin Installation Methods

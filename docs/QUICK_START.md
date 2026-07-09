@@ -56,7 +56,7 @@ git clone https://github.com/e54385991/CS2-ServerManager.git
 cd CS2-ServerManager
 
 # Install Python dependencies
-pip install -r requirements.txt
+pip install uv && uv sync --locked
 
 # Configure environment
 cp .env.example .env
@@ -66,7 +66,7 @@ cp .env.example .env
 docker-compose up -d
 
 # Run the manager
-python main.py
+uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 **✅ Verification:**
@@ -199,7 +199,7 @@ git clone https://github.com/e54385991/CS2-ServerManager.git
 cd CS2-ServerManager
 
 # 安装 Python 依赖
-pip install -r requirements.txt
+pip install uv && uv sync --locked
 
 # 配置环境
 cp .env.example .env
@@ -209,7 +209,7 @@ cp .env.example .env
 docker-compose up -d
 
 # 运行管理器
-python main.py
+uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 **✅ 验证：**
