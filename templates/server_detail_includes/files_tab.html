@@ -1,12 +1,12 @@
                 <div class="tab-pane fade" id="files" role="tabpanel" x-data="fileManager()">
                     <div class="card">
                         <div class="card-header bg-light">
-                            <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                                 <div>
                                     <h5 class="mb-0"><i class="bi bi-folder"></i> <span
                                             data-i18n="fileManager.title">File Manager</span></h5>
                                 </div>
-                                <div class="d-flex gap-2">
+                                <div class="d-flex flex-wrap gap-2">
                                     <button @click="refreshFiles" class="btn btn-sm btn-outline-primary"
                                         :disabled="loading">
                                         <i class="bi"
@@ -22,6 +22,11 @@
                                         class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-upload"></i>
                                         <span data-i18n="fileManager.upload">Upload</span>
+                                    </button>
+                                    <button @click="openUrlDownloadModal()"
+                                        class="btn btn-sm btn-outline-info" :disabled="urlDownloading">
+                                        <i class="bi bi-cloud-arrow-down"></i>
+                                        <span data-i18n="fileManager.downloadFromUrl">Download URL</span>
                                     </button>
                                     <input type="file" id="fileUpload" style="display: none" @change="uploadFile"
                                         multiple>
@@ -57,6 +62,41 @@
                                     <div class="progress" style="height: 6px;">
                                         <div class="progress-bar progress-bar-striped progress-bar-animated"
                                             :style="'width: ' + uploadProgress + '%'"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- URL Download Progress -->
+                            <div x-show="urlDownloading" x-cloak class="px-3 pt-2">
+                                <div class="alert alert-info mb-0">
+                                    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
+                                        <div class="text-break">
+                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                            <i class="bi bi-cloud-arrow-down me-1"></i>
+                                            <span data-i18n="fileManager.downloadingFromUrl">Downloading from URL</span>:
+                                            <strong x-text="urlDownloadProgress.fileName || urlDownloadProgress.targetPath || (window.i18n?.t('fileManager.archive') || 'Archive')"></strong>
+                                            <small class="d-block text-muted mt-1" x-show="urlDownloadProgress.targetPath"
+                                                x-text="urlDownloadProgress.targetPath"></small>
+                                        </div>
+                                        <div class="text-end text-nowrap">
+                                            <span class="badge"
+                                                :class="urlDownloadProgress.status === 'pending' ? 'bg-secondary' : 'bg-primary'"
+                                                x-text="urlDownloadStatusLabel(urlDownloadProgress.status)"></span>
+                                            <small class="ms-2 text-muted" x-show="urlDownloadProgress.elapsed > 0"
+                                                x-text="urlDownloadProgress.elapsed + 's'"></small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-content-between mt-2"
+                                        x-show="urlDownloadProgress.bytesDownloaded !== null || urlDownloadProgress.totalBytes !== null">
+                                        <small class="text-muted"
+                                            x-text="formatFileSize(urlDownloadProgress.bytesDownloaded || 0) + (urlDownloadProgress.totalBytes ? ' / ' + formatFileSize(urlDownloadProgress.totalBytes) : '')"></small>
+                                        <small class="text-muted" x-show="urlDownloadProgress.percent !== null"
+                                            x-text="urlDownloadProgress.percent + '%'"></small>
+                                    </div>
+                                    <div class="progress mt-2" style="height: 6px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                            :style="urlDownloadProgress.percent === null ? 'width: 100%' : 'width: ' + urlDownloadProgress.percent + '%'">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -231,27 +271,219 @@
                         </div>
                     </div>
 
-                    <!-- Create Folder Modal -->
-                    <div class="modal fade" id="createFolderModal" tabindex="-1">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title" data-i18n="fileManager.newFolder">New Folder</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <label class="form-label" data-i18n="fileManager.folderName">Folder Name</label>
-                                    <input type="text" class="form-control" id="createFolderName"
-                                        x-model.trim="newFolderName" @keyup.enter="createFolder()">
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
-                                        data-i18n="common.cancel">Cancel</button>
-                                    <button type="button" class="btn btn-primary" @click="createFolder()"
-                                        data-i18n="common.create">Create</button>
+                    <!-- Modals are teleported to body so Bootstrap backdrops never cover them inside the fading tab pane. -->
+                    <template x-teleport="body">
+                        <div class="modal fade" id="createFolderModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" data-i18n="fileManager.newFolder">New Folder</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <label class="form-label" for="createFolderName"
+                                            data-i18n="fileManager.folderName">Folder Name</label>
+                                        <input type="text" class="form-control" id="createFolderName"
+                                            x-model.trim="newFolderName" @keyup.enter="createFolder()">
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                                            data-i18n="common.cancel">Cancel</button>
+                                        <button type="button" class="btn btn-primary" @click="createFolder()"
+                                            :disabled="!newFolderName.trim()" data-i18n="common.create">Create</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </template>
+
+                    <!-- Download from URL Modal -->
+                    <template x-teleport="body">
+                        <div class="modal fade" id="urlDownloadModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">
+                                            <i class="bi bi-cloud-arrow-down me-1"></i>
+                                            <span data-i18n="fileManager.downloadFromUrl">Download URL</span>
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                            :disabled="urlDownloadStarting"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label" for="urlDownloadUrl"
+                                                data-i18n="fileManager.downloadUrl">Archive URL</label>
+                                            <input type="url" class="form-control" id="urlDownloadUrl"
+                                                x-model.trim="urlDownloadUrl"
+                                                data-i18n-placeholder="fileManager.downloadUrlPlaceholder"
+                                                placeholder="https://example.com/archive.zip" autocomplete="off">
+                                            <small class="form-text text-muted"
+                                                data-i18n="fileManager.downloadUrlHint">Only HTTP and HTTPS URLs are supported.</small>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label" for="urlDownloadFilename"
+                                                data-i18n="fileManager.downloadFilename">File name (optional)</label>
+                                            <input type="text" class="form-control" id="urlDownloadFilename"
+                                                x-model.trim="urlDownloadFilename"
+                                                data-i18n-placeholder="fileManager.downloadFilenamePlaceholder"
+                                                placeholder="Detected automatically from the URL">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label" for="urlDownloadDestinationPath"
+                                                data-i18n="fileManager.destinationPath">Destination Path</label>
+                                            <input type="text" class="form-control font-monospace"
+                                                id="urlDownloadDestinationPath"
+                                                x-model.trim="urlDownloadDestinationPath">
+                                            <small class="form-text text-muted"
+                                                data-i18n="fileManager.urlDestinationHint">The archive will be saved in this server directory.</small>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="urlDownloadOverwrite"
+                                                x-model="urlDownloadOverwrite">
+                                            <label class="form-check-label" for="urlDownloadOverwrite"
+                                                data-i18n="fileManager.overwriteExisting">Overwrite existing files</label>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                                            :disabled="urlDownloadStarting" data-i18n="common.cancel">Cancel</button>
+                                        <button type="button" class="btn btn-primary" @click="startUrlDownload()"
+                                            :disabled="urlDownloadStarting || !urlDownloadUrl.trim() || !urlDownloadDestinationPath.trim()">
+                                            <span x-show="!urlDownloadStarting">
+                                                <i class="bi bi-download me-1"></i>
+                                                <span data-i18n="fileManager.startDownload">Start Download</span>
+                                            </span>
+                                            <span x-show="urlDownloadStarting">
+                                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                                <span data-i18n="fileManager.startingDownload">Starting...</span>
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Advanced Extract Archive Modal -->
+                    <template x-teleport="body">
+                        <div class="modal fade" id="extractModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">
+                                            <i class="bi bi-file-zip me-1"></i>
+                                            <span data-i18n="fileManager.advancedExtract">Advanced Extraction</span>
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                            :disabled="extractStarting"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label" for="extractArchivePath"
+                                                data-i18n="fileManager.archivePath">Archive Path</label>
+                                            <input type="text" class="form-control font-monospace"
+                                                id="extractArchivePath" :value="extractArchivePath" disabled>
+                                            <div class="d-flex flex-wrap gap-2 mt-2"
+                                                x-show="extractArchiveType || extractArchiveEntryCount !== null">
+                                                <span class="badge bg-info" x-show="extractArchiveType"
+                                                    x-text="extractArchiveType"></span>
+                                                <span class="badge bg-secondary" x-show="extractArchiveEntryCount !== null"
+                                                    x-text="(extractArchiveEntryCount || 0) + ' ' + (window.i18n?.t('fileManager.archiveEntries') || 'entries')"></span>
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label d-block"
+                                                data-i18n="fileManager.extractContent">Content to extract</label>
+                                            <div class="btn-group w-100" role="group">
+                                                <input type="radio" class="btn-check" name="extractMode"
+                                                    id="extractModeAll" value="all" x-model="extractMode">
+                                                <label class="btn btn-outline-primary" for="extractModeAll">
+                                                    <i class="bi bi-files me-1"></i>
+                                                    <span data-i18n="fileManager.extractAll">Extract all contents</span>
+                                                </label>
+                                                <input type="radio" class="btn-check" name="extractMode"
+                                                    id="extractModeFolder" value="folder" x-model="extractMode"
+                                                    :disabled="extractInspecting || extractArchiveFolders.length === 0">
+                                                <label class="btn btn-outline-primary" for="extractModeFolder"
+                                                    :class="(extractInspecting || extractArchiveFolders.length === 0) ? 'disabled' : ''">
+                                                    <i class="bi bi-folder me-1"></i>
+                                                    <span data-i18n="fileManager.extractOneFolder">Extract one folder only</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3" x-show="extractInspecting">
+                                            <div class="d-flex align-items-center text-muted">
+                                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                                <span data-i18n="fileManager.inspectingArchive">Reading archive contents...</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="alert alert-warning py-2" x-show="extractInspectError" x-cloak>
+                                            <i class="bi bi-exclamation-triangle me-1"></i>
+                                            <span x-text="extractInspectError"></span>
+                                            <button type="button" class="btn btn-sm btn-outline-warning ms-2"
+                                                @click="inspectArchive()" data-i18n="common.retry">Retry</button>
+                                        </div>
+
+                                        <div x-show="extractMode === 'folder'" x-cloak>
+                                            <div class="mb-3">
+                                                <label class="form-label" for="extractSourceFolder"
+                                                    data-i18n="fileManager.sourceFolder">Folder in archive</label>
+                                                <select class="form-select font-monospace" id="extractSourceFolder"
+                                                    x-model="extractSourceFolder">
+                                                    <option value="" data-i18n="fileManager.selectSourceFolder">Select a folder...</option>
+                                                    <template x-for="folder in extractArchiveFolders" :key="folder">
+                                                        <option :value="folder" x-text="folder"></option>
+                                                    </template>
+                                                </select>
+                                            </div>
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input" type="checkbox"
+                                                    id="extractStripSourceFolder" x-model="extractStripSourceFolder"
+                                                    :disabled="!extractSourceFolder">
+                                                <label class="form-check-label" for="extractStripSourceFolder"
+                                                    data-i18n="fileManager.stripSourceFolder">Extract the folder's contents without the folder itself</label>
+                                                <small class="form-text text-muted d-block"
+                                                    data-i18n="fileManager.stripSourceFolderHint">When disabled, the selected folder is preserved at the destination.</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label" for="extractDestinationPath"
+                                                data-i18n="fileManager.destinationPath">Destination Path</label>
+                                            <input type="text" class="form-control font-monospace"
+                                                id="extractDestinationPath" x-model.trim="extractDestinationPath">
+                                            <small class="form-text text-muted"
+                                                data-i18n="fileManager.absoluteDestinationHint">Enter an absolute path inside the server game directory.</small>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="extractOverwrite"
+                                                x-model="extractOverwrite">
+                                            <label class="form-check-label" for="extractOverwrite"
+                                                data-i18n="fileManager.overwriteExisting">Overwrite existing files</label>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                                            :disabled="extractStarting" data-i18n="common.cancel">Cancel</button>
+                                        <button type="button" class="btn btn-primary" @click="extractArchive()"
+                                            :disabled="extractStarting || !extractDestinationPath.trim() || (extractMode === 'folder' && !extractSourceFolder)">
+                                            <span x-show="!extractStarting">
+                                                <i class="bi bi-file-zip me-1"></i>
+                                                <span data-i18n="fileManager.extract">Extract</span>
+                                            </span>
+                                            <span x-show="extractStarting">
+                                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                                <span data-i18n="fileManager.startingExtraction">Starting...</span>
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
 
                 </div>

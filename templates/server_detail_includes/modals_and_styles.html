@@ -257,41 +257,6 @@
         </div>
     </div>
 
-    <!-- Extract Archive Modal -->
-    <div class="modal fade" id="extractModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" data-i18n="fileManager.extractArchive">Extract Archive</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label" data-i18n="fileManager.archivePath">Archive Path</label>
-                        <input type="text" class="form-control" id="extractArchivePath" disabled>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" data-i18n="fileManager.destinationPath">Destination Path</label>
-                        <input type="text" class="form-control" id="extractDestinationPath" data-i18n-placeholder="fileManager.destinationPathHint">
-                        <small class="form-text text-muted" data-i18n="fileManager.destinationPathHint">Leave empty to extract to current directory</small>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="extractOverwrite">
-                        <label class="form-check-label" for="extractOverwrite" data-i18n="fileManager.overwriteExisting">
-                            Overwrite existing files
-                        </label>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
-                        data-i18n="common.cancel">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="extractArchiveBtn"
-                        data-i18n="fileManager.extract">Extract</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Operation Status Modal -->
     <div class="modal fade" id="operationStatusModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-lg">

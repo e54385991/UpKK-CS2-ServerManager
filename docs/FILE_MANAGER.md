@@ -10,6 +10,8 @@ The File Manager feature provides a comprehensive web-based interface for managi
 - **Browse Files**: Navigate through directories with a user-friendly interface
 - **Upload Files**: Upload single or multiple files with drag-and-drop support
 - **Download Files**: Download files from the server to your local machine
+- **Download from URL**: Download an archive directly to the remote server without routing it through the browser
+- **Advanced Extraction**: Extract common ZIP, 7z, and tar formats to a chosen directory, or extract only one folder from an archive
 - **Edit Files**: Edit text-based configuration files inline with syntax highlighting
 - **Create Folders**: Create new directories on the server
 - **Rename**: Rename files and folders
@@ -71,6 +73,26 @@ Supported file types for editing:
 1. Click the download icon next to any file
 2. The file will be downloaded to your browser's download folder
 
+### Downloading an Archive from a URL
+
+1. Open the destination directory in the file manager
+2. Click **Download URL**
+3. Enter an HTTP or HTTPS URL and, optionally, a custom filename
+4. Confirm the destination path and whether an existing file may be replaced
+5. The download runs in the background; its status is shown above the file list
+
+The URL is fetched by the managed server over its SSH connection. A partial download is kept under a temporary name and is only moved to the final filename after it succeeds.
+
+### Extracting Archives
+
+1. Click the archive icon next to a supported archive
+2. Choose the destination directory
+3. Select either the complete archive or one folder inside it
+4. When extracting one folder, choose whether to keep or remove that folder's outer directory
+5. Choose whether existing files may be overwritten, then click **Extract**
+
+Supported container formats include `.zip`, `.7z`, `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz2`, `.tar.xz`, and `.txz`. Availability also depends on the corresponding extraction command being installed on the managed server.
+
 ### Creating Folders
 
 1. Click the "New Folder" button in the toolbar
@@ -100,13 +122,19 @@ The file manager uses the following API endpoints:
 - `PUT /servers/{id}/files/content` - Update file content
 - `POST /servers/{id}/files/upload` - Upload file
 - `GET /servers/{id}/files/download` - Download file
+- `POST /servers/{id}/files/download-ticket` - Create a short-lived browser download ticket
+- `POST /servers/{id}/files/download-url` - Start a remote URL download
+- `GET /servers/{id}/files/download-url/status/{task_id}` - Get remote URL download status
 - `POST /servers/{id}/files/mkdir` - Create directory
 - `DELETE /servers/{id}/files` - Delete file/directory
 - `POST /servers/{id}/files/rename` - Rename/move file
+- `POST /servers/{id}/files/archive/inspect` - List selectable folders in an archive
+- `POST /servers/{id}/files/extract` - Start an archive extraction
+- `GET /servers/{id}/files/extract/status/{task_id}` - Get archive extraction status
 
 ### File Transfer Protocol
 
-All file operations use SFTP (SSH File Transfer Protocol) over the existing SSH connection to your server. This ensures secure and encrypted file transfers.
+File operations use SSH/SFTP over the existing server connection. URL downloads and archive tools execute on the managed server with validated paths and shell-quoted arguments.
 
 ### Limitations
 
@@ -181,7 +209,6 @@ Potential future improvements:
 - Syntax highlighting in the code editor
 - File search functionality
 - Bulk operations (select multiple files)
-- File compression/decompression
 - File preview for images
 - Drag-and-drop file upload
 - Context menu (right-click) operations

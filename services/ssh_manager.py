@@ -97,6 +97,15 @@ class SSHManager:
 
     # Download chunk size for streamed browser downloads (256KB)
     DOWNLOAD_CHUNK_SIZE = 262144
+
+    # File-manager archive safety limits. Listing is capped before extraction so
+    # a malformed archive cannot produce unbounded command output in the panel.
+    ARCHIVE_MAX_ENTRIES = 20000
+    ARCHIVE_MAX_MEMBER_PATH_BYTES = 1024
+    ARCHIVE_INSPECT_TIMEOUT = 120
+    ARCHIVE_EXTRACT_TIMEOUT = 900
+    REMOTE_DOWNLOAD_TIMEOUT = 1800
+    REMOTE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024 * 1024
     
     # SteamCMD retry configuration
     STEAMCMD_MAX_RETRIES = 5  # Maximum number of retry attempts (not counting the initial attempt)
@@ -138,6 +147,27 @@ class SSHManager:
         self.use_pool = use_pool
         self.current_server: Optional[Server] = None
         self.last_plugin_backup: Optional[Dict[str, Any]] = None
+
+    @staticmethod
+    def archive_type_from_path(path: str) -> Optional[str]:
+        """Return a normalized archive type from a local or remote filename."""
+        lower_path = path.lower()
+        for suffix, archive_type in (
+            ('.tar.gz', 'tar.gz'),
+            ('.tar.bz2', 'tar.bz2'),
+            ('.tar.xz', 'tar.xz'),
+            ('.tgz', 'tar.gz'),
+            ('.tbz2', 'tar.bz2'),
+            ('.txz', 'tar.xz'),
+            ('.zip', 'zip'),
+            ('.7z', '7z'),
+            ('.tar', 'tar'),
+            ('.gz', 'gz'),
+            ('.bz2', 'bz2'),
+        ):
+            if lower_path.endswith(suffix):
+                return archive_type
+        return None
     
     async def _handle_sftp_error_with_reconnect(self, error: Exception, server: Server, operation_name: str, retry_func):
         """
@@ -3714,6 +3744,349 @@ class SSHManager:
         finally:
             await self.disconnect()
     
+    @staticmethod
+    def _canonical_path_is_within(base_path: str, target_path: str) -> bool:
+        base = posixpath.normpath(base_path)
+        target = posixpath.normpath(target_path)
+        return target == base or target.startswith(base.rstrip('/') + '/')
+
+    async def validate_path_within_base(
+        self,
+        base_path: str,
+        target_path: str,
+        server: Server,
+        allow_missing: bool = False,
+        require_regular: bool = False,
+    ) -> Tuple[bool, str]:
+        """Validate a remote path against the canonical server directory.
+
+        Lexical checks alone do not catch a symlink beneath ``base_path`` which
+        points outside it. This resolves the nearest existing ancestor and then
+        applies any missing suffix components to that canonical path.
+        """
+        normalized_base = posixpath.normpath(base_path)
+        normalized_target = posixpath.normpath(target_path)
+        if not self._canonical_path_is_within(normalized_base, normalized_target):
+            return False, "Path is outside the server directory"
+
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, f"Connection failed: {msg}"
+
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                try:
+                    base_attrs = await sftp.stat(normalized_base)
+                    if base_attrs.type != asyncssh.FILEXFER_TYPE_DIRECTORY:
+                        return False, "Server directory is not a directory"
+                    canonical_base = posixpath.normpath(str(await sftp.realpath(normalized_base)))
+                except asyncssh.SFTPError as exc:
+                    return False, f"Cannot resolve server directory: {exc}"
+
+                probe = normalized_target
+                missing_parts: List[str] = []
+                target_attrs = None
+                while True:
+                    try:
+                        target_attrs = await sftp.lstat(probe)
+                        canonical_existing = posixpath.normpath(str(await sftp.realpath(probe)))
+                        break
+                    except (asyncssh.SFTPNoSuchFile, asyncssh.SFTPNoSuchPath):
+                        if not allow_missing:
+                            return False, "Remote path does not exist"
+                        parent = posixpath.dirname(probe)
+                        if parent == probe:
+                            return False, "Cannot resolve an existing parent directory"
+                        component = posixpath.basename(probe)
+                        if not component:
+                            return False, "Remote path contains an invalid component"
+                        missing_parts.append(component)
+                        probe = parent
+                    except asyncssh.SFTPError as exc:
+                        return False, f"Cannot resolve remote path: {exc}"
+
+                canonical_target = canonical_existing
+                for component in reversed(missing_parts):
+                    canonical_target = posixpath.join(canonical_target, component)
+                canonical_target = posixpath.normpath(canonical_target)
+                if not self._canonical_path_is_within(canonical_base, canonical_target):
+                    return False, "Remote path resolves outside the server directory"
+
+                if require_regular:
+                    if missing_parts:
+                        return False, "Archive file does not exist"
+                    if target_attrs is None or target_attrs.type != asyncssh.FILEXFER_TYPE_REGULAR:
+                        return False, "Archive path must be a regular file and cannot be a symlink"
+                return True, ""
+        except asyncssh.SFTPError as exc:
+            return False, f"SFTP path validation failed: {exc}"
+        except Exception as exc:
+            return False, f"Path validation failed: {exc}"
+
+    async def _find_remote_tool(self, candidates: Tuple[str, ...]) -> Optional[str]:
+        """Return the first available hard-coded executable name."""
+        for candidate in candidates:
+            success, stdout, _ = await self.execute_command(
+                f"command -v {shlex.quote(candidate)}",
+                timeout=5,
+            )
+            if success and stdout.strip():
+                return stdout.strip().splitlines()[0]
+        return None
+
+    @staticmethod
+    def _short_command_error(stdout: str, stderr: str, limit: int = 2000) -> str:
+        message = (stderr or stdout or "Remote command failed").strip()
+        if len(message) > limit:
+            return message[:limit] + "..."
+        return message
+
+    @classmethod
+    def _normalize_archive_member(cls, member_name: str) -> Tuple[Optional[str], Optional[str]]:
+        """Normalize one archive member, returning (path, error)."""
+        if not isinstance(member_name, str):
+            return None, "Archive contains a non-text member name"
+        if any(ord(char) < 32 or ord(char) == 127 for char in member_name):
+            return None, "Archive contains a member name with control characters"
+        if '\\' in member_name:
+            return None, "Archive contains a member name with backslash separators"
+        if len(member_name.encode('utf-8')) > cls.ARCHIVE_MAX_MEMBER_PATH_BYTES:
+            return None, "Archive contains an excessively long member path"
+
+        value = member_name.rstrip('/')
+        while value.startswith('./'):
+            value = value[2:]
+        if value in ('', '.'):
+            return None, None
+        if value.startswith('/') or re.match(r'^[A-Za-z]:', value):
+            return None, f"Archive member uses an absolute path: {member_name!r}"
+
+        components = value.split('/')
+        if any(component in ('', '.', '..') for component in components):
+            return None, f"Archive member contains an unsafe path component: {member_name!r}"
+        normalized = posixpath.normpath(value)
+        if normalized == '..' or normalized.startswith('../'):
+            return None, f"Archive member escapes the archive root: {member_name!r}"
+        return normalized, None
+
+    @classmethod
+    def _build_archive_info(
+        cls,
+        archive_type: str,
+        raw_members: List[Tuple[str, bool]],
+    ) -> Tuple[bool, Dict[str, Any], str]:
+        if len(raw_members) > cls.ARCHIVE_MAX_ENTRIES:
+            return False, {}, (
+                f"Archive contains too many entries (maximum {cls.ARCHIVE_MAX_ENTRIES})"
+            )
+
+        member_types: Dict[str, bool] = {}
+        members: List[Dict[str, Any]] = []
+        for raw_name, is_directory in raw_members:
+            normalized, error = cls._normalize_archive_member(raw_name)
+            if error:
+                return False, {}, error
+            if normalized is None:
+                continue
+            if normalized in member_types:
+                return False, {}, f"Archive contains a duplicate member path: {normalized}"
+            member_types[normalized] = is_directory
+            members.append({"path": normalized, "is_dir": is_directory})
+
+        file_paths = {path for path, is_directory in member_types.items() if not is_directory}
+        for path in member_types:
+            parts = path.split('/')
+            for index in range(1, len(parts)):
+                ancestor = '/'.join(parts[:index])
+                if ancestor in file_paths:
+                    return False, {}, (
+                        f"Archive member path conflicts with file ancestor: {path}"
+                    )
+
+        folders = set()
+        for member in members:
+            parts = member["path"].split('/')
+            folder_depth = len(parts) if member["is_dir"] else len(parts) - 1
+            for index in range(1, folder_depth + 1):
+                folders.add('/'.join(parts[:index]))
+
+        return True, {
+            "archive_type": archive_type,
+            "folders": sorted(folders, key=lambda value: (value.count('/'), value.lower())),
+            "entry_count": len(members),
+            "members": members,
+        }, ""
+
+    @staticmethod
+    def _parse_7z_listing(output: str) -> Tuple[Optional[List[Tuple[str, bool]]], Optional[str]]:
+        """Parse technical 7-Zip listing output after its entry separator."""
+        normalized_output = output.replace('\r\n', '\n').replace('\r', '\n')
+        separator_match = re.search(r'^-{10,}\s*$', normalized_output, flags=re.MULTILINE)
+        if separator_match:
+            normalized_output = normalized_output[separator_match.end():]
+
+        raw_members: List[Tuple[str, bool]] = []
+        for block in re.split(r'\n\s*\n', normalized_output.strip()):
+            if not block.strip():
+                continue
+            properties: Dict[str, str] = {}
+            malformed = False
+            for line in block.splitlines():
+                if ' = ' not in line:
+                    malformed = True
+                    continue
+                key, value = line.split(' = ', 1)
+                properties[key] = value
+            path = properties.get('Path')
+            if not path:
+                # Archive metadata and banner blocks are not members.
+                continue
+            if malformed:
+                return None, "7-Zip returned a malformed technical listing"
+
+            attributes = properties.get('Attributes', '')
+            lower_attributes = attributes.lower()
+            if (
+                properties.get('Symbolic Link')
+                or properties.get('Hard Link')
+                or properties.get('Anti') == '+'
+                or re.search(r'(^|\s)l[rwx-]{9}', lower_attributes)
+                or re.search(r'(^|\s)[bcp s][rwx-]{9}', lower_attributes)
+            ):
+                return None, f"Archive contains an unsupported link or special entry: {path}"
+            is_directory = properties.get('Folder') == '+' or attributes.startswith('D')
+            raw_members.append((path, is_directory))
+        return raw_members, None
+
+    async def _inspect_archive_connected(
+        self,
+        archive_path: str,
+        archive_type: str,
+    ) -> Tuple[bool, Dict[str, Any], str]:
+        """Inspect archive members using only quoted, fixed remote commands."""
+        safe_archive = shlex.quote(archive_path)
+        raw_members: List[Tuple[str, bool]]
+
+        if archive_type == 'zip':
+            unzip_tool = await self._find_remote_tool(('unzip',))
+            if not unzip_tool:
+                return False, {}, "Required archive tool is missing: install unzip"
+            safe_tool = shlex.quote(unzip_tool)
+            success, stdout, stderr = await self.execute_command(
+                f"LC_ALL=C {safe_tool} -Z1 {safe_archive}",
+                timeout=self.ARCHIVE_INSPECT_TIMEOUT,
+            )
+            if not success:
+                return False, {}, f"Invalid ZIP archive: {self._short_command_error(stdout, stderr)}"
+            raw_members = [(line, line.endswith('/')) for line in stdout.splitlines() if line]
+
+            verbose_success, verbose_stdout, verbose_stderr = await self.execute_command(
+                f"LC_ALL=C {safe_tool} -Z -l {safe_archive}",
+                timeout=self.ARCHIVE_INSPECT_TIMEOUT,
+            )
+            if not verbose_success:
+                return False, {}, (
+                    "Unable to inspect ZIP member types: "
+                    f"{self._short_command_error(verbose_stdout, verbose_stderr)}"
+                )
+            for line in verbose_stdout.splitlines():
+                stripped = line.lstrip()
+                if stripped and stripped[0] in 'lhbcps' and re.match(r'^[lhbcps][rwxstST-]{9}', stripped):
+                    return False, {}, "Archive contains a link or special ZIP member"
+
+        elif archive_type in ('tar', 'tar.gz', 'tar.bz2', 'tar.xz'):
+            tar_tool = await self._find_remote_tool(('tar',))
+            if not tar_tool:
+                return False, {}, "Required archive tool is missing: install tar"
+            safe_tool = shlex.quote(tar_tool)
+            list_flag = {
+                'tar': '-tf',
+                'tar.gz': '-tzf',
+                'tar.bz2': '-tjf',
+                'tar.xz': '-tJf',
+            }[archive_type]
+            verbose_flag = list_flag.replace('t', 'tv', 1)
+            success, stdout, stderr = await self.execute_command(
+                f"LC_ALL=C {safe_tool} {list_flag} {safe_archive}",
+                timeout=self.ARCHIVE_INSPECT_TIMEOUT,
+            )
+            if not success:
+                return False, {}, f"Invalid TAR archive: {self._short_command_error(stdout, stderr)}"
+            raw_members = [(line, line.endswith('/')) for line in stdout.splitlines() if line]
+
+            verbose_success, verbose_stdout, verbose_stderr = await self.execute_command(
+                f"LC_ALL=C {safe_tool} {verbose_flag} {safe_archive}",
+                timeout=self.ARCHIVE_INSPECT_TIMEOUT,
+            )
+            if not verbose_success:
+                return False, {}, (
+                    "Unable to inspect TAR member types: "
+                    f"{self._short_command_error(verbose_stdout, verbose_stderr)}"
+                )
+            for line in verbose_stdout.splitlines():
+                stripped = line.lstrip()
+                if stripped and stripped[0] in 'lhbcps':
+                    return False, {}, "Archive contains a link or special TAR member"
+
+        elif archive_type == '7z':
+            seven_zip_tool = await self._find_remote_tool(('7zz', '7z', '7za'))
+            if not seven_zip_tool:
+                return False, {}, "Required archive tool is missing: install 7zz, 7z, or 7za"
+            success, stdout, stderr = await self.execute_command(
+                f"LC_ALL=C {shlex.quote(seven_zip_tool)} l -slt -sccUTF-8 {safe_archive}",
+                timeout=self.ARCHIVE_INSPECT_TIMEOUT,
+            )
+            if not success:
+                return False, {}, f"Invalid 7z archive: {self._short_command_error(stdout, stderr)}"
+            parsed_members, parse_error = self._parse_7z_listing(stdout)
+            if parse_error:
+                return False, {}, parse_error
+            raw_members = parsed_members or []
+
+        elif archive_type in ('gz', 'bz2'):
+            tool_name = 'gzip' if archive_type == 'gz' else 'bzip2'
+            tool = await self._find_remote_tool((tool_name,))
+            if not tool:
+                return False, {}, f"Required archive tool is missing: install {tool_name}"
+            success, stdout, stderr = await self.execute_command(
+                f"{shlex.quote(tool)} -t {safe_archive}",
+                timeout=self.ARCHIVE_INSPECT_TIMEOUT,
+            )
+            if not success:
+                return False, {}, (
+                    f"Invalid {archive_type} archive: {self._short_command_error(stdout, stderr)}"
+                )
+            suffix_length = 3 if archive_type == 'gz' else 4
+            raw_members = [(posixpath.basename(archive_path)[:-suffix_length], False)]
+        else:
+            return False, {}, "Unsupported archive format"
+
+        return self._build_archive_info(archive_type, raw_members)
+
+    async def inspect_archive(
+        self,
+        archive_path: str,
+        server: Server,
+    ) -> Tuple[bool, Dict[str, Any], str]:
+        """Validate and list a remote archive for the file-manager UI."""
+        archive_type = self.archive_type_from_path(archive_path)
+        if archive_type is None:
+            return False, {}, (
+                "Unsupported archive format. Supported formats: .zip, .7z, .tar, .tar.gz, "
+                ".tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .gz, .bz2"
+            )
+        valid, validation_error = await self.validate_path_within_base(
+            server.game_directory,
+            archive_path,
+            server,
+            allow_missing=False,
+            require_regular=True,
+        )
+        if not valid:
+            return False, {}, validation_error
+        return await self._inspect_archive_connected(archive_path, archive_type)
+
     async def list_directory(self, path: str, server: Server) -> Tuple[bool, List[Dict[str, Any]], str]:
         """
         List directory contents with file metadata

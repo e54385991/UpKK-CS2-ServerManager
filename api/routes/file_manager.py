@@ -15,7 +15,8 @@ import asyncio
 import uuid
 import time
 import logging
-from urllib.parse import quote
+import ipaddress
+from urllib.parse import quote, unquote, urlsplit
 from jose import JWTError, jwt
 
 from modules import Server, get_db, User, get_current_active_user, settings
@@ -28,6 +29,8 @@ EXTRACTION_TASK_COMPLETED_CLEANUP_SECONDS = 3600  # 1 hour
 EXTRACTION_TASK_ABANDONED_CLEANUP_SECONDS = 7200  # 2 hours
 STREAMING_DOWNLOAD_THRESHOLD_BYTES = 3 * 1024 * 1024  # 3MB
 DOWNLOAD_TICKET_TTL_SECONDS = 60
+REMOTE_NAME_MAX_BYTES = 255
+DOWNLOAD_URL_MAX_LENGTH = 4096
 
 # In-memory storage for extraction task status
 # Key: task_id, Value: dict with status, archive_path, destination_path, 
@@ -41,6 +44,13 @@ _extraction_task_refs: Dict[str, asyncio.Task] = {}
 
 # Lock for thread-safe access to extraction_tasks and _extraction_task_refs
 extraction_tasks_lock = asyncio.Lock()
+
+# URL downloads use the same short-lived, process-local task model as archive
+# extraction. The task record intentionally does not retain the URL because
+# signed download URLs commonly contain credentials in their query string.
+download_url_tasks: Dict[str, Dict[str, Any]] = {}
+_download_url_task_refs: Dict[str, asyncio.Task] = {}
+download_url_tasks_lock = asyncio.Lock()
 
 # Short-lived one-time tickets let browser-native downloads authenticate
 # without exposing the long-lived JWT in a URL.
@@ -98,6 +108,21 @@ class ExtractArchiveRequest(SQLModel):
     archive_path: str
     destination_path: Optional[str] = None
     overwrite: bool = False
+    source_folder: Optional[str] = None
+    strip_source_folder: bool = False
+
+
+class DownloadUrlRequest(SQLModel):
+    """Download an archive URL to a remote server directory."""
+    url: str
+    destination_path: str
+    filename: Optional[str] = None
+    overwrite: bool = False
+
+
+class InspectArchiveRequest(SQLModel):
+    """Inspect folders contained in a remote archive."""
+    archive_path: str
 
 
 async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
@@ -214,6 +239,146 @@ def is_path_safe(base_path: str, requested_path: str) -> bool:
 def remote_join(*parts: str) -> str:
     """Join remote server paths using POSIX separators."""
     return posixpath.normpath(posixpath.join(*parts))
+
+
+def _validate_direct_child_name(name: str, label: str = "name") -> str:
+    """Validate a single remote path component without changing its value."""
+    if not isinstance(name, str) or not name or not name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{label} cannot be empty"
+        )
+    if name in (".", "..") or posixpath.basename(name) != name or "/" in name or "\\" in name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{label} must be a direct child name and cannot contain path separators"
+        )
+    if any(ord(char) < 32 or ord(char) == 127 for char in name):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{label} cannot contain control characters"
+        )
+    if len(name.encode("utf-8")) > REMOTE_NAME_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{label} is too long (maximum {REMOTE_NAME_MAX_BYTES} UTF-8 bytes)"
+        )
+    return name
+
+
+def _normalize_source_folder(source_folder: Optional[str]) -> Optional[str]:
+    """Normalize and validate a directory name stored inside an archive."""
+    if source_folder is None or not source_folder.strip():
+        return None
+
+    value = source_folder.strip().rstrip("/")
+    while value.startswith("./"):
+        value = value[2:]
+
+    if (
+        not value
+        or value.startswith("/")
+        or "\\" in value
+        or any(ord(char) < 32 or ord(char) == 127 for char in value)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="source_folder must be a safe relative POSIX directory path"
+        )
+
+    normalized = posixpath.normpath(value)
+    if normalized in ("", ".", "..") or normalized.startswith("../"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="source_folder cannot escape the archive root"
+        )
+    return normalized
+
+
+def _validate_download_url(url: str) -> str:
+    """Apply transport-level validation before passing a URL to remote curl."""
+    if not isinstance(url, str) or not url or len(url) > DOWNLOAD_URL_MAX_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"URL is required and must not exceed {DOWNLOAD_URL_MAX_LENGTH} characters"
+        )
+    if any(ord(char) < 32 or ord(char) == 127 for char in url):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="URL cannot contain control characters"
+        )
+
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port  # Accessing this validates malformed ports.
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid URL: {exc}"
+        ) from exc
+
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only absolute HTTP and HTTPS URLs are supported"
+        )
+    if parsed.username is not None or parsed.password is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="URLs containing embedded credentials are not supported"
+        )
+    if parsed.fragment:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="URL fragments are not supported"
+        )
+    if port is not None and not 1 <= port <= 65535:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="URL port is outside the valid range"
+        )
+
+    hostname = parsed.hostname.rstrip(".").lower()
+    if hostname == "localhost" or hostname.endswith(".localhost"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Localhost download URLs are not allowed"
+        )
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+    if address is not None and not address.is_global:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Non-public IP address download URLs are not allowed"
+        )
+
+    return url
+
+
+def _download_archive_filename(url: str, requested_filename: Optional[str]) -> str:
+    """Choose a safe archive filename from an explicit value or URL path."""
+    if requested_filename is not None and requested_filename.strip():
+        filename = requested_filename
+    else:
+        filename = posixpath.basename(unquote(urlsplit(url).path))
+        if not filename:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="filename is required when the URL path has no filename"
+            )
+
+    filename = _validate_direct_child_name(filename, "filename")
+    if SSHManager.archive_type_from_path(filename) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Unsupported archive filename. Supported formats: .zip, .7z, .tar, "
+                ".tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .gz, .bz2"
+            )
+        )
+    return filename
 
 
 def _cleanup_temp_file(path: str) -> None:
@@ -486,6 +651,189 @@ async def create_download_ticket(
     return {"ticket": ticket, "expires_in": DOWNLOAD_TICKET_TTL_SECONDS}
 
 
+async def _run_download_url_task(
+    task_id: str,
+    url: str,
+    target_path: str,
+    server: Server,
+    overwrite: bool,
+):
+    """Download an archive on the SSH host without retaining its URL in status."""
+    ssh_manager: Optional[SSHManager] = None
+    try:
+        async with download_url_tasks_lock:
+            download_url_tasks[task_id]["status"] = "running"
+            download_url_tasks[task_id]["started_at"] = time.time()
+
+        logger.info("[URL Download] Starting task %s -> %s", task_id, target_path)
+        ssh_manager = SSHManager()
+        success, error = await ssh_manager.download_url_to_file(
+            url,
+            target_path,
+            server,
+            overwrite=overwrite,
+        )
+
+        async with download_url_tasks_lock:
+            if success:
+                download_url_tasks[task_id]["status"] = "completed"
+                download_url_tasks[task_id]["message"] = "Archive downloaded successfully"
+            else:
+                download_url_tasks[task_id]["status"] = "failed"
+                download_url_tasks[task_id]["error"] = error
+            download_url_tasks[task_id]["completed_at"] = time.time()
+    except Exception as exc:
+        logger.exception("[URL Download] Task %s failed", task_id)
+        async with download_url_tasks_lock:
+            if task_id in download_url_tasks:
+                download_url_tasks[task_id]["status"] = "failed"
+                download_url_tasks[task_id]["error"] = str(exc)
+                download_url_tasks[task_id]["completed_at"] = time.time()
+    finally:
+        if ssh_manager is not None:
+            try:
+                await ssh_manager.disconnect()
+            except Exception:
+                logger.warning(
+                    "[URL Download] Failed to release SSH connection for task %s",
+                    task_id,
+                    exc_info=True,
+                )
+        async with download_url_tasks_lock:
+            _download_url_task_refs.pop(task_id, None)
+
+
+async def _cleanup_old_download_url_tasks():
+    """Remove expired URL download task records and completed task references."""
+    current_time = time.time()
+    tasks_to_remove = []
+    async with download_url_tasks_lock:
+        for task_id, task_info in download_url_tasks.items():
+            completed_at = task_info.get("completed_at")
+            created_at = task_info.get("created_at")
+            if completed_at and current_time - completed_at > EXTRACTION_TASK_COMPLETED_CLEANUP_SECONDS:
+                tasks_to_remove.append(task_id)
+            elif not completed_at and created_at and current_time - created_at > EXTRACTION_TASK_ABANDONED_CLEANUP_SECONDS:
+                tasks_to_remove.append(task_id)
+
+        for task_id in tasks_to_remove:
+            download_url_tasks.pop(task_id, None)
+            _download_url_task_refs.pop(task_id, None)
+
+
+@router.post("/download-url", status_code=status.HTTP_202_ACCEPTED)
+async def download_archive_from_url(
+    server_id: int,
+    request: DownloadUrlRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Start downloading an HTTP(S) archive directly on the SSH host."""
+    server = await get_server_for_user(server_id, db, current_user)
+    url = _validate_download_url(request.url)
+
+    if not request.destination_path or not request.destination_path.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="destination_path cannot be empty",
+        )
+    destination_path = posixpath.normpath(request.destination_path)
+    filename = _download_archive_filename(url, request.filename)
+    target_path = remote_join(destination_path, filename)
+
+    if not is_path_safe(server.game_directory, destination_path) or not is_path_safe(
+        server.game_directory, target_path
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: destination path is outside server directory",
+        )
+
+    # Resolve existing ancestors on the SSH host so an in-tree symlink cannot
+    # redirect the write outside the canonical game directory.
+    validator = SSHManager()
+    try:
+        valid, validation_error = await validator.validate_path_within_base(
+            server.game_directory,
+            target_path,
+            server,
+            allow_missing=True,
+        )
+    finally:
+        await validator.disconnect()
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied: {validation_error}",
+        )
+
+    await _cleanup_old_download_url_tasks()
+    task_id = str(uuid.uuid4())
+    async with download_url_tasks_lock:
+        download_url_tasks[task_id] = {
+            "status": "pending",
+            "target_path": target_path,
+            "server_id": server_id,
+            "user_id": current_user.id,
+            "created_at": time.time(),
+            "started_at": None,
+            "completed_at": None,
+            "message": None,
+            "error": None,
+        }
+
+    task = asyncio.create_task(
+        _run_download_url_task(task_id, url, target_path, server, request.overwrite)
+    )
+    async with download_url_tasks_lock:
+        _download_url_task_refs[task_id] = task
+
+    return {
+        "success": True,
+        "task_id": task_id,
+        "status": "pending",
+        "target_path": target_path,
+    }
+
+
+@router.get("/download-url/status/{task_id}")
+async def get_download_url_status(
+    server_id: int,
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Return status for a URL download task owned by this user and server."""
+    await get_server_for_user(server_id, db, current_user)
+    async with download_url_tasks_lock:
+        task_info = download_url_tasks.get(task_id)
+        if task_info is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Download task not found or has expired",
+            )
+        task_info = task_info.copy()
+
+    if task_info.get("server_id") != server_id or task_info.get("user_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Download task does not belong to this server and user",
+        )
+
+    elapsed = None
+    if task_info.get("started_at"):
+        end_time = task_info.get("completed_at") or time.time()
+        elapsed = round(end_time - task_info["started_at"], 1)
+    return {
+        "task_id": task_id,
+        "status": task_info["status"],
+        "target_path": task_info["target_path"],
+        "message": task_info.get("message"),
+        "error": task_info.get("error"),
+        "elapsed_seconds": elapsed,
+    }
+
+
 @router.post("/mkdir")
 async def create_directory(
     server_id: int,
@@ -496,9 +844,11 @@ async def create_directory(
 ):
     """Create a new directory"""
     server = await get_server_for_user(server_id, db, current_user)
+
+    directory_name = _validate_direct_child_name(request.name, "Directory name")
     
     # Construct full path
-    new_dir_path = remote_join(path, request.name)
+    new_dir_path = remote_join(path, directory_name)
     
     # Security check
     if not is_path_safe(server.game_directory, new_dir_path):
@@ -605,14 +955,51 @@ async def rename_file_or_directory(
     return {"success": True, "message": "Renamed successfully", "new_path": new_path}
 
 
+@router.post("/archive/inspect")
+async def inspect_archive(
+    server_id: int,
+    request: InspectArchiveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Inspect a remote archive and return its safe directory entries."""
+    server = await get_server_for_user(server_id, db, current_user)
+    archive_path = posixpath.normpath(request.archive_path)
+    if not is_path_safe(server.game_directory, archive_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: archive path is outside server directory",
+        )
+
+    ssh_manager = SSHManager()
+    try:
+        success, archive_info, error = await ssh_manager.inspect_archive(archive_path, server)
+    finally:
+        await ssh_manager.disconnect()
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error,
+        )
+
+    return {
+        "archive_type": archive_info["archive_type"],
+        "folders": archive_info["folders"],
+        "entry_count": archive_info["entry_count"],
+    }
+
+
 async def _run_extraction_task(
     task_id: str,
     archive_path: str,
     destination_path: str,
     server: Server,
-    overwrite: bool
+    overwrite: bool,
+    source_folder: Optional[str],
+    strip_source_folder: bool,
 ):
     """Background task to perform archive extraction"""
+    ssh_manager: Optional[SSHManager] = None
     try:
         async with extraction_tasks_lock:
             extraction_tasks[task_id]["status"] = "running"
@@ -623,7 +1010,12 @@ async def _run_extraction_task(
         # Extract using SSH
         ssh_manager = SSHManager()
         success, error = await ssh_manager.extract_archive(
-            archive_path, destination_path, server, overwrite
+            archive_path,
+            destination_path,
+            server,
+            overwrite,
+            source_folder=source_folder,
+            strip_source_folder=strip_source_folder,
         )
         
         async with extraction_tasks_lock:
@@ -645,6 +1037,15 @@ async def _run_extraction_task(
             extraction_tasks[task_id]["error"] = str(e)
             extraction_tasks[task_id]["completed_at"] = time.time()
     finally:
+        if ssh_manager is not None:
+            try:
+                await ssh_manager.disconnect()
+            except Exception:
+                logger.warning(
+                    "[Extraction] Failed to release SSH connection for task %s",
+                    task_id,
+                    exc_info=True,
+                )
         # Clean up task reference
         async with extraction_tasks_lock:
             if task_id in _extraction_task_refs:
@@ -689,12 +1090,13 @@ async def extract_archive(
     """
     server = await get_server_for_user(server_id, db, current_user)
     
-    archive_path = request.archive_path
+    archive_path = posixpath.normpath(request.archive_path)
+    source_folder = _normalize_source_folder(request.source_folder)
     # If no destination specified or empty string, extract to the same directory as the archive
     if not request.destination_path or request.destination_path.strip() == '':
         destination_path = posixpath.dirname(archive_path)
     else:
-        destination_path = request.destination_path
+        destination_path = posixpath.normpath(request.destination_path)
     
     # Security check
     if not is_path_safe(server.game_directory, archive_path):
@@ -721,6 +1123,8 @@ async def extract_archive(
             "status": "pending",
             "archive_path": archive_path,
             "destination_path": destination_path,
+            "source_folder": source_folder,
+            "strip_source_folder": bool(request.strip_source_folder and source_folder),
             "server_id": server_id,
             "user_id": current_user.id,
             "created_at": time.time(),
@@ -732,7 +1136,13 @@ async def extract_archive(
     
     # Start extraction task in background and store reference
     task = asyncio.create_task(_run_extraction_task(
-        task_id, archive_path, destination_path, server, request.overwrite
+        task_id,
+        archive_path,
+        destination_path,
+        server,
+        request.overwrite,
+        source_folder,
+        bool(request.strip_source_folder and source_folder),
     ))
     
     # Store task reference for proper cleanup/tracking
@@ -798,6 +1208,8 @@ async def get_extraction_status(
         "status": task_info["status"],
         "archive_path": task_info["archive_path"],
         "destination_path": task_info["destination_path"],
+        "source_folder": task_info.get("source_folder"),
+        "strip_source_folder": task_info.get("strip_source_folder", False),
         "message": task_info.get("message"),
         "error": task_info.get("error"),
         "elapsed_seconds": elapsed

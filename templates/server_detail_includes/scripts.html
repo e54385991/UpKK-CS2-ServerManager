@@ -2515,6 +2515,27 @@
                 uploading: false,
                 uploadProgress: 0,
                 uploadingFileName: '',
+                // URL download modal and background task data
+                urlDownloadUrl: '',
+                urlDownloadFilename: '',
+                urlDownloadDestinationPath: '',
+                urlDownloadOverwrite: false,
+                urlDownloadStarting: false,
+                urlDownloading: false,
+                urlDownloadTaskId: null,
+                urlDownloadProgress: {
+                    status: null,
+                    fileName: '',
+                    targetPath: '',
+                    elapsed: 0,
+                    bytesDownloaded: null,
+                    totalBytes: null,
+                    percent: null
+                },
+                urlDownloadPollInterval: null,
+                urlDownloadPollFailures: 0,
+                urlDownloadPollMaxFailures: 5,
+                urlDownloadPollIntervalMs: 1500,
                 // Rename modal data
                 renamingFile: null,
                 renameNewName: '',
@@ -2523,6 +2544,16 @@
                 extractArchivePath: '',
                 extractDestinationPath: '',
                 extractOverwrite: false,
+                extractMode: 'all',
+                extractSourceFolder: '',
+                extractStripSourceFolder: false,
+                extractArchiveFolders: [],
+                extractArchiveType: '',
+                extractArchiveEntryCount: null,
+                extractInspecting: false,
+                extractInspectError: '',
+                extractInspectRequestId: 0,
+                extractStarting: false,
                 // Extraction progress tracking
                 extracting: false,
                 extractTaskId: null,
@@ -2543,6 +2574,7 @@
                     // Clean up polling when page is unloaded to prevent memory leaks
                     window.addEventListener('beforeunload', () => {
                         this.stopExtractionPolling();
+                        this.stopUrlDownloadPolling();
                     });
                 },
 
@@ -2784,6 +2816,225 @@
                     this.refreshFiles();
                 },
 
+                openUrlDownloadModal() {
+                    if (this.urlDownloading) return;
+
+                    this.urlDownloadUrl = '';
+                    this.urlDownloadFilename = '';
+                    this.urlDownloadDestinationPath = this.currentPath;
+                    this.urlDownloadOverwrite = false;
+                    this.urlDownloadStarting = false;
+
+                    const modalElement = document.getElementById('urlDownloadModal');
+                    if (!modalElement) return;
+
+                    const modal = bootstrap.Modal.getOrCreateInstance(modalElement, {
+                        backdrop: 'static',
+                        keyboard: false
+                    });
+                    modalElement.addEventListener('shown.bs.modal', () => {
+                        document.getElementById('urlDownloadUrl')?.focus();
+                    }, { once: true });
+                    modal.show();
+                },
+
+                async startUrlDownload() {
+                    const url = this.urlDownloadUrl.trim();
+                    const destinationPath = this.urlDownloadDestinationPath.trim();
+                    if (!url || !destinationPath || this.urlDownloadStarting) return;
+
+                    try {
+                        const parsedUrl = new URL(url);
+                        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+                            throw new Error(window.i18n?.t('fileManager.invalidDownloadUrl') ||
+                                'Only HTTP and HTTPS URLs are supported.');
+                        }
+                    } catch (error) {
+                        showError(window.i18n?.t('fileManager.invalidDownloadUrl') ||
+                            'Please enter a valid HTTP or HTTPS URL.');
+                        return;
+                    }
+
+                    this.urlDownloadStarting = true;
+
+                    try {
+                        const payload = {
+                            url: url,
+                            destination_path: destinationPath,
+                            overwrite: this.urlDownloadOverwrite
+                        };
+                        const filename = this.urlDownloadFilename.trim();
+                        if (filename) payload.filename = filename;
+
+                        const response = await fetch(`/servers/{{ server.id }}/files/download-url`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(await this.readFileManagerApiError(
+                                response,
+                                window.i18n?.t('fileManager.errorDownloadingUrl') || 'Failed to start URL download'
+                            ));
+                        }
+
+                        const result = await response.json();
+                        if (!result.task_id) {
+                            throw new Error(window.i18n?.t('fileManager.missingDownloadTask') ||
+                                'The server did not return a download task ID.');
+                        }
+
+                        const targetPath = result.target_path || '';
+                        this.urlDownloadTaskId = result.task_id;
+                        this.urlDownloading = true;
+                        this.urlDownloadProgress = {
+                            status: result.status || 'pending',
+                            fileName: filename || (targetPath ? targetPath.split('/').pop() : ''),
+                            targetPath: targetPath,
+                            elapsed: 0,
+                            bytesDownloaded: null,
+                            totalBytes: null,
+                            percent: null
+                        };
+
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('urlDownloadModal'));
+                        if (modal) modal.hide();
+
+                        this.startUrlDownloadPolling();
+                    } catch (error) {
+                        console.error('Error starting URL download:', error);
+                        showError(this.formatSSHError(
+                            error.message,
+                            'fileManager.errorDownloadingUrl'
+                        ));
+                    } finally {
+                        this.urlDownloadStarting = false;
+                    }
+                },
+
+                startUrlDownloadPolling() {
+                    this.stopUrlDownloadPolling();
+                    this.urlDownloadPollFailures = 0;
+                    this.urlDownloadPollInterval = setInterval(
+                        () => this.pollUrlDownloadStatus(),
+                        this.urlDownloadPollIntervalMs
+                    );
+                    this.pollUrlDownloadStatus();
+                },
+
+                async pollUrlDownloadStatus() {
+                    if (!this.urlDownloadTaskId) {
+                        this.stopUrlDownloadPolling();
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(
+                            `/servers/{{ server.id }}/files/download-url/status/${this.urlDownloadTaskId}`,
+                            {
+                                headers: {
+                                    'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                                }
+                            }
+                        );
+
+                        if (!response.ok) {
+                            throw new Error(await this.readFileManagerApiError(
+                                response,
+                                window.i18n?.t('fileManager.urlStatusCheckFailed') ||
+                                    'Failed to check URL download status.'
+                            ));
+                        }
+
+                        this.urlDownloadPollFailures = 0;
+                        const status = await response.json();
+                        const bytesDownloaded = status.bytes_downloaded ?? status.downloaded_bytes ?? null;
+                        const totalBytes = status.total_bytes ?? status.file_size ?? null;
+                        let percent = status.progress_percent ?? status.percent ?? null;
+                        if (percent === null && totalBytes && bytesDownloaded !== null) {
+                            percent = Math.round((bytesDownloaded / totalBytes) * 100);
+                        }
+                        if (percent !== null && Number.isFinite(Number(percent))) {
+                            percent = Math.min(100, Math.max(0, Math.round(Number(percent))));
+                        } else {
+                            percent = null;
+                        }
+
+                        const targetPath = status.target_path || this.urlDownloadProgress.targetPath;
+                        this.urlDownloadProgress = {
+                            status: status.status || this.urlDownloadProgress.status,
+                            fileName: status.filename || this.urlDownloadProgress.fileName ||
+                                (targetPath ? targetPath.split('/').pop() : ''),
+                            targetPath: targetPath,
+                            elapsed: status.elapsed_seconds ?? status.elapsed ?? this.urlDownloadProgress.elapsed,
+                            bytesDownloaded: bytesDownloaded,
+                            totalBytes: totalBytes,
+                            percent: percent
+                        };
+
+                        if (status.status === 'completed') {
+                            this.stopUrlDownloadPolling();
+                            this.urlDownloading = false;
+                            this.urlDownloadTaskId = null;
+                            this.refreshFiles();
+                            showSuccess(window.i18n?.t('fileManager.urlDownloadSuccess') ||
+                                'URL download completed successfully');
+                        } else if (status.status === 'failed') {
+                            this.stopUrlDownloadPolling();
+                            this.urlDownloading = false;
+                            this.urlDownloadTaskId = null;
+                            showError(this.formatSSHError(
+                                status.error || status.message || 'URL download failed',
+                                'fileManager.errorDownloadingUrl'
+                            ));
+                        }
+                    } catch (error) {
+                        this.urlDownloadPollFailures++;
+                        console.error(
+                            `Error polling URL download status (attempt ${this.urlDownloadPollFailures}/${this.urlDownloadPollMaxFailures}):`,
+                            error
+                        );
+
+                        if (this.urlDownloadPollFailures >= this.urlDownloadPollMaxFailures) {
+                            this.stopUrlDownloadPolling();
+                            this.urlDownloading = false;
+                            this.urlDownloadTaskId = null;
+                            showError(window.i18n?.t('fileManager.urlStatusCheckFailed') ||
+                                'Failed to check URL download status. The download may still complete in the background.');
+                        }
+                    }
+                },
+
+                stopUrlDownloadPolling() {
+                    if (this.urlDownloadPollInterval) {
+                        clearInterval(this.urlDownloadPollInterval);
+                        this.urlDownloadPollInterval = null;
+                    }
+                    this.urlDownloadPollFailures = 0;
+                },
+
+                urlDownloadStatusLabel(status) {
+                    if (status === 'running') {
+                        return window.i18n?.t('fileManager.downloadRunning') || 'Downloading...';
+                    }
+                    return window.i18n?.t('fileManager.downloadPending') || 'Pending...';
+                },
+
+                async readFileManagerApiError(response, fallback) {
+                    const text = await response.text();
+                    if (!text) return fallback;
+                    try {
+                        const data = JSON.parse(text);
+                        return data.detail || data.error || data.message || fallback;
+                    } catch (error) {
+                        return text;
+                    }
+                },
+
                 async downloadFile(file) {
                     try {
                         const token = localStorage.getItem('access_token');
@@ -2990,47 +3241,107 @@
                 },
 
                 showExtractModal(file) {
+                    if (this.extracting) {
+                        showError(window.i18n?.t('fileManager.extractionAlreadyRunning') ||
+                            'Please wait for the current extraction to finish.');
+                        return;
+                    }
+
                     this.extractingFile = file;
                     this.extractArchivePath = file.path;
-                    this.extractDestinationPath = '';
+                    this.extractDestinationPath = this.currentPath;
                     this.extractOverwrite = false;
-                    
-                    // Set the input values directly (since modal is outside Alpine scope)
-                    document.getElementById('extractArchivePath').value = file.path;
-                    document.getElementById('extractDestinationPath').value = '';
-                    document.getElementById('extractOverwrite').checked = false;
-                    
-                    // Show modal using Bootstrap
-                    const modal = new bootstrap.Modal(document.getElementById('extractModal'));
+                    this.extractMode = 'all';
+                    this.extractSourceFolder = '';
+                    this.extractStripSourceFolder = false;
+                    this.extractArchiveFolders = [];
+                    this.extractArchiveType = '';
+                    this.extractArchiveEntryCount = null;
+                    this.extractInspectError = '';
+                    this.extractStarting = false;
+
+                    const modalElement = document.getElementById('extractModal');
+                    if (!modalElement) return;
+
+                    const modal = bootstrap.Modal.getOrCreateInstance(modalElement, {
+                        backdrop: 'static',
+                        keyboard: false
+                    });
                     modal.show();
-                    
-                    // Set up the extract button handler (remove previous listeners)
-                    const extractBtn = document.getElementById('extractArchiveBtn');
-                    const newExtractBtn = extractBtn.cloneNode(true);
-                    extractBtn.parentNode.replaceChild(newExtractBtn, extractBtn);
-                    newExtractBtn.addEventListener('click', () => this.extractArchive());
+                    this.inspectArchive();
+                },
+
+                async inspectArchive() {
+                    if (!this.extractArchivePath) return;
+
+                    const archivePath = this.extractArchivePath;
+                    const requestId = ++this.extractInspectRequestId;
+                    this.extractInspecting = true;
+                    this.extractInspectError = '';
+                    this.extractArchiveFolders = [];
+                    this.extractArchiveType = '';
+                    this.extractArchiveEntryCount = null;
+                    this.extractMode = 'all';
+                    this.extractSourceFolder = '';
+                    this.extractStripSourceFolder = false;
+
+                    try {
+                        const response = await fetch(`/servers/{{ server.id }}/files/archive/inspect`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ archive_path: archivePath })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(await this.readFileManagerApiError(
+                                response,
+                                window.i18n?.t('fileManager.errorInspectingArchive') ||
+                                    'Failed to read archive contents'
+                            ));
+                        }
+
+                        const result = await response.json();
+                        if (requestId !== this.extractInspectRequestId || archivePath !== this.extractArchivePath) {
+                            return;
+                        }
+                        this.extractArchiveType = result.archive_type || '';
+                        this.extractArchiveEntryCount = Number.isFinite(Number(result.entry_count))
+                            ? Number(result.entry_count)
+                            : null;
+                        this.extractArchiveFolders = Array.isArray(result.folders)
+                            ? [...new Set(result.folders.filter(folder => typeof folder === 'string' && folder.trim()))]
+                                .sort((left, right) => left.localeCompare(right))
+                            : [];
+                    } catch (error) {
+                        if (requestId !== this.extractInspectRequestId || archivePath !== this.extractArchivePath) {
+                            return;
+                        }
+                        console.error('Error inspecting archive:', error);
+                        const prefix = window.i18n?.t('fileManager.errorInspectingArchive') ||
+                            'Failed to read archive contents';
+                        this.extractInspectError = `${prefix}: ${error.message}`;
+                    } finally {
+                        if (requestId === this.extractInspectRequestId) {
+                            this.extractInspecting = false;
+                        }
+                    }
                 },
 
                 async extractArchive() {
-                    if (!this.extractingFile) return;
+                    if (!this.extractingFile || this.extractStarting) return;
 
-                    const destinationPath = document.getElementById('extractDestinationPath').value;
-                    const overwrite = document.getElementById('extractOverwrite').checked;
-
-                    // Disable the extract button and show loading state
-                    const extractBtn = document.getElementById('extractArchiveBtn');
-                    const originalBtnText = extractBtn?.textContent;
-                    if (extractBtn) {
-                        extractBtn.disabled = true;
-                        // Use textContent for the label to prevent any XSS
-                        const spinner = document.createElement('span');
-                        spinner.className = 'spinner-border spinner-border-sm me-1';
-                        extractBtn.textContent = '';
-                        extractBtn.appendChild(spinner);
-                        extractBtn.appendChild(document.createTextNode(
-                            window.i18n?.t('fileManager.startingExtraction') || 'Starting...'
-                        ));
+                    const destinationPath = this.extractDestinationPath.trim();
+                    if (!destinationPath) return;
+                    if (this.extractMode === 'folder' && !this.extractSourceFolder) {
+                        showError(window.i18n?.t('fileManager.selectSourceFolderRequired') ||
+                            'Select a folder from the archive first.');
+                        return;
                     }
+
+                    this.extractStarting = true;
 
                     try {
                         const response = await fetch(`/servers/{{ server.id }}/files/extract`, {
@@ -3041,14 +3352,18 @@
                             },
                             body: JSON.stringify({ 
                                 archive_path: this.extractArchivePath,
-                                destination_path: destinationPath || null,
-                                overwrite: overwrite
+                                destination_path: destinationPath,
+                                overwrite: this.extractOverwrite,
+                                source_folder: this.extractMode === 'folder' ? this.extractSourceFolder : null,
+                                strip_source_folder: this.extractMode === 'folder' && this.extractStripSourceFolder
                             })
                         });
 
                         if (!response.ok) {
-                            const errorData = await response.json();
-                            throw new Error(errorData.detail || 'Extraction failed');
+                            throw new Error(await this.readFileManagerApiError(
+                                response,
+                                window.i18n?.t('fileManager.errorExtracting') || 'Extraction failed'
+                            ));
                         }
 
                         const result = await response.json();
@@ -3066,6 +3381,13 @@
                         this.extractArchivePath = '';
                         this.extractDestinationPath = '';
                         this.extractOverwrite = false;
+                        this.extractMode = 'all';
+                        this.extractSourceFolder = '';
+                        this.extractStripSourceFolder = false;
+                        this.extractArchiveFolders = [];
+                        this.extractArchiveType = '';
+                        this.extractArchiveEntryCount = null;
+                        this.extractInspectError = '';
                         
                         // Start tracking extraction progress
                         if (result.task_id) {
@@ -3088,12 +3410,7 @@
                         console.error('Error extracting:', error);
                         showError(this.formatSSHError(error.message, 'errors.errorExtracting'));
                     } finally {
-                        // Re-enable button with safe text content
-                        if (extractBtn) {
-                            extractBtn.disabled = false;
-                            extractBtn.textContent = originalBtnText || 
-                                (window.i18n?.t('fileManager.extract') || 'Extract');
-                        }
+                        this.extractStarting = false;
                     }
                 },
                 
@@ -3203,7 +3520,8 @@
                 isArchiveFile(filename) {
                     // Check if file is a supported archive format
                     const archiveExtensions = [
-                        '.zip', '.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.gz', '.bz2', '.7z'
+                        '.zip', '.7z', '.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2',
+                        '.tar.xz', '.txz', '.gz', '.bz2'
                     ];
                     const lowerName = filename.toLowerCase();
                     return archiveExtensions.some(ext => lowerName.endsWith(ext));
@@ -3237,6 +3555,8 @@
                         '.tar': 'bi-file-zip text-warning',
                         '.gz': 'bi-file-zip text-warning',
                         '.bz2': 'bi-file-zip text-warning',
+                        '.xz': 'bi-file-zip text-warning',
+                        '.txz': 'bi-file-zip text-warning',
                         '.7z': 'bi-file-zip text-warning',
                         '.pdf': 'bi-file-pdf text-danger',
                         '.so': 'bi-file-binary text-secondary',
