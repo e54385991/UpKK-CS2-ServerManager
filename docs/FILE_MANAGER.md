@@ -77,11 +77,11 @@ Supported file types for editing:
 
 1. Open the destination directory in the file manager
 2. Click **Download URL**
-3. Enter an HTTP or HTTPS URL and, optionally, a custom filename
+3. Enter an HTTP or HTTPS URL and, optionally, a custom filename. If omitted, the filename is detected after redirects from `Content-Disposition` or the final URL
 4. Confirm the destination path and whether an existing file may be replaced
 5. The download runs in the background; its status is shown above the file list
 
-The URL is fetched by the managed server over its SSH connection. A partial download is kept under a temporary name and is only moved to the final filename after it succeeds.
+The URL is fetched by the managed server over its SSH connection. Redirects are followed using HTTP/HTTPS only. A partial download is kept under a temporary name and is only moved to the final filename after it succeeds. GitHub Actions artifact links are resolved through GitHub's artifact API using the GitHub token configured in the user's profile; the token needs Actions read access and is never sent to the managed game server.
 
 ### Extracting Archives
 

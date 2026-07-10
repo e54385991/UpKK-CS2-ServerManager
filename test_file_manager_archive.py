@@ -96,6 +96,11 @@ class FileManagerValidationTests(unittest.TestCase):
     def test_download_url_accepts_absolute_public_http_urls(self):
         valid_urls = (
             "https://example.com/releases/server.tar.gz?token=opaque",
+            "https://example.com/downloads/latest?id=opaque",
+            (
+                "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
+                "29046667365/artifacts/8210241957"
+            ),
             "http://8.8.8.8/archive.zip",
             "https://[2606:4700:4700::1111]/archive.7z",
         )
@@ -124,6 +129,10 @@ class FileManagerValidationTests(unittest.TestCase):
             "http://localhost/archive.zip",
             "http://build.localhost/archive.zip",
             "http://127.0.0.1/archive.zip",
+            "http://2130706433/archive.zip",
+            "http://127.1/archive.zip",
+            "http://0177.0.0.1/archive.zip",
+            "http://0x7f000001/archive.zip",
             "http://10.0.0.1/archive.zip",
             "http://169.254.169.254/latest/meta-data.zip",
             "http://0.0.0.0/archive.zip",
@@ -149,6 +158,104 @@ class FileManagerValidationTests(unittest.TestCase):
             ),
             "release build.tar.gz",
         )
+
+    def test_download_filename_can_be_deferred_for_suffixless_redirect_urls(self):
+        suffixless_urls = (
+            "https://example.com/download?id=1",
+            (
+                "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
+                "29046667365/artifacts/8210241957"
+            ),
+        )
+        for url in suffixless_urls:
+            with self.subTest(url=url):
+                self.assertIsNone(
+                    file_manager._download_archive_filename(
+                        url,
+                        None,
+                        allow_unresolved=True,
+                    )
+                )
+
+    def test_github_actions_artifact_url_parser_is_canonical_and_host_bound(self):
+        artifact_url = (
+            "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
+            "29046667365/artifacts/8210241957"
+        )
+        self.assertEqual(
+            file_manager._parse_github_actions_artifact_url(artifact_url),
+            ("Source2ZE", "CS2Fixes", 8210241957),
+        )
+
+        lookalikes = (
+            artifact_url.replace("github.com", "github.example.com"),
+            artifact_url.replace("/runs/29046667365", ""),
+            artifact_url + "/unexpected",
+            artifact_url.replace("29046667365", "not-a-run"),
+            artifact_url.replace("8210241957", "not-an-artifact"),
+        )
+        for url in lookalikes:
+            with self.subTest(url=url):
+                self.assertIsNone(file_manager._parse_github_actions_artifact_url(url))
+
+    def test_github_actions_artifact_resolution_uses_metadata_and_manual_redirect(self):
+        artifact_url = (
+            "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
+            "29046667365/artifacts/8210241957"
+        )
+        api_url = (
+            "https://api.github.com/repos/Source2ZE/CS2Fixes/"
+            "actions/artifacts/8210241957"
+        )
+        signed_url = "https://objects.githubusercontent.com/artifact.zip?signature=secret"
+
+        class FakeGithubClient:
+            def __init__(self):
+                self.calls = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, traceback):
+                return False
+
+            async def get(self, url, headers):
+                self.calls.append((url, dict(headers)))
+                request = file_manager.httpx.Request("GET", url)
+                if url == api_url:
+                    return file_manager.httpx.Response(
+                        200,
+                        json={"name": "CS2Fixes Linux", "expired": False},
+                        request=request,
+                    )
+                if url == f"{api_url}/zip":
+                    return file_manager.httpx.Response(
+                        302,
+                        headers={"Location": signed_url},
+                        request=request,
+                    )
+                raise AssertionError(f"Unexpected request: {url}")
+
+        client = FakeGithubClient()
+        with patch.object(
+            file_manager.httpx,
+            "AsyncClient",
+            return_value=client,
+        ) as client_factory:
+            resolved_url, filename = asyncio.run(
+                file_manager._resolve_github_actions_artifact(
+                    artifact_url,
+                    " github-token ",
+                )
+            )
+
+        self.assertEqual(resolved_url, signed_url)
+        self.assertEqual(filename, "CS2Fixes Linux.zip")
+        self.assertEqual([call[0] for call in client.calls], [api_url, f"{api_url}/zip"])
+        self.assertTrue(
+            all(call[1].get("Authorization") == "Bearer github-token" for call in client.calls)
+        )
+        self.assertFalse(client_factory.call_args.kwargs["follow_redirects"])
 
     def test_download_filename_rejects_missing_unsafe_and_unsupported_names(self):
         invalid_cases = (
@@ -189,6 +296,41 @@ class ArchivePureHelperTests(unittest.TestCase):
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(SSHManager.archive_type_from_path(path), expected)
+
+    def test_redirected_download_prefers_utf8_content_disposition_filename(self):
+        headers = (
+            "HTTP/1.1 302 Found\r\n"
+            'Content-Disposition: attachment; filename="redirect.zip"\r\n\r\n'
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Disposition: attachment; filename=legacy.zip; "
+            "filename*=UTF-8''CS2Fixes%20Linux.zip\r\n\r\n"
+        )
+        filename, error = SSHManager._filename_from_download_response(
+            headers,
+            "https://objects.example.com/opaque-token",
+        )
+        self.assertEqual(filename, "CS2Fixes Linux.zip")
+        self.assertEqual(error, "")
+
+    def test_redirected_download_accepts_plain_content_disposition_filename(self):
+        headers = (
+            "HTTP/1.1 200 OK\r\n"
+            'Content-Disposition: attachment; filename="artifact.7z"\r\n\r\n'
+        )
+        filename, error = SSHManager._filename_from_download_response(
+            headers,
+            "https://objects.example.com/opaque-token",
+        )
+        self.assertEqual(filename, "artifact.7z")
+        self.assertEqual(error, "")
+
+    def test_redirected_download_falls_back_to_effective_url_path(self):
+        filename, error = SSHManager._filename_from_download_response(
+            "HTTP/2 200\r\nContent-Type: application/octet-stream\r\n\r\n",
+            "https://cdn.example.com/releases/release%20build.tar.gz?signature=1",
+        )
+        self.assertEqual(filename, "release build.tar.gz")
+        self.assertEqual(error, "")
 
     def test_archive_member_normalization_accepts_safe_posix_members(self):
         self.assertEqual(
@@ -293,9 +435,118 @@ Attributes = A lrwxrwxrwx
         self.assertIn("link", error.lower())
 
 
+class RemoteDownloadSsrfTests(unittest.TestCase):
+    def test_remote_url_validation_rejects_nonpublic_literal_hosts(self):
+        unsafe_urls = (
+            "http://10.0.0.7/archive.zip",
+            "http://169.254.169.254/latest/meta-data.zip",
+            "http://127.0.0.1/archive.zip",
+            "http://[::1]/archive.zip",
+            "http://[fe80::1]/archive.zip",
+        )
+        for url in unsafe_urls:
+            with self.subTest(url=url):
+                parsed, error = SSHManager._validate_remote_download_url(url)
+                self.assertIsNone(parsed)
+                self.assertTrue(error)
+
+    def test_remote_dns_resolution_rejects_nonpublic_and_mixed_answers(self):
+        answer_sets = (
+            "10.0.0.7 STREAM private.example\n",
+            "169.254.169.254 STREAM metadata.example\n",
+            "127.0.0.1 STREAM loopback.example\n",
+            "::1 STREAM loopback-v6.example\n",
+            (
+                "8.8.8.8 STREAM mixed.example\n"
+                "2606:4700:4700::1111 STREAM mixed.example\n"
+                "10.0.0.7 STREAM mixed.example\n"
+            ),
+        )
+
+        for stdout in answer_sets:
+            with self.subTest(stdout=stdout):
+                manager = SSHManager(use_pool=False)
+                manager.conn = object()
+
+                async def execute(command, timeout=30):
+                    self.assertIn("getent", command)
+                    self.assertIn("ahosts", command)
+                    return True, stdout, ""
+
+                manager.execute_command = execute
+                address, error = asyncio.run(
+                    manager._resolve_public_download_address(
+                        "mixed.example",
+                        "/usr/bin/getent",
+                    )
+                )
+                self.assertIsNone(address)
+                self.assertTrue(error)
+
+    def test_remote_dns_resolution_accepts_only_all_public_answers(self):
+        manager = SSHManager(use_pool=False)
+        manager.conn = object()
+
+        async def execute(command, timeout=30):
+            return (
+                True,
+                "8.8.8.8 STREAM public.example\n"
+                "2606:4700:4700::1111 STREAM public.example\n",
+                "",
+            )
+
+        manager.execute_command = execute
+        address, error = asyncio.run(
+            manager._resolve_public_download_address(
+                "public.example",
+                "/usr/bin/getent",
+            )
+        )
+        self.assertEqual(address, "8.8.8.8")
+        self.assertEqual(error, "")
+
+    def test_redirect_location_is_joined_then_revalidated(self):
+        current_url = "https://downloads.example.com/releases/current/start"
+        headers = (
+            "HTTP/1.1 302 Found\r\n"
+            "Location: ../release.zip?signature=opaque\r\n\r\n"
+        )
+        next_url, is_redirect, error = SSHManager._redirect_url_from_response(
+            headers,
+            current_url,
+        )
+        self.assertTrue(is_redirect)
+        self.assertEqual(
+            next_url,
+            "https://downloads.example.com/releases/release.zip?signature=opaque",
+        )
+        self.assertEqual(error, "")
+
+    def test_redirect_rejects_private_metadata_and_non_http_schemes(self):
+        unsafe_locations = (
+            "http://169.254.169.254/latest/meta-data",
+            "http://127.0.0.1/archive.zip",
+            "ftp://downloads.example.com/archive.zip",
+            "file:///etc/passwd",
+        )
+        for location in unsafe_locations:
+            with self.subTest(location=location):
+                headers = (
+                    "HTTP/1.1 302 Found\r\n"
+                    f"Location: {location}\r\n\r\n"
+                )
+                next_url, is_redirect, error = SSHManager._redirect_url_from_response(
+                    headers,
+                    "https://downloads.example.com/start",
+                )
+                self.assertTrue(is_redirect)
+                self.assertIsNone(next_url)
+                self.assertTrue(error)
+
+
 class ArchiveRemoteCommandTests(unittest.TestCase):
     @staticmethod
-    def run(coroutine):
+    def run_async(coroutine):
         return asyncio.run(coroutine)
 
     def manager_with_commands(self, tool, responses):
@@ -331,7 +582,7 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
             return False, "", "missing"
 
         manager.execute_command = execute
-        result = self.run(manager._find_remote_tool(("7zz", "7z", "7za")))
+        result = self.run_async(manager._find_remote_tool(("7zz", "7z", "7za")))
 
         self.assertEqual(result, "/usr/bin/7z")
         self.assertEqual(
@@ -349,7 +600,7 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
             ],
         )
 
-        success, info, error = self.run(
+        success, info, error = self.run_async(
             manager._inspect_archive_connected(archive_path, "zip")
         )
 
@@ -369,7 +620,7 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
             ],
         )
 
-        success, _, error = self.run(
+        success, _, error = self.run_async(
             manager._inspect_archive_connected("/srv/game/archive.tar.xz", "tar.xz")
         )
 
@@ -390,7 +641,7 @@ Attributes = D
             [(True, listing, "")],
         )
 
-        success, info, error = self.run(
+        success, info, error = self.run_async(
             manager._inspect_archive_connected("/srv/game/archive.7z", "7z")
         )
 
@@ -402,7 +653,7 @@ Attributes = D
     def test_inspection_reports_missing_required_tool_without_running_archive(self):
         manager = self.manager_with_commands(None, [])
 
-        success, info, error = self.run(
+        success, info, error = self.run_async(
             manager._inspect_archive_connected("/srv/game/archive.zip", "zip")
         )
 
@@ -416,12 +667,16 @@ class _TaskSSHManager:
     instances = []
     extraction_result = (True, "")
     download_result = (True, "")
+    resolved_target_path = None
 
     def __init__(self):
         self.disconnected = False
         self.extraction_call = None
         self.download_call = None
         type(self).instances.append(self)
+
+    async def connect(self, server):
+        return True, "Connected"
 
     async def extract_archive(
         self,
@@ -441,8 +696,19 @@ class _TaskSSHManager:
         )
         return type(self).extraction_result
 
-    async def download_url_to_file(self, url, target_path, server, overwrite=False):
-        self.download_call = (url, target_path, overwrite)
+    async def download_url_to_file(
+        self,
+        url,
+        target_path,
+        server,
+        overwrite=False,
+        *,
+        destination_path=None,
+        resolved_target_callback=None,
+    ):
+        self.download_call = (url, target_path, overwrite, destination_path)
+        if type(self).resolved_target_path and resolved_target_callback:
+            await resolved_target_callback(type(self).resolved_target_path)
         return type(self).download_result
 
     async def disconnect(self):
@@ -454,6 +720,7 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
         _TaskSSHManager.instances = []
         _TaskSSHManager.extraction_result = (True, "")
         _TaskSSHManager.download_result = (True, "")
+        _TaskSSHManager.resolved_target_path = None
 
     def tearDown(self):
         file_manager.extraction_tasks.clear()
@@ -520,21 +787,115 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
                 file_manager._run_download_url_task(
                     task_id,
                     secret_url,
+                    "/srv/game",
                     "/srv/game/archive.zip",
                     SimpleNamespace(),
                     False,
+                    None,
                 )
             )
 
         manager = _TaskSSHManager.instances[0]
         self.assertEqual(
             manager.download_call,
-            (secret_url, "/srv/game/archive.zip", False),
+            (secret_url, "/srv/game/archive.zip", False, "/srv/game"),
         )
         self.assertTrue(manager.disconnected)
         self.assertEqual(file_manager.download_url_tasks[task_id]["status"], "completed")
         self.assertNotIn("url", file_manager.download_url_tasks[task_id])
         self.assertNotIn(task_id, file_manager._download_url_task_refs)
+
+    def test_download_task_updates_target_path_after_redirect_filename_resolution(self):
+        task_id = "redirect-download-test"
+        url = "https://example.com/download?id=opaque"
+        resolved_path = "/srv/game/CS2Fixes Linux.zip"
+        _TaskSSHManager.resolved_target_path = resolved_path
+        file_manager.download_url_tasks[task_id] = {
+            "status": "pending",
+            "target_path": None,
+            "created_at": 1.0,
+            "started_at": None,
+            "completed_at": None,
+            "message": None,
+            "error": None,
+        }
+        file_manager._download_url_task_refs[task_id] = object()
+
+        with patch.object(file_manager, "SSHManager", _TaskSSHManager):
+            asyncio.run(
+                file_manager._run_download_url_task(
+                    task_id,
+                    url,
+                    "/srv/game",
+                    None,
+                    SimpleNamespace(),
+                    False,
+                    None,
+                )
+            )
+
+        manager = _TaskSSHManager.instances[0]
+        self.assertEqual(manager.download_call, (url, None, False, "/srv/game"))
+        self.assertEqual(
+            file_manager.download_url_tasks[task_id]["target_path"],
+            resolved_path,
+        )
+        self.assertEqual(file_manager.download_url_tasks[task_id]["status"], "completed")
+        self.assertTrue(manager.disconnected)
+
+    def test_github_artifact_task_updates_target_and_sends_only_signed_url_to_ssh(self):
+        task_id = "github-artifact-download-test"
+        artifact_url = (
+            "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
+            "29046667365/artifacts/8210241957"
+        )
+        signed_url = "https://objects.githubusercontent.com/artifact.zip?signature=secret"
+        file_manager.download_url_tasks[task_id] = {
+            "status": "pending",
+            "target_path": None,
+            "created_at": 1.0,
+            "started_at": None,
+            "completed_at": None,
+            "message": None,
+            "error": None,
+        }
+        file_manager._download_url_task_refs[task_id] = object()
+
+        async def resolve_artifact(url, token):
+            self.assertEqual(url, artifact_url)
+            self.assertEqual(token, "github-token")
+            return signed_url, "CS2Fixes Linux.zip"
+
+        with (
+            patch.object(file_manager, "SSHManager", _TaskSSHManager),
+            patch.object(
+                file_manager,
+                "_resolve_github_actions_artifact",
+                resolve_artifact,
+            ),
+        ):
+            asyncio.run(
+                file_manager._run_download_url_task(
+                    task_id,
+                    artifact_url,
+                    "/srv/game",
+                    None,
+                    SimpleNamespace(),
+                    False,
+                    "github-token",
+                )
+            )
+
+        manager = _TaskSSHManager.instances[0]
+        self.assertEqual(
+            manager.download_call,
+            (signed_url, "/srv/game/CS2Fixes Linux.zip", False, "/srv/game"),
+        )
+        self.assertEqual(
+            file_manager.download_url_tasks[task_id]["target_path"],
+            "/srv/game/CS2Fixes Linux.zip",
+        )
+        self.assertEqual(file_manager.download_url_tasks[task_id]["status"], "completed")
 
 
 class _TemplateIdParser(HTMLParser):
@@ -596,7 +957,7 @@ class FileManagerDomRegressionTests(unittest.TestCase):
             1,
             "createFolderModal must have exactly one template definition",
         )
-        template_path, ancestors, _ = matches[0]
+        template_path, ancestors, (_, modal_attributes) = matches[0]
         self.assertEqual(template_path.name, "files_tab.html")
         self.assertTrue(
             any(
@@ -604,6 +965,20 @@ class FileManagerDomRegressionTests(unittest.TestCase):
                 for tag, attributes in ancestors
             ),
             "createFolderModal must remain inside an Alpine x-teleport=body template",
+        )
+        self.assertNotIn(
+            "x-show",
+            modal_attributes,
+            "Bootstrap must be the sole visibility controller for the folder modal",
+        )
+
+        scripts = (
+            PROJECT_ROOT / "templates/server_detail_includes/scripts.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "bootstrap.Modal.getOrCreateInstance(modalElement)",
+            scripts,
+            "The folder modal must reuse one Bootstrap instance instead of flickering",
         )
 
 

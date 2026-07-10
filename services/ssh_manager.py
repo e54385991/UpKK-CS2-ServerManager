@@ -3,16 +3,22 @@ SSH connection and server management utilities (Async)
 """
 import asyncssh
 import asyncio
+import ipaddress
+import inspect
 import os
 import posixpath
 import re
 import shlex
 import logging
+import socket
 import tempfile
 import uuid
 import shutil
+from email.message import Message
+from email.utils import collapse_rfc2231_value
 from typing import AsyncIterator, Optional, Tuple, List, Dict, Any
 from datetime import datetime
+from urllib.parse import unquote, urljoin, urlsplit
 from modules.models import Server, AuthType
 from services.server_monitor import server_monitor
 from services.ssh_connection_pool import ssh_connection_pool
@@ -107,6 +113,11 @@ class SSHManager:
     ARCHIVE_EXTRACT_TIMEOUT = 900
     REMOTE_DOWNLOAD_TIMEOUT = 1800
     REMOTE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024 * 1024
+    REMOTE_DOWNLOAD_METADATA_MAX_BYTES = 256 * 1024
+    REMOTE_DOWNLOAD_FILENAME_MAX_BYTES = 255
+    REMOTE_DOWNLOAD_URL_MAX_LENGTH = 4096
+    REMOTE_DOWNLOAD_MAX_REDIRECTS = 10
+    REMOTE_DOWNLOAD_REDIRECT_CODES = frozenset((301, 302, 303, 307, 308))
     
     # SteamCMD retry configuration
     STEAMCMD_MAX_RETRIES = 5  # Maximum number of retry attempts (not counting the initial attempt)
@@ -169,6 +180,296 @@ class SSHManager:
             if lower_path.endswith(suffix):
                 return archive_type
         return None
+
+    @staticmethod
+    def _filename_from_content_disposition(value: str) -> Optional[str]:
+        """Decode a Content-Disposition filename, preferring RFC 5987 filename*."""
+        if not value:
+            return None
+        message = Message()
+        try:
+            message["Content-Disposition"] = value
+            params = message.get_params(
+                header="content-disposition",
+                unquote=True,
+            ) or []
+        except (TypeError, ValueError):
+            return None
+
+        regular_names: List[str] = []
+        extended_names: List[str] = []
+        for key, raw_value in params[1:]:
+            if key.lower() != "filename" or raw_value is None:
+                continue
+            if isinstance(raw_value, tuple):
+                try:
+                    decoded = collapse_rfc2231_value(raw_value, errors="strict")
+                except (LookupError, UnicodeError, TypeError, ValueError):
+                    continue
+                extended_names.append(decoded)
+            elif isinstance(raw_value, str):
+                regular_names.append(raw_value)
+
+        candidates = extended_names or regular_names
+        return candidates[0] if candidates else None
+
+    @classmethod
+    def _validate_download_filename(cls, filename: str) -> Tuple[Optional[str], str]:
+        """Return a safe direct-child archive filename or a public error."""
+        if not isinstance(filename, str):
+            return None, "Download response did not provide a valid filename"
+        filename = filename.strip()
+        if (
+            not filename
+            or filename in ('.', '..')
+            or '/' in filename
+            or '\\' in filename
+            or posixpath.basename(filename) != filename
+            or any(ord(char) < 32 or ord(char) == 127 for char in filename)
+        ):
+            return None, "Download response filename is unsafe"
+        if len(filename.encode('utf-8')) > cls.REMOTE_DOWNLOAD_FILENAME_MAX_BYTES:
+            return None, "Download response filename is too long"
+        if cls.archive_type_from_path(filename) is None:
+            return None, "Download response filename does not use a supported archive extension"
+        return filename, ""
+
+    @classmethod
+    def _filename_from_download_response(
+        cls,
+        raw_headers: str,
+        effective_url: str,
+    ) -> Tuple[Optional[str], str]:
+        """Resolve a safe filename from the final headers, then effective URL."""
+        normalized_headers = raw_headers.replace('\r\n', '\n').replace('\r', '\n')
+        content_disposition = None
+        for block in reversed(re.split(r'\n\s*\n', normalized_headers)):
+            lines = block.splitlines()
+            if not lines or not lines[0].lstrip().upper().startswith('HTTP/'):
+                continue
+
+            unfolded: List[str] = []
+            for line in lines[1:]:
+                if line[:1] in (' ', '\t') and unfolded:
+                    unfolded[-1] += ' ' + line.strip()
+                else:
+                    unfolded.append(line)
+            for line in unfolded:
+                name, separator, value = line.partition(':')
+                if separator and name.strip().lower() == 'content-disposition':
+                    content_disposition = value.strip()
+            break
+
+        candidates: List[str] = []
+        if content_disposition:
+            header_filename = cls._filename_from_content_disposition(content_disposition)
+            if header_filename:
+                candidates.append(header_filename)
+
+        try:
+            raw_url_filename = posixpath.basename(urlsplit(effective_url.strip()).path)
+            if raw_url_filename:
+                candidates.append(unquote(raw_url_filename))
+        except ValueError:
+            pass
+
+        last_error = "Download response did not provide an archive filename"
+        for candidate in candidates:
+            filename, error = cls._validate_download_filename(candidate)
+            if filename is not None:
+                return filename, ""
+            last_error = error
+        return None, last_error
+
+    @classmethod
+    def _validate_remote_download_url(cls, url: str) -> Tuple[Optional[Any], str]:
+        """Validate one URL hop before it is resolved on the SSH host."""
+        if (
+            not isinstance(url, str)
+            or not url
+            or len(url) > cls.REMOTE_DOWNLOAD_URL_MAX_LENGTH
+        ):
+            return None, "Download URL is missing or too long"
+        if any(ord(char) < 32 or ord(char) == 127 for char in url):
+            return None, "Download URL contains control characters"
+
+        try:
+            parsed = urlsplit(url)
+            port = parsed.port
+        except (TypeError, ValueError):
+            return None, "Download URL is malformed"
+
+        if parsed.scheme.lower() not in ('http', 'https') or not parsed.hostname:
+            return None, "Only absolute HTTP and HTTPS download URLs are supported"
+        if parsed.username is not None or parsed.password is not None:
+            return None, "Download URLs containing credentials are not supported"
+        if parsed.fragment:
+            return None, "Download URL fragments are not supported"
+        if port is not None and not 1 <= port <= 65535:
+            return None, "Download URL port is outside the valid range"
+
+        hostname = parsed.hostname.rstrip('.').lower()
+        if not hostname or '%' in hostname:
+            return None, "Download URL hostname is invalid"
+
+        try:
+            literal_address = ipaddress.ip_address(hostname)
+        except ValueError:
+            literal_address = None
+            try:
+                socket.inet_aton(hostname)
+            except OSError:
+                pass
+            else:
+                return None, "Non-canonical numeric IPv4 download URLs are not allowed"
+
+            # Keep getent and curl's interpretation of the authority identical.
+            # IDNA hostnames can be supplied in their canonical ASCII form.
+            if len(hostname) > 253:
+                return None, "Download URL hostname is invalid"
+            labels = hostname.split('.')
+            if any(
+                not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label)
+                for label in labels
+            ):
+                return None, "Download URL hostname is invalid"
+        else:
+            mapped_address = getattr(literal_address, 'ipv4_mapped', None)
+            if (
+                not literal_address.is_global
+                or (mapped_address is not None and not mapped_address.is_global)
+            ):
+                return None, "Non-public IP address download URLs are not allowed"
+
+        return parsed, ""
+
+    async def _resolve_public_download_address(
+        self,
+        hostname: str,
+        getent_tool: str,
+    ) -> Tuple[Optional[str], str]:
+        """Resolve a host remotely and choose one address after validating all."""
+        literal_hostname = hostname.rstrip('.').lower()
+        try:
+            literal_address = ipaddress.ip_address(literal_hostname)
+        except ValueError:
+            literal_address = None
+
+        if literal_address is not None:
+            mapped_address = getattr(literal_address, 'ipv4_mapped', None)
+            if (
+                not literal_address.is_global
+                or (mapped_address is not None and not mapped_address.is_global)
+            ):
+                return None, "Download URL resolves to a non-public IP address"
+            return literal_address.compressed, ""
+
+        success, stdout, _ = await self.execute_command(
+            f"LC_ALL=C {shlex.quote(getent_tool)} ahosts {shlex.quote(hostname)} 2>/dev/null",
+            timeout=15,
+        )
+        addresses = []
+        for line in stdout.splitlines():
+            fields = line.split()
+            if not fields:
+                continue
+            try:
+                address = ipaddress.ip_address(fields[0])
+            except ValueError:
+                continue
+            mapped_address = getattr(address, 'ipv4_mapped', None)
+            if (
+                not address.is_global
+                or (mapped_address is not None and not mapped_address.is_global)
+            ):
+                return None, "Download URL resolves to a non-public IP address"
+            if '%' in fields[0]:
+                return None, "Download URL resolves to an unsupported scoped IP address"
+            if address not in addresses:
+                addresses.append(address)
+
+        if not success or not addresses:
+            return None, "Download host could not be resolved from the managed server"
+
+        # Prefer IPv4 when both families are returned.  getent applies the SSH
+        # host's address-family policy, and this avoids choosing an unusable
+        # IPv6 route while curl remains pinned to the validated result.
+        selected_address = min(addresses, key=lambda item: item.version != 4)
+        return selected_address.compressed, ""
+
+    @staticmethod
+    def _curl_resolve_entry(hostname: str, port: int, address: str) -> str:
+        """Build curl's host:port:address pin, including IPv6 brackets."""
+        resolve_host = f'[{hostname}]' if ':' in hostname else hostname
+        resolve_address = f'[{address}]' if ':' in address else address
+        return f'{resolve_host}:{port}:{resolve_address}'
+
+    @staticmethod
+    def _download_response_metadata(
+        raw_headers: str,
+    ) -> Tuple[Optional[int], Dict[str, str], str]:
+        """Return the last HTTP response status and unfolded headers."""
+        normalized_headers = raw_headers.replace('\r\n', '\n').replace('\r', '\n')
+        for block in reversed(re.split(r'\n\s*\n', normalized_headers)):
+            lines = block.splitlines()
+            if not lines:
+                continue
+            status_match = re.match(r'^\s*HTTP/\S+\s+([0-9]{3})(?:\s|$)', lines[0], re.I)
+            if status_match is None:
+                continue
+
+            unfolded: List[str] = []
+            for line in lines[1:]:
+                if line[:1] in (' ', '\t') and unfolded:
+                    unfolded[-1] += ' ' + line.strip()
+                else:
+                    unfolded.append(line)
+            headers: Dict[str, str] = {}
+            for line in unfolded:
+                name, separator, value = line.partition(':')
+                if separator:
+                    headers[name.strip().lower()] = value.strip()
+            return int(status_match.group(1)), headers, ""
+        return None, {}, "Download response did not include valid HTTP headers"
+
+    @classmethod
+    def _redirect_url_from_response(
+        cls,
+        raw_headers: str,
+        current_url: str,
+    ) -> Tuple[Optional[str], bool, str]:
+        """Resolve and validate a redirect Location from one curl response."""
+        status_code, headers, metadata_error = cls._download_response_metadata(raw_headers)
+        if status_code is None:
+            return None, False, metadata_error
+        if status_code in cls.REMOTE_DOWNLOAD_REDIRECT_CODES:
+            location = headers.get('location')
+            if not location:
+                return None, True, "Download redirect did not include a Location header"
+            if any(ord(char) < 32 or ord(char) == 127 for char in location):
+                return None, True, "Download redirect Location is invalid"
+            try:
+                redirect_url = urljoin(current_url, location.strip(' '))
+            except (TypeError, ValueError):
+                return None, True, "Download redirect Location is invalid"
+            _, validation_error = cls._validate_remote_download_url(redirect_url)
+            if validation_error:
+                return None, True, f"Download redirect target is not allowed: {validation_error}"
+            return redirect_url, True, ""
+        if 300 <= status_code < 400:
+            return None, False, f"Download returned unsupported redirect status HTTP {status_code}"
+        if not 200 <= status_code < 300:
+            return None, False, f"Download failed with HTTP status {status_code}"
+        return None, False, ""
+
+    @staticmethod
+    def _redact_download_error(message: str) -> str:
+        """Remove complete HTTP(S) URLs, including signed query strings."""
+        return re.sub(
+            r'(?i)https?://[^\s<>"\']+',
+            '[redacted URL]',
+            message or "Remote command failed",
+        )
     
     async def _handle_sftp_error_with_reconnect(self, error: Exception, server: Server, operation_name: str, retry_func):
         """
@@ -4323,17 +4624,36 @@ class SSHManager:
     async def download_url_to_file(
         self,
         url: str,
-        target_path: str,
+        target_path: Optional[str],
         server: Server,
         overwrite: bool = False,
+        *,
+        destination_path: Optional[str] = None,
+        resolved_target_callback=None,
     ) -> Tuple[bool, str]:
-        """Download an HTTP(S) URL to a unique part file and publish atomically."""
-        if self.archive_type_from_path(target_path) is None:
+        """Download an HTTP(S) URL to a part file and publish atomically.
+
+        Redirects are followed manually.  Every hop is resolved on the SSH
+        host, all returned addresses are required to be public, and curl is
+        pinned to one validated address to prevent DNS rebinding.  When
+        ``target_path`` is unknown, the final Content-Disposition (including
+        RFC 5987 filename*) takes precedence over the final URL.
+        """
+        if target_path is not None and self.archive_type_from_path(target_path) is None:
             return False, "Target filename does not use a supported archive extension"
+
+        if target_path is not None:
+            parent_dir = posixpath.dirname(target_path)
+            validation_path = target_path
+        elif destination_path:
+            parent_dir = posixpath.normpath(destination_path)
+            validation_path = parent_dir
+        else:
+            return False, "Download destination path is required"
 
         valid, validation_error = await self.validate_path_within_base(
             server.game_directory,
-            target_path,
+            validation_path,
             server,
             allow_missing=True,
         )
@@ -4343,12 +4663,16 @@ class SSHManager:
         curl_tool = await self._find_remote_tool(('curl',))
         if not curl_tool:
             return False, "Required download tool is missing: install curl"
+        getent_tool = await self._find_remote_tool(('getent',))
+        if not getent_tool:
+            return False, "Required DNS resolver is missing: install getent"
 
-        parent_dir = posixpath.dirname(target_path)
-        part_path = posixpath.join(parent_dir, f".upkk-download-{uuid.uuid4().hex}.part")
+        download_id = uuid.uuid4().hex
+        part_path = posixpath.join(parent_dir, f".upkk-download-{download_id}.part")
+        headers_path = posixpath.join(parent_dir, f".upkk-download-{download_id}.headers")
         safe_parent = shlex.quote(parent_dir)
-        safe_target = shlex.quote(target_path)
         safe_part = shlex.quote(part_path)
+        safe_headers = shlex.quote(headers_path)
 
         try:
             success, stdout, stderr = await self.execute_command(
@@ -4367,6 +4691,134 @@ class SSHManager:
             if not parent_valid:
                 return False, parent_error
 
+            if target_path is not None:
+                async with self.conn.start_sftp_client() as sftp:
+                    try:
+                        existing_attrs = await sftp.lstat(target_path)
+                    except (asyncssh.SFTPNoSuchFile, asyncssh.SFTPNoSuchPath):
+                        existing_attrs = None
+                    if existing_attrs is not None:
+                        if not overwrite:
+                            return False, "Target file already exists. Enable overwrite to replace it."
+                        if existing_attrs.type != asyncssh.FILEXFER_TYPE_REGULAR:
+                            return False, "Existing target must be a regular file and cannot be a symlink"
+
+            current_url = url
+            final_url = url
+            raw_headers = ""
+            seen_urls = set()
+            for redirect_count in range(self.REMOTE_DOWNLOAD_MAX_REDIRECTS + 1):
+                parsed_url, url_error = self._validate_remote_download_url(current_url)
+                if parsed_url is None:
+                    return False, url_error
+                if current_url in seen_urls:
+                    return False, "Download redirect loop detected"
+                seen_urls.add(current_url)
+
+                resolved_address, resolve_error = await self._resolve_public_download_address(
+                    parsed_url.hostname,
+                    getent_tool,
+                )
+                if resolved_address is None:
+                    return False, resolve_error
+                request_port = parsed_url.port or (
+                    443 if parsed_url.scheme.lower() == 'https' else 80
+                )
+                resolve_entry = self._curl_resolve_entry(
+                    parsed_url.hostname,
+                    request_port,
+                    resolved_address,
+                )
+
+                # Do not use --location: the response is inspected before the
+                # next hop is allowed.  --noproxy ensures an HTTP proxy cannot
+                # bypass the validated/pinned origin address.
+                curl_command = (
+                    f"umask 077; {shlex.quote(curl_tool)} --fail --silent --show-error "
+                    f"--request GET --noproxy {shlex.quote('*')} "
+                    f"--proto {shlex.quote('=http,https')} "
+                    f"--connect-timeout 20 --max-time {self.REMOTE_DOWNLOAD_TIMEOUT} "
+                    f"--retry 2 --retry-delay 2 --max-filesize {self.REMOTE_DOWNLOAD_MAX_BYTES} "
+                    f"--resolve {shlex.quote(resolve_entry)} "
+                    f"--dump-header {safe_headers} --output {safe_part} "
+                    f"--url {shlex.quote(current_url)}"
+                )
+                success, stdout, stderr = await self.execute_command(
+                    curl_command,
+                    timeout=self.REMOTE_DOWNLOAD_TIMEOUT + 30,
+                )
+                if not success:
+                    error_detail = self._redact_download_error(
+                        self._short_command_error(stdout, stderr).replace(
+                            current_url,
+                            "[redacted URL]",
+                        )
+                    )
+                    return False, f"Download failed: {error_detail}"
+
+                async with self.conn.start_sftp_client() as sftp:
+                    headers_attrs = await sftp.lstat(headers_path)
+                    if headers_attrs.type != asyncssh.FILEXFER_TYPE_REGULAR:
+                        return False, "Download response metadata is not a regular file"
+                    if headers_attrs.size > self.REMOTE_DOWNLOAD_METADATA_MAX_BYTES:
+                        return False, "Download response metadata is too large"
+                    async with sftp.open(headers_path, 'rb') as header_file:
+                        raw_header_bytes = await header_file.read()
+                if isinstance(raw_header_bytes, str):
+                    raw_headers = raw_header_bytes
+                else:
+                    raw_headers = raw_header_bytes.decode('iso-8859-1', errors='replace')
+
+                redirect_url, is_redirect, redirect_error = self._redirect_url_from_response(
+                    raw_headers,
+                    current_url,
+                )
+                if redirect_error:
+                    return False, redirect_error
+                if is_redirect:
+                    if redirect_count >= self.REMOTE_DOWNLOAD_MAX_REDIRECTS:
+                        return False, "Download exceeded the redirect limit"
+                    if redirect_url is None:
+                        return False, "Download redirect target could not be resolved"
+                    current_url = redirect_url
+                    continue
+
+                final_url = current_url
+                break
+
+            async with self.conn.start_sftp_client() as sftp:
+                attrs = await sftp.lstat(part_path)
+                if attrs.type != asyncssh.FILEXFER_TYPE_REGULAR or not attrs.size:
+                    return False, "Downloaded archive is empty or is not a regular file"
+                if attrs.size > self.REMOTE_DOWNLOAD_MAX_BYTES:
+                    return False, "Downloaded archive exceeds the configured size limit"
+
+                if target_path is None:
+                    resolved_filename, filename_error = self._filename_from_download_response(
+                        raw_headers,
+                        final_url,
+                    )
+                    if resolved_filename is None:
+                        return False, filename_error
+                    target_path = posixpath.join(parent_dir, resolved_filename)
+
+            if target_path is None:
+                return False, "Download response filename could not be resolved"
+
+            target_valid, target_error = await self.validate_path_within_base(
+                server.game_directory,
+                target_path,
+                server,
+                allow_missing=True,
+            )
+            if not target_valid:
+                return False, target_error
+
+            if resolved_target_callback is not None:
+                callback_result = resolved_target_callback(target_path)
+                if inspect.isawaitable(callback_result):
+                    await callback_result
+
             async with self.conn.start_sftp_client() as sftp:
                 try:
                     existing_attrs = await sftp.lstat(target_path)
@@ -4378,28 +4830,7 @@ class SSHManager:
                     if existing_attrs.type != asyncssh.FILEXFER_TYPE_REGULAR:
                         return False, "Existing target must be a regular file and cannot be a symlink"
 
-            curl_command = (
-                f"umask 077; {shlex.quote(curl_tool)} --fail --location --silent --show-error "
-                f"--proto {shlex.quote('=http,https')} "
-                f"--proto-redir {shlex.quote('=http,https')} --max-redirs 10 "
-                f"--connect-timeout 20 --max-time {self.REMOTE_DOWNLOAD_TIMEOUT} "
-                f"--retry 2 --retry-delay 2 --max-filesize {self.REMOTE_DOWNLOAD_MAX_BYTES} "
-                f"--output {safe_part} --url {shlex.quote(url)}"
-            )
-            success, stdout, stderr = await self.execute_command(
-                curl_command,
-                timeout=self.REMOTE_DOWNLOAD_TIMEOUT + 30,
-            )
-            if not success:
-                return False, f"Download failed: {self._short_command_error(stdout, stderr)}"
-
-            async with self.conn.start_sftp_client() as sftp:
-                attrs = await sftp.lstat(part_path)
-                if attrs.type != asyncssh.FILEXFER_TYPE_REGULAR or not attrs.size:
-                    return False, "Downloaded archive is empty or is not a regular file"
-                if attrs.size > self.REMOTE_DOWNLOAD_MAX_BYTES:
-                    return False, "Downloaded archive exceeds the configured size limit"
-
+            safe_target = shlex.quote(target_path)
             if overwrite:
                 publish_command = f"mv -f -- {safe_part} {safe_target}"
             else:
@@ -4415,9 +4846,11 @@ class SSHManager:
         except Exception as exc:
             return False, f"Error downloading archive: {exc}"
         finally:
-            # The path contains only a server-controlled UUID and is always
-            # quoted; cleanup is safe even when curl or publish was interrupted.
-            await self.execute_command(f"rm -f -- {safe_part}", timeout=10)
+            # These paths contain only a server-controlled UUID and are quoted.
+            await self.execute_command(
+                f"rm -f -- {safe_part} {safe_headers}",
+                timeout=10,
+            )
 
     async def extract_archive(
         self,
@@ -4498,6 +4931,18 @@ class SSHManager:
                     and existing_root_attrs.type != asyncssh.FILEXFER_TYPE_DIRECTORY
                 ):
                     return False, "Extraction task directory cannot be a symlink"
+                if existing_root_attrs is not None:
+                    canonical_game_dir = posixpath.normpath(
+                        str(await sftp.realpath(server.game_directory))
+                    )
+                    canonical_temp_root = posixpath.normpath(
+                        str(await sftp.realpath(temp_root))
+                    )
+                    expected_temp_root = posixpath.normpath(
+                        posixpath.join(canonical_game_dir, '.upkk-file-tasks')
+                    )
+                    if canonical_temp_root != expected_temp_root:
+                        return False, "Extraction task directory resolves to an unexpected path"
 
             root_success, root_stdout, root_stderr = await self.execute_command(
                 f"umask 077; mkdir -p -- {safe_temp_root} && chmod 700 -- {safe_temp_root}",
@@ -4510,6 +4955,17 @@ class SSHManager:
                 root_attrs = await sftp.lstat(temp_root)
                 if root_attrs.type != asyncssh.FILEXFER_TYPE_DIRECTORY:
                     return False, "Extraction task directory cannot be a symlink"
+                canonical_game_dir = posixpath.normpath(
+                    str(await sftp.realpath(server.game_directory))
+                )
+                canonical_temp_root = posixpath.normpath(
+                    str(await sftp.realpath(temp_root))
+                )
+                expected_temp_root = posixpath.normpath(
+                    posixpath.join(canonical_game_dir, '.upkk-file-tasks')
+                )
+                if canonical_temp_root != expected_temp_root:
+                    return False, "Extraction task directory resolves to an unexpected path"
             temp_root_safe, temp_root_error = await self.validate_path_within_base(
                 server.game_directory,
                 temp_root,
