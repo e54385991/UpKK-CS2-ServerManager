@@ -859,7 +859,10 @@ async def create_directory(
     
     # Create directory using SSH
     ssh_manager = SSHManager()
-    success, error = await ssh_manager.create_directory(new_dir_path, server)
+    try:
+        success, error = await ssh_manager.create_directory(new_dir_path, server)
+    finally:
+        await ssh_manager.disconnect()
     
     if not success:
         raise HTTPException(

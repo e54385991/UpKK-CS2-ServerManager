@@ -101,6 +101,7 @@ class SSHManager:
     # File-manager archive safety limits. Listing is capped before extraction so
     # a malformed archive cannot produce unbounded command output in the panel.
     ARCHIVE_MAX_ENTRIES = 20000
+    ARCHIVE_MAX_FOLDERS = 20000
     ARCHIVE_MAX_MEMBER_PATH_BYTES = 1024
     ARCHIVE_INSPECT_TIMEOUT = 120
     ARCHIVE_EXTRACT_TIMEOUT = 900
@@ -3910,6 +3911,10 @@ class SSHManager:
             folder_depth = len(parts) if member["is_dir"] else len(parts) - 1
             for index in range(1, folder_depth + 1):
                 folders.add('/'.join(parts[:index]))
+                if len(folders) > cls.ARCHIVE_MAX_FOLDERS:
+                    return False, {}, (
+                        f"Archive contains too many folders (maximum {cls.ARCHIVE_MAX_FOLDERS})"
+                    )
 
         return True, {
             "archive_type": archive_type,
@@ -3952,7 +3957,7 @@ class SSHManager:
                 or properties.get('Hard Link')
                 or properties.get('Anti') == '+'
                 or re.search(r'(^|\s)l[rwx-]{9}', lower_attributes)
-                or re.search(r'(^|\s)[bcp s][rwx-]{9}', lower_attributes)
+                or re.search(r'(^|\s)[bcps][rwx-]{9}', lower_attributes)
             ):
                 return None, f"Archive contains an unsupported link or special entry: {path}"
             is_directory = properties.get('Folder') == '+' or attributes.startswith('D')
@@ -4270,6 +4275,15 @@ class SSHManager:
             success, msg = await self.connect(server)
             if not success:
                 return False, f"Connection failed: {msg}"
+
+        valid, validation_error = await self.validate_path_within_base(
+            server.game_directory,
+            path,
+            server,
+            allow_missing=True,
+        )
+        if not valid:
+            return False, validation_error
         
         try:
             async with self.conn.start_sftp_client() as sftp:
@@ -4306,110 +4320,358 @@ class SSHManager:
         except Exception as e:
             return False, f"Error renaming: {str(e)}"
     
-    async def extract_archive(self, archive_path: str, destination_path: str, 
-                            server: Server, overwrite: bool = False) -> Tuple[bool, str]:
-        """
-        Extract archive file (zip, tar, tar.gz, tar.bz2, 7z, etc.)
-        
-        Args:
-            archive_path: Path to archive file
-            destination_path: Path to extract to
-            server: Server instance
-            overwrite: Whether to overwrite existing files (default: False)
-        
-        Returns:
-            Tuple[bool, str]: (success, error_message)
-        """
-        if not self.conn:
-            success, msg = await self.connect(server)
-            if not success:
-                return False, f"Connection failed: {msg}"
-        
+    async def download_url_to_file(
+        self,
+        url: str,
+        target_path: str,
+        server: Server,
+        overwrite: bool = False,
+    ) -> Tuple[bool, str]:
+        """Download an HTTP(S) URL to a unique part file and publish atomically."""
+        if self.archive_type_from_path(target_path) is None:
+            return False, "Target filename does not use a supported archive extension"
+
+        valid, validation_error = await self.validate_path_within_base(
+            server.game_directory,
+            target_path,
+            server,
+            allow_missing=True,
+        )
+        if not valid:
+            return False, validation_error
+
+        curl_tool = await self._find_remote_tool(('curl',))
+        if not curl_tool:
+            return False, "Required download tool is missing: install curl"
+
+        parent_dir = posixpath.dirname(target_path)
+        part_path = posixpath.join(parent_dir, f".upkk-download-{uuid.uuid4().hex}.part")
+        safe_parent = shlex.quote(parent_dir)
+        safe_target = shlex.quote(target_path)
+        safe_part = shlex.quote(part_path)
+
         try:
-            # Properly escape paths to prevent shell injection
-            safe_archive_path = shlex.quote(archive_path)
-            safe_destination_path = shlex.quote(destination_path)
-            
-            # Determine archive type from extension
-            archive_lower = archive_path.lower()
-            
-            if archive_lower.endswith('.zip'):
-                # Handle zip files
-                overwrite_flag = "-o" if overwrite else "-n"
-                extract_cmd = f"unzip {overwrite_flag} {safe_archive_path} -d {safe_destination_path}"
-            elif archive_lower.endswith('.tar.gz') or archive_lower.endswith('.tgz'):
-                # Handle tar.gz files
-                # tar by default overwrites existing files
-                # For non-overwrite, use --keep-old-files to prevent overwriting (skips existing files)
-                overwrite_flag = "" if overwrite else "--keep-old-files"
-                extract_cmd = f"tar -xzf {safe_archive_path} -C {safe_destination_path} {overwrite_flag}"
-            elif archive_lower.endswith('.tar.bz2') or archive_lower.endswith('.tbz2'):
-                # Handle tar.bz2 files
-                overwrite_flag = "" if overwrite else "--keep-old-files"
-                extract_cmd = f"tar -xjf {safe_archive_path} -C {safe_destination_path} {overwrite_flag}"
-            elif archive_lower.endswith('.tar'):
-                # Handle tar files
-                overwrite_flag = "" if overwrite else "--keep-old-files"
-                extract_cmd = f"tar -xf {safe_archive_path} -C {safe_destination_path} {overwrite_flag}"
-            elif archive_lower.endswith('.gz'):
-                # Handle gzip files (single file compression)
-                # For gzip, we extract to the same directory
-                base_name = posixpath.basename(archive_path)[:-3]  # Remove .gz extension
-                output_file = posixpath.join(destination_path, base_name)
-                safe_output_file = shlex.quote(output_file)
-                if overwrite:
-                    extract_cmd = f"gunzip -c {safe_archive_path} > {safe_output_file}"
-                else:
-                    # Check if file exists first - split into separate safe commands
-                    # We'll check first, then extract conditionally
-                    check_cmd = f"test -f {safe_output_file}"
-                    check_success, _, _ = await self.execute_command(check_cmd, timeout=5)
-                    if check_success:
-                        # File exists and we're not overwriting
-                        return False, "File already exists in destination. Enable overwrite to replace existing files."
-                    # File doesn't exist, proceed with extraction
-                    extract_cmd = f"gunzip -c {safe_archive_path} > {safe_output_file}"
-            elif archive_lower.endswith('.bz2'):
-                # Handle bzip2 files (single file compression)
-                base_name = posixpath.basename(archive_path)[:-4]  # Remove .bz2 extension
-                output_file = posixpath.join(destination_path, base_name)
-                safe_output_file = shlex.quote(output_file)
-                if overwrite:
-                    extract_cmd = f"bunzip2 -c {safe_archive_path} > {safe_output_file}"
-                else:
-                    # Check if file exists first - split into separate safe commands
-                    check_cmd = f"test -f {safe_output_file}"
-                    check_success, _, _ = await self.execute_command(check_cmd, timeout=5)
-                    if check_success:
-                        # File exists and we're not overwriting
-                        return False, "File already exists in destination. Enable overwrite to replace existing files."
-                    # File doesn't exist, proceed with extraction
-                    extract_cmd = f"bunzip2 -c {safe_archive_path} > {safe_output_file}"
-            elif archive_lower.endswith('.7z'):
-                # Handle 7z files
-                # 7z command: x = extract with full paths, -o = output directory
-                # -y = assume Yes on all queries (for overwrite)
-                # -aos = skip extracting of existing files (for non-overwrite)
-                if overwrite:
-                    # -aoa = Overwrite All existing files without prompt
-                    extract_cmd = f"7z x -aoa -o{safe_destination_path} {safe_archive_path}"
-                else:
-                    # -aos = Skip extracting of existing files
-                    extract_cmd = f"7z x -aos -o{safe_destination_path} {safe_archive_path}"
-            else:
-                return False, f"Unsupported archive format. Supported formats: .zip, .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .gz, .bz2, .7z"
-            
-            # Execute extraction command
-            success, stdout, stderr = await self.execute_command(extract_cmd, timeout=300)
-            
-            # Check for specific error cases
+            success, stdout, stderr = await self.execute_command(
+                f"mkdir -p -- {safe_parent}",
+                timeout=30,
+            )
             if not success:
-                return False, f"Extraction failed: {stderr if stderr else stdout}"
-            
+                return False, f"Failed to create download directory: {self._short_command_error(stdout, stderr)}"
+
+            parent_valid, parent_error = await self.validate_path_within_base(
+                server.game_directory,
+                parent_dir,
+                server,
+                allow_missing=False,
+            )
+            if not parent_valid:
+                return False, parent_error
+
+            async with self.conn.start_sftp_client() as sftp:
+                try:
+                    existing_attrs = await sftp.lstat(target_path)
+                except (asyncssh.SFTPNoSuchFile, asyncssh.SFTPNoSuchPath):
+                    existing_attrs = None
+                if existing_attrs is not None:
+                    if not overwrite:
+                        return False, "Target file already exists. Enable overwrite to replace it."
+                    if existing_attrs.type != asyncssh.FILEXFER_TYPE_REGULAR:
+                        return False, "Existing target must be a regular file and cannot be a symlink"
+
+            curl_command = (
+                f"umask 077; {shlex.quote(curl_tool)} --fail --location --silent --show-error "
+                f"--proto {shlex.quote('=http,https')} "
+                f"--proto-redir {shlex.quote('=http,https')} --max-redirs 10 "
+                f"--connect-timeout 20 --max-time {self.REMOTE_DOWNLOAD_TIMEOUT} "
+                f"--retry 2 --retry-delay 2 --max-filesize {self.REMOTE_DOWNLOAD_MAX_BYTES} "
+                f"--output {safe_part} --url {shlex.quote(url)}"
+            )
+            success, stdout, stderr = await self.execute_command(
+                curl_command,
+                timeout=self.REMOTE_DOWNLOAD_TIMEOUT + 30,
+            )
+            if not success:
+                return False, f"Download failed: {self._short_command_error(stdout, stderr)}"
+
+            async with self.conn.start_sftp_client() as sftp:
+                attrs = await sftp.lstat(part_path)
+                if attrs.type != asyncssh.FILEXFER_TYPE_REGULAR or not attrs.size:
+                    return False, "Downloaded archive is empty or is not a regular file"
+                if attrs.size > self.REMOTE_DOWNLOAD_MAX_BYTES:
+                    return False, "Downloaded archive exceeds the configured size limit"
+
+            if overwrite:
+                publish_command = f"mv -f -- {safe_part} {safe_target}"
+            else:
+                # A hard-link publish is an atomic no-clobber operation because
+                # the part file is created in the destination directory.
+                publish_command = f"ln -- {safe_part} {safe_target} && rm -- {safe_part}"
+            success, stdout, stderr = await self.execute_command(publish_command, timeout=30)
+            if not success:
+                return False, f"Failed to publish downloaded archive: {self._short_command_error(stdout, stderr)}"
             return True, ""
-            
-        except Exception as e:
-            return False, f"Error extracting archive: {str(e)}"
+        except asyncssh.SFTPError as exc:
+            return False, f"SFTP error while downloading archive: {exc}"
+        except Exception as exc:
+            return False, f"Error downloading archive: {exc}"
+        finally:
+            # The path contains only a server-controlled UUID and is always
+            # quoted; cleanup is safe even when curl or publish was interrupted.
+            await self.execute_command(f"rm -f -- {safe_part}", timeout=10)
+
+    async def extract_archive(
+        self,
+        archive_path: str,
+        destination_path: str,
+        server: Server,
+        overwrite: bool = False,
+        source_folder: Optional[str] = None,
+        strip_source_folder: bool = False,
+    ) -> Tuple[bool, str]:
+        """Inspect, stage, and merge a supported archive on the SSH host."""
+        archive_type = self.archive_type_from_path(archive_path)
+        if archive_type is None:
+            return False, (
+                "Unsupported archive format. Supported formats: .zip, .7z, .tar, .tar.gz, "
+                ".tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .gz, .bz2"
+            )
+
+        archive_valid, archive_error = await self.validate_path_within_base(
+            server.game_directory,
+            archive_path,
+            server,
+            allow_missing=False,
+            require_regular=True,
+        )
+        if not archive_valid:
+            return False, archive_error
+        destination_valid, destination_error = await self.validate_path_within_base(
+            server.game_directory,
+            destination_path,
+            server,
+            allow_missing=True,
+        )
+        if not destination_valid:
+            return False, destination_error
+
+        inspect_success, archive_info, inspect_error = await self._inspect_archive_connected(
+            archive_path,
+            archive_type,
+        )
+        if not inspect_success:
+            return False, inspect_error
+
+        normalized_source = None
+        if source_folder:
+            normalized_source, source_error = self._normalize_archive_member(source_folder.rstrip('/'))
+            if source_error or normalized_source is None:
+                return False, source_error or "Invalid source_folder"
+            if normalized_source not in set(archive_info["folders"]):
+                return False, f"Selected source folder was not found in archive: {normalized_source}"
+
+        temp_root = posixpath.join(posixpath.normpath(server.game_directory), '.upkk-file-tasks')
+        stage_path = posixpath.join(temp_root, f"extract-{uuid.uuid4().hex}")
+        safe_archive = shlex.quote(archive_path)
+        safe_destination = shlex.quote(destination_path)
+        safe_temp_root = shlex.quote(temp_root)
+        safe_stage = shlex.quote(stage_path)
+        stage_created = False
+        temp_root_validated = False
+
+        try:
+            temp_root_safe, temp_root_error = await self.validate_path_within_base(
+                server.game_directory,
+                temp_root,
+                server,
+                allow_missing=True,
+            )
+            if not temp_root_safe:
+                return False, temp_root_error
+
+            async with self.conn.start_sftp_client() as sftp:
+                try:
+                    existing_root_attrs = await sftp.lstat(temp_root)
+                except (asyncssh.SFTPNoSuchFile, asyncssh.SFTPNoSuchPath):
+                    existing_root_attrs = None
+                if (
+                    existing_root_attrs is not None
+                    and existing_root_attrs.type != asyncssh.FILEXFER_TYPE_DIRECTORY
+                ):
+                    return False, "Extraction task directory cannot be a symlink"
+
+            root_success, root_stdout, root_stderr = await self.execute_command(
+                f"umask 077; mkdir -p -- {safe_temp_root} && chmod 700 -- {safe_temp_root}",
+                timeout=30,
+            )
+            if not root_success:
+                return False, f"Failed to create extraction task directory: {self._short_command_error(root_stdout, root_stderr)}"
+
+            async with self.conn.start_sftp_client() as sftp:
+                root_attrs = await sftp.lstat(temp_root)
+                if root_attrs.type != asyncssh.FILEXFER_TYPE_DIRECTORY:
+                    return False, "Extraction task directory cannot be a symlink"
+            temp_root_safe, temp_root_error = await self.validate_path_within_base(
+                server.game_directory,
+                temp_root,
+                server,
+                allow_missing=False,
+            )
+            if not temp_root_safe:
+                return False, temp_root_error
+            temp_root_validated = True
+
+            create_success, create_stdout, create_stderr = await self.execute_command(
+                f"umask 077; mkdir -- {safe_stage} && chmod 700 -- {safe_stage}",
+                timeout=30,
+            )
+            if not create_success:
+                return False, f"Failed to create extraction staging directory: {self._short_command_error(create_stdout, create_stderr)}"
+            stage_created = True
+
+            async with self.conn.start_sftp_client() as sftp:
+                stage_attrs = await sftp.lstat(stage_path)
+                if stage_attrs.type != asyncssh.FILEXFER_TYPE_DIRECTORY:
+                    return False, "Extraction staging path cannot be a symlink"
+
+            stage_valid, stage_error = await self.validate_path_within_base(
+                server.game_directory,
+                stage_path,
+                server,
+                allow_missing=False,
+            )
+            if not stage_valid:
+                return False, stage_error
+
+            if archive_type == 'zip':
+                tool = await self._find_remote_tool(('unzip',))
+                if not tool:
+                    return False, "Required archive tool is missing: install unzip"
+                extract_command = (
+                    f"LC_ALL=C {shlex.quote(tool)} -qq -o {safe_archive} -d {safe_stage}"
+                )
+            elif archive_type in ('tar', 'tar.gz', 'tar.bz2', 'tar.xz'):
+                tool = await self._find_remote_tool(('tar',))
+                if not tool:
+                    return False, "Required archive tool is missing: install tar"
+                extract_flag = {
+                    'tar': '-xf',
+                    'tar.gz': '-xzf',
+                    'tar.bz2': '-xjf',
+                    'tar.xz': '-xJf',
+                }[archive_type]
+                extract_command = (
+                    f"LC_ALL=C {shlex.quote(tool)} {extract_flag} {safe_archive} -C {safe_stage} "
+                    "--no-same-owner --no-same-permissions"
+                )
+            elif archive_type == '7z':
+                tool = await self._find_remote_tool(('7zz', '7z', '7za'))
+                if not tool:
+                    return False, "Required archive tool is missing: install 7zz, 7z, or 7za"
+                output_argument = shlex.quote(f"-o{stage_path}")
+                extract_command = (
+                    f"LC_ALL=C {shlex.quote(tool)} x -y -aoa -bd -bso0 -bsp0 "
+                    f"{output_argument} -- {safe_archive}"
+                )
+            elif archive_type in ('gz', 'bz2'):
+                tool_name = 'gzip' if archive_type == 'gz' else 'bzip2'
+                tool = await self._find_remote_tool((tool_name,))
+                if not tool:
+                    return False, f"Required archive tool is missing: install {tool_name}"
+                suffix_length = 3 if archive_type == 'gz' else 4
+                output_name = posixpath.basename(archive_path)[:-suffix_length]
+                safe_output = shlex.quote(posixpath.join(stage_path, output_name))
+                extract_command = f"{shlex.quote(tool)} -dc {safe_archive} > {safe_output}"
+            else:
+                return False, "Unsupported archive format"
+
+            extract_success, extract_stdout, extract_stderr = await self.execute_command(
+                extract_command,
+                timeout=self.ARCHIVE_EXTRACT_TIMEOUT,
+            )
+            if not extract_success:
+                return False, f"Extraction failed: {self._short_command_error(extract_stdout, extract_stderr)}"
+
+            # Fail closed if the extractor produced any link, hardlink, device,
+            # FIFO, or socket despite the preflight member listing.
+            special_command = (
+                f"find {safe_stage} -xdev \\( -type l -o -type b -o -type c -o "
+                "-type p -o -type s \\) -print -quit"
+            )
+            special_success, special_stdout, special_stderr = await self.execute_command(
+                special_command,
+                timeout=60,
+            )
+            if not special_success:
+                return False, f"Failed to validate extracted files: {self._short_command_error(special_stdout, special_stderr)}"
+            if special_stdout.strip():
+                return False, "Archive extraction produced a link or special filesystem entry"
+
+            hardlink_success, hardlink_stdout, hardlink_stderr = await self.execute_command(
+                f"find {safe_stage} -xdev -type f -links +1 -print -quit",
+                timeout=60,
+            )
+            if not hardlink_success:
+                return False, f"Failed to validate extracted hardlinks: {self._short_command_error(hardlink_stdout, hardlink_stderr)}"
+            if hardlink_stdout.strip():
+                return False, "Archive extraction produced a hardlinked file"
+
+            mkdir_success, mkdir_stdout, mkdir_stderr = await self.execute_command(
+                f"mkdir -p -- {safe_destination}",
+                timeout=30,
+            )
+            if not mkdir_success:
+                return False, f"Failed to create extraction destination: {self._short_command_error(mkdir_stdout, mkdir_stderr)}"
+            destination_valid, destination_error = await self.validate_path_within_base(
+                server.game_directory,
+                destination_path,
+                server,
+                allow_missing=False,
+            )
+            if not destination_valid:
+                return False, destination_error
+
+            cp_tool = await self._find_remote_tool(('cp',))
+            if not cp_tool:
+                return False, "Required merge tool is missing: install coreutils (cp)"
+            copy_options = (
+                "-a --no-dereference --remove-destination"
+                if overwrite
+                else "-a --no-dereference --no-clobber"
+            )
+            if normalized_source:
+                selected_path = posixpath.join(stage_path, normalized_source)
+                safe_selected = shlex.quote(selected_path)
+                selected_success, _, _ = await self.execute_command(
+                    f"test -d {safe_selected} && test ! -L {safe_selected}",
+                    timeout=10,
+                )
+                if not selected_success:
+                    return False, "Selected source folder was not extracted as a directory"
+                if strip_source_folder:
+                    copy_source = shlex.quote(posixpath.join(selected_path, '.'))
+                else:
+                    # Preserve the selected directory itself (its archive
+                    # parents are selection context and are not recreated).
+                    copy_source = safe_selected
+            else:
+                copy_source = shlex.quote(posixpath.join(stage_path, '.'))
+
+            merge_command = (
+                f"{shlex.quote(cp_tool)} {copy_options} -- {copy_source} {safe_destination}/"
+            )
+            merge_success, merge_stdout, merge_stderr = await self.execute_command(
+                merge_command,
+                timeout=self.ARCHIVE_EXTRACT_TIMEOUT,
+            )
+            if not merge_success:
+                return False, f"Failed to merge extracted files: {self._short_command_error(merge_stdout, merge_stderr)}"
+            return True, ""
+        except Exception as exc:
+            return False, f"Error extracting archive: {exc}"
+        finally:
+            if stage_created and temp_root_validated:
+                await self.execute_command(f"rm -rf -- {safe_stage}", timeout=60)
+                await self.execute_command(f"rmdir -- {safe_temp_root} 2>/dev/null || true", timeout=10)
     
     async def upload_file(self, local_path: str, remote_path: str, server: Server) -> Tuple[bool, str]:
         """
