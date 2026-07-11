@@ -637,6 +637,10 @@ async def install_plugin(
     Returns:
         Installation result
     """
+    selected_release_id = None
+    selected_release_tag = None
+    selected_asset_name = None
+
     # Validate download_url if provided
     if download_url:
         # Ensure it's a GitHub releases download URL
@@ -645,6 +649,11 @@ async def install_plugin(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid download URL. Must be a GitHub releases download URL."
             )
+        release_parts = download_url.split('/releases/download/', 1)[1].split('/', 1)
+        if len(release_parts) == 2:
+            selected_release_tag = release_parts[0]
+            selected_release_id = f"tag:{selected_release_tag}"
+            selected_asset_name = release_parts[1]
     
     # Get plugin and server (read-only, no locking)
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
@@ -747,6 +756,8 @@ async def install_plugin(
             
             # Find suitable asset (exclude Windows, prefer Linux archives)
             assets = data.get("assets", [])
+            selected_release_id = str(data.get("id") or "")
+            selected_release_tag = data.get("tag_name") or "unknown"
             download_url = None
             
             for asset in assets:
@@ -759,6 +770,7 @@ async def install_plugin(
                 # Check for archive files
                 if any(asset_name.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]):
                     download_url = asset.get("browser_download_url")
+                    selected_asset_name = asset.get("name")
                     break
             
             if not download_url:
@@ -801,6 +813,22 @@ async def install_plugin(
                 # Log but don't fail if install count update fails
                 logger.error(f"Failed to update install count: {e}")
                 await db.rollback()
+
+            from services.plugin_auto_update_service import derive_asset_glob, upsert_managed_plugin
+            await upsert_managed_plugin(
+                server_id=server.id,
+                source_type="market",
+                source_key=str(plugin.id),
+                display_name=plugin.title,
+                repo_url=plugin.github_url,
+                market_plugin_id=plugin.id,
+                installed_release_id=selected_release_id,
+                installed_version=selected_release_tag or plugin.version or "unknown",
+                asset_glob=derive_asset_glob(selected_asset_name, selected_release_tag),
+                custom_install_path=plugin.custom_install_path,
+                exclude_dirs=exclude_dirs,
+                exclude_files=final_exclude_files,
+            )
             
             # Add dependency info to success message
             if installed_deps:
@@ -1033,5 +1061,18 @@ async def uninstall_market_plugin(
     # Verify server ownership
     server = await get_server_for_user(server_id, db, current_user)
     
-    # Use the existing uninstall function
-    return await uninstall_plugin(server_id, request, db, current_user)
+    result = await uninstall_plugin(server_id, request, db, current_user)
+    if result.success:
+        from modules.models import ManagedPlugin
+        tracked = await db.execute(
+            select(ManagedPlugin).where(
+                ManagedPlugin.server_id == server_id,
+                ManagedPlugin.source_type == "market",
+                ManagedPlugin.source_key == str(plugin_id),
+            )
+        )
+        managed = tracked.scalar_one_or_none()
+        if managed:
+            await db.delete(managed)
+            await db.commit()
+    return result

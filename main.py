@@ -11,22 +11,31 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import os
 import logging
+import uuid
 
 from modules import init_db, migrate_db, settings, Server, ServerResponse, setup_logging, _get_log_level
 from services import redis_manager
-from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market, system_settings, gmail_oauth
+from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market, plugin_auto_update, system_settings, gmail_oauth
 
 # Initialize logging first (before anything else logs)
 # Get log level from settings
 log_level = _get_log_level(settings.LOG_LEVEL)
 setup_logging(level=log_level, asyncssh_level=settings.ASYNCSSH_LOG_LEVEL)
 logger = logging.getLogger(__name__)
+STATIC_ASSET_VERSION = uuid.uuid4().hex
+
+
+def static_url(path: str) -> str:
+    """Return a cache-busted static asset URL for this app process."""
+    normalized_path = path.lstrip("/")
+    separator = "&" if "?" in normalized_path else "?"
+    return f"/static/{normalized_path}{separator}v={STATIC_ASSET_VERSION}"
 
 async def startup_event():
     """Initialize database and start monitoring on startup"""
-    # Run migrations first to add any missing columns to existing tables
+    # migrate_db first creates missing tables, then adds columns that create_all
+    # cannot add to an existing installation.
     await migrate_db()
-    # Then initialize database (create tables if they don't exist, create default admin)
     await init_db()
     
     # Start SSH connection pool cleanup task
@@ -60,6 +69,10 @@ async def startup_event():
     from services.auto_update_service import auto_update_service
     await auto_update_service.start()
     print("Auto-update service started")
+
+    from services.plugin_auto_update_service import plugin_auto_update_service
+    await plugin_auto_update_service.start()
+    print("Plugin auto-update service started")
     
     # Start scheduled task service
     from services.scheduled_task_service import scheduled_task_service
@@ -110,6 +123,9 @@ async def shutdown_event():
     # Stop auto-update service
     from services.auto_update_service import auto_update_service
     auto_update_service.stop()
+
+    from services.plugin_auto_update_service import plugin_auto_update_service
+    plugin_auto_update_service.stop()
     
     # Stop scheduled task service
     from services.scheduled_task_service import scheduled_task_service
@@ -155,6 +171,8 @@ if os.path.exists("static"):
 
 # Setup Jinja2 templates
 templates = Jinja2Templates(directory="templates")
+templates.env.globals["static_url"] = static_url
+templates.env.globals["static_version"] = STATIC_ASSET_VERSION
 
 # Include routers
 # PUBLIC ROUTER FIRST - no authentication, no prefix
@@ -171,6 +189,7 @@ app.include_router(file_manager.router)
 app.include_router(scheduled_tasks.router)
 app.include_router(github_plugins.router)
 app.include_router(plugin_market.router)
+app.include_router(plugin_auto_update.router)
 app.include_router(system_settings.router)
 app.include_router(gmail_oauth.router)
 

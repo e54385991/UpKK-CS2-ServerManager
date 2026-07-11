@@ -842,6 +842,27 @@ async def server_action(
                 detail=error_msg
             )
         
+        if success and action in {
+            "install_metamod", "update_metamod",
+            "install_counterstrikesharp", "update_counterstrikesharp",
+            "install_cs2fixes", "update_cs2fixes",
+        }:
+            try:
+                from services.plugin_auto_update_service import record_framework_installation, record_known_github_installation
+                if "cs2fixes" in action:
+                    await record_known_github_installation(
+                        server, current_user, "https://github.com/Source2ZE/CS2Fixes",
+                        "CS2Fixes", "CS2Fixes-*-linux.tar.gz",
+                    )
+                    await record_framework_installation(server, current_user, "metamod")
+                else:
+                    framework_key = "metamod" if "metamod" in action else "counterstrikesharp"
+                    await record_framework_installation(server, current_user, framework_key)
+                    if framework_key == "counterstrikesharp":
+                        await record_framework_installation(server, current_user, "metamod")
+            except Exception as tracking_error:
+                logger.warning("Framework installed but tracking metadata failed: %s", tracking_error)
+
         await db.commit()
         await db.refresh(server)
         await db.refresh(log)
@@ -928,6 +949,7 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
     import logging
     logger = logging.getLogger(__name__)
     server = None
+    owner = None
     
     try:
         # Update status to in_progress
@@ -939,6 +961,7 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
                 server = await Server.get_by_id(db, server_id)
             else:
                 server = await Server.get_by_id_and_user(db, server_id, user_id)
+            owner = await db.get(User, server.user_id) if server else None
             
             if not server:
                 await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
@@ -1179,6 +1202,22 @@ async def execute_single_server_plugins(server_id: int, plugins: List[str], user
                 else:
                     success = False
                     message = f"Unknown plugin: {plugin}"
+
+                if success and owner:
+                    try:
+                        from services.plugin_auto_update_service import record_framework_installation, record_known_github_installation
+                        if plugin in {"metamod", "counterstrikesharp"}:
+                            await record_framework_installation(server, owner, plugin)
+                            if plugin == "counterstrikesharp":
+                                await record_framework_installation(server, owner, "metamod")
+                        elif plugin == "cs2fixes":
+                            await record_known_github_installation(
+                                server, owner, "https://github.com/Source2ZE/CS2Fixes",
+                                "CS2Fixes", "CS2Fixes-*-linux.tar.gz",
+                            )
+                            await record_framework_installation(server, owner, "metamod")
+                    except Exception as tracking_error:
+                        logger.warning("Plugin installed but tracking metadata failed: %s", tracking_error)
                 
                 # Create deployment log in a separate quick session
                 async with async_session_maker() as db:

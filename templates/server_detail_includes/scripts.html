@@ -33,9 +33,39 @@
                                                                             loadingStatusLogs: false,
                                                                                 loadingRestartLogs: false,
                                                                                     loadingA2SCheckLogs: false,
-                                                                                        pluginSelection: {
+        pluginSelection: {
             metamod: false,
                 counterstrikesharp: false
+        },
+        pluginAutoUpdate: {
+            enable_plugin_auto_update: false,
+            plugin_update_check_interval_hours: 1,
+            last_plugin_update_check: null,
+            plugins: []
+        },
+        loadingPluginAutoUpdate: false,
+        savingPluginAutoUpdate: false,
+        registeringManagedPlugin: false,
+        managedPluginReleases: [],
+        marketPluginOptions: [],
+        loadingMarketPluginOptions: false,
+        pluginUpdateRunStatus: {
+            state: 'idle', phase: 'idle', message: '', current: 0, total: 0, logs: []
+        },
+        pluginUpdateStatusTimer: null,
+        managedPluginRegistration: {
+            source_type: 'github',
+            display_name: '',
+            repo_url: '',
+            framework_key: 'metamod',
+            market_plugin_id: '',
+            release_index: '',
+            asset_index: '',
+            asset_glob: '',
+            custom_install_path: '',
+            exclude_dirs_text: '',
+            exclude_files_text: '',
+            auto_update_enabled: false
         },
         // Deployment lock tracking
         deploymentLockExists: false,
@@ -242,6 +272,9 @@
             this.loadMonitoringForm();
             this.loadAutoUpdateForm();
             await this.loadDiscordSettings();
+            await this.loadPluginAutoUpdate();
+            await this.loadMarketPluginOptions();
+            await this.loadPluginUpdateRunStatus();
             this.loadA2SConfigForm();
             this.loadCpuAffinityForm();
             this.loadGithubProxyForm();
@@ -283,6 +316,9 @@
                     this.loadTokenCaptcha();
                 }
             });
+            window.addEventListener('beforeunload', () => {
+                if (this.pluginUpdateStatusTimer) clearTimeout(this.pluginUpdateStatusTimer);
+            }, { once: true });
             
         },
         
@@ -1950,6 +1986,231 @@
             }
         },
         
+        async loadPluginAutoUpdate() {
+            this.loadingPluginAutoUpdate = true;
+            try {
+                const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update`);
+                if (!response.ok) throw new Error((await response.json()).detail || 'Failed to load plugin auto-update settings');
+                this.pluginAutoUpdate = await response.json();
+            } catch (err) {
+                this.showToast(err.message, 'error');
+            } finally {
+                this.loadingPluginAutoUpdate = false;
+            }
+        },
+
+        async savePluginAutoUpdateSettings() {
+            this.savingPluginAutoUpdate = true;
+            try {
+                const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/settings`, {
+                    method: 'PUT', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        enable_plugin_auto_update: this.pluginAutoUpdate.enable_plugin_auto_update,
+                        plugin_update_check_interval_hours: Number(this.pluginAutoUpdate.plugin_update_check_interval_hours)
+                    })
+                });
+                if (!response.ok) throw new Error((await response.json()).detail || 'Failed to save settings');
+                this.pluginAutoUpdate = await response.json();
+                this.showToast(window.i18n?.t('pluginAutoUpdate.saved') || 'Plugin auto-update settings saved', 'success');
+            } catch (err) {
+                this.showToast(err.message, 'error');
+            } finally {
+                this.savingPluginAutoUpdate = false;
+            }
+        },
+
+        async toggleManagedPlugin(plugin) {
+            const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/plugins/${plugin.id}`, {
+                method: 'PATCH', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({auto_update_enabled: plugin.auto_update_enabled})
+            });
+            if (!response.ok) {
+                plugin.auto_update_enabled = !plugin.auto_update_enabled;
+                this.showToast((await response.json()).detail || 'Failed to update plugin', 'error');
+            }
+        },
+
+        async toggleManagedPluginRestart(plugin) {
+            const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/plugins/${plugin.id}`, {
+                method: 'PATCH', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({restart_after_update: plugin.restart_after_update})
+            });
+            if (!response.ok) {
+                plugin.restart_after_update = !plugin.restart_after_update;
+                this.showToast((await response.json()).detail || 'Failed to update restart policy', 'error');
+            }
+        },
+
+        async toggleManagedPluginBackup(plugin) {
+            const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/plugins/${plugin.id}`, {
+                method: 'PATCH', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({backup_before_update: plugin.backup_before_update})
+            });
+            if (!response.ok) {
+                plugin.backup_before_update = !plugin.backup_before_update;
+                this.showToast((await response.json()).detail || 'Failed to update backup policy', 'error');
+            }
+        },
+
+        async runPluginAutoUpdateNow() {
+            const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/run`, {method: 'POST'});
+            const data = await response.json();
+            this.showToast(data.message || data.detail || 'Plugin update check started', response.ok ? 'success' : 'error');
+            if (response.ok) {
+                await this.loadPluginUpdateRunStatus(true);
+            }
+        },
+
+        async loadPluginUpdateRunStatus(keepPolling = false) {
+            const previousFinishedAt = this.pluginUpdateRunStatus.finished_at;
+            try {
+                const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/status`);
+                if (response.ok) this.pluginUpdateRunStatus = await response.json();
+            } catch (err) {
+                console.warn('Failed to load plugin update status:', err);
+            }
+            if (this.pluginUpdateStatusTimer) clearTimeout(this.pluginUpdateStatusTimer);
+            const pollDelay = (keepPolling || this.pluginUpdateRunStatus.state === 'running') ? 1500 : 5000;
+            this.pluginUpdateStatusTimer = setTimeout(() => this.loadPluginUpdateRunStatus(false), pollDelay);
+            if (['completed', 'failed'].includes(this.pluginUpdateRunStatus.state)
+                && this.pluginUpdateRunStatus.finished_at !== previousFinishedAt) {
+                await this.loadPluginAutoUpdate();
+            }
+        },
+
+        pluginUpdateProgressPercent() {
+            const total = Number(this.pluginUpdateRunStatus.total || 0);
+            if (!total) return this.pluginUpdateRunStatus.state === 'completed' ? 100 : 0;
+            return Math.min(100, Math.round((Number(this.pluginUpdateRunStatus.current || 0) / total) * 100));
+        },
+
+        async loadMarketPluginOptions() {
+            this.loadingMarketPluginOptions = true;
+            try {
+                const response = await authFetch('/api/plugin-market/plugins?page=1&page_size=100');
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.detail || 'Failed to load plugin market');
+                this.marketPluginOptions = data.plugins || [];
+            } catch (err) {
+                this.showToast(err.message, 'error');
+            } finally {
+                this.loadingMarketPluginOptions = false;
+            }
+        },
+
+        onManagedSourceChanged() {
+            const form = this.managedPluginRegistration;
+            form.release_index = '';
+            form.asset_index = '';
+            form.asset_glob = '';
+            this.managedPluginReleases = [];
+            if (form.source_type === 'framework') {
+                form.display_name = form.framework_key;
+                form.repo_url = '';
+            }
+        },
+
+        async onMarketPluginSelected() {
+            const form = this.managedPluginRegistration;
+            const plugin = this.marketPluginOptions.find(item => String(item.id) === String(form.market_plugin_id));
+            if (!plugin) return;
+            form.display_name = plugin.title;
+            form.repo_url = plugin.github_url;
+            form.custom_install_path = plugin.custom_install_path || '';
+            await this.fetchManagedPluginReleases();
+            if (this.managedPluginReleases.length) {
+                const normalizedVersion = String(plugin.version || '').replace(/^v/i, '');
+                let index = this.managedPluginReleases.findIndex(release =>
+                    String(release.tag_name || '').replace(/^v/i, '') === normalizedVersion
+                );
+                if (index < 0) index = 0;
+                form.release_index = index;
+                const assets = this.managedPluginReleases[index]?.assets || [];
+                if (assets.length === 1) {
+                    form.asset_index = 0;
+                    this.onManagedAssetSelected();
+                }
+            }
+        },
+
+        async fetchManagedPluginReleases() {
+            const repo = this.managedPluginRegistration.repo_url;
+            if (!repo) return;
+            const response = await authFetch(`/api/github-plugins/releases?repo_url=${encodeURIComponent(repo)}&count=10`);
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                this.showToast(data.detail || data.error || 'Failed to fetch releases', 'error');
+                return;
+            }
+            this.managedPluginReleases = data.releases.filter(release => !release.prerelease);
+            this.managedPluginRegistration.release_index = '';
+            this.managedPluginRegistration.asset_index = '';
+        },
+
+        onManagedAssetSelected() {
+            const form = this.managedPluginRegistration;
+            const release = this.managedPluginReleases[form.release_index];
+            const asset = release?.assets?.[form.asset_index];
+            if (!asset) return;
+            let pattern = asset.name;
+            [release.tag_name, release.tag_name?.replace(/^v/i, '')].filter(Boolean).forEach(value => {
+                pattern = pattern.replace(new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), '*');
+            });
+            form.asset_glob = pattern;
+            if (!form.display_name) form.display_name = form.repo_url.split('/').filter(Boolean).pop() || '';
+        },
+
+        async registerManagedPlugin() {
+            const form = this.managedPluginRegistration;
+            let body;
+            if (form.source_type === 'framework') {
+                body = {
+                    source_type: 'framework', framework_key: form.framework_key,
+                    display_name: form.framework_key, auto_update_enabled: false,
+                    backup_before_update: false, restart_after_update: false
+                };
+            } else {
+                const release = this.managedPluginReleases[form.release_index];
+                const asset = release?.assets?.[form.asset_index];
+                const unknownVersion = form.release_index === 'unknown';
+                if ((!unknownVersion && (!release || !asset)) || !form.asset_glob) {
+                    this.showToast(window.i18n?.t('pluginAutoUpdate.selectReleaseAsset') || 'Select the installed release and asset', 'error');
+                    return;
+                }
+                body = {
+                    source_type: form.source_type, display_name: form.display_name,
+                    source_key: form.source_type === 'market' ? String(form.market_plugin_id) : null,
+                    market_plugin_id: form.source_type === 'market' ? Number(form.market_plugin_id) : null,
+                    repo_url: form.repo_url, installed_release_id: unknownVersion ? null : release.id,
+                    installed_version: unknownVersion ? 'unknown' : release.tag_name, asset_glob: form.asset_glob,
+                    custom_install_path: form.custom_install_path || null,
+                    exclude_dirs: form.exclude_dirs_text.split(/[\n,]/).map(v => v.trim()).filter(Boolean),
+                    exclude_files: form.exclude_files_text.split(/[\n,]/).map(v => v.trim()).filter(Boolean),
+                    auto_update_enabled: false, backup_before_update: false, restart_after_update: false
+                };
+            }
+            this.registeringManagedPlugin = true;
+            try {
+                const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/plugins`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+                });
+                if (!response.ok) throw new Error((await response.json()).detail || 'Failed to register plugin');
+                await this.loadPluginAutoUpdate();
+                this.showToast(window.i18n?.t('pluginAutoUpdate.registered') || 'Plugin registered', 'success');
+            } catch (err) {
+                this.showToast(err.message, 'error');
+            } finally {
+                this.registeringManagedPlugin = false;
+            }
+        },
+
+        async unmanagePlugin(plugin) {
+            if (!confirm(window.i18n?.t('pluginAutoUpdate.unmanageConfirm', {name: plugin.display_name}) || `Stop managing ${plugin.display_name}? Remote files will remain.`)) return;
+            const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/plugins/${plugin.id}`, {method: 'DELETE'});
+            if (response.ok) await this.loadPluginAutoUpdate();
+            else this.showToast((await response.json()).detail || 'Failed to unmanage plugin', 'error');
+        },
+
         // GitHub Plugin Installation Methods
         async fetchGitHubReleases() {
             if (!this.githubRepoUrl) return;
@@ -2112,7 +2373,12 @@
                     body: JSON.stringify({
                         download_url: asset.browser_download_url,
                         exclude_dirs: this.githubExcludeDirs,
-                        exclude_files: this.githubExcludeFiles
+                        exclude_files: this.githubExcludeFiles,
+                        repo_url: this.githubRepoUrl,
+                        release_id: release.id,
+                        release_tag: release.tag_name,
+                        asset_name: asset.name,
+                        display_name: this.githubRepoUrl.split('/').filter(Boolean).pop()
                     })
                 });
                 

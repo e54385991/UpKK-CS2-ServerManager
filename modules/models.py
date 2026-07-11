@@ -3,7 +3,7 @@ Database models for CS2 Server Manager
 Using SQLModel for seamless FastAPI integration
 """
 from sqlmodel import SQLModel, Field, Column, select
-from sqlalchemy import Text, Enum as SQLEnum, Integer, ForeignKey, text
+from sqlalchemy import Text, Enum as SQLEnum, Integer, ForeignKey, JSON, UniqueConstraint, text
 from sqlalchemy.sql import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
@@ -55,8 +55,8 @@ class User(SQLModel, table=True):
     s3_retention_count: Optional[int] = Field(default=10)
     google_id: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)  # Google OAuth ID
     oauth_provider: Optional[str] = Field(default=None, max_length=50)  # OAuth provider (google, etc.)
-    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()})
     
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', email='{self.email}')>"
@@ -174,6 +174,11 @@ class Server(SQLModel, table=True):
     update_check_interval_hours: float = Field(default=1.0)  # Support fractional hours (e.g., 0.0167 = 1 minute)
     last_update_check: Optional[datetime] = Field(default=None)
     last_update_time: Optional[datetime] = Field(default=None)
+
+    # Plugin auto-update configuration
+    enable_plugin_auto_update: bool = Field(default=False)
+    plugin_update_check_interval_hours: float = Field(default=1.0)
+    last_plugin_update_check: Optional[datetime] = Field(default=None)
     
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(default=None, max_length=500)
@@ -211,8 +216,8 @@ class Server(SQLModel, table=True):
     # Additional info
     description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     last_deployed: Optional[datetime] = Field(default=None)
-    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()})
     
     def __repr__(self):
         status_val = self.status.value if self.status else "unknown"
@@ -385,7 +390,7 @@ class DeploymentLog(SQLModel, table=True):
     status: str = Field(max_length=50, nullable=False)
     output: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     error_message: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
-    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
     
     def __repr__(self):
         return f"<DeploymentLog(id={self.id}, server_id={self.server_id}, action='{self.action}', status='{self.status}')>"
@@ -412,7 +417,7 @@ class MonitoringLog(SQLModel, table=True):
     event_type: str = Field(max_length=50, nullable=False)
     status: str = Field(max_length=50, nullable=False)
     message: str = Field(sa_column=Column(Text, nullable=False))
-    created_at: Optional[datetime] = Field(default=None, index=True, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
+    created_at: Optional[datetime] = Field(default=None, index=True, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
     
     def __repr__(self):
         return f"<MonitoringLog(id={self.id}, server_id={self.server_id}, event_type='{self.event_type}', status='{self.status}')>"
@@ -441,8 +446,8 @@ class ScheduledTask(SQLModel, table=True):
     last_status: Optional[str] = Field(default=None, max_length=50)
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     
-    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()})
     
     def __repr__(self):
         return f"<ScheduledTask(id={self.id}, server_id={self.server_id}, name='{self.name}', action='{self.action}', enabled={self.enabled})>"
@@ -493,8 +498,8 @@ class CustomCommand(SQLModel, table=True):
     name: str = Field(max_length=255, nullable=False)
     target: str = Field(default="host", max_length=30, nullable=False)
     commands: str = Field(sa_column=Column(Text, nullable=False))
-    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()})
 
     def __repr__(self):
         return f"<CustomCommand(id={self.id}, server_id={self.server_id}, name='{self.name}', target='{self.target}')>"
@@ -543,8 +548,8 @@ class InitializedServer(SQLModel, table=True):
     ssh_user: str = Field(max_length=100, nullable=False)
     ssh_password: str = Field(max_length=255, nullable=False)
     game_directory: str = Field(default="/home/cs2server/cs2", max_length=500)
-    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()})
     
     def __repr__(self):
         return f"<InitializedServer(id={self.id}, user_id={self.user_id}, name='{self.name}', host='{self.host}')>"
@@ -587,8 +592,8 @@ class MarketPlugin(SQLModel, table=True):
     custom_install_path: Optional[str] = Field(default=None, max_length=255)  # Custom extraction path for non-standard packages (e.g., "addons")
     download_count: int = Field(default=0)
     install_count: int = Field(default=0)
-    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()})
     
     def __repr__(self):
         return f"<MarketPlugin(id={self.id}, title='{self.title}', category='{self.category.value}')>"
@@ -656,6 +661,44 @@ class MarketPlugin(SQLModel, table=True):
         return plugins, total_count
 
 
+class ManagedPlugin(SQLModel, table=True):
+    """A GitHub-backed plugin/framework managed for one game server."""
+    __tablename__ = "managed_plugins"
+    __table_args__ = (
+        UniqueConstraint("server_id", "source_type", "source_key", name="uq_managed_plugin_source"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    server_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True)
+    )
+    source_type: str = Field(max_length=30)  # github, market, framework
+    source_key: str = Field(max_length=500)
+    display_name: str = Field(max_length=255)
+    repo_url: Optional[str] = Field(default=None, max_length=500)
+    market_plugin_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("market_plugins.id", ondelete="SET NULL"), nullable=True),
+    )
+    framework_key: Optional[str] = Field(default=None, max_length=100)
+    installed_release_id: Optional[str] = Field(default=None, max_length=100)
+    installed_version: str = Field(default="unknown", max_length=100)
+    latest_version: Optional[str] = Field(default=None, max_length=100)
+    asset_glob: Optional[str] = Field(default=None, max_length=500)
+    custom_install_path: Optional[str] = Field(default=None, max_length=255)
+    exclude_dirs: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    exclude_files: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    auto_update_enabled: bool = Field(default=False)
+    backup_before_update: bool = Field(default=False)
+    restart_after_update: bool = Field(default=False)
+    last_check_at: Optional[datetime] = Field(default=None)
+    last_update_at: Optional[datetime] = Field(default=None)
+    last_status: Optional[str] = Field(default=None, max_length=30)
+    last_error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()})
+
+
 class SSHServerSudo(SQLModel, table=True):
     """SSH Server Sudo Configuration model for setup wizard"""
     __tablename__ = "ssh_servers_sudo"
@@ -666,8 +709,8 @@ class SSHServerSudo(SQLModel, table=True):
     ssh_port: int = Field(default=22, nullable=False)
     sudo_user: str = Field(max_length=100, nullable=False)
     sudo_password: str = Field(max_length=255, nullable=False)
-    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP"})
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": "CURRENT_TIMESTAMP", "onupdate": func.now()})
+    created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()})
     
     def __repr__(self):
         return f"<SSHServerSudo(id={self.id}, host='{self.host}', port={self.ssh_port}, user='{self.sudo_user}')>"

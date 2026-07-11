@@ -11,6 +11,7 @@ from services.steam_api_service import steam_api_service
 from services.ssh_manager import SSHManager
 from services.steam_inf_service import steam_inf_service
 from services.discord_notification_service import EVENT_AUTO_UPDATE, discord_notification_service
+from services.maintenance_lock import maintenance_lock_service
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,6 @@ class AutoUpdateService:
         self.task: Optional[asyncio.Task] = None
         self.running = False
         self.updating_servers: Set[int] = set()  # Track servers currently being updated
-        self._update_locks: dict[int, asyncio.Lock] = {}  # Per-server locks to prevent concurrent updates
         
     async def start(self):
         """Start the background auto-update task"""
@@ -96,88 +96,42 @@ class AutoUpdateService:
             logger.error(f"Error checking servers for updates: {e}")
     
     async def _check_and_update_server(self, server):
-        """Check a single server and update if needed"""
+        """Check a single server and run a long update outside the check timeout."""
         try:
-            # Wrap the entire check in a timeout to prevent blocking
-            # Use 60 seconds timeout for the entire check process
             async def _do_check():
-                # Update last check time first - use a separate DB session just for this quick operation
                 from modules.database import async_session_maker
                 from sqlalchemy import update as sql_update
                 from modules.models import Server
                 async with async_session_maker() as db:
                     await db.execute(
-                        sql_update(Server)
-                        .where(Server.id == server.id)
-                        .values(last_update_check=get_current_time())
+                        sql_update(Server).where(Server.id == server.id).values(last_update_check=get_current_time())
                     )
                     await db.commit()
-                
-                # Try to get version from steam.inf first (more reliable)
-                current_version = None
-                version_source = "unknown"
-                
+
                 success, version = await steam_inf_service.get_version_from_steam_inf(server)
-                
-                if success and version:
-                    current_version = version
-                    version_source = "steam.inf"
-                    logger.info(
-                        f"Got version from steam.inf for server {server.id} ({server.name}): "
-                        f"{current_version}"
-                    )
-                else:
-                    # Fallback to database stored version (from A2S or previous reads)
-                    current_version = server.current_game_version
-                    version_source = "database/A2S"
-                    logger.info(
-                        f"steam.inf read failed, using stored version for server {server.id} ({server.name}): "
-                        f"current_version={current_version}"
-                    )
-                
+                current_version = version if success and version else server.current_game_version
+                version_source = "steam.inf" if success and version else "database/A2S"
                 if not current_version:
-                    logger.warning(
-                        f"No version available for server {server.id}, skipping update check"
-                    )
-                    return
-                
-                # Check version against Steam API
+                    logger.warning("No version available for server %s", server.id)
+                    return None
                 success, result = await steam_api_service.check_version(current_version)
-                
                 if not success:
-                    logger.warning(
-                        f"Failed to check version for server {server.id}: "
-                        f"{result.get('error', 'Unknown error')}"
-                    )
-                    return
-                
-                # Check if update is needed
-                if result.get('up_to_date', True):
-                    logger.info(
-                        f"Server {server.id} ({server.name}) is up-to-date "
-                        f"(version: {current_version} from {version_source})"
-                    )
-                    return
-                
-                required_version = result.get('required_version')
-                logger.info(
-                    f"Server {server.id} ({server.name}) needs update: "
-                    f"current={current_version} (from {version_source}), required={required_version}"
-                )
-                
-                # Trigger update
+                    logger.warning("Steam version check failed for server %s: %s", server.id, result.get("error"))
+                    return None
+                if result.get("up_to_date", True):
+                    return None
+                return current_version, result.get("required_version"), version_source
+
+            update_info = await asyncio.wait_for(_do_check(), timeout=60)
+            if update_info:
                 await self._trigger_server_update(
                     server,
-                    current_version=current_version,
-                    required_version=required_version,
-                    version_source=version_source,
+                    current_version=update_info[0],
+                    required_version=update_info[1],
+                    version_source=update_info[2],
                 )
-            
-            # Apply timeout to prevent blocking the event loop
-            await asyncio.wait_for(_do_check(), timeout=60)
-            
         except asyncio.TimeoutError:
-            logger.warning(f"Timeout checking/updating server {server.id} - operation took longer than 60 seconds, skipping to prevent blocking")
+            logger.warning("Timeout checking server %s; update was not started", server.id)
         except Exception as e:
             logger.error(f"Error checking/updating server {server.id}: {e}")
     
@@ -189,11 +143,7 @@ class AutoUpdateService:
         version_source: Optional[str] = None,
     ):
         """Trigger update for a server and restart it"""
-        # Get or create lock for this server
-        if server.id not in self._update_locks:
-            self._update_locks[server.id] = asyncio.Lock()
-        
-        lock = self._update_locks[server.id]
+        lock = maintenance_lock_service.get(server.id)
         
         # Try to acquire lock without blocking - if already locked, skip this update
         if lock.locked():
@@ -231,6 +181,17 @@ class AutoUpdateService:
                     log_id = log.id
                 
                 logger.info(f"Triggering auto-update for server {server.id} ({server.name})")
+
+                discord_notification_service.queue_notify(
+                    server,
+                    EVENT_AUTO_UPDATE,
+                    "auto_update",
+                    True,
+                    "A newer CS2 server version was detected. Automatic update is starting.",
+                    title="Automatic update started",
+                    details=notification_details,
+                    state="in_progress",
+                )
                 
                 # Create SSH manager
                 ssh_manager = SSHManager()
@@ -257,6 +218,7 @@ class AutoUpdateService:
                 
                 if not update_success:
                     error_msg = f"Update failed: {update_message}"
+                    notification_details["Operation Result"] = update_message
                     logger.error(f"Update failed for server {server.id}: {update_message}")
                     
                     # Update log as failed
@@ -277,9 +239,54 @@ class AutoUpdateService:
                         details=notification_details,
                     )
                     return
+
+                # SteamCMD success is not enough. Bypass Redis and read steam.inf
+                # from the server, allowing a short delay for the file to settle.
+                observed_version = None
+                for attempt, delay in enumerate((0, 2, 5), start=1):
+                    if delay:
+                        await asyncio.sleep(delay)
+                    verified_read, observed = await steam_inf_service.refresh_version_cache(server)
+                    if verified_read and observed:
+                        observed_version = observed
+                        break
+                    await log_progress(f"steam.inf verification attempt {attempt} failed")
+
+                notification_details["Observed Version"] = observed_version or "Unavailable"
+                notification_details["Recovery Result"] = update_message
+                version_verified = bool(observed_version and observed_version == required_version)
+
+                # A new Valve release can appear while SteamCMD is running. In that
+                # race, accept a different observed version only if Steam confirms it
+                # is currently up to date.
+                if observed_version and not version_verified:
+                    check_success, final_check = await steam_api_service.check_version(observed_version)
+                    version_verified = bool(check_success and final_check.get("up_to_date", False))
+                    if check_success and final_check.get("required_version"):
+                        notification_details["Latest Required Version"] = final_check.get("required_version")
+
+                if not version_verified:
+                    error_msg = (
+                        "Update verification failed: steam.inf could not be read"
+                        if not observed_version
+                        else f"Update verification failed: steam.inf reports {observed_version}, required {required_version}"
+                    )
+                    await log_progress(error_msg)
+                    async with async_session_maker() as db:
+                        log_to_update = await db.get(DeploymentLog, log_id)
+                        if log_to_update:
+                            log_to_update.status = "failed"
+                            log_to_update.error_message = error_msg
+                            log_to_update.output = "\n".join(output_messages)
+                            await db.commit()
+                    discord_notification_service.queue_notify(
+                        server, EVENT_AUTO_UPDATE, "auto_update", False, error_msg,
+                        title="Automatic update failed", details=notification_details,
+                    )
+                    return
                 
                 logger.info(f"Auto-update completed successfully for server {server.id}")
-                await log_progress("Auto-update completed successfully")
+                await log_progress(f"Auto-update verified successfully via steam.inf: {observed_version}")
                 
                 # Update last_update_time in database
                 from sqlalchemy import update as sql_update
@@ -305,7 +312,7 @@ class AutoUpdateService:
                     EVENT_AUTO_UPDATE,
                     "auto_update",
                     True,
-                    "Auto-update completed successfully",
+                    f"Auto-update completed and steam.inf verified version {observed_version}",
                     title="Automatic update completed",
                     details=notification_details,
                 )

@@ -139,6 +139,12 @@
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="plugin-auto-update-tab" data-bs-toggle="tab" data-bs-target="#plugin-auto-update" type="button"
+                        role="tab">
+                        <i class="bi bi-arrow-repeat"></i> <span data-i18n="pluginAutoUpdate.title">Plugin Automatic Updates</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
                     <button class="nav-link" id="scheduled-tasks-tab" data-bs-toggle="tab" data-bs-target="#scheduled-tasks" type="button"
                         role="tab">
                         <i class="bi bi-clock-history"></i> <span data-i18n="serverDetail.scheduledTasks">Scheduled Tasks</span>
@@ -171,6 +177,9 @@
 
                 <!-- File Manager Tab -->
                 {% include 'server_detail_includes/files_tab.html' %}
+
+                <!-- Plugin Auto Update Tab -->
+                {% include 'server_detail_includes/plugin_auto_update_tab.html' %}
 
                 <!-- Scheduled Tasks Tab -->
                 {% include 'server_detail_includes/scheduled_tasks_tab.html' %}

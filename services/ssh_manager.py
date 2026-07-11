@@ -2431,10 +2431,17 @@ class SSHManager:
                 timeout=1800  # 30 minutes per attempt
             )
             
-            if not success and stderr and "error" in stderr.lower():
-                await send_progress(f"Update completed with warnings: {stderr}")
-            else:
-                await send_progress("CS2 server updated successfully")
+            if not success:
+                error_detail = stderr or stdout or "SteamCMD returned a failure status"
+                await send_progress(f"CS2 server update failed: {error_detail}")
+                recovery_detail = ""
+                if was_running:
+                    await send_progress("Attempting to restore the previously running server...")
+                    recovery_success, recovery_message = await self.start_server(server, progress_callback)
+                    recovery_detail = f"; recovery start {'succeeded' if recovery_success else 'failed'}: {recovery_message}"
+                return False, f"SteamCMD update failed: {error_detail}{recovery_detail}"
+
+            await send_progress("CS2 server updated successfully")
             
             # Refresh steam.inf version cache after update
             try:
@@ -2455,10 +2462,12 @@ class SSHManager:
                 if restart_success:
                     await send_progress("✓ Server restarted successfully after update")
                 else:
-                    await send_progress(f"⚠ Warning: Failed to restart server after update: {restart_msg}")
-                    await send_progress("You may need to manually start the server")
+                    await send_progress(f"✗ Failed to restart server after update: {restart_msg}")
+                    return False, f"Server files updated, but failed to restore the running server: {restart_msg}"
             
-            return True, "Server updated successfully"
+            if was_running:
+                return True, "Server updated and restored to running state successfully"
+            return True, "Server updated successfully; server remained stopped"
         
         except Exception as e:
             await send_progress(f"Update error: {str(e)}")

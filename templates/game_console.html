@@ -6,7 +6,7 @@
     <title>Game Console - Server {{ server_id }}</title>
     
     <!-- Xterm.js CSS -->
-    <link rel="stylesheet" href="/static/xterm/xterm.css">
+    <link rel="stylesheet" href="{{ static_url('xterm/xterm.css') }}">
     
     <style>
         * {
@@ -170,9 +170,9 @@
     </div>
     
     <!-- Xterm.js and addons -->
-    <script src="/static/xterm/xterm.js"></script>
-    <script src="/static/xterm/xterm-addon-fit.js"></script>
-    <script src="/static/xterm/xterm-addon-web-links.js"></script>
+    <script src="{{ static_url('xterm/xterm.js') }}"></script>
+    <script src="{{ static_url('xterm/xterm-addon-fit.js') }}"></script>
+    <script src="{{ static_url('xterm/xterm-addon-web-links.js') }}"></script>
     
     <script>
         // Configuration

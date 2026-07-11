@@ -6,14 +6,15 @@
     <title>{% block title %} Upkk CS2 Server Manager & Pythonv3.14 & FastAPI {% endblock %}</title>
     
     <!-- Local Bootstrap CSS -->
-    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ static_url('css/bootstrap.min.css') }}">
     <!-- Local Bootstrap Icons -->
-    <link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{{ static_url('css/bootstrap-icons.min.css') }}">
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="stylesheet" href="{{ static_url('css/app.css') }}">
     
     <!-- i18n Script - Load Early (with cache busting) -->
-    <script src="/static/js/i18n.js?v=1.0.28"></script>
+    <script>window.STATIC_ASSET_VERSION = "{{ static_version }}";</script>
+    <script src="{{ static_url('js/i18n.js') }}"></script>
     
     {% block extra_css %}{% endblock %}
 </head>
@@ -113,11 +114,11 @@
     </footer>
 
     <!-- Local Bootstrap JS -->
-    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ static_url('js/bootstrap.bundle.min.js') }}"></script>
     <!-- Dialog Manager -->
-    <script src="/static/js/dialog.js"></script>
+    <script src="{{ static_url('js/dialog.js') }}"></script>
     <!-- Local Alpine.js -->
-    <script src="/static/js/alpine.min.js" defer></script>
+    <script src="{{ static_url('js/alpine.min.js') }}" defer></script>
     
     <!-- Authentication Status Check -->
     <script>

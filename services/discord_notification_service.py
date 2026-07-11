@@ -32,6 +32,7 @@ EVENT_CRASH_RESTART = "crash_restart"
 SUCCESS_COLOR = 0x2ECC71
 ERROR_COLOR = 0xE74C3C
 TEST_COLOR = 0x5865F2
+IN_PROGRESS_COLOR = 0x3498DB
 
 MAX_TITLE_LENGTH = 256
 MAX_DESCRIPTION_LENGTH = 4096
@@ -99,6 +100,7 @@ class DiscordNotificationService:
         details: Optional[Dict[str, Any]] = None,
         rate_limit_minutes: Optional[int] = None,
         rate_limit_scope: Optional[str] = None,
+        state: Optional[str] = None,
     ) -> bool:
         """Queue a Discord notification without waiting for network I/O."""
         if not self.should_notify(server, event_type):
@@ -125,6 +127,7 @@ class DiscordNotificationService:
             message,
             title=title,
             details=details,
+            state=state,
         )
 
         try:
@@ -184,6 +187,7 @@ class DiscordNotificationService:
         *,
         title: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
+        state: Optional[str] = None,
     ) -> bool:
         """Send a Discord notification if enabled for the server and event."""
         if not self.should_notify(server, event_type):
@@ -207,6 +211,7 @@ class DiscordNotificationService:
             message,
             title=title,
             details=details,
+            state=state,
         )
         return await self._send_payload(webhook_url, payload, server.id, action)
 
@@ -243,11 +248,18 @@ class DiscordNotificationService:
         title: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
         color: Optional[int] = None,
+        state: Optional[str] = None,
     ) -> Dict[str, Any]:
-        status_text = "Success" if success else "Failed"
+        normalized_state = state or ("success" if success else "failed")
+        status_text = {
+            "in_progress": "In Progress",
+            "success": "Success",
+            "failed": "Failed",
+        }.get(normalized_state, "Success" if success else "Failed")
         event_label = self._event_label(event_type)
         embed_title = title or f"{event_label}: {status_text}"
-        embed_color = color if color is not None else (SUCCESS_COLOR if success else ERROR_COLOR)
+        default_color = IN_PROGRESS_COLOR if normalized_state == "in_progress" else (SUCCESS_COLOR if success else ERROR_COLOR)
+        embed_color = color if color is not None else default_color
 
         fields = [
             {"name": "Server", "value": self._server_label(server), "inline": True},
@@ -271,10 +283,15 @@ class DiscordNotificationService:
             "inline": False,
         })
 
+        descriptions = {
+            "in_progress": f"{server.name} is starting an update-related operation.",
+            "success": f"{server.name} has completed an update-related operation successfully.",
+            "failed": f"{server.name} could not complete an update-related operation.",
+        }
         embed: Dict[str, Any] = {
             "title": self._truncate(embed_title, MAX_TITLE_LENGTH),
             "description": self._truncate(
-                f"{server.name} has completed an update-related operation.",
+                descriptions.get(normalized_state, f"{server.name} has completed an update-related operation."),
                 MAX_DESCRIPTION_LENGTH,
             ),
             "color": embed_color,

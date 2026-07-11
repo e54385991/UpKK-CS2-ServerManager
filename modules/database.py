@@ -66,6 +66,10 @@ async def init_db():
 async def migrate_db():
     """Run database migrations for schema updates"""
     async with engine.begin() as conn:
+        # Make a fresh database safe for the ALTER/FK migrations below while
+        # leaving existing tables untouched. init_db later creates the admin.
+        await conn.run_sync(SQLModel.metadata.create_all)
+
         # Check if sudo_password column exists, add it if not
         result = await conn.execute(
             text("""
@@ -510,6 +514,23 @@ async def migrate_db():
             else:
                 print(f"{column} column exists in servers table")
 
+        plugin_update_columns = {
+            'enable_plugin_auto_update': 'TINYINT(1) NOT NULL DEFAULT 0',
+            'plugin_update_check_interval_hours': 'FLOAT NOT NULL DEFAULT 1.0',
+            'last_plugin_update_check': 'DATETIME NULL',
+        }
+        for column, definition in plugin_update_columns.items():
+            result = await conn.execute(
+                text(f"""
+                    SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'servers'
+                    AND COLUMN_NAME = '{column}'
+                """)
+            )
+            if result.fetchone() is None:
+                await conn.execute(text(f"ALTER TABLE servers ADD COLUMN {column} {definition}"))
+                print(f"Migration completed: {column} column added to servers table")
+
         # Check if SSH health monitoring daemon columns exist in servers table
         ssh_health_columns = ['enable_ssh_health_monitoring', 'ssh_health_check_interval_hours', 
                               'ssh_health_failure_threshold', 'last_ssh_health_check', 'ssh_health_status']
@@ -628,6 +649,76 @@ async def migrate_db():
             print("✓ Migration completed: dependencies column added to market_plugins")
         else:
             print("✓ dependencies column exists in market_plugins table")
+
+        # Create the managed plugin table only after both referenced tables exist.
+        result = await conn.execute(
+            text("""
+                SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'managed_plugins'
+            """)
+        )
+        if result.fetchone() is None:
+            await conn.execute(
+                text("""
+                    CREATE TABLE managed_plugins (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        server_id INT NOT NULL,
+                        source_type VARCHAR(30) NOT NULL,
+                        source_key VARCHAR(500) NOT NULL,
+                        display_name VARCHAR(255) NOT NULL,
+                        repo_url VARCHAR(500) NULL,
+                        market_plugin_id INT NULL,
+                        framework_key VARCHAR(100) NULL,
+                        installed_release_id VARCHAR(100) NULL,
+                        installed_version VARCHAR(100) NOT NULL DEFAULT 'unknown',
+                        latest_version VARCHAR(100) NULL,
+                        asset_glob VARCHAR(500) NULL,
+                        custom_install_path VARCHAR(255) NULL,
+                        exclude_dirs JSON NOT NULL,
+                        exclude_files JSON NOT NULL,
+                        auto_update_enabled TINYINT(1) NOT NULL DEFAULT 0,
+                        backup_before_update TINYINT(1) NOT NULL DEFAULT 0,
+                        restart_after_update TINYINT(1) NOT NULL DEFAULT 0,
+                        last_check_at DATETIME NULL,
+                        last_update_at DATETIME NULL,
+                        last_status VARCHAR(30) NULL,
+                        last_error TEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_managed_plugins_server_id (server_id),
+                        UNIQUE KEY uq_managed_plugin_source (server_id, source_type, source_key),
+                        CONSTRAINT fk_managed_plugins_server FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+                        CONSTRAINT fk_managed_plugins_market FOREIGN KEY (market_plugin_id) REFERENCES market_plugins(id) ON DELETE SET NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """)
+            )
+            print("Migration completed: managed_plugins table created")
+
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'managed_plugins'
+                AND COLUMN_NAME = 'restart_after_update'
+            """)
+        )
+        if result.fetchone() is None:
+            await conn.execute(
+                text("ALTER TABLE managed_plugins ADD COLUMN restart_after_update TINYINT(1) NOT NULL DEFAULT 0")
+            )
+            print("Migration completed: restart_after_update added to managed_plugins")
+
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'managed_plugins'
+                AND COLUMN_NAME = 'backup_before_update'
+            """)
+        )
+        if result.fetchone() is None:
+            await conn.execute(
+                text("ALTER TABLE managed_plugins ADD COLUMN backup_before_update TINYINT(1) NOT NULL DEFAULT 0")
+            )
+            print("Migration completed: backup_before_update added to managed_plugins")
         
         # Fix category enum values if needed (lowercase to uppercase migration)
         # Check current enum definition

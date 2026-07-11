@@ -15,6 +15,7 @@ from services.discord_notification_service import (
     MAX_FIELD_VALUE_LENGTH,
     SUCCESS_COLOR,
     TEST_COLOR,
+    IN_PROGRESS_COLOR,
     DiscordNotificationService,
 )
 
@@ -84,6 +85,18 @@ def test_build_payload_uses_success_and_failure_embed_templates():
         field["name"] == "Result" and field["value"] == "Failed"
         for field in failure_payload["embeds"][0]["fields"]
     )
+
+
+def test_build_payload_supports_in_progress_state():
+    service = DiscordNotificationService()
+    payload = service.build_payload(
+        make_server(), EVENT_AUTO_UPDATE, "auto_update", True,
+        "Starting update", title="Automatic update started", state="in_progress",
+    )
+    embed = payload["embeds"][0]
+    assert embed["color"] == IN_PROGRESS_COLOR
+    assert "is starting" in embed["description"]
+    assert any(field["name"] == "Result" and field["value"] == "In Progress" for field in embed["fields"])
 
 
 def test_build_payload_truncates_discord_field_limits():

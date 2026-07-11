@@ -2,7 +2,7 @@
 Core modules for CS2 Server Manager
 """
 from .config import settings, Settings
-from .models import Base, Server, DeploymentLog, MonitoringLog, ServerStatus, AuthType, User, InitializedServer, ScheduledTask, CustomCommand, MarketPlugin, PluginCategory, SSHServerSudo, SystemSettings, PasswordResetToken
+from .models import Base, Server, DeploymentLog, MonitoringLog, ServerStatus, AuthType, User, InitializedServer, ScheduledTask, CustomCommand, MarketPlugin, ManagedPlugin, PluginCategory, SSHServerSudo, SystemSettings, PasswordResetToken
 from .schemas import (
     ServerCreate, ServerUpdate, ServerResponse, ServerResponseWithUser,
     ServerAction, ActionResponse, DeploymentLogResponse,
@@ -24,6 +24,8 @@ from .schemas import (
     GitHubPluginInstallRequest, GitHubPluginInstallResponse,
     MarketPluginCreate, MarketPluginUpdate, MarketPluginResponse, MarketPluginListResponse,
     MarketPluginInstallRequest, GitHubRepoInfo, DependencyInfo,
+    PluginAutoUpdateSettings, ManagedPluginCreate, ManagedPluginUpdate,
+    ManagedPluginResponse, PluginAutoUpdateResponse,
     PluginUninstallRequest, PluginUninstallResponse,
     InstalledPluginFile, InstalledPluginAnalysisResponse,
     MetamodStatusResponse,
@@ -54,6 +56,7 @@ __all__ = [
     'ScheduledTask',
     'CustomCommand',
     'MarketPlugin',
+    'ManagedPlugin',
     'PluginCategory',
     'SSHServerSudo',
     'SystemSettings',
@@ -120,6 +123,11 @@ __all__ = [
     'MarketPluginResponse',
     'MarketPluginListResponse',
     'MarketPluginInstallRequest',
+    'PluginAutoUpdateSettings',
+    'ManagedPluginCreate',
+    'ManagedPluginUpdate',
+    'ManagedPluginResponse',
+    'PluginAutoUpdateResponse',
     'GitHubRepoInfo',
     'DependencyInfo',
     'PluginUninstallRequest',

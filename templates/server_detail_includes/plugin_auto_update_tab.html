@@ -1,0 +1,185 @@
+<div class="tab-pane fade" id="plugin-auto-update" role="tabpanel">
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-arrow-repeat"></i> <span data-i18n="pluginAutoUpdate.title">Plugin Automatic Updates</span></h5>
+            <button class="btn btn-sm btn-outline-primary" @click="runPluginAutoUpdateNow()">
+                <i class="bi bi-play-fill"></i> <span data-i18n="pluginAutoUpdate.checkNow">Check now</span>
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-warning py-2" data-i18n="pluginAutoUpdate.noRestartWarning">
+                Backup and framework restart policies are configured per item and default to off. Other plugins never trigger a restart.
+            </div>
+            <div class="border rounded p-3 mb-3" x-show="pluginUpdateRunStatus.state !== 'idle'">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div>
+                        <strong data-i18n="pluginAutoUpdate.liveStatus">Live request / processing status</strong>
+                        <span class="badge ms-2"
+                            :class="pluginUpdateRunStatus.state === 'running' ? 'bg-primary' : (pluginUpdateRunStatus.state === 'completed' ? 'bg-success' : 'bg-danger')"
+                            x-text="pluginUpdateRunStatus.phase"></span>
+                    </div>
+                    <span class="small text-muted" x-text="`${pluginUpdateRunStatus.current || 0}/${pluginUpdateRunStatus.total || 0}`"></span>
+                </div>
+                <div class="small mb-2" x-text="pluginUpdateRunStatus.message"></div>
+                <div class="progress mb-2" style="height: 8px;">
+                    <div class="progress-bar" :class="{'progress-bar-striped progress-bar-animated': pluginUpdateRunStatus.state === 'running'}"
+                        :style="`width: ${pluginUpdateProgressPercent()}%`"></div>
+                </div>
+                <div class="bg-dark text-light rounded p-2 font-monospace small" style="max-height: 180px; overflow-y: auto;">
+                    <template x-for="(entry, index) in (pluginUpdateRunStatus.logs || [])" :key="index">
+                        <div><span class="text-secondary" x-text="entry.time ? new Date(entry.time).toLocaleTimeString() : ''"></span> <span x-text="entry.message"></span></div>
+                    </template>
+                </div>
+            </div>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="pluginAutoUpdateMaster" x-model="pluginAutoUpdate.enable_plugin_auto_update">
+                        <label class="form-check-label" for="pluginAutoUpdateMaster" data-i18n="pluginAutoUpdate.masterSwitch">Enable plugin automatic updates</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" data-i18n="pluginAutoUpdate.interval">Check interval (hours)</label>
+                    <input class="form-control" type="number" min="0.0167" max="24" step="0.1" x-model.number="pluginAutoUpdate.plugin_update_check_interval_hours">
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-primary" @click="savePluginAutoUpdateSettings()" :disabled="savingPluginAutoUpdate">
+                        <i class="bi bi-save"></i> <span data-i18n="common.save">Save</span>
+                    </button>
+                </div>
+            </div>
+
+            <hr>
+            <div x-show="loadingPluginAutoUpdate" class="text-center"><span class="spinner-border spinner-border-sm"></span></div>
+            <div class="list-group mb-3" x-show="!loadingPluginAutoUpdate">
+                <template x-if="pluginAutoUpdate.plugins.length === 0">
+                    <div class="list-group-item text-muted" data-i18n="pluginAutoUpdate.none">No plugins are managed yet.</div>
+                </template>
+                <template x-for="plugin in pluginAutoUpdate.plugins" :key="plugin.id">
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between gap-3">
+                            <div>
+                                <div class="fw-semibold" x-text="plugin.display_name"></div>
+                                <small class="text-muted">
+                                    <span x-text="plugin.installed_version || 'unknown'"></span>
+                                    <span x-show="plugin.latest_version"> -> <span x-text="plugin.latest_version"></span></span>
+                                    &middot; <span x-text="plugin.source_type"></span>
+                                    <span x-show="plugin.last_status"> &middot; <span x-text="plugin.last_status"></span></span>
+                                </small>
+                                <div class="small text-danger" x-show="plugin.last_error" x-text="plugin.last_error"></div>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="form-check form-switch mb-0" :title="window.i18n?.t('pluginAutoUpdate.itemSwitch') || 'Auto update this item'">
+                                    <input class="form-check-input" type="checkbox" x-model="plugin.auto_update_enabled" @change="toggleManagedPlugin(plugin)">
+                                    <label class="form-check-label small" data-i18n="pluginAutoUpdate.updateShort">Update</label>
+                                </div>
+                                <div class="form-check form-switch mb-0"
+                                    :title="window.i18n?.t('pluginAutoUpdate.backupBeforeUpdate') || 'Back up plugins before updating this item'">
+                                    <input class="form-check-input" type="checkbox" x-model="plugin.backup_before_update" @change="toggleManagedPluginBackup(plugin)">
+                                    <label class="form-check-label small" data-i18n="pluginAutoUpdate.backupShort">Backup</label>
+                                </div>
+                                <div class="form-check form-switch mb-0" x-show="plugin.source_type === 'framework'"
+                                    :title="window.i18n?.t('pluginAutoUpdate.restartAfterUpdate') || 'Restart after this framework updates'">
+                                    <input class="form-check-input" type="checkbox" x-model="plugin.restart_after_update" @change="toggleManagedPluginRestart(plugin)">
+                                    <label class="form-check-label small" data-i18n="pluginAutoUpdate.restartShort">Restart</label>
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger" @click="unmanagePlugin(plugin)" :title="window.i18n?.t('pluginAutoUpdate.unmanage') || 'Stop managing'">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <details>
+                <summary class="fw-semibold" data-i18n="pluginAutoUpdate.registerExisting">Register an existing plugin or framework</summary>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-3">
+                        <label class="form-label" data-i18n="pluginAutoUpdate.source">Source</label>
+                        <select class="form-select" x-model="managedPluginRegistration.source_type" @change="onManagedSourceChanged()">
+                            <option value="github">GitHub</option>
+                            <option value="market" data-i18n="pluginAutoUpdate.market">Plugin Market</option>
+                            <option value="framework" data-i18n="pluginAutoUpdate.framework">Framework</option>
+                        </select>
+                    </div>
+                    <template x-if="managedPluginRegistration.source_type === 'framework'">
+                        <div class="col-md-5">
+                            <label class="form-label" data-i18n="pluginAutoUpdate.framework">Framework</label>
+                            <select class="form-select" x-model="managedPluginRegistration.framework_key">
+                                <option value="metamod">Metamod:Source</option>
+                                <option value="counterstrikesharp">CounterStrikeSharp</option>
+                            </select>
+                        </div>
+                    </template>
+                    <template x-if="managedPluginRegistration.source_type === 'market'">
+                        <div class="col-md-9">
+                            <label class="form-label" data-i18n="pluginAutoUpdate.marketPlugin">Plugin Market item</label>
+                            <select class="form-select" x-model="managedPluginRegistration.market_plugin_id" @change="onMarketPluginSelected()" :disabled="loadingMarketPluginOptions">
+                                <option value="">--</option>
+                                <template x-for="plugin in marketPluginOptions" :key="plugin.id">
+                                    <option :value="plugin.id" x-text="`${plugin.title}${plugin.version ? ' · ' + plugin.version : ''}`"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </template>
+                    <template x-if="managedPluginRegistration.source_type !== 'framework'">
+                        <div class="col-12 row g-3 m-0 p-0">
+                            <div class="col-md-4">
+                                <label class="form-label" data-i18n="pluginAutoUpdate.name">Name</label>
+                                <input class="form-control" x-model="managedPluginRegistration.display_name" :disabled="managedPluginRegistration.source_type === 'market'">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">GitHub</label>
+                                <input class="form-control" x-model="managedPluginRegistration.repo_url" placeholder="https://github.com/owner/repo" :disabled="managedPluginRegistration.source_type === 'market'">
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button class="btn btn-outline-secondary w-100" @click="fetchManagedPluginReleases()" data-i18n="pluginAutoUpdate.fetch">Fetch</button>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" data-i18n="pluginAutoUpdate.installedRelease">Installed stable release</label>
+                                <select class="form-select" x-model="managedPluginRegistration.release_index" @change="managedPluginRegistration.asset_index=''; managedPluginRegistration.asset_glob=''">
+                                    <option value="">--</option>
+                                    <option value="unknown" data-i18n="pluginAutoUpdate.unknownVersion">Unknown (synchronize on first run)</option>
+                                    <template x-for="(release, index) in managedPluginReleases" :key="release.id || release.tag_name">
+                                        <option :value="index" x-text="release.tag_name"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="col-md-4" x-show="managedPluginRegistration.release_index !== 'unknown'">
+                                <label class="form-label" data-i18n="pluginAutoUpdate.asset">Release asset</label>
+                                <select class="form-select" x-model="managedPluginRegistration.asset_index" @change="onManagedAssetSelected()">
+                                    <option value="">--</option>
+                                    <template x-for="(asset, index) in (managedPluginReleases[managedPluginRegistration.release_index]?.assets || [])" :key="asset.name">
+                                        <option :value="index" x-text="asset.name"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" data-i18n="pluginAutoUpdate.assetGlob">Future asset glob</label>
+                                <input class="form-control font-monospace" x-model="managedPluginRegistration.asset_glob">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" data-i18n="pluginAutoUpdate.installPath">Custom install path</label>
+                                <input class="form-control" x-model="managedPluginRegistration.custom_install_path" placeholder="addons">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" data-i18n="pluginAutoUpdate.excludeDirs">Excluded directories</label>
+                                <input class="form-control" x-model="managedPluginRegistration.exclude_dirs_text" placeholder="configs, data">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" data-i18n="pluginAutoUpdate.excludeFiles">Excluded files/globs</label>
+                                <input class="form-control" x-model="managedPluginRegistration.exclude_files_text" placeholder="*.json, *.cfg">
+                            </div>
+                        </div>
+                    </template>
+                    <div class="col-12">
+                        <button class="btn btn-success" @click="registerManagedPlugin()" :disabled="registeringManagedPlugin">
+                            <i class="bi bi-plus-lg"></i> <span data-i18n="pluginAutoUpdate.register">Register (auto-update remains off)</span>
+                        </button>
+                    </div>
+                </div>
+            </details>
+        </div>
+    </div>
+</div>

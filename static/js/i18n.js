@@ -9,8 +9,8 @@ class I18n {
         this.translations = {};
         this.fallbackLocale = 'en-US';
         this.supportedLocales = ['en-US', 'zh-CN'];
-        // Version for cache busting - update when translations change
-        this.version = '1.0.31';
+        // Version for cache busting. The backend sets this once per app start.
+        this.version = window.STATIC_ASSET_VERSION || '1.0.31';
         // Track if translations are loaded
         this.isInitialized = false;
     }

@@ -78,8 +78,9 @@
     <div id="editor-container"></div>
     
     <!-- Monaco Editor -->
-    <script src="/static/vs/loader.js"></script>
+    <script src="{{ static_url('vs/loader.js') }}"></script>
     <script>
+        const STATIC_ASSET_VERSION = "{{ static_version }}";
         const serverId = {{ server_id }};
         const filePath = '{{ file_path }}';
         const accessToken = localStorage.getItem('access_token');
@@ -89,7 +90,8 @@
         require.config({ 
             paths: { 
                 vs: '/static/vs' 
-            }
+            },
+            urlArgs: `v=${STATIC_ASSET_VERSION}`
         });
         
         // Initialize Monaco Editor

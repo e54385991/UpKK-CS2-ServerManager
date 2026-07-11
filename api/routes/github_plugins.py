@@ -152,7 +152,9 @@ async def get_github_releases(
     
     # Parse releases
     releases = []
-    for release_data in data[:count]:
+    for release_data in data:
+        if release_data.get("draft") or release_data.get("prerelease"):
+            continue
         assets = []
         for asset_data in release_data.get("assets", []):
             asset_name = asset_data.get("name", "")
@@ -174,12 +176,15 @@ async def get_github_releases(
         # Only include releases that have downloadable assets
         if assets:
             releases.append(GitHubRelease(
+                id=str(release_data.get("id") or ""),
                 tag_name=release_data.get("tag_name", ""),
                 name=release_data.get("name"),
                 published_at=release_data.get("published_at"),
                 prerelease=release_data.get("prerelease", False),
                 assets=assets
             ))
+            if len(releases) >= count:
+                break
     
     return GitHubReleasesResponse(
         success=True,
@@ -488,6 +493,8 @@ async def install_github_plugin(
         message: str,
         installed_files: Optional[int] = None,
     ) -> None:
+        if request.suppress_notification:
+            return
         details = {
             "Download URL": request.download_url,
         }
@@ -502,6 +509,29 @@ async def install_github_plugin(
             message,
             title=f"GitHub plugin install {'completed' if success else 'failed'}",
             details=details,
+        )
+
+    async def record_installation() -> None:
+        if not request.record_installation or not request.repo_url:
+            return
+        from services.plugin_auto_update_service import (
+            canonical_repo_url,
+            derive_asset_glob,
+            upsert_managed_plugin,
+        )
+        repo_url = canonical_repo_url(request.repo_url)
+        await upsert_managed_plugin(
+            server_id=server.id,
+            source_type="github",
+            source_key=repo_url.lower(),
+            display_name=request.display_name or repo_url.rsplit("/", 1)[-1],
+            repo_url=repo_url,
+            installed_release_id=request.release_id,
+            installed_version=request.release_tag or "unknown",
+            asset_glob=request.asset_glob or derive_asset_glob(request.asset_name, request.release_tag),
+            custom_install_path=request.custom_install_path,
+            exclude_dirs=request.exclude_dirs,
+            exclude_files=request.exclude_files,
         )
     
     ssh_manager = SSHManager()
@@ -894,6 +924,7 @@ async def install_github_plugin(
                     f"Plugin installed successfully to custom path: {safe_custom_path}",
                     count_after,
                 )
+                await record_installation()
                 
                 return GitHubPluginInstallResponse(
                     success=True,
@@ -989,6 +1020,7 @@ async def install_github_plugin(
         success_msg = f"Plugin installed successfully! {installed_files} files installed. Restart server to apply changes."
         await progress(success_msg, "complete")
         await notify_install_result(True, success_msg, installed_files)
+        await record_installation()
         
         return GitHubPluginInstallResponse(
             success=True,
