@@ -53,6 +53,7 @@
             state: 'idle', phase: 'idle', message: '', current: 0, total: 0, logs: []
         },
         pluginUpdateStatusTimer: null,
+        testingManagedPluginId: null,
         managedPluginRegistration: {
             source_type: 'github',
             display_name: '',
@@ -2053,11 +2054,36 @@
         },
 
         async runPluginAutoUpdateNow() {
+            if (this.testingManagedPluginId !== null || this.pluginUpdateRunStatus.state === 'running') {
+                this.showToast(window.i18n?.t('pluginAutoUpdate.testUpdateBusy') || 'Another plugin update is already running', 'error');
+                return;
+            }
             const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/run`, {method: 'POST'});
             const data = await response.json();
             this.showToast(data.message || data.detail || 'Plugin update check started', response.ok ? 'success' : 'error');
             if (response.ok) {
                 await this.loadPluginUpdateRunStatus(true);
+            }
+        },
+
+        async runManagedPluginTestUpdate(plugin) {
+            if (this.pluginUpdateRunStatus.state === 'running') {
+                this.showToast(window.i18n?.t('pluginAutoUpdate.testUpdateBusy') || 'Another plugin update is already running', 'error');
+                return;
+            }
+            this.testingManagedPluginId = plugin.id;
+            try {
+                const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update/plugins/${plugin.id}/test-update`, {method: 'POST'});
+                const data = await response.json().catch(() => ({}));
+                this.showToast(data.message || data.detail || 'Plugin test update started', response.ok ? 'success' : 'error');
+                if (response.ok) {
+                    await this.loadPluginUpdateRunStatus(true);
+                } else {
+                    this.testingManagedPluginId = null;
+                }
+            } catch (err) {
+                this.testingManagedPluginId = null;
+                this.showToast(err.message || 'Plugin test update failed', 'error');
             }
         },
 
@@ -2074,6 +2100,7 @@
             this.pluginUpdateStatusTimer = setTimeout(() => this.loadPluginUpdateRunStatus(false), pollDelay);
             if (['completed', 'failed'].includes(this.pluginUpdateRunStatus.state)
                 && this.pluginUpdateRunStatus.finished_at !== previousFinishedAt) {
+                this.testingManagedPluginId = null;
                 await this.loadPluginAutoUpdate();
             }
         },

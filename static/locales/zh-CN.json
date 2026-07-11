@@ -1258,7 +1258,7 @@
       "excludeDirHelp": "勾选您想要排除的目录（在更新时保留配置文件很有用）",
       "excludeFileHelp": "勾选您想要排除的文件（在更新时保留特定配置文件很有用）",
       "installDependencies": "自动安装依赖",
-      "installDependenciesHelp": "取消勾选后，插件依赖不会自动安装。使用选择性解压时此选项会自动禁用。"
+      "installDependenciesHelp": "默认关闭。启用后才会安装此插件的市场依赖；使用选择性解压时此选项会自动禁用。"
     },
     "messages": {
       "deleteConfirm": "确定要删除此插件吗？",
@@ -1382,13 +1382,16 @@
   "pluginAutoUpdate": {
     "title": "插件自动升级",
     "checkNow": "立即检查",
-    "noRestartWarning": "备份和框架重启均按项目单独配置，默认关闭；普通插件不会触发服务器重启。",
+    "noRestartWarning": "备份和重启均按项目单独配置，默认关闭；多个项目请求重启时，整批完成后只重启一次。",
     "liveStatus": "实时请求 / 处理状态",
+    "testUpdate": "立即测试此项目更新",
+    "testUpdateShort": "测试更新",
+    "testUpdateBusy": "已有其他插件更新正在执行",
     "itemSwitch": "自动升级此项目",
     "updateShort": "升级",
     "backupBeforeUpdate": "升级此项目之前创建本地插件备份",
     "backupShort": "备份",
-    "restartAfterUpdate": "此框架升级后自动重启",
+    "restartAfterUpdate": "此项目升级后自动重启服务器",
     "restartShort": "重启",
     "masterSwitch": "启用插件自动升级",
     "interval": "检查间隔（小时）",

@@ -2,13 +2,15 @@
     <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="bi bi-arrow-repeat"></i> <span data-i18n="pluginAutoUpdate.title">Plugin Automatic Updates</span></h5>
-            <button class="btn btn-sm btn-outline-primary" @click="runPluginAutoUpdateNow()">
+            <button class="btn btn-sm btn-outline-primary"
+                @click="runPluginAutoUpdateNow()"
+                :disabled="testingManagedPluginId !== null || pluginUpdateRunStatus.state === 'running'">
                 <i class="bi bi-play-fill"></i> <span data-i18n="pluginAutoUpdate.checkNow">Check now</span>
             </button>
         </div>
         <div class="card-body">
             <div class="alert alert-warning py-2" data-i18n="pluginAutoUpdate.noRestartWarning">
-                Backup and framework restart policies are configured per item and default to off. Other plugins never trigger a restart.
+                Backup and restart policies are configured per item and default to off. If several items request a restart, the server restarts once after the whole batch.
             </div>
             <div class="border rounded p-3 mb-3" x-show="pluginUpdateRunStatus.state !== 'idle'">
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -69,6 +71,13 @@
                                 <div class="small text-danger" x-show="plugin.last_error" x-text="plugin.last_error"></div>
                             </div>
                             <div class="d-flex align-items-center gap-2">
+                                <button class="btn btn-sm btn-outline-primary"
+                                    @click="runManagedPluginTestUpdate(plugin)"
+                                    :disabled="testingManagedPluginId !== null || pluginUpdateRunStatus.state === 'running'"
+                                    :title="window.i18n?.t('pluginAutoUpdate.testUpdate') || 'Test update this item'">
+                                    <i class="bi bi-play-circle"></i>
+                                    <span data-i18n="pluginAutoUpdate.testUpdateShort">Test</span>
+                                </button>
                                 <div class="form-check form-switch mb-0" :title="window.i18n?.t('pluginAutoUpdate.itemSwitch') || 'Auto update this item'">
                                     <input class="form-check-input" type="checkbox" x-model="plugin.auto_update_enabled" @change="toggleManagedPlugin(plugin)">
                                     <label class="form-check-label small" data-i18n="pluginAutoUpdate.updateShort">Update</label>
@@ -78,8 +87,8 @@
                                     <input class="form-check-input" type="checkbox" x-model="plugin.backup_before_update" @change="toggleManagedPluginBackup(plugin)">
                                     <label class="form-check-label small" data-i18n="pluginAutoUpdate.backupShort">Backup</label>
                                 </div>
-                                <div class="form-check form-switch mb-0" x-show="plugin.source_type === 'framework'"
-                                    :title="window.i18n?.t('pluginAutoUpdate.restartAfterUpdate') || 'Restart after this framework updates'">
+                                <div class="form-check form-switch mb-0"
+                                    :title="window.i18n?.t('pluginAutoUpdate.restartAfterUpdate') || 'Restart after this item updates'">
                                     <input class="form-check-input" type="checkbox" x-model="plugin.restart_after_update" @change="toggleManagedPluginRestart(plugin)">
                                     <label class="form-check-label small" data-i18n="pluginAutoUpdate.restartShort">Restart</label>
                                 </div>

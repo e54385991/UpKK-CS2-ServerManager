@@ -34,6 +34,21 @@ def test_managed_plugin_defaults_to_auto_update_disabled():
 
 
 @pytest.mark.asyncio
+async def test_single_plugin_test_update_forces_selected_item(monkeypatch):
+    service = PluginAutoUpdateService()
+    calls = {}
+
+    async def fake_check(server_id, force=False, plugin_id=None):
+        calls.update(server_id=server_id, force=force, plugin_id=plugin_id)
+        return {"success": True}
+
+    monkeypatch.setattr(service, "_check_server", fake_check)
+    result = await service.check_plugin(7, 42)
+    assert result == {"success": True}
+    assert calls == {"server_id": 7, "force": True, "plugin_id": 42}
+
+
+@pytest.mark.asyncio
 async def test_latest_release_requires_exactly_one_matching_asset(monkeypatch):
     service = PluginAutoUpdateService()
     item = ManagedPlugin(
@@ -65,6 +80,58 @@ async def test_latest_release_requires_exactly_one_matching_asset(monkeypatch):
     assert ok is False
     assert latest is None
     assert "exactly one" in error
+
+
+@pytest.mark.asyncio
+async def test_market_release_asset_fallback_handles_changed_version_name(monkeypatch):
+    service = PluginAutoUpdateService()
+    item = ManagedPlugin(
+        server_id=1, source_type="market", source_key="42", display_name="CleanerCS2",
+        market_plugin_id=42, repo_url="https://github.com/Owner/CleanerCS2",
+        asset_glob="MultiAddonManager-*-linux.tar.gz",
+    )
+    user = User(username="u", email="u@example.com", hashed_password="x")
+
+    async def latest(*args, **kwargs):
+        return True, {
+            "id": 45, "tag_name": "v3.0.0", "draft": False, "prerelease": False,
+            "assets": [{
+                "name": "MultiAddonManager-3.0.0.tar.gz",
+                "browser_download_url": "https://github.com/Owner/CleanerCS2/releases/download/v3.0.0/MultiAddonManager-3.0.0.tar.gz",
+            }],
+        }, None
+
+    monkeypatch.setattr("services.plugin_auto_update_service.http_helper.get", latest)
+    ok, release, error = await service._latest_github_release(item, user)
+    assert ok is True
+    assert error == ""
+    assert release["asset"]["name"] == "MultiAddonManager-3.0.0.tar.gz"
+
+
+@pytest.mark.asyncio
+async def test_market_release_asset_fallback_rejects_ambiguous_archives(monkeypatch):
+    service = PluginAutoUpdateService()
+    item = ManagedPlugin(
+        server_id=1, source_type="market", source_key="42", display_name="CleanerCS2",
+        market_plugin_id=42, repo_url="https://github.com/Owner/CleanerCS2",
+        asset_glob="MultiAddonManager-*-linux.tar.gz",
+    )
+    user = User(username="u", email="u@example.com", hashed_password="x")
+
+    async def latest(*args, **kwargs):
+        return True, {
+            "id": 45, "tag_name": "v3.0.0", "draft": False, "prerelease": False,
+            "assets": [
+                {"name": "MultiAddonManager-3.0.0.tar.gz", "browser_download_url": "https://github.com/x/a"},
+                {"name": "MultiAddonManager-3.0.0-debug.tar.gz", "browser_download_url": "https://github.com/x/b"},
+            ],
+        }, None
+
+    monkeypatch.setattr("services.plugin_auto_update_service.http_helper.get", latest)
+    ok, release, error = await service._latest_github_release(item, user)
+    assert ok is False
+    assert release is None
+    assert "fallback matched 2" in error
 
 
 @pytest.mark.asyncio
@@ -150,7 +217,7 @@ async def test_shared_maintenance_lock_prevents_overlapping_update():
 
 
 @pytest.mark.asyncio
-async def test_framework_restart_policy_restarts_running_server_once(monkeypatch):
+async def test_plugin_restart_policy_restarts_running_server_once_for_multiple_items(monkeypatch):
     service = PluginAutoUpdateService()
     service._redis_status_retry_after = float("inf")
     server = Server(
@@ -165,10 +232,17 @@ async def test_framework_restart_policy_restarts_running_server_once(monkeypatch
         installed_release_id="1", installed_version="v1", auto_update_enabled=True,
         restart_after_update=True,
     )
+    ordinary_item = ManagedPlugin(
+        id=8, server_id=89, source_type="github", source_key="ordinary",
+        display_name="Ordinary Plugin", repo_url="https://github.com/owner/plugin",
+        asset_glob="plugin-*.zip", installed_release_id="1", installed_version="v1",
+        auto_update_enabled=True, restart_after_update=True,
+    )
+    items = {item.id: item, ordinary_item.id: ordinary_item}
 
     class Result:
         def scalars(self): return self
-        def all(self): return [item]
+        def all(self): return [item, ordinary_item]
 
     class Session:
         async def __aenter__(self): return self
@@ -176,14 +250,16 @@ async def test_framework_restart_policy_restarts_running_server_once(monkeypatch
         async def get(self, model, object_id):
             if model is Server: return server
             if model is User: return user
-            if model is ManagedPlugin: return item
+            if model is ManagedPlugin: return items[object_id]
         async def execute(self, statement): return Result()
         async def commit(self): return None
         def add(self, value): return None
 
-    calls = {"backup": 0, "stop": 0, "start": 0}
+    calls = {"status": 0, "backup": 0, "stop": 0, "start": 0}
     class Manager:
-        async def get_server_status(self, server): return True, "running"
+        async def get_server_status(self, server):
+            calls["status"] += 1
+            return True, "running"
         async def backup_plugins(self, server):
             calls["backup"] += 1
             return True, "/backup/plugins.tar.gz"
@@ -208,6 +284,6 @@ async def test_framework_restart_policy_restarts_running_server_once(monkeypatch
 
     result = await service.check_server(89)
     assert result["success"] is True
-    assert calls == {"backup": 0, "stop": 1, "start": 1}
+    assert calls == {"status": 1, "backup": 0, "stop": 1, "start": 1}
     assert result["restart"]["message"] == "started"
     assert (await service.get_status(89))["state"] == "completed"

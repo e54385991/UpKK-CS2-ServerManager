@@ -610,7 +610,10 @@ async def install_plugin(
     download_url: Optional[str] = Query(None, description="Specific release download URL (if not provided, uses latest)"),
     exclude_dirs: list[str] = Query(default=[], description="Directories to exclude (deprecated, use exclude_files)"),
     exclude_files: list[str] = Query(default=[], description="Files to exclude from installation"),
-    install_dependencies: bool = Query(default=True, description="Whether to install dependencies"),
+    # Installing dependencies is explicitly opt-in for a market install.  The
+    # automatic updater never follows a market dependency graph; it only
+    # updates the managed item selected by the server owner.
+    install_dependencies: bool = Query(default=False, description="Whether to install dependencies"),
     upgrade_mode: bool = Query(default=False, description="Enable upgrade mode to auto-exclude config files"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)

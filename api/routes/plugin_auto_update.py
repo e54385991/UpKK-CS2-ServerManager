@@ -149,6 +149,24 @@ async def run_now(server_id: int, db: AsyncSession = Depends(get_db), current_us
     return ActionResponse(success=True, message="Plugin update check started")
 
 
+@router.post("/plugins/{plugin_id}/test-update", response_model=ActionResponse, status_code=status.HTTP_202_ACCEPTED)
+async def test_plugin_update(
+    server_id: int,
+    plugin_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Run the normal protected update pipeline for one managed plugin."""
+    await owned_server(db, server_id, current_user)
+    await owned_plugin(db, server_id, plugin_id)
+    if maintenance_lock_service.get(server_id).locked():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Another maintenance operation is already running")
+    task = asyncio.create_task(plugin_auto_update_service.check_plugin(server_id, plugin_id))
+    _background_tasks.add(task)
+    task.add_done_callback(_task_done)
+    return ActionResponse(success=True, message="Plugin test update started")
+
+
 @router.get("/status")
 async def get_run_status(server_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     await owned_server(db, server_id, current_user)

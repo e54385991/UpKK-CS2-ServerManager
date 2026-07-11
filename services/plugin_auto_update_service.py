@@ -37,6 +37,7 @@ FRAMEWORKS = {
         "asset_glob": "mmsource-*-linux.tar.gz",
     },
 }
+ARCHIVE_EXTENSIONS = (".tar.gz", ".zip", ".tgz", ".tar", ".7z")
 
 
 def canonical_repo_url(repo_url: str) -> str:
@@ -234,6 +235,91 @@ class PluginAutoUpdateService:
             if self._due(server.last_plugin_update_check, server.plugin_update_check_interval_hours or 1.0):
                 await self.check_server(server.id)
 
+    @staticmethod
+    def _is_windows_asset(asset_name: str) -> bool:
+        """Match the platform filtering used by the plugin-market installer."""
+        name = (asset_name or "").casefold()
+        return (
+            "windows" in name
+            or "-win-" in name
+            or "_win_" in name
+            or name.endswith("-win.zip")
+        )
+
+    @staticmethod
+    def _archive_extension(asset_name: str) -> Optional[str]:
+        name = (asset_name or "").casefold()
+        for extension in ARCHIVE_EXTENSIONS:
+            if name.endswith(extension):
+                return extension
+        return None
+
+    @classmethod
+    def _fallback_release_assets(
+        cls, item: ManagedPlugin, assets: List[Dict[str, Any]], pattern: str
+    ) -> List[Dict[str, Any]]:
+        """Select a changed-but-compatible market asset without guessing.
+
+        A market record stores a glob derived from the asset selected during
+        installation. Projects occasionally remove the version component or
+        rename the archive in a later release, which makes the literal glob
+        return zero matches. We first retain the fixed prefix/suffix and archive
+        type, then (for market records) use the same single Linux archive rule as
+        the installer. Every fallback still requires exactly one candidate.
+        """
+        wildcard_positions = [index for index, char in enumerate(pattern) if char in "*?"]
+        if wildcard_positions:
+            first_wildcard = wildcard_positions[0]
+            last_wildcard = wildcard_positions[-1]
+            prefix = pattern[:first_wildcard].casefold()
+            suffix = pattern[last_wildcard + 1 :].casefold()
+        else:
+            prefix = pattern.casefold()
+            suffix = ""
+        expected_extension = cls._archive_extension(pattern)
+
+        all_archives: List[Dict[str, Any]] = []
+        archives: List[Dict[str, Any]] = []
+        for asset in assets:
+            name = str(asset.get("name") or "")
+            if not name or cls._is_windows_asset(name):
+                continue
+            extension = cls._archive_extension(name)
+            if extension is None:
+                continue
+            all_archives.append(asset)
+            if not expected_extension or extension == expected_extension:
+                archives.append(asset)
+
+        def has_shape(asset: Dict[str, Any], include_suffix: bool = True) -> bool:
+            name = str(asset.get("name") or "").casefold()
+            if prefix and not name.startswith(prefix):
+                return False
+            return not (include_suffix and suffix and not name.endswith(suffix))
+
+        # Keep the stored resource rule authoritative wherever possible. This
+        # handles e.g. `Plugin-*-linux.tar.gz` -> `Plugin-linux.tar.gz`.
+        shaped = [asset for asset in archives if has_shape(asset)]
+        if shaped:
+            return shaped
+
+        # A market install historically selected the first suitable Linux
+        # archive. For auto-update, only accept this compatibility fallback when
+        # it is unambiguous, so a changed naming scheme cannot overwrite a wrong
+        # file. GitHub registrations still require their configured prefix.
+        if item.source_type == "market" or item.market_plugin_id is not None:
+            prefixed = [asset for asset in archives if has_shape(asset, include_suffix=False)]
+            if prefixed:
+                return prefixed
+            if archives:
+                return archives
+            # The market installer accepts any supported Linux archive. If a
+            # project changes tar.gz to zip while retaining the plugin prefix,
+            # preserve that behavior, but still require a single candidate at
+            # the caller so an ambiguous release is never overwritten.
+            return [asset for asset in all_archives if has_shape(asset, include_suffix=False)] or all_archives
+        return []
+
     async def _latest_github_release(
         self, item: ManagedPlugin, user: User
     ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
@@ -251,7 +337,26 @@ class PluginAutoUpdateService:
             return False, None, "GitHub latest release is not a stable release"
         assets = data.get("assets") or []
         pattern = item.asset_glob or "*"
-        matches = [asset for asset in assets if fnmatch.fnmatchcase(asset.get("name", ""), pattern)]
+        matches = [
+            asset for asset in assets
+            if fnmatch.fnmatchcase(str(asset.get("name") or ""), pattern)
+        ]
+        if not matches:
+            fallback_matches = self._fallback_release_assets(item, assets, pattern)
+            if len(fallback_matches) == 1:
+                matches = fallback_matches
+                logger.info(
+                    "Using compatible release asset fallback for %s: glob %r -> %s",
+                    item.display_name,
+                    pattern,
+                    fallback_matches[0].get("name"),
+                )
+            else:
+                fallback_count = len(fallback_matches)
+                return False, None, (
+                    f"Asset glob '{pattern}' matched 0 assets; compatible Linux archive fallback "
+                    f"matched {fallback_count}; exactly one is required"
+                )
         if len(matches) != 1:
             return False, None, f"Asset glob '{pattern}' matched {len(matches)} assets; exactly one is required"
         return True, {
@@ -283,6 +388,9 @@ class PluginAutoUpdateService:
         if item.framework_key == "counterstrikesharp":
             return await SSHManager().update_counterstrikesharp(server)
 
+        # Automatic updates operate on the selected managed item only.  Do not
+        # recurse through a market dependency graph; CONFIG_EXCLUSIONS plus the
+        # persisted rules below are the non-destructive upgrade-mode behavior.
         from api.routes.github_plugins import install_github_plugin
         request = GitHubPluginInstallRequest(
             download_url=latest["asset"]["browser_download_url"],
@@ -300,25 +408,40 @@ class PluginAutoUpdateService:
             result = await install_github_plugin(server.id, request, db, user)
         return result.success, result.message
 
-    async def check_server(self, server_id: int, force: bool = False) -> Dict[str, Any]:
+    async def check_server(
+        self, server_id: int, force: bool = False, plugin_id: Optional[int] = None
+    ) -> Dict[str, Any]:
         try:
-            return await self._check_server(server_id, force=force)
+            return await self._check_server(server_id, force=force, plugin_id=plugin_id)
         except Exception as exc:
-            logger.exception("Plugin update task failed for server %s", server_id)
+            logger.exception("Plugin update task failed for server %s (plugin %s)", server_id, plugin_id or "batch")
             await self._publish_status(
                 server_id, state="failed", phase="failed", message=str(exc), log=f"Task failed: {exc}"
             )
             raise
 
-    async def _check_server(self, server_id: int, force: bool = False) -> Dict[str, Any]:
+    async def check_plugin(self, server_id: int, plugin_id: int) -> Dict[str, Any]:
+        """Run the normal update pipeline for one managed plugin.
+
+        This is intentionally not a dry-run: it verifies the release and then
+        executes the same protected installation, backup and batch restart
+        policy as a scheduled update, while ignoring the item's auto-update
+        switch so it can be tested before enabling it.
+        """
+        return await self.check_server(server_id, force=True, plugin_id=plugin_id)
+
+    async def _check_server(
+        self, server_id: int, force: bool = False, plugin_id: Optional[int] = None
+    ) -> Dict[str, Any]:
         lock = maintenance_lock_service.get(server_id)
         if lock.locked():
             return {"success": False, "message": "Another maintenance operation is already running"}
 
         async with lock:
+            run_label = "Plugin test update" if plugin_id is not None else "Plugin update check"
             await self._publish_status(
-                server_id, state="running", phase="checking", message="Loading plugin update configuration",
-                current=0, total=0, log="Plugin update check started",
+                server_id, state="running", phase="checking", message=f"Loading {run_label.lower()} configuration",
+                current=0, total=0, log=f"{run_label} started",
             )
             async with async_session_maker() as db:
                 server = await db.get(Server, server_id)
@@ -332,17 +455,27 @@ class PluginAutoUpdateService:
                     )
                     return {"success": False, "message": "Plugin auto-update is disabled"}
                 user = await db.get(User, server.user_id)
-                result = await db.execute(
-                    select(ManagedPlugin).where(
-                        ManagedPlugin.server_id == server_id,
-                        ManagedPlugin.auto_update_enabled.is_(True),
-                    )
-                )
+                item_filters = [ManagedPlugin.server_id == server_id]
+                if plugin_id is None:
+                    item_filters.append(ManagedPlugin.auto_update_enabled.is_(True))
+                else:
+                    item_filters.append(ManagedPlugin.id == plugin_id)
+                result = await db.execute(select(ManagedPlugin).where(*item_filters))
                 items = list(result.scalars().all())
-                await db.execute(
-                    sql_update(Server).where(Server.id == server_id).values(last_plugin_update_check=get_current_time())
-                )
+                # A manual per-item test must not postpone the next scheduled
+                # server-wide check.
+                if plugin_id is None:
+                    await db.execute(
+                        sql_update(Server).where(Server.id == server_id).values(last_plugin_update_check=get_current_time())
+                    )
                 await db.commit()
+
+            if plugin_id is not None and not items:
+                message = "Managed plugin not found"
+                await self._publish_status(
+                    server_id, state="failed", phase="failed", message=message, log=message
+                )
+                return {"success": False, "message": message}
 
             if not user:
                 await self._publish_status(server_id, state="failed", phase="failed", message="Server owner not found", log="Server owner not found")
@@ -420,13 +553,16 @@ class PluginAutoUpdateService:
                 }
 
             candidates.sort(key=lambda pair: {"metamod": 0, "counterstrikesharp": 1}.get(pair[0].framework_key, 2))
-            restart_candidates = [item for item, _ in candidates if item.source_type == "framework" and item.restart_after_update]
+            # Restart is a batch-level policy for every managed item (ordinary
+            # GitHub/market plugins and frameworks).  Multiple selected items
+            # therefore result in one state check and, at most, one restart.
+            restart_candidates = [item for item, _ in candidates if item.restart_after_update]
             status_check_ok = True
             was_running = False
             status_check_message = "Restart not requested"
             if restart_candidates:
                 await self._publish_status(
-                    server_id, phase="checking_server", message="Checking server state for framework restart policy",
+                    server_id, phase="checking_server", message="Checking server state for batch restart policy",
                     current=0, total=len(candidates), log="Checking whether the server is currently running",
                 )
                 status_check_ok, server_state = await SSHManager().get_server_status(server)
@@ -438,7 +574,7 @@ class PluginAutoUpdateService:
             )
             discord_notification_service.queue_notify(
                 server, EVENT_PLUGIN_UPDATE, "plugin_auto_update", True,
-                "Plugin auto-update is starting. Framework restart settings will be applied after the batch.",
+                "Plugin auto-update is starting. Restart settings will be applied once after the batch.",
                 title="Plugin automatic update started",
                 details={
                     "Updates": targets,
@@ -532,7 +668,7 @@ class PluginAutoUpdateService:
 
             successful_restart_items = [
                 result for result in results
-                if result["success"] and result["source_type"] == "framework" and result["restart_after_update"]
+                if result["success"] and result["restart_after_update"]
             ]
             restart_success = True
             restart_message = "Not requested"
@@ -544,16 +680,23 @@ class PluginAutoUpdateService:
                     restart_message = "Skipped because the server was stopped before the update"
                 else:
                     await self._publish_status(
-                        server_id, phase="restarting", message="Restarting server after framework update",
-                        current=len(candidates), total=len(candidates), log="Framework restart policy triggered one server restart",
+                        server_id, phase="restarting", message="Restarting server once after plugin update batch",
+                        current=len(candidates), total=len(candidates), log="Batch restart policy triggered one server restart",
                     )
                     stop_success, stop_message = await SSHManager().stop_server(server)
                     await self._publish_status(server_id, log=f"Stop result: {stop_message}")
-                    await asyncio.sleep(0.5)
-                    start_success, start_message = await SSHManager().start_server(server)
-                    restart_success = start_success
-                    restart_message = start_message if start_success else f"Restart failed: {start_message}"
-                    await self._publish_status(server_id, log=f"Start result: {restart_message}")
+                    if not stop_success:
+                        # Never issue start after a failed stop: that could
+                        # create a second process/screen session.
+                        restart_success = False
+                        restart_message = f"Restart failed while stopping server: {stop_message}"
+                        await self._publish_status(server_id, log=restart_message)
+                    else:
+                        await asyncio.sleep(0.5)
+                        start_success, start_message = await SSHManager().start_server(server)
+                        restart_success = start_success
+                        restart_message = start_message if start_success else f"Restart failed: {start_message}"
+                        await self._publish_status(server_id, log=f"Start result: {restart_message}")
 
             all_success = all(result["success"] for result in results) and not resolve_failures and restart_success
             summary_lines = [
@@ -564,8 +707,8 @@ class PluginAutoUpdateService:
             summary_lines.extend(f"✗ {item.display_name}: {error}" for item, error in resolve_failures)
             discord_notification_service.queue_notify(
                 server, EVENT_PLUGIN_UPDATE, "plugin_auto_update", all_success,
-                "Plugin update batch completed and the configured framework restart policy was applied."
-                if all_success else "One or more plugin updates or the configured framework restart failed.",
+                "Plugin update batch completed and the configured restart policy was applied once."
+                if all_success else "One or more plugin updates or the configured batch restart failed.",
                 title="Plugin automatic update completed" if all_success else "Plugin automatic update failed",
                 details={"Results": "\n".join(summary_lines), "Backup": backup_message, "Restart": restart_message},
             )

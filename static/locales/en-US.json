@@ -1258,7 +1258,7 @@
       "excludeDirHelp": "Check directories you want to EXCLUDE (useful for preserving configs during updates)",
       "excludeFileHelp": "Check files you want to EXCLUDE (useful for preserving specific config files during updates)",
       "installDependencies": "Automatically install dependencies",
-      "installDependenciesHelp": "When unchecked, plugin dependencies will not be installed automatically. This option is automatically disabled when using selective extraction."
+      "installDependenciesHelp": "Off by default. Enable to install this plugin's market dependencies; selective extraction disables it automatically."
     },
     "messages": {
       "deleteConfirm": "Are you sure you want to delete this plugin?",
@@ -1382,13 +1382,16 @@
   "pluginAutoUpdate": {
     "title": "Plugin Automatic Updates",
     "checkNow": "Check now",
-    "noRestartWarning": "Backup and framework restart policies are configured per item and default to off. Other plugins never trigger a restart.",
+    "noRestartWarning": "Backup and restart policies are configured per item and default to off. If several items request a restart, the server restarts once after the whole batch.",
     "liveStatus": "Live request / processing status",
+    "testUpdate": "Test update this item now",
+    "testUpdateShort": "Test",
+    "testUpdateBusy": "Another plugin update is already running",
     "itemSwitch": "Auto update this item",
     "updateShort": "Update",
     "backupBeforeUpdate": "Create a local plugin backup before updating this item",
     "backupShort": "Backup",
-    "restartAfterUpdate": "Restart after this framework updates",
+    "restartAfterUpdate": "Restart after this item updates",
     "restartShort": "Restart",
     "masterSwitch": "Enable plugin automatic updates",
     "interval": "Check interval (hours)",

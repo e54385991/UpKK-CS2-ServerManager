@@ -457,7 +457,7 @@
                         <!-- Dependency Installation Checkbox -->
                         <div class="mb-3">
                             <div class="form-check">
-                                <input type="checkbox" class="form-check-input" id="install-dependencies-checkbox" checked onchange="onDependencyCheckboxChanged()">
+                                <input type="checkbox" class="form-check-input" id="install-dependencies-checkbox" onchange="onDependencyCheckboxChanged()">
                                 <label class="form-check-label" for="install-dependencies-checkbox">
                                     <span data-i18n="pluginMarket.installModal.installDependencies">Automatically install dependencies</span>
                                 </label>
@@ -1473,7 +1473,8 @@ async function showInstallModal(pluginId, pluginName) {
     document.getElementById('exclusion-mode-dir').checked = true;
     
     // Reset dependency checkbox
-    document.getElementById('install-dependencies-checkbox').checked = true;
+    // Dependency installation is opt-in. Keep the modal and API defaults in sync.
+    document.getElementById('install-dependencies-checkbox').checked = false;
     document.getElementById('install-dependencies-checkbox').disabled = false;
     
     // Reset upgrade mode checkbox
