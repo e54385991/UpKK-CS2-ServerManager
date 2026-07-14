@@ -343,19 +343,29 @@ class ServerMonitor:
                         self.record_restart(server_id)
                         
                         try:
-                            # Force stop existing server first to ensure clean restart
-                            # This handles cases where the process is dead but screen session lingers
-                            try:
-                                stop_success, stop_msg = await ssh_manager.stop_server(server)
-                                if stop_success:
-                                    logger.info(f"Server {server_id} stopped before auto-restart: {stop_msg}")
-                                else:
-                                    logger.warning(f"Server {server_id} stop attempt before auto-restart: {stop_msg}")
-                            except Exception as stop_e:
-                                logger.warning(f"Error stopping server {server_id} before auto-restart: {stop_e}")
-                            
-                            # Attempt restart
-                            restart_success, restart_msg = await ssh_manager.start_server(server, progress_callback)
+                            manager_ready, preflight_message = (
+                                await ssh_manager.check_session_manager_available(server)
+                            )
+                            if not manager_ready:
+                                restart_success = False
+                                restart_msg = (
+                                    f"Auto-restart aborted before stopping: {preflight_message}. "
+                                    "The existing game session was left untouched."
+                                )
+                            else:
+                                # Force stop existing server first to ensure clean restart.
+                                # Handles cases where the process is dead but its managed session lingers.
+                                try:
+                                    stop_success, stop_msg = await ssh_manager.stop_server(server)
+                                    if stop_success:
+                                        logger.info(f"Server {server_id} stopped before auto-restart: {stop_msg}")
+                                    else:
+                                        logger.warning(f"Server {server_id} stop attempt before auto-restart: {stop_msg}")
+                                except Exception as stop_e:
+                                    logger.warning(f"Error stopping server {server_id} before auto-restart: {stop_e}")
+
+                                # Attempt restart
+                                restart_success, restart_msg = await ssh_manager.start_server(server, progress_callback)
                             
                             # Update server status in database in a separate quick session
                             async with async_session_maker() as db:

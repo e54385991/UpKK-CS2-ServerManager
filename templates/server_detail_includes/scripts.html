@@ -110,7 +110,8 @@
                                         steam_account_token: '',
                                             tv_enable: false,
                                                 tv_port: 27020,
-                                                    additional_parameters: ''
+                                                    additional_parameters: '',
+                                                        session_manager: 'screen'
         },
         generatingToken: false,
         showTokenGeneratorModal: false,
@@ -476,7 +477,8 @@
                 steam_account_token: this.server.steam_account_token || '',
                 tv_enable: this.server.tv_enable || false,
                 tv_port: this.server.tv_port || 27020,
-                additional_parameters: this.server.additional_parameters || ''
+                additional_parameters: this.server.additional_parameters || '',
+                session_manager: this.server.session_manager || 'screen'
             };
             this.updateGameTypeFromMode();
         },
@@ -584,6 +586,18 @@
                     this.server = updated;
                     this.showConfigEdit = false;
                     this.addLog('complete', 'Configuration saved successfully');
+                    this.showToast(
+                        window.i18n?.t('serverDetail.configurationSaved') || 'Configuration saved successfully',
+                        'success'
+                    );
+
+                    if (updated.restart_required) {
+                        const restartMessage = window.i18n?.t('serverDetail.restartRequiredMessage') ||
+                            'Settings that affect the startup command have changed. Restart the server now?';
+                        if (confirm(restartMessage)) {
+                            await this.executeAction('restart');
+                        }
+                    }
                 } else {
                     const error = await response.json();
                     this.addLog('error', `Failed to save: ${error.detail}`);

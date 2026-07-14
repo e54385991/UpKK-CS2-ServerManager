@@ -56,6 +56,11 @@ The server startup command is automatically built using these parameters:
 screen -dmS cs2server_{id} /path/to/cs2 -dedicated -port {game_port} +map {default_map} +maxplayers {max_players} +hostname "{server_name}"
 ```
 
+`screen` remains the default for existing servers. Set **Session Manager** to
+`tmux` in the server configuration to use the isolated `upkk-cs2` tmux socket;
+the panel automatically changes launch, status, command, stop, and Web console
+operations together.
+
 ### With Optional Parameters
 ```bash
 # If IP address is set:

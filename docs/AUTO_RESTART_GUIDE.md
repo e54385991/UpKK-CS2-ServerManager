@@ -60,7 +60,7 @@ Each server is assigned a unique 64-character API key for secure communication:
 3. **Enhanced Start Server Logic**
    - Deploys autorestart script to remote server
    - Configures environment with server_id, api_key, and backend_url
-   - Starts server within screen session for persistence
+   - Starts the server in its selected screen or tmux session for persistence
 
 ## Usage
 
@@ -186,6 +186,7 @@ If the autorestart script fails to deploy:
    ```bash
    command -v curl
    command -v screen
+   command -v tmux
    ```
 3. The system will fallback to simple start without auto-restart
 

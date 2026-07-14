@@ -343,6 +343,48 @@ class ArchivePureHelperTests(unittest.TestCase):
         )
         self.assertEqual(SSHManager._normalize_archive_member("./"), (None, None))
 
+    def test_archive_member_normalization_accepts_safe_windows_tar_members(self):
+        self.assertEqual(
+            SSHManager._normalize_archive_member(
+                r".\addons\plugins\example.dll",
+                allow_backslash_separators=True,
+            ),
+            ("addons/plugins/example.dll", None),
+        )
+
+    def test_windows_tar_member_normalization_still_rejects_unsafe_paths(self):
+        unsafe_members = (
+            r"\etc\passwd",
+            r"..\outside",
+            r"addons\..\outside",
+            r"C:\Windows\system.ini",
+            r"\\server\share\file.txt",
+            r"addons\\plugins\example.dll",
+        )
+        for member in unsafe_members:
+            with self.subTest(member=repr(member)):
+                normalized, error = SSHManager._normalize_archive_member(
+                    member,
+                    allow_backslash_separators=True,
+                )
+                self.assertIsNone(normalized)
+                self.assertTrue(error)
+
+    def test_tar_listing_escape_decoder_preserves_backslashes_and_controls(self):
+        self.assertEqual(
+            SSHManager._decode_tar_listing_name(
+                r"addons\\plugins\\example.dll"
+            ),
+            (r"addons\plugins\example.dll", None),
+        )
+        self.assertEqual(
+            SSHManager._decode_tar_listing_name(r"literal\\n.txt"),
+            (r"literal\n.txt", None),
+        )
+        decoded, error = SSHManager._decode_tar_listing_name(r"line\nbreak.txt")
+        self.assertIsNone(error)
+        self.assertEqual(decoded, "line\nbreak.txt")
+
     def test_archive_member_normalization_rejects_escape_and_ambiguous_paths(self):
         unsafe_members = (
             "/etc/passwd",
@@ -376,6 +418,46 @@ class ArchivePureHelperTests(unittest.TestCase):
         self.assertEqual(info["archive_type"], "zip")
         self.assertEqual(info["entry_count"], 5)
         self.assertEqual(info["folders"], ["addons", "cfg", "addons/plugins"])
+
+    def test_tar_archive_info_normalizes_backslashes_and_detects_collisions(self):
+        success, info, error = SSHManager._build_archive_info(
+            "tar.gz",
+            [
+                (r"backup\cfg", True),
+                (r"backup\cfg\server.cfg", False),
+            ],
+        )
+
+        self.assertTrue(success, error)
+        self.assertEqual(info["folders"], ["backup", "backup/cfg"])
+        self.assertTrue(info["has_backslash_separators"])
+
+        success, _, error = SSHManager._build_archive_info(
+            "tar.gz",
+            [(r"backup\cfg\server.cfg", False), ("backup/cfg/server.cfg", False)],
+        )
+        self.assertFalse(success)
+        self.assertIn("duplicate", error.lower())
+
+    def test_tar_extract_command_normalizes_backslashes_only_when_needed(self):
+        normalized_command = SSHManager._tar_extract_command(
+            "/bin/tar",
+            "tar.gz",
+            "/srv/game/server backup.tar.gz",
+            "/srv/game/.stage",
+            True,
+        )
+        self.assertIn(r"--transform=s|\\|/|g", shlex.split(normalized_command))
+        self.assertIn("/srv/game/server backup.tar.gz", shlex.split(normalized_command))
+
+        regular_command = SSHManager._tar_extract_command(
+            "/bin/tar",
+            "tar.gz",
+            "/srv/game/server.tar.gz",
+            "/srv/game/.stage",
+            False,
+        )
+        self.assertNotIn("--transform=", regular_command)
 
     def test_archive_info_rejects_duplicate_and_file_ancestor_conflicts(self):
         success, _, error = SSHManager._build_archive_info(
@@ -628,6 +710,38 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
         self.assertEqual(manager.tool_candidates, [("tar",)])
         self.assertIn(" -tJf ", manager.commands[0][0])
         self.assertIn(" -tvJf ", manager.commands[1][0])
+        self.assertTrue(
+            all("--quoting-style=escape" in command for command, _ in manager.commands)
+        )
+        self.assertTrue(
+            all(timeout == SSHManager.ARCHIVE_INSPECT_TIMEOUT for _, timeout in manager.commands)
+        )
+
+    def test_tar_inspection_decodes_windows_separators_and_uses_member_types(self):
+        manager = self.manager_with_commands(
+            "/bin/tar",
+            [
+                (
+                    True,
+                    "backup\\\\cfg/\nbackup\\\\cfg\\\\server.cfg\n",
+                    "",
+                ),
+                (
+                    True,
+                    "drwxr-xr-x user/group 0 backup\\\\cfg/\n"
+                    "-rw-r--r-- user/group 1 backup\\\\cfg\\\\server.cfg\n",
+                    "",
+                ),
+            ],
+        )
+
+        success, info, error = self.run_async(
+            manager._inspect_archive_connected("/srv/game/backup.tar.gz", "tar.gz")
+        )
+
+        self.assertTrue(success, error)
+        self.assertEqual(info["folders"], ["backup", "backup/cfg"])
+        self.assertTrue(info["has_backslash_separators"])
 
     def test_7z_inspection_prefers_modern_then_legacy_tools(self):
         listing = """

@@ -16,7 +16,7 @@ sys.path.insert(0, '.')
 from services.server_monitor import ServerMonitor
 
 
-async def test_basic_monitoring():
+async def run_basic_monitoring_demo():
     """Test basic monitoring functionality"""
     print("=" * 60)
     print("Testing CS2 Server Auto-Restart Monitoring")
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     print()
     
     try:
-        asyncio.run(test_basic_monitoring())
+        asyncio.run(run_basic_monitoring_demo())
         sys.exit(0)
     except KeyboardInterrupt:
         print("\n\n⚠ Test interrupted by user")

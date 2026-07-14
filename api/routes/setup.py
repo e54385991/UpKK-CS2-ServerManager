@@ -356,8 +356,8 @@ async def auto_setup_server(
             await add_log("✓ sudo 已安装")
         
         # Install required packages
-        await add_log("安装系统依赖 (lib32gcc-s1, lib32stdc++6, screen, curl, wget, p7zip-full, bzip2, libicu-dev)...")
-        packages = "lib32gcc-s1 lib32stdc++6 screen curl wget unzip p7zip-full bzip2 libicu-dev"
+        await add_log("安装系统依赖 (lib32gcc-s1, lib32stdc++6, screen, tmux, curl, wget, p7zip-full, bzip2, libicu-dev)...")
+        packages = "lib32gcc-s1 lib32stdc++6 screen tmux curl wget unzip p7zip-full bzip2 libicu-dev"
         install_cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages}"
         
         if needs_sudo:

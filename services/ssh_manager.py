@@ -20,6 +20,16 @@ from typing import AsyncIterator, Optional, Tuple, List, Dict, Any
 from datetime import datetime
 from urllib.parse import unquote, urljoin, urlsplit
 from modules.models import Server, AuthType
+from services.game_session import (
+    availability_command,
+    cleanup_command,
+    find_running_session_managers,
+    force_stop_session_command,
+    normalize_session_manager,
+    session_name,
+    start_session_command,
+    stop_session_command,
+)
 from services.server_monitor import server_monitor
 from services.ssh_connection_pool import ssh_connection_pool
 
@@ -109,8 +119,8 @@ class SSHManager:
     ARCHIVE_MAX_ENTRIES = 20000
     ARCHIVE_MAX_FOLDERS = 20000
     ARCHIVE_MAX_MEMBER_PATH_BYTES = 1024
-    ARCHIVE_INSPECT_TIMEOUT = 120
-    ARCHIVE_EXTRACT_TIMEOUT = 900
+    ARCHIVE_INSPECT_TIMEOUT = 900
+    ARCHIVE_EXTRACT_TIMEOUT = 3600
     REMOTE_DOWNLOAD_TIMEOUT = 1800
     REMOTE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024 * 1024
     REMOTE_DOWNLOAD_METADATA_MAX_BYTES = 256 * 1024
@@ -886,7 +896,7 @@ class SSHManager:
         Similar to LinuxGSM approach - works entirely in user space
         
         Prerequisites (must be installed by system administrator):
-        - lib32gcc-s1, lib32stdc++6, curl, wget, tar, screen, unzip
+        - lib32gcc-s1, lib32stdc++6, curl, wget, tar, screen or tmux, unzip
         
         Args:
             server: Server instance
@@ -961,7 +971,8 @@ class SSHManager:
             
             # Check if required tools are available
             await send_progress("Checking system prerequisites...")
-            required_tools = ["wget", "tar", "screen", "unzip"]
+            session_manager = normalize_session_manager(server.session_manager)
+            required_tools = ["wget", "tar", session_manager, "unzip"]
             missing_tools = []
             for tool in required_tools:
                 success, stdout, stderr = await self.execute_command(f"command -v {tool}")
@@ -1462,14 +1473,119 @@ class SSHManager:
         except Exception as e:
             await send_progress(f"Self-check error: {str(e)}")
             return False, f"Self-check error: {str(e)}"
+
+    async def _running_server_session_managers(
+        self,
+        server: Server,
+        timeout: int = 10,
+    ) -> List[str]:
+        """Find configured and legacy sessions for a server on this connection."""
+        return await find_running_session_managers(
+            self.execute_command,
+            server.session_manager,
+            session_name(server.id),
+            timeout=timeout,
+        )
+
+    async def _configured_session_manager_available_connected(
+        self,
+        server: Server,
+        timeout: int = 10,
+    ) -> Tuple[bool, str]:
+        """Check the selected manager without changing any existing session."""
+        manager = normalize_session_manager(server.session_manager)
+        available, _, _ = await self.execute_command(
+            availability_command(manager),
+            timeout=timeout,
+        )
+        if available:
+            return True, f"{manager} is available"
+        return False, (
+            f"Selected session manager '{manager}' is not installed on the remote host"
+        )
+
+    async def check_session_manager_available(
+        self,
+        server: Server,
+        timeout: int = 10,
+    ) -> Tuple[bool, str]:
+        """Preflight a future start/restart before stopping a live server."""
+        success, message = await self.connect(server)
+        if not success:
+            return False, f"Connection failed during session-manager preflight: {message}"
+
+        try:
+            return await self._configured_session_manager_available_connected(
+                server,
+                timeout=timeout,
+            )
+        finally:
+            await self.disconnect()
+
+    async def _stop_server_sessions_connected(
+        self,
+        server: Server,
+        progress_callback=None,
+        retries: int = 3,
+    ) -> Tuple[bool, List[str]]:
+        """Stop every matching screen/tmux session without closing SSH.
+
+        Checking both managers is intentional: a user may change the preferred
+        manager while a legacy session is still running.  tmux force-stop is
+        session-scoped by ``game_session`` and never kills its shared server.
+
+        Returns ``(all_stopped, managers_found_before_stop)``.
+        """
+        name = session_name(server.id)
+        initial_managers = await self._running_server_session_managers(server)
+        if not initial_managers:
+            return True, []
+
+        await self._send_progress_if_callback(
+            progress_callback,
+            "Found existing game session(s): " + ", ".join(initial_managers),
+        )
+
+        remaining = initial_managers
+        for attempt in range(max(1, retries)):
+            for manager in remaining:
+                await self.execute_command(
+                    stop_session_command(manager, name),
+                    timeout=10,
+                )
+
+            await asyncio.sleep(1)
+            remaining = await self._running_server_session_managers(server)
+            if not remaining:
+                return True, initial_managers
+
+            if attempt < max(1, retries) - 1:
+                await self._send_progress_if_callback(
+                    progress_callback,
+                    f"Waiting for {', '.join(remaining)} session(s) to terminate...",
+                )
+
+        await self._send_progress_if_callback(
+            progress_callback,
+            "Session shutdown timed out; applying manager-scoped force stop...",
+        )
+        for manager in remaining:
+            await self.execute_command(
+                force_stop_session_command(manager, name),
+                timeout=10,
+            )
+
+        await asyncio.sleep(1)
+        remaining = await self._running_server_session_managers(server)
+        return not remaining, initial_managers
     
     async def start_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """
         Start CS2 server with LGSM-style configuration and real-time output streaming
         
-        This method includes defensive checks to ensure no duplicate screen sessions.
-        It will automatically terminate any existing screen session before starting a new one.
-        This is critical for restart operations and prevents screen session conflicts.
+        This method includes defensive checks to ensure no duplicate screen or
+        tmux sessions.  It also cleans up a legacy session when the configured
+        manager has changed.
         """
         success, msg = await self.connect(server)
         if not success:
@@ -1499,50 +1615,41 @@ class SSHManager:
             return cmd
         
         try:
-            # Clean up any dead screen sessions first
-            # This prevents false positives when checking for existing sessions
-            await send_progress("Cleaning up dead screen sessions...")
-            await self.execute_command("screen -wipe || true")
-            await send_progress("✓ Dead screen sessions cleaned up")
-            
-            # CRITICAL: Ensure no existing screen session before starting
-            # This prevents duplicate screen sessions for the same server
-            # This check is essential for restart operations and edge cases
-            screen_name = f"cs2server_{server.id}"
-            check_cmd = f"screen -list | grep {screen_name} || true"
-            check_success, check_output, _ = await self.execute_command(check_cmd)
-            
-            if check_success and check_output.strip() and screen_name in check_output:
-                await send_progress(f"⚠ Existing screen session(s) detected for server {server.id}")
-                await send_progress("Terminating all existing sessions to prevent duplicates...")
-                
-                # Terminate ALL screen sessions matching this pattern
-                # Use pkill to ensure all processes are killed
-                kill_all_cmd = f"screen -ls | grep {screen_name} | cut -d. -f1 | awk '{{print $1}}' | xargs -r -I {{}} screen -S {{}} -X quit; pkill -f 'SCREEN.*{screen_name}' || true"
-                await self.execute_command(kill_all_cmd)
-                
-                # Wait and verify termination with retry logic
-                for retry in range(3):
-                    await asyncio.sleep(1)
-                    verify_cmd = f"screen -list | grep {screen_name} || true"
-                    verify_success, verify_output, _ = await self.execute_command(verify_cmd)
-                    
-                    if not verify_output.strip() or screen_name not in verify_output:
-                        await send_progress("✓ All existing screen sessions terminated successfully")
-                        break
-                    
-                    if retry < 2:
-                        await send_progress(f"Retry {retry + 1}: Waiting for sessions to terminate...")
-                        # Try killing again with more aggressive approach
-                        await self.execute_command(kill_all_cmd)
-                else:
-                    # Final attempt with force kill of all related processes
-                    await send_progress("⚠ Some screen sessions still exist, attempting final force termination...")
-                    final_kill_cmd = f"pkill -9 -f 'SCREEN.*{screen_name}' || true; pkill -9 -f 'cs2server_{server.id}' || true"
-                    await self.execute_command(final_kill_cmd)
-                    await asyncio.sleep(1)
-            
-            # Kill any stray CS2 processes that might be running outside screen
+            manager = normalize_session_manager(server.session_manager)
+            name = session_name(server.id)
+            await send_progress(f"Using {manager} as the game session manager")
+
+            manager_available, manager_message = (
+                await self._configured_session_manager_available_connected(server)
+            )
+            if not manager_available:
+                return False, (
+                    f"Cannot start server: {manager_message}. "
+                    "Please install it on the remote host first."
+                )
+
+            # GNU screen can leave dead sockets. tmux removes dead sessions
+            # itself, so it deliberately has no equivalent global cleanup.
+            stale_cleanup = cleanup_command("screen")
+            if stale_cleanup:
+                await self.execute_command(stale_cleanup, timeout=10)
+
+            sessions_stopped, previous_managers = (
+                await self._stop_server_sessions_connected(
+                    server,
+                    progress_callback=progress_callback,
+                    retries=3,
+                )
+            )
+            if not sessions_stopped:
+                return False, (
+                    "Cannot start server because an existing screen/tmux "
+                    "session could not be terminated safely"
+                )
+            if previous_managers:
+                await send_progress("✓ Existing game session(s) terminated")
+
+            # Kill any stray CS2 processes which no longer have a live session.
             # This is an additional safety check to prevent duplicate processes
             await self._kill_stray_cs2_processes(server, progress_callback)
             
@@ -1703,41 +1810,54 @@ class SSHManager:
             # Working directory must be the bin directory for CS2 to find its libraries
             game_bin_dir = f"{server.game_directory}/cs2/game/bin/linuxsteamrt64"
             
-            # Build the CS2 server start command (without screen wrapper)
+            # Build the CS2 command independently of its session manager.
             cs2_start_cmd = (
-                f"cd {game_bin_dir} && "
-                f"export LD_LIBRARY_PATH='{game_bin_dir}:${{LD_LIBRARY_PATH}}' && "
+                f"cd {shlex.quote(game_bin_dir)} && "
+                f"export LD_LIBRARY_PATH={shlex.quote(game_bin_dir)}:"
+                f"\"${{LD_LIBRARY_PATH:-}}\" && "
                 f"{cs2_executable} {params_str}"
             )
             
-            # Build the complete startup command with proper environment
-            # Prepare CPU affinity prefix if configured
-            cpu_affinity_prefix = ""
+            # CPU affinity belongs to the payload, not the tmux client.  A
+            # long-lived tmux daemon would otherwise retain its old affinity.
+            cpu_affinity = None
             if server.cpu_affinity:
-                # Validate cpu_affinity format to prevent command injection
-                # Only allow digits, commas, hyphens, and whitespace (which gets stripped)
-                if re.match(r'^[\d,\-\s]+$', server.cpu_affinity.strip()):
-                    cpu_affinity_prefix = f"taskset -c {server.cpu_affinity.strip()} "
-                    await send_progress(f"✓ CPU affinity configured: cores {server.cpu_affinity.strip()}")
+                affinity = server.cpu_affinity.strip()
+                if re.fullmatch(r'[\d,\-\s]+', affinity):
+                    cpu_affinity = affinity
+                    await send_progress(f"✓ CPU affinity configured: cores {affinity}")
                 else:
                     await send_progress(f"⚠ Warning: Invalid CPU affinity format '{server.cpu_affinity}', ignoring")
             
             if use_autorestart and api_key:
-                # Use autorestart wrapper with screen
-                start_cmd = (
-                    f"{cpu_affinity_prefix}screen -dmS cs2server_{server.id} "
-                    f"bash {autorestart_script_path} "
-                    f"{server.id} '{api_key}' '{backend_url}' '{server.game_directory}' "
-                    f"'{cs2_start_cmd}'"
+                payload = (
+                    f"bash {shlex.quote(autorestart_script_path)} "
+                    f"{server.id} {shlex.quote(api_key)} "
+                    f"{shlex.quote(backend_url)} {shlex.quote(server.game_directory)} "
+                    f"{shlex.quote(cs2_start_cmd)}"
+                )
+                start_cmd = start_session_command(
+                    manager,
+                    name,
+                    payload,
+                    cpu_affinity,
                 )
                 await send_progress("✓ Starting with auto-restart protection enabled")
             else:
-                # Fallback to simple screen start without autorestart
-                start_cmd = (
-                    f"cd {game_bin_dir} && "
-                    f"export LD_LIBRARY_PATH=\"{game_bin_dir}:$LD_LIBRARY_PATH\" && "
-                    f"{cpu_affinity_prefix}screen -dmS cs2server_{server.id} "
-                    f"bash -c '{cs2_executable} {params_str} 2>&1 | tee {server.game_directory}/cs2/game/csgo/console.log'"
+                console_log = f"{server.game_directory}/cs2/game/csgo/console.log"
+                shell_payload = (
+                    f"cd {shlex.quote(game_bin_dir)} && "
+                    f"export LD_LIBRARY_PATH={shlex.quote(game_bin_dir)}:"
+                    f"\"${{LD_LIBRARY_PATH:-}}\" && "
+                    f"{cs2_executable} {params_str} 2>&1 | "
+                    f"tee {shlex.quote(console_log)}"
+                )
+                payload = f"bash -c {shlex.quote(shell_payload)}"
+                start_cmd = start_session_command(
+                    manager,
+                    name,
+                    payload,
+                    cpu_affinity,
                 )
                 if not api_key:
                     await send_progress("⚠ Warning: No API key configured, auto-restart reporting disabled")
@@ -1793,14 +1913,13 @@ class SSHManager:
             await send_progress("Initial startup output complete, verifying server status...")
             await send_progress("=" * 60)
             
-            # Early check: Verify screen session was created
+            # Early check: verify the configured session was created.
             # Wait a bit longer as initialization can take time
             await asyncio.sleep(0.8)
-            screen_check = f"screen -list | grep cs2server_{server.id} || echo 'NO_SCREEN'"
-            screen_success, screen_output, _ = await self.execute_command(screen_check)
+            running_managers = await self._running_server_session_managers(server)
             
-            if 'NO_SCREEN' in screen_output:
-                # Screen session never created or exited during initialization
+            if manager not in running_managers:
+                # The selected session never started or exited during initialization.
                 log_check = f"test -f {server.game_directory}/cs2/game/csgo/console.log && tail -150 {server.game_directory}/cs2/game/csgo/console.log || echo 'No log file'"
                 _, immediate_log, _ = await self.execute_command(log_check, timeout=10)
                 
@@ -1892,10 +2011,9 @@ class SSHManager:
             
             # Wait 1 second and check if server is still alive (detect immediate crashes)
             await asyncio.sleep(1)
-            quick_check = f"screen -list | grep cs2server_{server.id} || echo 'CRASHED'"
-            _, quick_output, _ = await self.execute_command(quick_check)
+            running_managers = await self._running_server_session_managers(server)
             
-            if 'CRASHED' in quick_output:
+            if manager not in running_managers:
                 # Server crashed within 1 second - get logs immediately
                 log_check = f"test -f {server.game_directory}/cs2/game/csgo/console.log && tail -100 {server.game_directory}/cs2/game/csgo/console.log || echo 'No log file'"
                 _, crash_log, _ = await self.execute_command(log_check, timeout=10)
@@ -1924,11 +2042,10 @@ class SSHManager:
             await asyncio.sleep(3)
             
             # Check if server is running - try multiple methods
-            # Method 1: Check screen session
-            check_cmd = f"screen -list | grep cs2server_{server.id} || true"
-            success, stdout, stderr = await self.execute_command(check_cmd)
+            # Method 1: check the configured detached session.
+            running_managers = await self._running_server_session_managers(server)
             
-            if stdout and f"cs2server_{server.id}" in stdout:
+            if manager in running_managers:
                 # Server started successfully, refresh steam.inf version cache
                 try:
                     from services.steam_inf_service import steam_inf_service
@@ -2009,7 +2126,10 @@ class SSHManager:
                         error_indicators.append(f"Found {error_count} error(s) in console log")
             
             diagnostics.append("=== Startup Diagnostics ===")
-            diagnostics.append(f"Screen session: {'NOT FOUND' if not stdout or f'cs2server_{server.id}' not in stdout else 'Found but process may have exited'}")
+            diagnostics.append(
+                f"{manager} session: "
+                f"{'Found but process may have exited' if manager in running_managers else 'NOT FOUND'}"
+            )
             diagnostics.append(f"Process running: {'NO' if 'not running' in proc_stdout else 'UNKNOWN'}")
             diagnostics.append(f"Port {server.game_port} listening: {'NO' if 'not listening' in port_stdout or not port_stdout.strip() else 'UNKNOWN'}")
             
@@ -2067,46 +2187,24 @@ class SSHManager:
             return False, f"Connection failed: {msg}"
         
         try:
-            screen_name = f"cs2server_{server.id}"
-            
-            # Check if screen session exists
-            check_cmd = f"screen -list | grep {screen_name} || true"
-            check_success, check_output, _ = await self.execute_command(check_cmd)
-            
-            if not check_output.strip() or screen_name not in check_output:
-                return True, "Server is not running (no screen session found)"
-            
-            # Stop screen session
-            stop_cmd = f"screen -S {screen_name} -X quit"
-            await self.execute_command(stop_cmd)
-            
-            # Verify termination with retry logic
-            for retry in range(5):
-                await asyncio.sleep(1)
-                
-                verify_cmd = f"screen -list | grep {screen_name} || true"
-                verify_success, verify_output, _ = await self.execute_command(verify_cmd)
-                
-                if not verify_output.strip() or screen_name not in verify_output:
-                    return True, "Server stopped successfully"
-                
-                if retry < 4:
-                    # Retry sending quit command
-                    await self.execute_command(stop_cmd)
-            
-            # Final attempt with force kill if still running
-            kill_cmd = f"pkill -9 -f 'SCREEN.*{screen_name}' || true"
-            await self.execute_command(kill_cmd)
-            await asyncio.sleep(1)
-            
-            # Final verification
-            final_check_cmd = f"screen -list | grep {screen_name} || true"
-            final_success, final_output, _ = await self.execute_command(final_check_cmd)
-            
-            if not final_output.strip() or screen_name not in final_output:
-                return True, "Server stopped successfully (force terminated)"
-            else:
-                return False, "Server failed to stop after multiple attempts"
+            all_stopped, managers = await self._stop_server_sessions_connected(
+                server,
+                retries=5,
+            )
+
+            # A pane/session shutdown should terminate its children.  Retain the
+            # existing exact-port cleanup as a final guard for detached CS2
+            # processes, regardless of which manager owned the session.
+            await self._kill_stray_cs2_processes(server)
+
+            if not managers:
+                return True, "Server is not running (no screen/tmux session found)"
+            if all_stopped:
+                return True, (
+                    "Server stopped successfully "
+                    f"({', '.join(managers)} session terminated)"
+                )
+            return False, "Server failed to stop all screen/tmux sessions"
         
         except Exception as e:
             return False, f"Stop error: {str(e)}"
@@ -2172,7 +2270,7 @@ class SSHManager:
     
     async def _kill_stray_cs2_processes(self, server: Server, progress_callback=None) -> None:
         """
-        Kill any CS2 server processes running outside of screen sessions
+        Kill any CS2 server processes left outside managed screen/tmux sessions
         
         This prevents duplicate processes when starting/updating/validating servers.
         Only kills CS2 processes matching this server's port to avoid affecting other servers.
@@ -2365,38 +2463,35 @@ class SSHManager:
             # Kill any existing steamcmd processes for this server
             await self._kill_steamcmd_processes(server, progress_callback)
             
-            # Check if server is running and stop it first
-            screen_name = f"cs2server_{server.id}"
-            check_cmd = f"screen -list | grep {screen_name} || true"
-            check_success, check_output, _ = await self.execute_command(check_cmd)
-            
-            was_running = check_output.strip() and screen_name in check_output
+            # Detect both the configured manager and a possible legacy session.
+            running_managers = await self._running_server_session_managers(server)
+            was_running = bool(running_managers)
             if was_running:
-                await send_progress("Server is running, stopping before update...")
-                
-                # Use improved stop logic
-                stop_cmd = f"screen -S {screen_name} -X quit"
-                await self.execute_command(stop_cmd)
-                
-                # Wait and verify with retry
-                for retry in range(3):
-                    await asyncio.sleep(1)
-                    verify_cmd = f"screen -list | grep {screen_name} || true"
-                    verify_success, verify_output, _ = await self.execute_command(verify_cmd)
-                    
-                    if not verify_output.strip() or screen_name not in verify_output:
-                        await send_progress("✓ Server stopped successfully")
-                        break
-                    
-                    if retry < 2:
-                        await self.execute_command(stop_cmd)
-                else:
-                    await send_progress("⚠ Force stopping server...")
-                    kill_cmd = f"pkill -f 'SCREEN.*{screen_name}' || true"
-                    await self.execute_command(kill_cmd)
-                    await asyncio.sleep(1)
+                manager_available, manager_message = (
+                    await self._configured_session_manager_available_connected(server)
+                )
+                if not manager_available:
+                    return False, (
+                        f"Server update aborted before stopping: {manager_message}. "
+                        "The existing game session was left running."
+                    )
+                await send_progress(
+                    "Server is running in "
+                    f"{', '.join(running_managers)}, stopping before update..."
+                )
+                all_stopped, _ = await self._stop_server_sessions_connected(
+                    server,
+                    progress_callback=progress_callback,
+                    retries=3,
+                )
+                if not all_stopped:
+                    return False, (
+                        "Server update aborted because the existing "
+                        "screen/tmux session could not be stopped"
+                    )
+                await send_progress("✓ Server stopped successfully")
             
-            # Kill any stray CS2 processes that might be running outside screen
+            # Kill any stray CS2 processes left outside the managed session.
             await self._kill_stray_cs2_processes(server, progress_callback)
             
             # Navigate to game directory
@@ -2495,38 +2590,35 @@ class SSHManager:
             # Kill any existing steamcmd processes for this server
             await self._kill_steamcmd_processes(server, progress_callback)
             
-            # Check if server is running and stop it first
-            screen_name = f"cs2server_{server.id}"
-            check_cmd = f"screen -list | grep {screen_name} || true"
-            check_success, check_output, _ = await self.execute_command(check_cmd)
-            
-            was_running = check_output.strip() and screen_name in check_output
+            # Detect both the configured manager and a possible legacy session.
+            running_managers = await self._running_server_session_managers(server)
+            was_running = bool(running_managers)
             if was_running:
-                await send_progress("Server is running, stopping before update...")
-                
-                # Use improved stop logic
-                stop_cmd = f"screen -S {screen_name} -X quit"
-                await self.execute_command(stop_cmd)
-                
-                # Wait and verify with retry
-                for retry in range(3):
-                    await asyncio.sleep(1)
-                    verify_cmd = f"screen -list | grep {screen_name} || true"
-                    verify_success, verify_output, _ = await self.execute_command(verify_cmd)
-                    
-                    if not verify_output.strip() or screen_name not in verify_output:
-                        await send_progress("✓ Server stopped successfully")
-                        break
-                    
-                    if retry < 2:
-                        await self.execute_command(stop_cmd)
-                else:
-                    await send_progress("⚠ Force stopping server...")
-                    kill_cmd = f"pkill -f 'SCREEN.*{screen_name}' || true"
-                    await self.execute_command(kill_cmd)
-                    await asyncio.sleep(1)
+                manager_available, manager_message = (
+                    await self._configured_session_manager_available_connected(server)
+                )
+                if not manager_available:
+                    return False, (
+                        f"Server validation aborted before stopping: {manager_message}. "
+                        "The existing game session was left running."
+                    )
+                await send_progress(
+                    "Server is running in "
+                    f"{', '.join(running_managers)}, stopping before validation..."
+                )
+                all_stopped, _ = await self._stop_server_sessions_connected(
+                    server,
+                    progress_callback=progress_callback,
+                    retries=3,
+                )
+                if not all_stopped:
+                    return False, (
+                        "Server validation aborted because the existing "
+                        "screen/tmux session could not be stopped"
+                    )
+                await send_progress("✓ Server stopped successfully")
             
-            # Kill any stray CS2 processes that might be running outside screen
+            # Kill any stray CS2 processes left outside the managed session.
             await self._kill_stray_cs2_processes(server, progress_callback)
             
             # Navigate to game directory
@@ -2604,13 +2696,10 @@ class SSHManager:
             return False, "offline"
         
         try:
-            check_cmd = f"screen -list | grep cs2server_{server.id}"
-            success, stdout, stderr = await self.execute_command(check_cmd)
-            
-            if success and stdout:
+            running_managers = await self._running_server_session_managers(server)
+            if running_managers:
                 return True, "running"
-            else:
-                return True, "stopped"
+            return True, "stopped"
         
         except Exception as e:
             return False, "unknown"
@@ -4159,14 +4248,21 @@ class SSHManager:
         return message
 
     @classmethod
-    def _normalize_archive_member(cls, member_name: str) -> Tuple[Optional[str], Optional[str]]:
+    def _normalize_archive_member(
+        cls,
+        member_name: str,
+        *,
+        allow_backslash_separators: bool = False,
+    ) -> Tuple[Optional[str], Optional[str]]:
         """Normalize one archive member, returning (path, error)."""
         if not isinstance(member_name, str):
             return None, "Archive contains a non-text member name"
         if any(ord(char) < 32 or ord(char) == 127 for char in member_name):
             return None, "Archive contains a member name with control characters"
         if '\\' in member_name:
-            return None, "Archive contains a member name with backslash separators"
+            if not allow_backslash_separators:
+                return None, "Archive contains a member name with backslash separators"
+            member_name = member_name.replace('\\', '/')
         if len(member_name.encode('utf-8')) > cls.ARCHIVE_MAX_MEMBER_PATH_BYTES:
             return None, "Archive contains an excessively long member path"
 
@@ -4186,6 +4282,46 @@ class SSHManager:
             return None, f"Archive member escapes the archive root: {member_name!r}"
         return normalized, None
 
+    @staticmethod
+    def _decode_tar_listing_name(value: str) -> Tuple[Optional[str], Optional[str]]:
+        """Decode one GNU tar ``--quoting-style=escape`` member name."""
+        decoded = []
+        index = 0
+        escapes = {
+            '\\': '\\',
+            'a': '\a',
+            'b': '\b',
+            'f': '\f',
+            'n': '\n',
+            'r': '\r',
+            't': '\t',
+            'v': '\v',
+        }
+        while index < len(value):
+            char = value[index]
+            if char != '\\':
+                decoded.append(char)
+                index += 1
+                continue
+
+            index += 1
+            if index >= len(value):
+                return None, "TAR returned a malformed escaped member name"
+            escaped = value[index]
+            if escaped in escapes:
+                decoded.append(escapes[escaped])
+                index += 1
+                continue
+            if escaped in '01234567':
+                end = index + 1
+                while end < min(index + 3, len(value)) and value[end] in '01234567':
+                    end += 1
+                decoded.append(chr(int(value[index:end], 8)))
+                index = end
+                continue
+            return None, "TAR returned an unsupported escaped member name"
+        return ''.join(decoded), None
+
     @classmethod
     def _build_archive_info(
         cls,
@@ -4197,10 +4333,17 @@ class SSHManager:
                 f"Archive contains too many entries (maximum {cls.ARCHIVE_MAX_ENTRIES})"
             )
 
+        normalize_backslashes = archive_type in ('tar', 'tar.gz', 'tar.bz2', 'tar.xz')
+        has_backslash_separators = False
         member_types: Dict[str, bool] = {}
         members: List[Dict[str, Any]] = []
         for raw_name, is_directory in raw_members:
-            normalized, error = cls._normalize_archive_member(raw_name)
+            if '\\' in raw_name:
+                has_backslash_separators = True
+            normalized, error = cls._normalize_archive_member(
+                raw_name,
+                allow_backslash_separators=normalize_backslashes,
+            )
             if error:
                 return False, {}, error
             if normalized is None:
@@ -4236,7 +4379,32 @@ class SSHManager:
             "folders": sorted(folders, key=lambda value: (value.count('/'), value.lower())),
             "entry_count": len(members),
             "members": members,
+            "has_backslash_separators": has_backslash_separators,
         }, ""
+
+    @staticmethod
+    def _tar_extract_command(
+        tool: str,
+        archive_type: str,
+        archive_path: str,
+        stage_path: str,
+        normalize_backslashes: bool,
+    ) -> str:
+        extract_flag = {
+            'tar': '-xf',
+            'tar.gz': '-xzf',
+            'tar.bz2': '-xjf',
+            'tar.xz': '-xJf',
+        }[archive_type]
+        transform_option = ''
+        if normalize_backslashes:
+            transform_expression = shlex.quote(r's|\\|/|g')
+            transform_option = f" --transform={transform_expression}"
+        return (
+            f"LC_ALL=C {shlex.quote(tool)} {extract_flag} {shlex.quote(archive_path)} "
+            f"-C {shlex.quote(stage_path)} --no-same-owner --no-same-permissions"
+            f"{transform_option}"
+        )
 
     @staticmethod
     def _parse_7z_listing(output: str) -> Tuple[Optional[List[Tuple[str, bool]]], Optional[str]]:
@@ -4328,15 +4496,24 @@ class SSHManager:
             }[archive_type]
             verbose_flag = list_flag.replace('t', 'tv', 1)
             success, stdout, stderr = await self.execute_command(
-                f"LC_ALL=C {safe_tool} {list_flag} {safe_archive}",
+                f"LC_ALL=C {safe_tool} {list_flag} {safe_archive} "
+                "--quoting-style=escape",
                 timeout=self.ARCHIVE_INSPECT_TIMEOUT,
             )
             if not success:
                 return False, {}, f"Invalid TAR archive: {self._short_command_error(stdout, stderr)}"
-            raw_members = [(line, line.endswith('/')) for line in stdout.splitlines() if line]
+            member_names = []
+            for line in stdout.splitlines():
+                if not line:
+                    continue
+                decoded_name, decode_error = self._decode_tar_listing_name(line)
+                if decode_error:
+                    return False, {}, decode_error
+                member_names.append(decoded_name or '')
 
             verbose_success, verbose_stdout, verbose_stderr = await self.execute_command(
-                f"LC_ALL=C {safe_tool} {verbose_flag} {safe_archive}",
+                f"LC_ALL=C {safe_tool} {verbose_flag} {safe_archive} "
+                "--quoting-style=escape",
                 timeout=self.ARCHIVE_INSPECT_TIMEOUT,
             )
             if not verbose_success:
@@ -4344,10 +4521,21 @@ class SSHManager:
                     "Unable to inspect TAR member types: "
                     f"{self._short_command_error(verbose_stdout, verbose_stderr)}"
                 )
+            member_types = []
             for line in verbose_stdout.splitlines():
                 stripped = line.lstrip()
-                if stripped and stripped[0] in 'lhbcps':
+                if not stripped:
+                    continue
+                member_type = stripped[0]
+                if member_type not in ('-', 'd'):
                     return False, {}, "Archive contains a link or special TAR member"
+                member_types.append(member_type)
+            if len(member_names) != len(member_types):
+                return False, {}, "TAR returned inconsistent member listings"
+            raw_members = [
+                (name, member_type == 'd')
+                for name, member_type in zip(member_names, member_types)
+            ]
 
         elif archive_type == '7z':
             seven_zip_tool = await self._find_remote_tool(('7zz', '7z', '7za'))
@@ -5023,15 +5211,12 @@ class SSHManager:
                 tool = await self._find_remote_tool(('tar',))
                 if not tool:
                     return False, "Required archive tool is missing: install tar"
-                extract_flag = {
-                    'tar': '-xf',
-                    'tar.gz': '-xzf',
-                    'tar.bz2': '-xjf',
-                    'tar.xz': '-xJf',
-                }[archive_type]
-                extract_command = (
-                    f"LC_ALL=C {shlex.quote(tool)} {extract_flag} {safe_archive} -C {safe_stage} "
-                    "--no-same-owner --no-same-permissions"
+                extract_command = self._tar_extract_command(
+                    tool,
+                    archive_type,
+                    archive_path,
+                    stage_path,
+                    archive_info["has_backslash_separators"],
                 )
             elif archive_type == '7z':
                 tool = await self._find_remote_tool(('7zz', '7z', '7za'))

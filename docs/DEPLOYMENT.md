@@ -48,7 +48,8 @@ sudo apt-get install -y \
     curl \
     wget \
     tar \
-    screen
+    screen \
+    tmux
 ```
 
 **Why these packages are needed:**
@@ -56,7 +57,7 @@ sudo apt-get install -y \
 - `libsdl2-2.0-0:i386`: SDL2 library for CS2 server
 - `curl`, `wget`: For downloading files
 - `tar`: For extracting archives
-- `screen`: For running the server in background sessions
+- `screen`, `tmux`: Selectable terminal multiplexers for detached game sessions
 
 ### Step 2: Create User Account
 
@@ -144,7 +145,7 @@ If you see errors like `wget: command not found` or `tar: command not found`, it
 **Solution:** Have your system administrator install the prerequisites on the target server:
 ```bash
 sudo apt-get update
-sudo apt-get install -y wget tar curl screen lib32gcc-s1 lib32stdc++6 lib32z1 libsdl2-2.0-0:i386
+sudo apt-get install -y wget tar curl screen tmux lib32gcc-s1 lib32stdc++6 lib32z1 libsdl2-2.0-0:i386
 ```
 
 ### Permission Denied Errors
@@ -242,7 +243,8 @@ sudo apt-get install -y \
     curl \
     wget \
     tar \
-    screen
+    screen \
+    tmux
 ```
 
 **为什么需要这些包：**
@@ -250,7 +252,7 @@ sudo apt-get install -y \
 - `libsdl2-2.0-0:i386`: CS2 服务器的 SDL2 库
 - `curl`, `wget`: 用于下载文件
 - `tar`: 用于解压存档
-- `screen`: 用于在后台会话中运行服务器
+- `screen`, `tmux`: 可按服务器选择的后台终端会话管理器
 
 ### 步骤 2: 创建用户账户
 
@@ -338,7 +340,7 @@ sudo passwd cs2server
 **解决方案：** 让系统管理员在目标服务器上安装前置条件：
 ```bash
 sudo apt-get update
-sudo apt-get install -y wget tar curl screen lib32gcc-s1 lib32stdc++6 lib32z1 libsdl2-2.0-0:i386
+sudo apt-get install -y wget tar curl screen tmux lib32gcc-s1 lib32stdc++6 lib32z1 libsdl2-2.0-0:i386
 ```
 
 ### 权限被拒绝错误

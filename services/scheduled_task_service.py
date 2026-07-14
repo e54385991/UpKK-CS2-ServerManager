@@ -211,6 +211,15 @@ class ScheduledTaskService:
                 logger.info(f"[Server {server.id}] {msg}")
             
             if action == "restart":
+                manager_ready, preflight_message = (
+                    await ssh_manager.check_session_manager_available(server)
+                )
+                if not manager_ready:
+                    return False, (
+                        f"Restart aborted before stopping: {preflight_message}. "
+                        "The existing game session was left untouched."
+                    )
+
                 # Restart is implemented as stop + start sequence
                 await log_progress("Stopping server...")
                 success, message = await ssh_manager.stop_server(server)

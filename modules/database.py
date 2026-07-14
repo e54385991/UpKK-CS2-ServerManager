@@ -284,6 +284,30 @@ async def migrate_db():
             print("✓ Migration completed: cpu_affinity column added")
         else:
             print("✓ cpu_affinity column exists")
+
+        # Existing installations predate the selectable screen/tmux backend.
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'servers'
+                AND COLUMN_NAME = 'session_manager'
+            """)
+        )
+        session_manager_exists = result.fetchone() is not None
+
+        if not session_manager_exists:
+            print("Adding session_manager column to servers table...")
+            await conn.execute(
+                text("""
+                    ALTER TABLE servers
+                    ADD COLUMN session_manager VARCHAR(16) NOT NULL DEFAULT 'screen'
+                """)
+            )
+            print("✓ Migration completed: session_manager column added")
+        else:
+            print("✓ session_manager column exists")
         
         # Check if api_key column exists in users table
         # First ensure users table exists

@@ -86,6 +86,7 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 - 🔐 **SSH 连接**: 支持密码和密钥文件两种认证方式
 - 📦 **自动部署**: 通过 SSH 自动部署 CS2 服务器
 - 🎮 **服务器控制**: 启动、停止、重启服务器
+- 🖥️ **可选会话管理器**: 每台服务器可选择 GNU screen 或 tmux，Web 控制台、指令发送和生命周期操作均保持可用
 - 🔄 **自动重启保护**: 服务器崩溃时自动重启，具有崩溃循环保护机制 ([查看文档](docs/AUTO_RESTART_GUIDE.md))
 - 🔔 **实时状态上报**: 服务器通过 API 向管理端上报崩溃、重启等事件
 - 🔌 **插件框架安装**: 一键安装 Metamod:Source 和 CounterStrikeSharp，支持批量安装和更新
@@ -254,6 +255,7 @@ A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + My
 - 🔐 **SSH Connection**: Supports both password and key file authentication
 - 📦 **Auto Deployment**: Automatic CS2 server deployment via SSH
 - 🎮 **Server Control**: Start, stop, and restart servers
+- 🖥️ **Selectable Session Manager**: Choose GNU screen or tmux per server while retaining Web console, command, and lifecycle support
 - 🔄 **Auto-Restart Protection**: Automatic restart on crash with crash loop protection ([View Docs](docs/AUTO_RESTART_GUIDE.md))
 - 🔔 **Real-time Status Reporting**: Servers report crash and restart events to the manager via API
 - 🔌 **Plugin Framework Installation**: One-click install for Metamod:Source and CounterStrikeSharp, supports batch install and update

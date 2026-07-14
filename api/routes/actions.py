@@ -11,6 +11,7 @@ import json
 import uuid
 import secrets
 import logging
+from contextlib import suppress
 
 from modules import (
     Server, DeploymentLog, ServerStatus,
@@ -29,6 +30,12 @@ from services.discord_notification_service import (
     discord_notification_service,
 )
 from services.server_monitor import server_monitor
+from services.game_session import (
+    attach_command,
+    find_running_session_manager,
+    send_keys_command,
+    session_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -462,6 +469,30 @@ async def server_action(
     await send_deployment_update(server_id, "status", f"Starting action: {action}")
     
     try:
+        if action == "restart":
+            manager_ready, preflight_message = (
+                await ssh_manager.check_session_manager_available(server)
+            )
+            if not manager_ready:
+                success = False
+                message = (
+                    f"Restart aborted before stopping: {preflight_message}. "
+                    "The existing game session was left untouched."
+                )
+                log.status = "failed"
+                log.error_message = message
+                await send_deployment_update(server_id, "error", message)
+                await db.commit()
+                await db.refresh(server)
+                await db.refresh(log)
+                await redis_manager.set_server_status(server_id, server.status.value)
+                await send_discord_action_notification(server, action, success, message)
+                return ActionResponse(
+                    success=False,
+                    message=message,
+                    data={"status": server.status.value},
+                )
+
         if action == "deploy":
             server.status = ServerStatus.DEPLOYING
             await db.commit()
@@ -975,20 +1006,30 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
         
         try:
             if action == "restart":
-                # Stop then start
-                await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Stopping server...")
-                stop_success, stop_msg = await ssh_manager.stop_server(server)
-                
-                # Add small delay
-                await asyncio.sleep(0.5)
-                
-                await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Starting server...")
-                success, message = await ssh_manager.start_server(server)
-                
-                if success:
-                    new_status = ServerStatus.RUNNING
+                manager_ready, preflight_message = (
+                    await ssh_manager.check_session_manager_available(server)
+                )
+                if not manager_ready:
+                    success = False
+                    message = (
+                        f"Restart aborted before stopping: {preflight_message}. "
+                        "The existing game session was left untouched."
+                    )
                 else:
-                    new_status = ServerStatus.ERROR
+                    # Stop then start only after the selected manager is ready.
+                    await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Stopping server...")
+                    stop_success, stop_msg = await ssh_manager.stop_server(server)
+
+                    # Add small delay
+                    await asyncio.sleep(0.5)
+
+                    await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Starting server...")
+                    success, message = await ssh_manager.start_server(server)
+
+                    if success:
+                        new_status = ServerStatus.RUNNING
+                    else:
+                        new_status = ServerStatus.ERROR
                     
             elif action == "stop":
                 success, message = await ssh_manager.stop_server(server)
@@ -1376,13 +1417,16 @@ async def execute_single_server_command(server_id: int, command: str, user_id: i
                 return
             
             try:
-                # Check if game server is running
-                screen_name = f"cs2server_{server_id}"
-                check_cmd = f"screen -list | grep {screen_name} || true"
-                
-                success, stdout, stderr = await ssh_manager.execute_command(check_cmd, timeout=10)
-                
-                if not stdout or not stdout.strip() or screen_name not in stdout:
+                # Detect the configured manager first and the legacy manager
+                # second, so switching settings cannot orphan a running session.
+                name = session_name(server_id)
+                active_manager = await find_running_session_manager(
+                    ssh_manager.execute_command,
+                    server.session_manager,
+                    name,
+                )
+
+                if not active_manager:
                     await redis_manager.set_batch_action_status(
                         batch_id, server_id, "failed", 
                         "Game server is not running. Please start the server first."
@@ -1391,13 +1435,10 @@ async def execute_single_server_command(server_id: int, command: str, user_id: i
                 
                 await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", f"Executing command: {command}")
                 
-                # Send command to screen session using stuff command
-                # The "stuff" command sends text to the screen session as if typed
-                # Add newline to execute the command
-                escaped_command = command.replace('"', '\\"')
-                stuff_cmd = f'screen -S {screen_name} -X stuff "{escaped_command}\n"'
-                
-                success, stdout, stderr = await ssh_manager.execute_command(stuff_cmd, timeout=10)
+                input_cmd = send_keys_command(active_manager, name, command)
+                success, stdout, stderr = await ssh_manager.execute_command(
+                    input_cmd, timeout=10
+                )
                 
                 if success:
                     await redis_manager.set_batch_action_status(
@@ -1428,7 +1469,7 @@ async def batch_send_command(
     Send a command to multiple game servers asynchronously (non-blocking).
     
     This endpoint sends the specified command to all selected game servers.
-    Commands are sent via screen session to running game servers.
+    Commands are sent via each server's configured detached session.
     
     Use the batch_id returned to check progress via GET /servers/batch-actions/{batch_id}
     
@@ -1574,8 +1615,7 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
 async def game_console_websocket(websocket: WebSocket, server_id: int):
     """
     WebSocket endpoint for game console access
-    Uses interactive PTY attachment to screen session for real-time console access (like screen -x)
-    Same logic as SSH console but attaches to the game server screen session
+    Uses an interactive PTY attachment to the configured screen/tmux session.
     """
     await websocket.accept()
     
@@ -1605,14 +1645,15 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
             await websocket.close()
             return
         
-        # Check if game server is running
-        screen_name = f"cs2server_{server_id}"
+        # Check both the configured and legacy manager to support safe switches.
+        name = session_name(server_id)
         try:
-            success, stdout, stderr = await ssh_manager.execute_command(
-                f"screen -list | grep {screen_name} || true",
-                timeout=10
+            active_manager = await find_running_session_manager(
+                ssh_manager.execute_command,
+                server.session_manager,
+                name,
             )
-            if not stdout or not stdout.strip() or screen_name not in stdout:
+            if not active_manager:
                 await websocket.send_json({
                     "type": "error",
                     "message": "Game server is not running. Please start the server first."
@@ -1634,19 +1675,20 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
             "message": f"Connected to CS2 server console on {server.host}"
         })
         
-        # Attach to screen session with PTY (same logic as SSH console)
+        # Attach to the live session with a PTY (screen and tmux both support
+        # multiple clients without disconnecting the game process).
+        process = None
+        output_task = None
         try:
-            # Create interactive process with PTY to attach to screen session
-            # screen -x allows multiple users to attach to the same session
             process = await ssh_manager.conn.create_process(
-                f"screen -x {screen_name}",
+                attach_command(active_manager, name),
                 term_type='xterm-256color',
                 encoding='utf-8',
                 errors='replace'
             )
         
             async def read_output():
-                """Read output from screen session and send to WebSocket"""
+                """Read output from the game session and send it to WebSocket."""
                 try:
                     while True:
                         output = await process.stdout.read(1024)
@@ -1669,7 +1711,7 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                 message = json.loads(data)
                 
                 if message.get("type") == "input":
-                    # Send input directly to screen session via stdin
+                    # Send input directly to the attached session via stdin.
                     input_data = message.get("data", "")
                     process.stdin.write(input_data)
                     await process.stdin.drain()
@@ -1689,12 +1731,31 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                 elif message.get("type") == "disconnect":
                     break
         
+        except WebSocketDisconnect:
+            pass
         except Exception as e:
             await websocket.send_json({
                 "type": "error",
                 "message": f"Console error: {str(e)}"
             })
         finally:
+            # A pooled SSH connection remains open after disconnect(), so the
+            # attached screen/tmux client must be closed explicitly.  This
+            # detaches only the console client; it does not stop the session.
+            if output_task is not None:
+                output_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await output_task
+
+            if process is not None:
+                try:
+                    process.terminate()
+                    await asyncio.wait_for(process.wait_closed(), timeout=2)
+                except Exception:
+                    with suppress(Exception):
+                        process.kill()
+                        await asyncio.wait_for(process.wait_closed(), timeout=2)
+
             await ssh_manager.disconnect()
     
     except WebSocketDisconnect:

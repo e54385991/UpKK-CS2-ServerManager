@@ -255,7 +255,7 @@ async def test_plugin_restart_policy_restarts_running_server_once_for_multiple_i
         async def commit(self): return None
         def add(self, value): return None
 
-    calls = {"status": 0, "backup": 0, "stop": 0, "start": 0}
+    calls = {"status": 0, "backup": 0, "preflight": 0, "stop": 0, "start": 0}
     class Manager:
         async def get_server_status(self, server):
             calls["status"] += 1
@@ -263,6 +263,9 @@ async def test_plugin_restart_policy_restarts_running_server_once_for_multiple_i
         async def backup_plugins(self, server):
             calls["backup"] += 1
             return True, "/backup/plugins.tar.gz"
+        async def check_session_manager_available(self, server):
+            calls["preflight"] += 1
+            return True, "screen is available"
         async def stop_server(self, server):
             calls["stop"] += 1
             return True, "stopped"
@@ -284,6 +287,12 @@ async def test_plugin_restart_policy_restarts_running_server_once_for_multiple_i
 
     result = await service.check_server(89)
     assert result["success"] is True
-    assert calls == {"status": 1, "backup": 0, "stop": 1, "start": 1}
+    assert calls == {
+        "status": 1,
+        "backup": 0,
+        "preflight": 1,
+        "stop": 1,
+        "start": 1,
+    }
     assert result["restart"]["message"] == "started"
     assert (await service.get_status(89))["state"] == "completed"

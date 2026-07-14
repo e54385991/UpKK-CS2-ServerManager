@@ -26,7 +26,7 @@ CS2 dedicated servers often fail to start after deployment due to several common
 
 5. **Environment Setup**
    - Proper bash environment with library paths
-   - Screen session for detached operation
+   - User-selected GNU screen or tmux session for detached operation
 
 ## Startup Command Structure
 
@@ -42,11 +42,20 @@ screen -dmS cs2server_1 /path/to/cs2/game/bin/linuxsteamrt64/cs2 -dedicated ...
 - Permissions not verified
 
 ### New (LGSM-Style) Approach
+
+GNU screen (the backward-compatible default):
 ```bash
 cd /path/to/cs2/game/bin/linuxsteamrt64 && \
 export LD_LIBRARY_PATH="/path/to/cs2/game/bin/linuxsteamrt64:$LD_LIBRARY_PATH" && \
 screen -dmS cs2server_1 \
   bash -c './cs2 -dedicated -port 27015 +map de_dust2 ... 2>&1 | tee /path/to/cs2/game/csgo/console.log'
+```
+
+tmux (when selected in the server configuration):
+
+```bash
+tmux -L upkk-cs2 -f /dev/null new-session -d -s cs2server_1 \
+  bash -c 'cd /path/to/cs2/game/bin/linuxsteamrt64 && export LD_LIBRARY_PATH="/path/to/cs2/game/bin/linuxsteamrt64:$LD_LIBRARY_PATH" && ./cs2 -dedicated -port 27015 +map de_dust2 ... 2>&1 | tee /path/to/cs2/game/csgo/console.log'
 ```
 
 **Benefits:**
@@ -60,11 +69,15 @@ screen -dmS cs2server_1 \
 
 The startup process uses multiple verification methods:
 
-### 1. Screen Session Check
+### 1. Session Manager Check
 ```bash
 screen -list | grep cs2server_1
+# Or, for tmux:
+tmux -L upkk-cs2 -f /dev/null has-session -t =cs2server_1
 ```
-Verifies the screen session is running.
+Verifies the selected detached session is running. The panel also checks the
+other manager during a screen/tmux setting transition so an old session is not
+orphaned.
 
 ### 2. Process Check
 ```bash

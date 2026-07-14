@@ -447,6 +447,16 @@
                                 <i class="bi bi-info-circle"></i> <span data-i18n="servers.gameDirectoryHint">Only letters, numbers, underscores, and hyphens allowed</span>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <label for="sessionManager" class="form-label" data-i18n="servers.sessionManagerLabel">Session Manager</label>
+                            <select class="form-select" id="sessionManager">
+                                <option value="screen" selected data-i18n="servers.sessionManagerScreen">GNU Screen (compatible default)</option>
+                                <option value="tmux" data-i18n="servers.sessionManagerTmux">tmux</option>
+                            </select>
+                            <div class="form-text" data-i18n="servers.sessionManagerHint">
+                                Controls the detached terminal session used for the game server and web console.
+                            </div>
+                        </div>
                         <div class="col-12">
                             <label for="serverDescription" class="form-label" data-i18n="servers.descriptionLabel">Description</label>
                             <textarea class="form-control" id="serverDescription" rows="2"></textarea>
@@ -1445,6 +1455,7 @@ async function submitAddServer() {
         ssh_password: document.getElementById('sshPassword').value,
         game_port: parseInt(document.getElementById('gamePort').value),
         game_directory: gameDirectory,
+        session_manager: document.getElementById('sessionManager').value || 'screen',
         description: document.getElementById('serverDescription').value,
         captcha_token: document.getElementById('server-captcha-token').value,
         captcha_code: document.getElementById('serverCaptcha').value

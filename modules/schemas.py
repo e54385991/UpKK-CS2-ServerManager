@@ -4,7 +4,7 @@ Using SQLModel for seamless FastAPI integration
 """
 from sqlmodel import SQLModel, Field
 from pydantic import EmailStr, field_validator, model_validator
-from typing import Optional, Dict, List, Annotated
+from typing import Optional, Dict, List, Annotated, Literal
 from datetime import datetime
 from .models import ServerStatus
 import re
@@ -371,6 +371,12 @@ class ServerCreate(SQLModel):
     
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(None, max_length=500, description="Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')")
+
+    # Detached console session manager
+    session_manager: Literal["screen", "tmux"] = Field(
+        default="screen",
+        description="Terminal multiplexer used to run and control the CS2 process",
+    )
     
     # GitHub proxy configuration
     github_proxy: Optional[str] = Field(None, max_length=500, description="GitHub proxy URL (e.g., https://ghfast.top/https://github.com)")
@@ -465,6 +471,14 @@ class ServerUpdate(SQLModel):
     
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(None, max_length=500, description="Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')")
+
+    # Detached console session manager
+    # A default of None makes the PATCH-style field omittable, while the
+    # non-optional annotation rejects an explicitly supplied JSON null.
+    session_manager: Literal["screen", "tmux"] = Field(
+        default=None,
+        description="Terminal multiplexer used to run and control the CS2 process",
+    )
     
     # GitHub proxy configuration
     github_proxy: Optional[str] = Field(None, max_length=500, description="GitHub proxy URL (e.g., https://ghfast.top/https://github.com)")
@@ -568,6 +582,9 @@ class ServerResponse(SQLModel):
     
     # CPU affinity configuration
     cpu_affinity: Optional[str] = None
+
+    # Detached console session manager
+    session_manager: Literal["screen", "tmux"] = "screen"
     
     # GitHub proxy configuration
     github_proxy: Optional[str] = None

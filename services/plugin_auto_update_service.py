@@ -683,20 +683,32 @@ class PluginAutoUpdateService:
                         server_id, phase="restarting", message="Restarting server once after plugin update batch",
                         current=len(candidates), total=len(candidates), log="Batch restart policy triggered one server restart",
                     )
-                    stop_success, stop_message = await SSHManager().stop_server(server)
-                    await self._publish_status(server_id, log=f"Stop result: {stop_message}")
-                    if not stop_success:
-                        # Never issue start after a failed stop: that could
-                        # create a second process/screen session.
+                    restart_manager = SSHManager()
+                    manager_ready, preflight_message = (
+                        await restart_manager.check_session_manager_available(server)
+                    )
+                    if not manager_ready:
                         restart_success = False
-                        restart_message = f"Restart failed while stopping server: {stop_message}"
+                        restart_message = (
+                            f"Restart aborted before stopping: {preflight_message}. "
+                            "The existing game session was left untouched."
+                        )
                         await self._publish_status(server_id, log=restart_message)
                     else:
-                        await asyncio.sleep(0.5)
-                        start_success, start_message = await SSHManager().start_server(server)
-                        restart_success = start_success
-                        restart_message = start_message if start_success else f"Restart failed: {start_message}"
-                        await self._publish_status(server_id, log=f"Start result: {restart_message}")
+                        stop_success, stop_message = await restart_manager.stop_server(server)
+                        await self._publish_status(server_id, log=f"Stop result: {stop_message}")
+                        if not stop_success:
+                            # Never issue start after a failed stop: that could
+                            # create a second process in another managed session.
+                            restart_success = False
+                            restart_message = f"Restart failed while stopping server: {stop_message}"
+                            await self._publish_status(server_id, log=restart_message)
+                        else:
+                            await asyncio.sleep(0.5)
+                            start_success, start_message = await restart_manager.start_server(server)
+                            restart_success = start_success
+                            restart_message = start_message if start_success else f"Restart failed: {start_message}"
+                            await self._publish_status(server_id, log=f"Start result: {restart_message}")
 
             all_success = all(result["success"] for result in results) and not resolve_failures and restart_success
             summary_lines = [

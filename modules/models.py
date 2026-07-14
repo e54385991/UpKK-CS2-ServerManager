@@ -182,6 +182,9 @@ class Server(SQLModel, table=True):
     
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(default=None, max_length=500)
+
+    # Detached console session manager (legacy default: GNU screen)
+    session_manager: str = Field(default="screen", max_length=16)
     
     # GitHub proxy configuration
     github_proxy: Optional[str] = Field(default=None, max_length=500)

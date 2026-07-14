@@ -30,7 +30,8 @@ sudo apt-get install -y \
     curl \
     wget \
     tar \
-    screen
+    screen \
+    tmux
 
 # Create a dedicated user for CS2
 sudo useradd -m -s /bin/bash cs2server
@@ -173,7 +174,8 @@ sudo apt-get install -y \
     curl \
     wget \
     tar \
-    screen
+    screen \
+    tmux
 
 # 创建 CS2 专用用户
 sudo useradd -m -s /bin/bash cs2server

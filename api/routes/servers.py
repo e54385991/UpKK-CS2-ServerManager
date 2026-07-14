@@ -31,6 +31,13 @@ from services.game_cleanup_service import game_cleanup_service
 from services.s3_backup_service import s3_backup_service
 from services.ssh_manager import SSHManager
 from services.discord_notification_service import discord_notification_service
+from services.game_session import (
+    find_running_session_manager,
+    normalize_session_manager,
+    send_keys_command,
+    session_name,
+    start_session_command,
+)
 
 router = APIRouter(prefix="/servers", tags=["servers"])
 
@@ -151,10 +158,13 @@ async def execute_custom_commands(
     results: List[Dict[str, Any]] = []
     try:
         if target == "game_process":
-            screen_name = f"cs2server_{server.id}"
-            check_cmd = f"screen -list | grep -F {shlex.quote(screen_name)} || true"
-            _, stdout, _ = await ssh_manager.execute_command(check_cmd, timeout=10)
-            if not stdout or screen_name not in stdout:
+            name = session_name(server.id)
+            active_manager = await find_running_session_manager(
+                ssh_manager.execute_command,
+                server.session_manager,
+                name,
+            )
+            if not active_manager:
                 return {
                     "success": False,
                     "message": "Game server is not running. Please start the server first.",
@@ -163,8 +173,10 @@ async def execute_custom_commands(
                 }
 
             for index, command in enumerate(command_lines, start=1):
-                stuff_cmd = f"screen -S {shlex.quote(screen_name)} -X stuff {shlex.quote(command + chr(10))}"
-                success, stdout, stderr = await ssh_manager.execute_command(stuff_cmd, timeout=10)
+                input_cmd = send_keys_command(active_manager, name, command)
+                success, stdout, stderr = await ssh_manager.execute_command(
+                    input_cmd, timeout=10
+                )
                 results.append({
                     "index": index,
                     "command": command,
@@ -833,7 +845,8 @@ async def update_server(
         'game_port', 'game_directory', 'server_name', 'default_map',
         'max_players', 'game_mode', 'game_type', 'server_password',
         'rcon_password', 'steam_account_token', 'tv_enable', 'tv_port',
-        'additional_parameters', 'ip_address', 'client_port', 'cpu_affinity'
+        'additional_parameters', 'ip_address', 'client_port', 'cpu_affinity',
+        'session_manager'
     }
     
     # Track old values for startup-affecting fields
@@ -1439,33 +1452,39 @@ async def get_startup_command(
         f"{cs2_executable} {params_str}"
     )
 
-    # CPU affinity prefix
-    cpu_affinity_prefix = ""
+    # CPU affinity is applied to the process inside the detached session.
+    cpu_affinity = None
     if server.cpu_affinity and re.match(r'^[\d,\-\s]+$', server.cpu_affinity.strip()):
-        cpu_affinity_prefix = f"taskset -c {server.cpu_affinity.strip()} "
+        cpu_affinity = server.cpu_affinity.strip()
 
-    # Build full command with screen wrapper (autorestart variant)
+    # Build full command with the configured session manager.
     autorestart_script_path = f"{server.game_directory}/cs2_autorestart.sh"
     api_key = server.api_key or ""
     backend_url = server.backend_url or app_settings.BACKEND_URL
+    manager = normalize_session_manager(server.session_manager)
+    name = session_name(server.id)
 
     if api_key:
-        start_cmd = (
-            f"{cpu_affinity_prefix}screen -dmS cs2server_{server.id} "
-            f"bash {autorestart_script_path} "
-            f"{server.id} '***API_KEY***' '{backend_url}' '{server.game_directory}' "
-            f"'{cs2_start_cmd}'"
+        payload = (
+            f"bash {shlex.quote(autorestart_script_path)} "
+            f"{server.id} {shlex.quote('***API_KEY***')} "
+            f"{shlex.quote(backend_url)} {shlex.quote(server.game_directory)} "
+            f"{shlex.quote(cs2_start_cmd)}"
         )
+        start_cmd = start_session_command(manager, name, payload, cpu_affinity)
     else:
-        start_cmd = (
-            f"cd {game_bin_dir} && "
-            f"export LD_LIBRARY_PATH=\"{game_bin_dir}:$LD_LIBRARY_PATH\" && "
-            f"{cpu_affinity_prefix}screen -dmS cs2server_{server.id} "
-            f"bash -c '{cs2_executable} {params_str} 2>&1 | tee {server.game_directory}/cs2/game/csgo/console.log'"
+        console_log = f"{server.game_directory}/cs2/game/csgo/console.log"
+        shell_payload = (
+            f"cd {shlex.quote(game_bin_dir)} && "
+            f"export LD_LIBRARY_PATH={shlex.quote(game_bin_dir)}:\"${{LD_LIBRARY_PATH:-}}\" && "
+            f"{cs2_executable} {params_str} 2>&1 | tee {shlex.quote(console_log)}"
         )
+        payload = f"bash -c {shlex.quote(shell_payload)}"
+        start_cmd = start_session_command(manager, name, payload, cpu_affinity)
 
     return {
         "startup_command": start_cmd,
         "cs2_command": f"{cs2_executable} {params_str}",
+        "session_manager": manager,
         "game_mode_resolved": f"{game_mode_str} (game_type: {game_type}, game_mode: {game_mode})"
     }

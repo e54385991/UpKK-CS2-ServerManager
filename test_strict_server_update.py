@@ -18,7 +18,7 @@ class FakeUpdateManager(SSHManager):
         self.running = running
         self.steam_success = steam_success
         self.restart_success = restart_success
-        self.screen_checks = 0
+        self.session_checks = 0
 
     async def connect(self, server):
         return True, "connected"
@@ -33,11 +33,15 @@ class FakeUpdateManager(SSHManager):
         return None
 
     async def execute_command(self, command, *args, **kwargs):
-        if "screen -list" in command:
-            self.screen_checks += 1
-            if self.running and self.screen_checks == 1:
+        is_session_status = (
+            "screen -list" in command
+            or "has-session" in command
+        )
+        if is_session_status:
+            self.session_checks += 1
+            if self.running and self.session_checks == 1:
                 return True, "cs2server_9", ""
-            return True, "", ""
+            return False, "", ""
         return True, "", ""
 
     async def _execute_steamcmd_with_retry(self, *args, **kwargs):
