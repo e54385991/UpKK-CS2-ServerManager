@@ -3153,6 +3153,11 @@ class SSHManager:
             await send_progress("Extracting CounterStrikeSharp...")
             extract_cmd = f"unzip -o {temp_dir}/counterstrikesharp.zip -d {cs2_dir}/game/csgo/"
             success, stdout, stderr = await self.execute_command(extract_cmd, timeout=120)
+
+            if not success:
+                await self.execute_command(f"rm -rf {temp_dir}")
+                extraction_error = stderr or stdout or "unzip returned a non-zero status"
+                return False, f"CounterStrikeSharp extraction failed: {extraction_error}"
             
             # Check if extraction actually succeeded by checking the directory
             verify_extract = f"test -d {cs2_dir}/game/csgo/addons/counterstrikesharp && echo 'extracted'"

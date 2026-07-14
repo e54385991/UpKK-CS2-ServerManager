@@ -10,6 +10,7 @@ import asyncio
 import logging
 import tempfile
 import os
+import shlex
 import uuid
 import shutil
 
@@ -34,6 +35,60 @@ GITHUB_REPO_PATTERN = re.compile(r'^https://github\.com/([a-zA-Z0-9_.-]+)/([a-zA
 
 # Progress update interval (percent) for panel proxy downloads/uploads
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every 10%
+
+
+def _build_plugin_copy_command(
+    source_dir: str,
+    target_dir: str,
+    exclude_patterns: list[str],
+    *,
+    use_rsync: bool,
+) -> str:
+    """Build a plugin copy command while always refreshing gamedata files.
+
+    Upgrade exclusions intentionally preserve user configuration files by
+    extension.  Framework gamedata often uses those same extensions (for
+    example CounterStrikeSharp's ``gamedata.json`` and CS2Fixes'
+    ``cs2fixes.jsonc``), so a final, unconditional copy of every file below a
+    ``gamedata`` directory is required after the filtered copy.
+    """
+    safe_source = shlex.quote(source_dir)
+    safe_target = shlex.quote(target_dir)
+
+    if use_rsync:
+        exclusions = "".join(
+            f" --exclude={shlex.quote(pattern)}" for pattern in exclude_patterns
+        )
+        primary_copy = f"rsync -av{exclusions} {safe_source}/ {safe_target}/"
+    elif exclude_patterns:
+        exclusions = " ".join(
+            f"--exclude={shlex.quote(pattern)}" for pattern in exclude_patterns
+        )
+        primary_copy = (
+            f"cd {safe_source} && tar {exclusions} -cf - . "
+            f"| tar -xf - -C {safe_target}"
+        )
+    else:
+        primary_copy = f"cp -r {safe_source}/. {safe_target}/"
+
+    # GNU find's batched -exec form propagates a non-zero copy status.  Rebuild
+    # each archive-relative parent path below the destination, then force the
+    # file copy so gamedata is immune to every upgrade/manual exclusion rule.
+    copy_script = (
+        'target="$1"; shift; '
+        'for source do '
+        'relative=${source#./}; destination="$target/$relative"; '
+        'parent=${destination%/*}; mkdir -p "$parent" '
+        '&& cp -a --no-dereference --remove-destination -- '
+        '"$source" "$destination" || exit 1; '
+        'done'
+    )
+    gamedata_copy = (
+        f"cd {safe_source} && "
+        "find . -path '*/gamedata/*' -type f "
+        f"-exec sh -c {shlex.quote(copy_script)} sh {safe_target} {{}} +"
+    )
+    return f"{primary_copy} && {gamedata_copy}"
 
 
 def parse_github_url(url: str) -> tuple[str, str]:
@@ -880,20 +935,24 @@ async def install_github_plugin(
                 
                 if rsync_path.strip():
                     # Use rsync for better control
-                    rsync_excludes = ''
                     if exclude_raw_patterns:
-                        for pattern in exclude_raw_patterns:
-                            rsync_excludes += f' --exclude="{pattern}"'
                         await progress(f"Applying {len(exclude_raw_patterns)} exclusion pattern(s)")
-                    copy_cmd = f'rsync -av{rsync_excludes} "{extract_dir}/" "{target_custom_dir}/"'
+                    copy_cmd = _build_plugin_copy_command(
+                        extract_dir,
+                        target_custom_dir,
+                        exclude_raw_patterns,
+                        use_rsync=True,
+                    )
                 else:
                     # Fallback to cp with tar for exclusions
                     if exclude_raw_patterns:
-                        tar_excludes = ' '.join([f'--exclude="{p}"' for p in exclude_raw_patterns])
-                        copy_cmd = f'cd "{extract_dir}" && tar {tar_excludes} -cf - . | tar -xf - -C "{target_custom_dir}"'
                         await progress(f"Using tar with {len(exclude_raw_patterns)} exclusion pattern(s)")
-                    else:
-                        copy_cmd = f'cp -r "{extract_dir}"/* "{target_custom_dir}/"'
+                    copy_cmd = _build_plugin_copy_command(
+                        extract_dir,
+                        target_custom_dir,
+                        exclude_raw_patterns,
+                        use_rsync=False,
+                    )
                 
                 logger.info(f"Custom path copy command: {copy_cmd}")
                 success, _, stderr = await ssh_manager.execute_command(copy_cmd)
@@ -978,21 +1037,24 @@ async def install_github_plugin(
         
         if rsync_path.strip():
             # Use rsync for better control
-            # Build exclude arguments properly for rsync
-            rsync_excludes = ''
             if exclude_raw_patterns:
-                for pattern in exclude_raw_patterns:
-                    rsync_excludes += f' --exclude="{pattern}"'
                 await progress(f"Applying {len(exclude_raw_patterns)} exclusion pattern(s)")
-            copy_cmd = f'rsync -av{rsync_excludes} "{source_dir}/" "{csgo_dir}/"'
+            copy_cmd = _build_plugin_copy_command(
+                source_dir,
+                csgo_dir,
+                exclude_raw_patterns,
+                use_rsync=True,
+            )
         else:
             # Fallback to cp with tar for exclusions
             if exclude_raw_patterns:
-                tar_excludes = ' '.join([f'--exclude="{p}"' for p in exclude_raw_patterns])
-                copy_cmd = f'cd "{source_dir}" && tar {tar_excludes} -cf - . | tar -xf - -C "{csgo_dir}"'
                 await progress(f"Using tar with {len(exclude_raw_patterns)} exclusion pattern(s)")
-            else:
-                copy_cmd = f'cp -r "{source_dir}"/* "{csgo_dir}/"'
+            copy_cmd = _build_plugin_copy_command(
+                source_dir,
+                csgo_dir,
+                exclude_raw_patterns,
+                use_rsync=False,
+            )
         
         logger.info(f"Copy command: {copy_cmd}")
         success, copy_output, stderr = await ssh_manager.execute_command(copy_cmd, timeout=120)
