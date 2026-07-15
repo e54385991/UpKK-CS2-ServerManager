@@ -3,6 +3,7 @@ SSH connection and server management utilities (Async)
 """
 import asyncssh
 import asyncio
+import contextlib
 import ipaddress
 import inspect
 import os
@@ -16,7 +17,7 @@ import uuid
 import shutil
 from email.message import Message
 from email.utils import collapse_rfc2231_value
-from typing import AsyncIterator, Optional, Tuple, List, Dict, Any
+from typing import AsyncIterator, Callable, Optional, Tuple, List, Dict, Any
 from datetime import datetime
 from urllib.parse import unquote, urljoin, urlsplit
 from modules.models import Server, AuthType
@@ -119,8 +120,16 @@ class SSHManager:
     ARCHIVE_MAX_ENTRIES = 20000
     ARCHIVE_MAX_FOLDERS = 20000
     ARCHIVE_MAX_MEMBER_PATH_BYTES = 1024
-    ARCHIVE_INSPECT_TIMEOUT = 900
+    # TAR inspection streams one C-quoted verbose listing instead of collecting
+    # complete command results in memory. Keep the timeout aligned with
+    # extraction because listing a compressed TAR must still decompress the
+    # entire input, even when the archive contains only a handful of members.
+    ARCHIVE_INSPECT_TIMEOUT = 3600
     ARCHIVE_EXTRACT_TIMEOUT = 3600
+    ARCHIVE_LISTING_READ_BYTES = 64 * 1024
+    ARCHIVE_LISTING_MAX_LINE_BYTES = (ARCHIVE_MAX_MEMBER_PATH_BYTES * 4) + 4096
+    ARCHIVE_LISTING_ERROR_BYTES = 8192
+    ARCHIVE_LISTING_STOP_TIMEOUT = 5
     REMOTE_DOWNLOAD_TIMEOUT = 1800
     REMOTE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024 * 1024
     REMOTE_DOWNLOAD_METADATA_MAX_BYTES = 256 * 1024
@@ -4247,6 +4256,158 @@ class SSHManager:
             return message[:limit] + "..."
         return message
 
+    async def _stream_archive_listing(
+        self,
+        command: str,
+        line_handler: Callable[[str], Optional[str]],
+    ) -> Tuple[bool, str]:
+        """Stream a bounded archive listing and handle each line immediately.
+
+        Archive listings can be surprisingly large even when the compressed
+        file itself is modest. ``SSHClientConnection.run()`` retains the whole
+        stdout value, so use a byte stream here and cap both line length and
+        entry count before any output is retained by the panel process.
+        """
+        if not self.conn:
+            return False, "Not connected"
+
+        process = None
+        stderr_task = None
+        local_error: Optional[str] = None
+        process_finished = False
+
+        async def read_stderr(stream) -> str:
+            retained = bytearray()
+            while True:
+                chunk = await stream.read(self.ARCHIVE_LISTING_READ_BYTES)
+                if not chunk:
+                    break
+                if isinstance(chunk, str):
+                    chunk = chunk.encode("utf-8", errors="replace")
+                remaining = self.ARCHIVE_LISTING_ERROR_BYTES - len(retained)
+                if remaining > 0:
+                    retained.extend(chunk[:remaining])
+            return retained.decode("utf-8", errors="replace")
+
+        async def consume_stdout(stream) -> Optional[str]:
+            buffer = bytearray()
+            line_count = 0
+
+            async def handle(raw_line: bytes) -> Optional[str]:
+                nonlocal line_count
+                raw_line = raw_line.rstrip(b"\r")
+                if not raw_line:
+                    return None
+                line_count += 1
+                if line_count > self.ARCHIVE_MAX_ENTRIES:
+                    return (
+                        "Archive contains too many entries "
+                        f"(maximum {self.ARCHIVE_MAX_ENTRIES})"
+                    )
+                if len(raw_line) > self.ARCHIVE_LISTING_MAX_LINE_BYTES:
+                    return "Archive contains an excessively long member path"
+                try:
+                    line = raw_line.decode("utf-8", errors="strict")
+                except UnicodeDecodeError:
+                    return "Archive contains a member name which is not valid UTF-8"
+                return line_handler(line)
+
+            while True:
+                chunk = await stream.read(self.ARCHIVE_LISTING_READ_BYTES)
+                if not chunk:
+                    break
+                if isinstance(chunk, str):
+                    chunk = chunk.encode("utf-8")
+                buffer.extend(chunk)
+
+                while True:
+                    newline = buffer.find(b"\n")
+                    if newline < 0:
+                        break
+                    raw_line = bytes(buffer[:newline])
+                    del buffer[:newline + 1]
+                    error = await handle(raw_line)
+                    if error:
+                        return error
+
+                if len(buffer) > self.ARCHIVE_LISTING_MAX_LINE_BYTES:
+                    return "Archive contains an excessively long member path"
+
+            if buffer:
+                return await handle(bytes(buffer))
+            return None
+
+        try:
+            # Bytes mode lets us enforce limits before decoding potentially
+            # attacker-controlled member names.
+            process = await self.conn.create_process(command, encoding=None)
+            stderr_task = asyncio.create_task(read_stderr(process.stderr))
+
+            async def run_listing() -> Tuple[Any, Optional[str], str]:
+                nonlocal process_finished
+                handler_error = await consume_stdout(process.stdout)
+                if handler_error:
+                    process_finished = await self._stop_archive_listing_process(process)
+                    return None, handler_error, ""
+                result = await process.wait()
+                process_finished = True
+                stderr = await stderr_task
+                return result, handler_error, stderr
+
+            result, local_error, stderr = await asyncio.wait_for(
+                run_listing(),
+                timeout=self.ARCHIVE_INSPECT_TIMEOUT,
+            )
+            if local_error:
+                return False, local_error
+            if result.exit_status != 0:
+                return False, self._short_command_error("", stderr)
+            return True, ""
+        except asyncio.TimeoutError:
+            if process is not None:
+                process_finished = await self._stop_archive_listing_process(process)
+            return False, "Archive inspection timed out"
+        except (asyncssh.ConnectionLost, asyncssh.DisconnectError, asyncssh.ChannelOpenError) as exc:
+            return False, f"SSH connection lost while inspecting archive: {exc}"
+        except Exception as exc:
+            return False, f"Unable to inspect archive: {exc}"
+        finally:
+            if process is not None and not process_finished:
+                await self._stop_archive_listing_process(process)
+            if stderr_task is not None:
+                if not stderr_task.done():
+                    stderr_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await stderr_task
+
+    @classmethod
+    async def _stop_archive_listing_process(cls, process: Any) -> bool:
+        """Reap a listing process, escalating from TERM to KILL quickly."""
+        with contextlib.suppress(Exception):
+            process.terminate()
+        try:
+            await asyncio.wait_for(
+                process.wait(),
+                timeout=cls.ARCHIVE_LISTING_STOP_TIMEOUT,
+            )
+            return True
+        except asyncio.TimeoutError:
+            with contextlib.suppress(Exception):
+                process.kill()
+            try:
+                await asyncio.wait_for(
+                    process.wait(),
+                    timeout=cls.ARCHIVE_LISTING_STOP_TIMEOUT,
+                )
+                return True
+            except Exception:
+                logger.warning("Archive listing process could not be reaped after SIGKILL")
+                return False
+        except Exception:
+            # A closed SSH channel or already-reaped child also means there is
+            # no live listing process left for this connection to retain.
+            return True
+
     @classmethod
     def _normalize_archive_member(
         cls,
@@ -4259,6 +4420,7 @@ class SSHManager:
             return None, "Archive contains a non-text member name"
         if any(ord(char) < 32 or ord(char) == 127 for char in member_name):
             return None, "Archive contains a member name with control characters"
+        original_member_name = member_name
         if '\\' in member_name:
             if not allow_backslash_separators:
                 return None, "Archive contains a member name with backslash separators"
@@ -4266,13 +4428,24 @@ class SSHManager:
         if len(member_name.encode('utf-8')) > cls.ARCHIVE_MAX_MEMBER_PATH_BYTES:
             return None, "Archive contains an excessively long member path"
 
+        # GNU tar emits the two POSIX root markers; Windows-created TARs can
+        # also contain the exact equivalent '.\\'. Do not infer a root marker
+        # after rewriting separators or trimming slashes: doing so would
+        # silently accept absolute '/', '//' or Windows '\\' members.
+        if original_member_name in ('.', './') or (
+            allow_backslash_separators and original_member_name == '.\\'
+        ):
+            return None, None
+        if member_name.startswith('/') or re.match(r'^[A-Za-z]:', member_name):
+            return None, f"Archive member uses an absolute path: {original_member_name!r}"
+
         value = member_name.rstrip('/')
         while value.startswith('./'):
             value = value[2:]
         if value in ('', '.'):
-            return None, None
+            return None, f"Archive member contains an unsafe empty path: {original_member_name!r}"
         if value.startswith('/') or re.match(r'^[A-Za-z]:', value):
-            return None, f"Archive member uses an absolute path: {member_name!r}"
+            return None, f"Archive member uses an absolute path: {original_member_name!r}"
 
         components = value.split('/')
         if any(component in ('', '.', '..') for component in components):
@@ -4284,23 +4457,24 @@ class SSHManager:
 
     @staticmethod
     def _decode_tar_listing_name(value: str) -> Tuple[Optional[str], Optional[str]]:
-        """Decode one GNU tar ``--quoting-style=escape`` member name."""
-        decoded = []
+        """Decode the escaped body of one GNU tar C-quoted member name."""
+        decoded = bytearray()
         index = 0
         escapes = {
-            '\\': '\\',
-            'a': '\a',
-            'b': '\b',
-            'f': '\f',
-            'n': '\n',
-            'r': '\r',
-            't': '\t',
-            'v': '\v',
+            '\\': ord('\\'),
+            '"': ord('"'),
+            'a': 7,
+            'b': 8,
+            'f': 12,
+            'n': 10,
+            'r': 13,
+            't': 9,
+            'v': 11,
         }
         while index < len(value):
             char = value[index]
             if char != '\\':
-                decoded.append(char)
+                decoded.extend(char.encode('utf-8'))
                 index += 1
                 continue
 
@@ -4316,11 +4490,46 @@ class SSHManager:
                 end = index + 1
                 while end < min(index + 3, len(value)) and value[end] in '01234567':
                     end += 1
-                decoded.append(chr(int(value[index:end], 8)))
+                decoded_byte = int(value[index:end], 8)
+                if decoded_byte > 255:
+                    return None, "TAR returned an invalid octal escape in a member name"
+                decoded.append(decoded_byte)
                 index = end
                 continue
             return None, "TAR returned an unsupported escaped member name"
-        return ''.join(decoded), None
+        try:
+            return decoded.decode('utf-8', errors='strict'), None
+        except UnicodeDecodeError:
+            return None, "Archive contains a member name which is not valid UTF-8"
+
+    @classmethod
+    def _parse_tar_c_verbose_listing_line(
+        cls,
+        line: str,
+    ) -> Tuple[Optional[Tuple[str, bool]], Optional[str]]:
+        """Parse GNU tar's stable numeric, UTC, C-quoted verbose format."""
+        fields = line.split(None, 5)
+        if len(fields) != 6 or not fields[0]:
+            return None, "TAR returned a malformed member listing"
+
+        member_type = fields[0][0]
+        if member_type not in ('-', 'd'):
+            # Reject links before parsing their ``name -> target`` suffix.
+            return None, "Archive contains a link or special TAR member"
+
+        quoted_name = fields[5]
+        if (
+            len(quoted_name) < 2
+            or not quoted_name.startswith('"')
+            or not quoted_name.endswith('"')
+        ):
+            return None, "TAR returned an unquoted or malformed member name"
+        decoded_name, decode_error = cls._decode_tar_listing_name(quoted_name[1:-1])
+        if decode_error:
+            return None, decode_error
+        if decoded_name is None:
+            return None, "TAR returned a malformed member name"
+        return (decoded_name, member_type == 'd'), None
 
     @classmethod
     def _build_archive_info(
@@ -4398,10 +4607,13 @@ class SSHManager:
         }[archive_type]
         transform_option = ''
         if normalize_backslashes:
-            transform_expression = shlex.quote(r's|\\|/|g')
+            # Limit the transform to member names. Uppercase S/H explicitly
+            # exclude symbolic/hard-link targets as defence in depth if an
+            # archive changes between inspection and extraction.
+            transform_expression = shlex.quote(r'flags=rSH;s|\\|/|g')
             transform_option = f" --transform={transform_expression}"
         return (
-            f"LC_ALL=C {shlex.quote(tool)} {extract_flag} {shlex.quote(archive_path)} "
+            f"LC_ALL=C TAR_OPTIONS= {shlex.quote(tool)} {extract_flag} {shlex.quote(archive_path)} "
             f"-C {shlex.quote(stage_path)} --no-same-owner --no-same-permissions"
             f"{transform_option}"
         )
@@ -4488,54 +4700,29 @@ class SSHManager:
             if not tar_tool:
                 return False, {}, "Required archive tool is missing: install tar"
             safe_tool = shlex.quote(tar_tool)
-            list_flag = {
-                'tar': '-tf',
-                'tar.gz': '-tzf',
-                'tar.bz2': '-tjf',
-                'tar.xz': '-tJf',
+            verbose_flag = {
+                'tar': '-tvf',
+                'tar.gz': '-tvzf',
+                'tar.bz2': '-tvjf',
+                'tar.xz': '-tvJf',
             }[archive_type]
-            verbose_flag = list_flag.replace('t', 'tv', 1)
-            success, stdout, stderr = await self.execute_command(
-                f"LC_ALL=C {safe_tool} {list_flag} {safe_archive} "
-                "--quoting-style=escape",
-                timeout=self.ARCHIVE_INSPECT_TIMEOUT,
-            )
-            if not success:
-                return False, {}, f"Invalid TAR archive: {self._short_command_error(stdout, stderr)}"
-            member_names = []
-            for line in stdout.splitlines():
-                if not line:
-                    continue
-                decoded_name, decode_error = self._decode_tar_listing_name(line)
-                if decode_error:
-                    return False, {}, decode_error
-                member_names.append(decoded_name or '')
+            raw_members: List[Tuple[str, bool]] = []
 
-            verbose_success, verbose_stdout, verbose_stderr = await self.execute_command(
-                f"LC_ALL=C {safe_tool} {verbose_flag} {safe_archive} "
-                "--quoting-style=escape",
-                timeout=self.ARCHIVE_INSPECT_TIMEOUT,
+            def handle_tar_line(line: str) -> Optional[str]:
+                parsed_member, parse_error = self._parse_tar_c_verbose_listing_line(line)
+                if parse_error:
+                    return parse_error
+                if parsed_member is not None:
+                    raw_members.append(parsed_member)
+                return None
+
+            list_success, list_error = await self._stream_archive_listing(
+                f"LC_ALL=C TAR_OPTIONS= {safe_tool} {verbose_flag} {safe_archive} "
+                "--numeric-owner --full-time --utc --quoting-style=c",
+                handle_tar_line,
             )
-            if not verbose_success:
-                return False, {}, (
-                    "Unable to inspect TAR member types: "
-                    f"{self._short_command_error(verbose_stdout, verbose_stderr)}"
-                )
-            member_types = []
-            for line in verbose_stdout.splitlines():
-                stripped = line.lstrip()
-                if not stripped:
-                    continue
-                member_type = stripped[0]
-                if member_type not in ('-', 'd'):
-                    return False, {}, "Archive contains a link or special TAR member"
-                member_types.append(member_type)
-            if len(member_names) != len(member_types):
-                return False, {}, "TAR returned inconsistent member listings"
-            raw_members = [
-                (name, member_type == 'd')
-                for name, member_type in zip(member_names, member_types)
-            ]
+            if not list_success:
+                return False, {}, f"Invalid TAR archive: {list_error}"
 
         elif archive_type == '7z':
             seven_zip_tool = await self._find_remote_tool(('7zz', '7z', '7za'))
@@ -5098,7 +5285,12 @@ class SSHManager:
 
         normalized_source = None
         if source_folder:
-            normalized_source, source_error = self._normalize_archive_member(source_folder.rstrip('/'))
+            normalized_source, source_error = self._normalize_archive_member(
+                source_folder.rstrip('/'),
+                allow_backslash_separators=archive_type in (
+                    'tar', 'tar.gz', 'tar.bz2', 'tar.xz'
+                ),
+            )
             if source_error or normalized_source is None:
                 return False, source_error or "Invalid source_folder"
             if normalized_source not in set(archive_info["folders"]):

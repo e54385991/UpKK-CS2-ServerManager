@@ -341,6 +341,7 @@ class ArchivePureHelperTests(unittest.TestCase):
             SSHManager._normalize_archive_member("addons/plugins/"),
             ("addons/plugins", None),
         )
+        self.assertEqual(SSHManager._normalize_archive_member("."), (None, None))
         self.assertEqual(SSHManager._normalize_archive_member("./"), (None, None))
 
     def test_archive_member_normalization_accepts_safe_windows_tar_members(self):
@@ -351,9 +352,17 @@ class ArchivePureHelperTests(unittest.TestCase):
             ),
             ("addons/plugins/example.dll", None),
         )
+        self.assertEqual(
+            SSHManager._normalize_archive_member(
+                ".\\",
+                allow_backslash_separators=True,
+            ),
+            (None, None),
+        )
 
     def test_windows_tar_member_normalization_still_rejects_unsafe_paths(self):
         unsafe_members = (
+            "\\",
             r"\etc\passwd",
             r"..\outside",
             r"addons\..\outside",
@@ -385,9 +394,49 @@ class ArchivePureHelperTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(decoded, "line\nbreak.txt")
 
+    def test_tar_listing_escape_decoder_reassembles_utf8_octal_bytes(self):
+        decoded, error = SSHManager._decode_tar_listing_name(
+            r"\345\244\207\344\273\275/\351\205\215\347\275\256.cfg"
+        )
+        self.assertIsNone(error)
+        self.assertEqual(decoded, "备份/配置.cfg")
+
+        decoded, error = SSHManager._decode_tar_listing_name(r"invalid\777.txt")
+        self.assertIsNone(decoded)
+        self.assertIn("octal", error.lower())
+
+    def test_tar_c_verbose_listing_parser_preserves_quoted_names(self):
+        member, error = SSHManager._parse_tar_c_verbose_listing_line(
+            r'-rw-r--r-- 0/0 12 2026-07-15 04:00:00 " leading.txt"'
+        )
+        self.assertIsNone(error)
+        self.assertEqual(member, (" leading.txt", False))
+
+        member, error = SSHManager._parse_tar_c_verbose_listing_line(
+            r'-rw-r--r-- 0/0 12 2026-07-15 04:00:00 "quote\"name.txt"'
+        )
+        self.assertIsNone(error)
+        self.assertEqual(member, ('quote"name.txt', False))
+
+        member, error = SSHManager._parse_tar_c_verbose_listing_line(
+            r'-rw-r--r-- 0/0 12 2026-07-15 04:00:00 "backup\\cfg\\server.cfg"'
+        )
+        self.assertIsNone(error)
+        self.assertEqual(member, (r"backup\cfg\server.cfg", False))
+
+        member, error = SSHManager._parse_tar_c_verbose_listing_line(
+            r'lrwxrwxrwx 0/0 0 2026-07-15 04:00:00 "link" -> "../../outside"'
+        )
+        self.assertIsNone(member)
+        self.assertIn("link", error.lower())
+
     def test_archive_member_normalization_rejects_escape_and_ambiguous_paths(self):
         unsafe_members = (
+            "",
+            "/",
+            "//",
             "/etc/passwd",
+            "./C:/Windows/system.ini",
             "../outside",
             "addons/../../outside",
             "addons//plugin.dll",
@@ -447,7 +496,11 @@ class ArchivePureHelperTests(unittest.TestCase):
             "/srv/game/.stage",
             True,
         )
-        self.assertIn(r"--transform=s|\\|/|g", shlex.split(normalized_command))
+        self.assertIn(
+            r"--transform=flags=rSH;s|\\|/|g",
+            shlex.split(normalized_command),
+        )
+        self.assertIn("TAR_OPTIONS=", shlex.split(normalized_command))
         self.assertIn("/srv/game/server backup.tar.gz", shlex.split(normalized_command))
 
         regular_command = SSHManager._tar_extract_command(
@@ -648,8 +701,23 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
                 return queued_responses.pop(0)
             return True, "", ""
 
+        async def stream_listing(command, line_handler):
+            manager.commands.append((command, SSHManager.ARCHIVE_INSPECT_TIMEOUT))
+            if queued_responses:
+                success, stdout, stderr = queued_responses.pop(0)
+            else:
+                success, stdout, stderr = True, "", ""
+            if not success:
+                return False, stderr or stdout or "Remote command failed"
+            for line in stdout.splitlines():
+                error = line_handler(line)
+                if error:
+                    return False, error
+            return True, ""
+
         manager._find_remote_tool = find_tool
         manager.execute_command = execute
+        manager._stream_archive_listing = stream_listing
         return manager
 
     def test_find_remote_tool_uses_fixed_quoted_candidates_in_order(self):
@@ -697,8 +765,12 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
         manager = self.manager_with_commands(
             "/bin/tar",
             [
-                (True, "addons/\naddons/plugin.dll\n", ""),
-                (True, "drwxr-xr-x user/group 0 addons/\n-rw-r--r-- user/group 1 addons/plugin.dll\n", ""),
+                (
+                    True,
+                    'drwxr-xr-x 0/0 0 2026-07-15 04:00:00 "addons/"\n'
+                    '-rw-r--r-- 0/0 1 2026-07-15 04:00:00 "addons/plugin.dll"\n',
+                    "",
+                ),
             ],
         )
 
@@ -708,11 +780,14 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
 
         self.assertTrue(success, error)
         self.assertEqual(manager.tool_candidates, [("tar",)])
-        self.assertIn(" -tJf ", manager.commands[0][0])
-        self.assertIn(" -tvJf ", manager.commands[1][0])
+        self.assertIn(" -tvJf ", manager.commands[0][0])
         self.assertTrue(
-            all("--quoting-style=escape" in command for command, _ in manager.commands)
+            all("--quoting-style=c" in command for command, _ in manager.commands)
         )
+        self.assertIn("--numeric-owner", manager.commands[0][0])
+        self.assertIn("--full-time", manager.commands[0][0])
+        self.assertIn("--utc", manager.commands[0][0])
+        self.assertIn("TAR_OPTIONS=", manager.commands[0][0])
         self.assertTrue(
             all(timeout == SSHManager.ARCHIVE_INSPECT_TIMEOUT for _, timeout in manager.commands)
         )
@@ -723,13 +798,9 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
             [
                 (
                     True,
-                    "backup\\\\cfg/\nbackup\\\\cfg\\\\server.cfg\n",
-                    "",
-                ),
-                (
-                    True,
-                    "drwxr-xr-x user/group 0 backup\\\\cfg/\n"
-                    "-rw-r--r-- user/group 1 backup\\\\cfg\\\\server.cfg\n",
+                    'drwxr-xr-x 0/0 0 2026-07-15 04:00:00 "backup\\\\cfg/"\n'
+                    '-rw-r--r-- 0/0 1 2026-07-15 04:00:00 '
+                    '"backup\\\\cfg\\\\server.cfg"\n',
                     "",
                 ),
             ],
@@ -775,6 +846,135 @@ Attributes = D
         self.assertEqual(info, {})
         self.assertIn("install unzip", error)
         self.assertEqual(manager.commands, [])
+
+
+class _ArchiveByteStream:
+    def __init__(self, chunks):
+        self.chunks = list(chunks)
+
+    async def read(self, _size):
+        if self.chunks:
+            return self.chunks.pop(0)
+        return b""
+
+
+class _ArchiveListingProcess:
+    def __init__(self, stdout_chunks, stderr_chunks=(), exit_status=0):
+        self.stdout = _ArchiveByteStream(stdout_chunks)
+        self.stderr = _ArchiveByteStream(stderr_chunks)
+        self.exit_status = exit_status
+        self.terminated = False
+        self.killed = False
+
+    def terminate(self):
+        self.terminated = True
+
+    def kill(self):
+        self.killed = True
+
+    async def wait(self):
+        return SimpleNamespace(exit_status=self.exit_status)
+
+
+class _StubbornArchiveListingProcess(_ArchiveListingProcess):
+    def __init__(self, stdout_chunks):
+        super().__init__(stdout_chunks)
+        self._killed = asyncio.Event()
+
+    def kill(self):
+        super().kill()
+        self._killed.set()
+
+    async def wait(self):
+        await self._killed.wait()
+        return SimpleNamespace(exit_status=-9)
+
+
+class _ArchiveListingConnection:
+    def __init__(self, process):
+        self.process = process
+        self.calls = []
+
+    async def create_process(self, command, **kwargs):
+        self.calls.append((command, kwargs))
+        return self.process
+
+
+class ArchiveListingStreamTests(unittest.TestCase):
+    @staticmethod
+    def run_async(coroutine):
+        return asyncio.run(coroutine)
+
+    def test_streaming_listing_handles_chunk_boundaries_without_collecting_stdout(self):
+        process = _ArchiveListingProcess(
+            [b"first member\nsecond", b" member\nthird member", b""],
+        )
+        manager = SSHManager(use_pool=False)
+        manager.conn = _ArchiveListingConnection(process)
+        lines = []
+
+        success, error = self.run_async(
+            manager._stream_archive_listing(
+                "tar-list-command",
+                lambda line: lines.append(line),
+            )
+        )
+
+        self.assertTrue(success, error)
+        self.assertEqual(lines, ["first member", "second member", "third member"])
+        self.assertEqual(
+            manager.conn.calls,
+            [("tar-list-command", {"encoding": None})],
+        )
+
+    def test_streaming_listing_stops_at_entry_limit(self):
+        process = _StubbornArchiveListingProcess([b"one\ntwo\n"])
+        manager = SSHManager(use_pool=False)
+        manager.conn = _ArchiveListingConnection(process)
+
+        with (
+            patch.object(SSHManager, "ARCHIVE_MAX_ENTRIES", 1),
+            patch.object(SSHManager, "ARCHIVE_LISTING_STOP_TIMEOUT", 0.01),
+        ):
+            success, error = self.run_async(
+                manager._stream_archive_listing("tar-list-command", lambda _line: None)
+            )
+
+        self.assertFalse(success)
+        self.assertIn("too many entries", error)
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.killed)
+
+    def test_streaming_listing_rejects_oversized_unterminated_line(self):
+        process = _ArchiveListingProcess([b"x" * 33])
+        manager = SSHManager(use_pool=False)
+        manager.conn = _ArchiveListingConnection(process)
+
+        with patch.object(SSHManager, "ARCHIVE_LISTING_MAX_LINE_BYTES", 32):
+            success, error = self.run_async(
+                manager._stream_archive_listing("tar-list-command", lambda _line: None)
+            )
+
+        self.assertFalse(success)
+        self.assertIn("long", error)
+        self.assertTrue(process.terminated)
+
+    def test_streaming_listing_bounds_remote_error_output(self):
+        process = _ArchiveListingProcess(
+            [],
+            stderr_chunks=[b"failure:" + (b"x" * 100)],
+            exit_status=2,
+        )
+        manager = SSHManager(use_pool=False)
+        manager.conn = _ArchiveListingConnection(process)
+
+        with patch.object(SSHManager, "ARCHIVE_LISTING_ERROR_BYTES", 16):
+            success, error = self.run_async(
+                manager._stream_archive_listing("tar-list-command", lambda _line: None)
+            )
+
+        self.assertFalse(success)
+        self.assertEqual(error, "failure:xxxxxxxx")
 
 
 class _TaskSSHManager:

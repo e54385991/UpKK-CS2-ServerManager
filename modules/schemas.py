@@ -374,7 +374,7 @@ class ServerCreate(SQLModel):
 
     # Detached console session manager
     session_manager: Literal["screen", "tmux"] = Field(
-        default="screen",
+        default="tmux",
         description="Terminal multiplexer used to run and control the CS2 process",
     )
     
@@ -584,7 +584,7 @@ class ServerResponse(SQLModel):
     cpu_affinity: Optional[str] = None
 
     # Detached console session manager
-    session_manager: Literal["screen", "tmux"] = "screen"
+    session_manager: Literal["screen", "tmux"] = "tmux"
     
     # GitHub proxy configuration
     github_proxy: Optional[str] = None

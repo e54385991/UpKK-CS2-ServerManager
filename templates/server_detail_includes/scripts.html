@@ -111,7 +111,7 @@
                                             tv_enable: false,
                                                 tv_port: 27020,
                                                     additional_parameters: '',
-                                                        session_manager: 'screen'
+                                                        session_manager: 'tmux'
         },
         generatingToken: false,
         showTokenGeneratorModal: false,
@@ -478,7 +478,7 @@
                 tv_enable: this.server.tv_enable || false,
                 tv_port: this.server.tv_port || 27020,
                 additional_parameters: this.server.additional_parameters || '',
-                session_manager: this.server.session_manager || 'screen'
+                session_manager: this.server.session_manager || 'tmux'
             };
             this.updateGameTypeFromMode();
         },

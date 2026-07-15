@@ -53,13 +53,13 @@ The server startup command is automatically built using these parameters:
 > **Note:** The `-tickrate` parameter is no longer supported in CS2. The server runs at a fixed 128 tick rate.
 
 ```bash
-screen -dmS cs2server_{id} /path/to/cs2 -dedicated -port {game_port} +map {default_map} +maxplayers {max_players} +hostname "{server_name}"
+tmux -L upkk-cs2 -f /dev/null new-session -d -s cs2server_{id} /path/to/cs2 -dedicated -port {game_port} +map {default_map} +maxplayers {max_players} +hostname "{server_name}"
 ```
 
-`screen` remains the default for existing servers. Set **Session Manager** to
-`tmux` in the server configuration to use the isolated `upkk-cs2` tmux socket;
-the panel automatically changes launch, status, command, stop, and Web console
-operations together.
+`tmux` is the default for newly created servers and uses the isolated
+`upkk-cs2` socket. Existing servers migrated from an older release keep their
+stored `screen` setting. Changing **Session Manager** updates launch, status,
+command, stop, and Web console operations together.
 
 ### With Optional Parameters
 ```bash
@@ -110,7 +110,7 @@ operations together.
 
 **Generated command:**
 ```bash
-screen -dmS cs2server_1 /home/cs2server/cs2/game/bin/linuxsteamrt64/cs2 \
+tmux -L upkk-cs2 -f /dev/null new-session -d -s cs2server_1 /home/cs2server/cs2/game/bin/linuxsteamrt64/cs2 \
   -dedicated \
   -port 27015 \
   +map de_mirage \
@@ -140,7 +140,7 @@ screen -dmS cs2server_1 /home/cs2server/cs2/game/bin/linuxsteamrt64/cs2 \
 
 **Generated command:**
 ```bash
-screen -dmS cs2server_2 /home/cs2server/cs2/game/bin/linuxsteamrt64/cs2 \
+tmux -L upkk-cs2 -f /dev/null new-session -d -s cs2server_2 /home/cs2server/cs2/game/bin/linuxsteamrt64/cs2 \
   -dedicated \
   -port 27015 \
   +map de_dust2 \
@@ -170,7 +170,7 @@ screen -dmS cs2server_2 /home/cs2server/cs2/game/bin/linuxsteamrt64/cs2 \
 
 **Generated command:**
 ```bash
-screen -dmS cs2server_3 /home/cs2server/cs2/game/bin/linuxsteamrt64/cs2 \
+tmux -L upkk-cs2 -f /dev/null new-session -d -s cs2server_3 /home/cs2server/cs2/game/bin/linuxsteamrt64/cs2 \
   -dedicated \
   -port 27015 \
   +map de_inferno \

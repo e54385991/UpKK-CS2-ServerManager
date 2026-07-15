@@ -286,16 +286,22 @@ async def migrate_db():
             print("✓ cpu_affinity column exists")
 
         # Existing installations predate the selectable screen/tmux backend.
+        # Add the column with the old default first so pre-existing rows stay on
+        # screen, then change only the database default for future inserts.
         result = await conn.execute(
             text("""
-                SELECT COLUMN_NAME
+                SELECT COLUMN_NAME, COLUMN_DEFAULT
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = DATABASE()
                 AND TABLE_NAME = 'servers'
                 AND COLUMN_NAME = 'session_manager'
             """)
         )
-        session_manager_exists = result.fetchone() is not None
+        session_manager_column = result.fetchone()
+        session_manager_exists = session_manager_column is not None
+        session_manager_default = (
+            session_manager_column[1] if session_manager_column is not None else None
+        )
 
         if not session_manager_exists:
             print("Adding session_manager column to servers table...")
@@ -306,8 +312,20 @@ async def migrate_db():
                 """)
             )
             print("✓ Migration completed: session_manager column added")
+            session_manager_default = "screen"
         else:
             print("✓ session_manager column exists")
+
+        if session_manager_default != "tmux":
+            await conn.execute(
+                text("""
+                    ALTER TABLE servers
+                    MODIFY COLUMN session_manager VARCHAR(16) NOT NULL DEFAULT 'tmux'
+                """)
+            )
+            print("✓ session_manager default set to tmux (existing values preserved)")
+        else:
+            print("✓ session_manager default is tmux")
         
         # Check if api_key column exists in users table
         # First ensure users table exists

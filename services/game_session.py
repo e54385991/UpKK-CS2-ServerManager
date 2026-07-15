@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 
-DEFAULT_SESSION_MANAGER = "screen"
+DEFAULT_SESSION_MANAGER = "tmux"
 SUPPORTED_SESSION_MANAGERS = ("screen", "tmux")
 TMUX_SOCKET_NAME = "upkk-cs2"
 
@@ -20,7 +20,7 @@ ExecuteCommand = Callable[..., Awaitable[tuple[bool, str, str]]]
 
 
 def normalize_session_manager(value: Any) -> str:
-    """Return a supported manager name, preserving screen as the legacy default."""
+    """Return a supported manager name, falling back to the current default."""
     if hasattr(value, "session_manager"):
         value = value.session_manager
     manager = str(value or DEFAULT_SESSION_MANAGER).strip().lower()

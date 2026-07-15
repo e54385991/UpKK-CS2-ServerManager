@@ -29,17 +29,17 @@ from services.game_session import (
 TMUX_PREFIX = f"tmux -L {TMUX_SOCKET_NAME} -f /dev/null"
 
 
-def test_existing_and_legacy_clients_default_to_screen():
+def test_new_servers_default_to_tmux_while_explicit_screen_is_preserved():
     model = Server(
         id=1,
         user_id=1,
-        name="Legacy",
+        name="New server",
         host="127.0.0.1",
         ssh_user="steam",
         auth_type=AuthType.PASSWORD,
     )
     request = ServerCreate(
-        name="Legacy",
+        name="New server",
         host="127.0.0.1",
         ssh_user="steam",
         ssh_password="secret",
@@ -47,8 +47,19 @@ def test_existing_and_legacy_clients_default_to_screen():
         captcha_code="1234",
     )
 
-    assert model.session_manager == "screen"
-    assert request.session_manager == "screen"
+    migrated_server = Server(
+        id=2,
+        user_id=1,
+        name="Migrated server",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+        session_manager="screen",
+    )
+
+    assert model.session_manager == "tmux"
+    assert request.session_manager == "tmux"
+    assert migrated_server.session_manager == "screen"
 
 
 def test_schema_accepts_only_supported_session_managers():

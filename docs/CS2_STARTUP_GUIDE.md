@@ -43,7 +43,7 @@ screen -dmS cs2server_1 /path/to/cs2/game/bin/linuxsteamrt64/cs2 -dedicated ...
 
 ### New (LGSM-Style) Approach
 
-GNU screen (the backward-compatible default):
+GNU screen (still used by existing servers migrated from older releases):
 ```bash
 cd /path/to/cs2/game/bin/linuxsteamrt64 && \
 export LD_LIBRARY_PATH="/path/to/cs2/game/bin/linuxsteamrt64:$LD_LIBRARY_PATH" && \
@@ -51,7 +51,7 @@ screen -dmS cs2server_1 \
   bash -c './cs2 -dedicated -port 27015 +map de_dust2 ... 2>&1 | tee /path/to/cs2/game/csgo/console.log'
 ```
 
-tmux (when selected in the server configuration):
+tmux (the default for newly created servers):
 
 ```bash
 tmux -L upkk-cs2 -f /dev/null new-session -d -s cs2server_1 \
@@ -147,8 +147,12 @@ sudo apt-get install lib32gcc-s1 lib32stdc++6
 tail -50 /path/to/cs2/game/csgo/console.log
 ```
 
-### 2. Check Screen Session
+### 2. Check Detached Session
 ```bash
+tmux -L upkk-cs2 -f /dev/null list-sessions
+tmux -L upkk-cs2 -f /dev/null attach-session -t =cs2server_1
+
+# For an existing server configured to use GNU screen:
 screen -list
 screen -r cs2server_1
 ```
@@ -240,7 +244,7 @@ Our implementation follows LinuxGSM's proven approach:
 | LD_LIBRARY_PATH | ✅ Set | ✅ Set |
 | Output logging | ✅ tee to file | ✅ tee to file |
 | Permissions check | ✅ chmod +x | ✅ chmod +x |
-| Screen session | ✅ detached | ✅ detached |
+| Detached session | ✅ detached | ✅ detached (tmux or screen) |
 | Multiple verification | ✅ yes | ✅ yes (enhanced) |
 
 ## References

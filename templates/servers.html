@@ -450,8 +450,8 @@
                         <div class="col-md-6">
                             <label for="sessionManager" class="form-label" data-i18n="servers.sessionManagerLabel">Session Manager</label>
                             <select class="form-select" id="sessionManager">
-                                <option value="screen" selected data-i18n="servers.sessionManagerScreen">GNU Screen (compatible default)</option>
-                                <option value="tmux" data-i18n="servers.sessionManagerTmux">tmux</option>
+                                <option value="screen" data-i18n="servers.sessionManagerScreen">GNU Screen</option>
+                                <option value="tmux" selected data-i18n="servers.sessionManagerTmux">tmux (default)</option>
                             </select>
                             <div class="form-text" data-i18n="servers.sessionManagerHint">
                                 Controls the detached terminal session used for the game server and web console.
@@ -1455,7 +1455,7 @@ async function submitAddServer() {
         ssh_password: document.getElementById('sshPassword').value,
         game_port: parseInt(document.getElementById('gamePort').value),
         game_directory: gameDirectory,
-        session_manager: document.getElementById('sessionManager').value || 'screen',
+        session_manager: document.getElementById('sessionManager').value || 'tmux',
         description: document.getElementById('serverDescription').value,
         captcha_token: document.getElementById('server-captcha-token').value,
         captcha_code: document.getElementById('serverCaptcha').value

@@ -59,7 +59,7 @@
                                             <li><i class="bi bi-window-stack"></i> <strong
                                                     data-i18n="serverDetail.sessionManager">Session Manager:</strong>
                                                 <span
-                                                    x-text="(server.session_manager || 'screen') === 'tmux' ? (window.i18n?.t('serverDetail.sessionManagerTmux') || 'tmux') : (window.i18n?.t('serverDetail.sessionManagerScreen') || 'GNU Screen')"></span>
+                                                    x-text="(server.session_manager || 'tmux') === 'tmux' ? (window.i18n?.t('serverDetail.sessionManagerTmux') || 'tmux') : (window.i18n?.t('serverDetail.sessionManagerScreen') || 'GNU Screen')"></span>
                                             </li>
                                             <li><i class="bi bi-gear"></i> <strong
                                                     data-i18n="serverDetail.additionalParameters">Additional
@@ -207,7 +207,7 @@
                                             </small>
                                         </div>
                                         <div class="col-12"
-                                            x-show="String(server.status || '').toLowerCase() === 'running' && configForm.session_manager !== (server.session_manager || 'screen')"
+                                            x-show="String(server.status || '').toLowerCase() === 'running' && configForm.session_manager !== (server.session_manager || 'tmux')"
                                             x-cloak>
                                             <div class="alert alert-warning mb-0">
                                                 <i class="bi bi-exclamation-triangle"></i>
