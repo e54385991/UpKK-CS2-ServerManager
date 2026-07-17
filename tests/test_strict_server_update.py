@@ -1,4 +1,6 @@
 """Regression tests for SteamCMD and restart failures being reported as failures."""
+from types import SimpleNamespace
+
 import pytest
 
 from modules.models import AuthType, Server
@@ -53,6 +55,51 @@ class FakeUpdateManager(SSHManager):
         return self.restart_success, "restart result"
 
 
+class FakeStream:
+    def __init__(self, lines):
+        self._lines = iter(lines)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._lines)
+        except StopIteration:
+            raise StopAsyncIteration
+
+
+class FakeStreamingProcess:
+    def __init__(self, exit_status):
+        self.stdout = FakeStream(["Success! App '730' fully installed.\n"])
+        self.stderr = FakeStream(["steamcmd.sh[123]: Starting steamcmd\n"])
+        self.exit_status = exit_status
+
+    async def wait(self):
+        return SimpleNamespace(exit_status=self.exit_status)
+
+
+class FakeStreamingConnection:
+    def __init__(self, exit_status):
+        self.exit_status = exit_status
+
+    async def create_process(self, command):
+        return FakeStreamingProcess(self.exit_status)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exit_status,expected_success", [(0, True), (8, False)])
+async def test_streaming_command_uses_completed_process_exit_status(exit_status, expected_success):
+    manager = SSHManager()
+    manager.conn = FakeStreamingConnection(exit_status)
+
+    success, stdout, stderr = await manager.execute_command_streaming("steamcmd")
+
+    assert success is expected_success
+    assert "fully installed" in stdout
+    assert "Starting steamcmd" in stderr
+
+
 @pytest.mark.asyncio
 async def test_steamcmd_failure_without_word_error_is_failure(monkeypatch):
     async def no_sleep(*args, **kwargs):
@@ -62,6 +109,7 @@ async def test_steamcmd_failure_without_word_error_is_failure(monkeypatch):
     success, message = await manager.update_server(server_fixture())
     assert success is False
     assert "network unavailable" in message
+    assert "Connection closed" in message
 
 
 @pytest.mark.asyncio

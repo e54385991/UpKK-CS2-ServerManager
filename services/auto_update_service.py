@@ -4,7 +4,8 @@ Periodically checks server versions against Steam API and triggers updates when 
 """
 import asyncio
 import logging
-from typing import Optional, Set
+import math
+from typing import Optional, Set, Tuple
 from modules.utils import get_current_time
 
 from services.steam_api_service import steam_api_service
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 class AutoUpdateService:
     """Background service to check and update CS2 servers automatically"""
+
+    VERSION_VERIFICATION_TIMEOUT_SECONDS = 5 * 60
+    VERSION_VERIFICATION_POLL_INTERVAL_SECONDS = 30
     
     def __init__(self):
         self.check_interval = 60  # Check every minute (configurable, supports debugging)
@@ -134,6 +138,106 @@ class AutoUpdateService:
             logger.warning("Timeout checking server %s; update was not started", server.id)
         except Exception as e:
             logger.error(f"Error checking/updating server {server.id}: {e}")
+
+    async def _wait_for_updated_version(
+        self,
+        server,
+        required_version: Optional[str],
+        log_progress,
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Poll fresh steam.inf reads until the target version is observed."""
+        timeout = max(0, self.VERSION_VERIFICATION_TIMEOUT_SECONDS)
+        interval = max(0, self.VERSION_VERIFICATION_POLL_INTERVAL_SECONDS)
+        max_attempts = math.ceil(timeout / interval) + 1 if timeout and interval else 1
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout if timeout else None
+
+        observed_version = None
+        target_version = required_version
+        latest_required_version = None
+        checked_versions = {}
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                if deadline is None:
+                    verified_read, observed = await steam_inf_service.refresh_version_cache(server)
+                else:
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        break
+                    verified_read, observed = await asyncio.wait_for(
+                        steam_inf_service.refresh_version_cache(server),
+                        timeout=remaining,
+                    )
+            except asyncio.TimeoutError:
+                await log_progress("steam.inf verification window expired during a version read")
+                break
+
+            if verified_read and observed:
+                observed_version = observed
+                if self._versions_match(observed_version, target_version):
+                    return True, observed_version, latest_required_version
+
+                # A new Valve release can appear while SteamCMD is running.
+                # Accept a different version only if Steam confirms that it is
+                # currently up to date. Cache successful checks for unchanged
+                # versions to avoid repeating the same API request every poll.
+                final_check = checked_versions.get(observed_version)
+                if final_check is None:
+                    try:
+                        if deadline is None:
+                            check_success, candidate = await steam_api_service.check_version(observed_version)
+                        else:
+                            remaining = deadline - loop.time()
+                            if remaining <= 0:
+                                break
+                            check_success, candidate = await asyncio.wait_for(
+                                steam_api_service.check_version(observed_version),
+                                timeout=remaining,
+                            )
+                    except asyncio.TimeoutError:
+                        await log_progress("Version verification window expired during the Steam API check")
+                        break
+                    if check_success:
+                        final_check = candidate
+                        checked_versions[observed_version] = candidate
+
+                if final_check:
+                    if final_check.get("required_version"):
+                        latest_required_version = final_check.get("required_version")
+                        target_version = latest_required_version
+                        if self._versions_match(observed_version, target_version):
+                            return True, observed_version, latest_required_version
+                    if final_check.get("up_to_date", False):
+                        return True, observed_version, latest_required_version
+
+                await log_progress(
+                    f"steam.inf verification attempt {attempt}/{max_attempts} "
+                    f"observed {observed_version}, required {target_version or 'current Steam version'}"
+                )
+            else:
+                await log_progress(
+                    f"steam.inf verification attempt {attempt}/{max_attempts} could not read a version"
+                )
+
+            if attempt < max_attempts:
+                if deadline is None:
+                    break
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    break
+                await asyncio.sleep(min(interval, remaining))
+
+        return False, observed_version, latest_required_version
+
+    @staticmethod
+    def _versions_match(observed_version: Optional[str], required_version: Optional[str]) -> bool:
+        """Compare dotted steam.inf versions with Steam's numeric fallback format."""
+        if not observed_version or not required_version:
+            return False
+        observed_digits = "".join(character for character in observed_version if character.isdigit())
+        required_digits = "".join(character for character in required_version if character.isdigit())
+        return bool(observed_digits and observed_digits == required_digits)
     
     async def _trigger_server_update(
         self,
@@ -215,8 +319,19 @@ class AutoUpdateService:
                     server,
                     progress_callback=log_progress
                 )
-                
-                if not update_success:
+
+                # A SteamCMD process can return a failure status after having
+                # replaced the game files. Unless recovery itself failed,
+                # reconcile that provisional result against fresh steam.inf
+                # reads before sending a terminal failure notification.
+                update_message_lower = update_message.lower()
+                reconcile_steamcmd_failure = bool(
+                    not update_success
+                    and update_message_lower.startswith("steamcmd update failed:")
+                    and "recovery start failed:" not in update_message_lower
+                )
+
+                if not update_success and not reconcile_steamcmd_failure:
                     error_msg = f"Update failed: {update_message}"
                     notification_details["Operation Result"] = update_message
                     logger.error(f"Update failed for server {server.id}: {update_message}")
@@ -240,36 +355,40 @@ class AutoUpdateService:
                     )
                     return
 
-                # SteamCMD success is not enough. Bypass Redis and read steam.inf
-                # from the server, allowing a short delay for the file to settle.
-                observed_version = None
-                for attempt, delay in enumerate((0, 2, 5), start=1):
-                    if delay:
-                        await asyncio.sleep(delay)
-                    verified_read, observed = await steam_inf_service.refresh_version_cache(server)
-                    if verified_read and observed:
-                        observed_version = observed
-                        break
-                    await log_progress(f"steam.inf verification attempt {attempt} failed")
+                if reconcile_steamcmd_failure:
+                    notification_details["Operation Result"] = update_message
+                    await log_progress(
+                        "SteamCMD reported a failure; keeping the update in progress "
+                        "while steam.inf is verified for up to 5 minutes"
+                    )
+
+                # SteamCMD success is not enough. Bypass Redis and poll the
+                # remote steam.inf for the required version. A readable but
+                # stale file must keep polling rather than fail immediately.
+                notification_details["Verification Window"] = "Up to 5 minutes"
+                version_verified, observed_version, latest_required_version = (
+                    await self._wait_for_updated_version(
+                        server,
+                        required_version,
+                        log_progress,
+                    )
+                )
 
                 notification_details["Observed Version"] = observed_version or "Unavailable"
-                notification_details["Recovery Result"] = update_message
-                version_verified = bool(observed_version and observed_version == required_version)
-
-                # A new Valve release can appear while SteamCMD is running. In that
-                # race, accept a different observed version only if Steam confirms it
-                # is currently up to date.
-                if observed_version and not version_verified:
-                    check_success, final_check = await steam_api_service.check_version(observed_version)
-                    version_verified = bool(check_success and final_check.get("up_to_date", False))
-                    if check_success and final_check.get("required_version"):
-                        notification_details["Latest Required Version"] = final_check.get("required_version")
+                notification_details["Operation Result"] = update_message
+                if latest_required_version:
+                    notification_details["Latest Required Version"] = latest_required_version
+                if reconcile_steamcmd_failure and version_verified:
+                    notification_details["SteamCMD Reconciliation"] = (
+                        "Reported failure, but fresh steam.inf verification passed"
+                    )
 
                 if not version_verified:
+                    expected_version = latest_required_version or required_version or "current Steam version"
                     error_msg = (
                         "Update verification failed: steam.inf could not be read"
                         if not observed_version
-                        else f"Update verification failed: steam.inf reports {observed_version}, required {required_version}"
+                        else f"Update verification failed: steam.inf reports {observed_version}, required {expected_version}"
                     )
                     await log_progress(error_msg)
                     async with async_session_maker() as db:
@@ -307,12 +426,17 @@ class AutoUpdateService:
                         log_to_update.output = "\n".join(output_messages)
                         await db.commit()
 
+                completion_message = (
+                    f"SteamCMD reported a failure, but fresh steam.inf verification confirmed version {observed_version}"
+                    if reconcile_steamcmd_failure
+                    else f"Auto-update completed and steam.inf verified version {observed_version}"
+                )
                 discord_notification_service.queue_notify(
                     server,
                     EVENT_AUTO_UPDATE,
                     "auto_update",
                     True,
-                    f"Auto-update completed and steam.inf verified version {observed_version}",
+                    completion_message,
                     title="Automatic update completed",
                     details=notification_details,
                 )

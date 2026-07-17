@@ -105,6 +105,8 @@ https://api.steampowered.com/ISteamApps/UpToDateCheck/v0001/
 - Checks servers with `enable_auto_update = TRUE` every hour
 - Only checks if `last_update_check` is older than 1 hour
 - Triggers update when `up_to_date = false` from Steam API
+- Confirms the installed version from a fresh `steam.inf` read after SteamCMD
+- If the target version is not visible yet, retries every 30 seconds for up to 5 minutes before reporting failure
 
 ## Monitoring and Logs
 

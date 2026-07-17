@@ -817,13 +817,15 @@ class SSHManager:
                 return_exceptions=True
             )
             
-            # Wait for process to complete
-            exit_status = await process.wait()
+            # AsyncSSH returns an SSHCompletedProcess here, not the numeric
+            # exit status itself. Comparing that result object directly with
+            # zero makes every streaming command look like a failure.
+            completed = await process.wait()
             
             stdout_text = '\n'.join(stdout_lines)
             stderr_text = '\n'.join(stderr_lines)
             
-            return exit_status == 0, stdout_text, stderr_text
+            return completed.exit_status == 0, stdout_text, stderr_text
         
         try:
             return await asyncio.wait_for(_execute(), timeout=timeout)
@@ -2536,7 +2538,15 @@ class SSHManager:
             )
             
             if not success:
-                error_detail = stderr or stdout or "SteamCMD returned a failure status"
+                # SteamCMD's launcher writes benign startup diagnostics to
+                # stderr. Preserve both streams so that line doesn't hide a
+                # useful success/error message from stdout.
+                error_parts = []
+                if stderr and stderr.strip():
+                    error_parts.append(f"stderr: {stderr.strip()[-1000:]}")
+                if stdout and stdout.strip():
+                    error_parts.append(f"stdout: {stdout.strip()[-1000:]}")
+                error_detail = "; ".join(error_parts) or "SteamCMD returned a failure status"
                 await send_progress(f"CS2 server update failed: {error_detail}")
                 recovery_detail = ""
                 if was_running:
