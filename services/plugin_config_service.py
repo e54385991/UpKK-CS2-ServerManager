@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import json
 import math
@@ -10,7 +12,7 @@ import re
 import shlex
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional
+from typing import Any, AsyncIterator, Iterable, Optional
 
 import asyncssh
 
@@ -20,6 +22,11 @@ from services.ssh_manager import SSHManager
 
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_SOURCE_FILES = 2000
+SCAN_READ_BYTES = 64 * 1024
+SCAN_MAX_TOKEN_BYTES = 64 * 1024
+SCAN_IDLE_TIMEOUT = 30
+SCAN_STOP_TIMEOUT = 2
+SCAN_ERROR_BYTES = 4096
 SUPPORTED_DIRECTORY_EXTENSIONS = {
     ".json", ".jsonc", ".cfg", ".ini", ".conf", ".toml",
     ".yaml", ".yml", ".vdf", ".txt",
@@ -611,6 +618,8 @@ async def browse_directory(
             raise PluginConfigError("Browse path is not a directory")
         items: list[dict[str, Any]] = []
         async for entry in sftp.scandir(target):
+            if entry.filename in {".", ".."}:
+                continue
             entry_type = entry.attrs.type
             if entry_type == asyncssh.FILEXFER_TYPE_SYMLINK:
                 items.append({"name": entry.filename, "type": "symlink", "selectable": False})
@@ -634,13 +643,48 @@ async def browse_directory(
         await sftp.wait_closed()
 
 
-async def scan_source(
+async def iter_source_scan(
     ssh_manager: SSHManager,
     server: Server,
     relative_path: str,
     source_type: str,
-) -> dict[str, Any]:
+) -> AsyncIterator[dict[str, Any]]:
+    """Yield matching files from one non-following remote ``find`` process."""
     sftp, target, attrs = await _sftp_root(ssh_manager, server, relative_path)
+    process = None
+    process_finished = False
+    stderr_task = None
+
+    async def stop_process() -> None:
+        nonlocal process_finished
+        if process is None or process_finished:
+            return
+        with contextlib.suppress(Exception):
+            process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=SCAN_STOP_TIMEOUT)
+        except asyncio.TimeoutError:
+            with contextlib.suppress(Exception):
+                process.kill()
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(process.wait(), timeout=SCAN_STOP_TIMEOUT)
+        except Exception:
+            pass
+        process_finished = True
+
+    async def read_stderr() -> str:
+        retained = bytearray()
+        while True:
+            chunk = await process.stderr.read(SCAN_READ_BYTES)
+            if not chunk:
+                break
+            if isinstance(chunk, str):
+                chunk = chunk.encode("utf-8", errors="replace")
+            remaining = SCAN_ERROR_BYTES - len(retained)
+            if remaining > 0:
+                retained.extend(chunk[:remaining])
+        return retained.decode("utf-8", errors="replace").strip()
+
     try:
         actual_type = (
             "directory" if attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY
@@ -649,51 +693,190 @@ async def scan_source(
         )
         if actual_type != source_type:
             raise PluginConfigError("Configuration source type changed on the remote server")
-        files: list[dict[str, Any]] = []
         truncated = False
+        count = 0
         if source_type == "file":
-            files.append({
-                "name": posixpath.basename(target),
-                "path": relative_path,
-                "tree_path": posixpath.basename(target),
-                "size": attrs.size or 0,
-                "modified": attrs.mtime or 0,
-                "format": format_for_filename(target),
-                "too_large": (attrs.size or 0) > MAX_CONFIG_BYTES,
-            })
+            count = 1
+            yield {
+                "type": "file",
+                "file": {
+                    "name": posixpath.basename(target),
+                    "path": relative_path,
+                    "tree_path": posixpath.basename(target),
+                    "size": attrs.size or 0,
+                    "modified": attrs.mtime or 0,
+                    "format": format_for_filename(target),
+                    "too_large": (attrs.size or 0) > MAX_CONFIG_BYTES,
+                },
+            }
         else:
-            stack: list[tuple[str, str]] = [(target, "")]
-            while stack and not truncated:
-                directory, tree_prefix = stack.pop()
-                async for entry in sftp.scandir(directory):
-                    if entry.attrs.type == asyncssh.FILEXFER_TYPE_SYMLINK:
-                        continue
-                    tree_path = posixpath.join(tree_prefix, entry.filename) if tree_prefix else entry.filename
-                    if entry.attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY:
-                        stack.append((posixpath.join(directory, entry.filename), tree_path))
-                        continue
-                    if entry.attrs.type != asyncssh.FILEXFER_TYPE_REGULAR:
-                        continue
-                    if _extension(entry.filename) not in SUPPORTED_DIRECTORY_EXTENSIONS:
-                        continue
-                    if len(files) >= MAX_SOURCE_FILES:
-                        truncated = True
-                        break
-                    game_relative = posixpath.normpath(posixpath.join(relative_path, tree_path))
-                    files.append({
-                        "name": entry.filename,
+            # Validation above deliberately uses SFTP/lstat. Close that channel
+            # before starting the scan so a large tree still consumes only one
+            # SSH channel and one remote traversal.
+            sftp.exit()
+            await sftp.wait_closed()
+            sftp = None
+
+            extension_expression = " -o ".join(
+                f"-iname {shlex.quote('*' + extension)}"
+                for extension in sorted(SUPPORTED_DIRECTORY_EXTENSIONS)
+            )
+            command = (
+                f"LC_ALL=C find -P {shlex.quote(target)} "
+                r"\( -type d -printf 'D\0%P\0' \) -o "
+                rf"\( -type f \( {extension_expression} \) "
+                r"-printf 'F\0%P\0%s\0%T@\0' \)"
+            )
+            process = await ssh_manager.conn.create_process(command, encoding=None)
+            stderr_task = asyncio.create_task(read_stderr())
+            buffer = bytearray()
+            record_type: Optional[str] = None
+            record: list[str] = []
+
+            def decode_token(raw_token: bytes) -> str:
+                try:
+                    value = raw_token.decode("utf-8", errors="strict")
+                except UnicodeDecodeError as exc:
+                    raise PluginConfigError(
+                        "Configuration source contains a non-UTF-8 path"
+                    ) from exc
+                if "\\" in value or any(
+                    ord(char) < 32 or ord(char) == 127 for char in value
+                ):
+                    raise PluginConfigError(
+                        "Configuration source contains an unsafe path"
+                    )
+                return value
+
+            async def handle_token(raw_token: bytes) -> AsyncIterator[dict[str, Any]]:
+                nonlocal record_type, record, count, truncated
+                token = decode_token(raw_token)
+                if record_type is None:
+                    if token not in {"D", "F"}:
+                        raise PluginConfigError("Remote scan returned an invalid record")
+                    record_type = token
+                    record = []
+                    return
+                record.append(token)
+                required = 1 if record_type == "D" else 3
+                if len(record) < required:
+                    return
+
+                current_type = record_type
+                values = record
+                record_type = None
+                record = []
+                tree_path = values[0]
+                if current_type == "D":
+                    yield {
+                        "type": "progress",
+                        "directory": tree_path or ".",
+                        "count": count,
+                    }
+                    return
+
+                if count >= MAX_SOURCE_FILES:
+                    truncated = True
+                    await stop_process()
+                    return
+                try:
+                    size = int(values[1])
+                    modified = float(values[2])
+                except ValueError as exc:
+                    raise PluginConfigError(
+                        "Remote scan returned invalid file metadata"
+                    ) from exc
+                game_relative = posixpath.normpath(
+                    posixpath.join(relative_path, tree_path)
+                )
+                count += 1
+                yield {
+                    "type": "file",
+                    "file": {
+                        "name": posixpath.basename(tree_path),
                         "path": game_relative,
                         "tree_path": tree_path,
-                        "size": entry.attrs.size or 0,
-                        "modified": entry.attrs.mtime or 0,
-                        "format": format_for_filename(entry.filename),
-                        "too_large": (entry.attrs.size or 0) > MAX_CONFIG_BYTES,
-                    })
-        files.sort(key=lambda item: item["tree_path"].lower())
-        return {"files": files, "truncated": truncated, "count": len(files)}
+                        "size": size,
+                        "modified": modified,
+                        "format": format_for_filename(tree_path),
+                        "too_large": size > MAX_CONFIG_BYTES,
+                    },
+                }
+
+            while not truncated:
+                try:
+                    chunk = await asyncio.wait_for(
+                        process.stdout.read(SCAN_READ_BYTES),
+                        timeout=SCAN_IDLE_TIMEOUT,
+                    )
+                except asyncio.TimeoutError as exc:
+                    raise PluginConfigError("Remote configuration scan timed out") from exc
+                if not chunk:
+                    break
+                if isinstance(chunk, str):
+                    chunk = chunk.encode("utf-8")
+                buffer.extend(chunk)
+                while True:
+                    delimiter = buffer.find(b"\0")
+                    if delimiter < 0:
+                        break
+                    raw_token = bytes(buffer[:delimiter])
+                    del buffer[:delimiter + 1]
+                    async for event in handle_token(raw_token):
+                        yield event
+                    if truncated:
+                        break
+                if len(buffer) > SCAN_MAX_TOKEN_BYTES:
+                    raise PluginConfigError("Configuration source path is too long")
+
+            if not truncated:
+                if buffer or record_type is not None:
+                    raise PluginConfigError("Remote scan returned an incomplete record")
+                result = await asyncio.wait_for(
+                    process.wait(), timeout=SCAN_IDLE_TIMEOUT
+                )
+                process_finished = True
+                stderr = await stderr_task
+                if result.exit_status != 0:
+                    raise PluginConfigError(
+                        stderr or "Remote configuration scan failed"
+                    )
+        yield {"type": "complete", "truncated": truncated, "count": count}
     finally:
-        sftp.exit()
-        await sftp.wait_closed()
+        if process is not None and not process_finished:
+            await stop_process()
+        if stderr_task is not None:
+            if not stderr_task.done():
+                stderr_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await stderr_task
+        if sftp is not None:
+            sftp.exit()
+            await sftp.wait_closed()
+
+
+async def scan_source(
+    ssh_manager: SSHManager,
+    server: Server,
+    relative_path: str,
+    source_type: str,
+) -> dict[str, Any]:
+    """Collect the streaming scanner for non-streaming callers and tests."""
+    files: list[dict[str, Any]] = []
+    complete: dict[str, Any] = {"truncated": False, "count": 0}
+    async for event in iter_source_scan(
+        ssh_manager, server, relative_path, source_type
+    ):
+        if event["type"] == "file":
+            files.append(event["file"])
+        elif event["type"] == "complete":
+            complete = event
+    files.sort(key=lambda item: item["tree_path"].lower())
+    return {
+        "files": files,
+        "truncated": bool(complete["truncated"]),
+        "count": int(complete["count"]),
+    }
 
 
 async def read_text_file(

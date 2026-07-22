@@ -130,12 +130,17 @@ def test_plugin_config_tab_is_lazy_loaded_and_localized():
     assert "async open()" in script
     assert "if (this.initialized) return;" in script
     assert "/scan`" in script
+    assert "response.body.getReader()" in script
+    assert "await this.reloadSources(source.id)" in script
+    assert "item.id === source.id && item.persisted" in script
     assert "loadSource(source)" in tab_template
+    assert "source.fileCount" in tab_template
     assert "init()" not in script
 
     required = {
         "title", "manualLoadHint", "addSource", "loadConfiguration", "visual",
-        "raw", "conflict", "saved",
+        "raw", "conflict", "saved", "scanning", "persisted",
+        "persistenceFailed", "streamInterrupted",
     }
     for locale in ("en-US", "zh-CN"):
         messages = json.loads(

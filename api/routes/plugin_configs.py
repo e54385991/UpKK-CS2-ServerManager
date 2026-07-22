@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import posixpath
 from typing import Any, Literal, Optional
 
 import asyncssh
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,11 +32,11 @@ from services.plugin_config_service import (
     browse_directory,
     content_revision,
     inspect_source,
+    iter_source_scan,
     normalize_relative_path,
     parse_config,
     path_hash,
     read_text_file,
-    scan_source,
     validate_raw_content,
 )
 from services.ssh_manager import SSHManager
@@ -71,6 +73,7 @@ def _source_payload(source: PluginConfigSource, game_directory: str) -> dict[str
         "name": posixpath.basename(source.relative_path.rstrip("/")) or game_directory,
         "type": source.source_type,
         "is_default": source.is_default,
+        "persisted": source.id is not None,
     }
 
 
@@ -298,18 +301,53 @@ async def load_source_files(
     source_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-) -> dict[str, Any]:
+) -> StreamingResponse:
     server = await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)
-    manager = await _connect(server)
-    try:
-        return await scan_source(
-            manager, server, source.relative_path, source.source_type
-        )
-    except Exception as exc:
-        raise _remote_error(exc) from exc
-    finally:
-        await manager.disconnect()
+
+    async def stream_events():
+        manager: Optional[SSHManager] = None
+        try:
+            yield json.dumps({"type": "start"}) + "\n"
+            manager = await _connect(server)
+            async for event in iter_source_scan(
+                manager, server, source.relative_path, source.source_type
+            ):
+                yield json.dumps(
+                    event, ensure_ascii=False, separators=(",", ":")
+                ) + "\n"
+        except HTTPException as exc:
+            yield json.dumps(
+                {"type": "error", "detail": exc.detail}, ensure_ascii=False
+            ) + "\n"
+        except PluginConfigError as exc:
+            yield json.dumps(
+                {"type": "error", "detail": str(exc)}, ensure_ascii=False
+            ) + "\n"
+        except (asyncssh.Error, OSError) as exc:
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "detail": f"Remote configuration scan failed: {exc}",
+                },
+                ensure_ascii=False,
+            ) + "\n"
+        except Exception:
+            yield json.dumps(
+                {"type": "error", "detail": "Plugin configuration scan failed"}
+            ) + "\n"
+        finally:
+            if manager is not None:
+                await manager.disconnect()
+
+    return StreamingResponse(
+        stream_events(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/sources/{source_id}/file")

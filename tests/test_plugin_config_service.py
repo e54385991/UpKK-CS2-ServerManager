@@ -161,8 +161,8 @@ class _FakeSFTP:
         return SimpleNamespace(type=asyncssh.FILEXFER_TYPE_DIRECTORY, size=0, mtime=1)
 
     async def scandir(self, path):
-        for entry in self.directories[path]:
-            yield entry
+        raise AssertionError("Directory scans should use one remote find process")
+        yield path
 
     def exit(self):
         self.closed = True
@@ -171,17 +171,49 @@ class _FakeSFTP:
         return None
 
 
+class _FakeByteStream:
+    def __init__(self, chunks):
+        self.chunks = list(chunks)
+
+    async def read(self, _size):
+        return self.chunks.pop(0) if self.chunks else b""
+
+
+class _FakeFindProcess:
+    def __init__(self, chunks, exit_status=0):
+        self.stdout = _FakeByteStream(chunks)
+        self.stderr = _FakeByteStream([])
+        self.exit_status = exit_status
+        self.terminated = False
+        self.killed = False
+
+    def terminate(self):
+        self.terminated = True
+
+    def kill(self):
+        self.killed = True
+
+    async def wait(self):
+        return SimpleNamespace(exit_status=self.exit_status)
+
+
 class _FakeConnection:
-    def __init__(self, sftp):
+    def __init__(self, sftp, process):
         self.sftp = sftp
+        self.process = process
+        self.commands = []
 
     async def start_sftp_client(self):
         return self.sftp
 
+    async def create_process(self, command, **kwargs):
+        self.commands.append((command, kwargs))
+        return self.process
+
 
 class _FakeSSHManager:
-    def __init__(self, sftp):
-        self.conn = _FakeConnection(sftp)
+    def __init__(self, sftp, process):
+        self.conn = _FakeConnection(sftp, process)
 
     async def validate_path_within_base(self, *_args, **_kwargs):
         return True, ""
@@ -197,21 +229,19 @@ def _entry(name, entry_type, size=0, mtime=1):
 @pytest.mark.asyncio
 async def test_recursive_scan_filters_extensions_and_ignores_symlinks():
     base = "/home/cs2/configs"
-    sftp = _FakeSFTP({
-        base: [
-            _entry("Nested", asyncssh.FILEXFER_TYPE_DIRECTORY),
-            _entry("root.json", asyncssh.FILEXFER_TYPE_REGULAR, 20, 10),
-            _entry("plugin.dll", asyncssh.FILEXFER_TYPE_REGULAR, 30, 11),
-            _entry("outside", asyncssh.FILEXFER_TYPE_SYMLINK),
-        ],
-        f"{base}/Nested": [
-            _entry("server.cfg", asyncssh.FILEXFER_TYPE_REGULAR, 40, 12),
-            _entry("notes.txt", asyncssh.FILEXFER_TYPE_REGULAR, 50, 13),
-        ],
-    })
+    sftp = _FakeSFTP({base: []})
+    output = b"\0".join([
+        b"D", b"", b"D", b"Nested",
+        b"F", b"root.json", b"20", b"10.0",
+        b"F", b"Nested/server.cfg", b"40", b"12.0",
+        b"F", b"Nested/notes.txt", b"50", b"13.0",
+        b"",
+    ])
+    process = _FakeFindProcess([output[:19], output[19:47], output[47:]])
+    manager = _FakeSSHManager(sftp, process)
 
     result = await scan_source(
-        _FakeSSHManager(sftp),
+        manager,
         SimpleNamespace(game_directory="/home/cs2"),
         "configs",
         "directory",
@@ -224,3 +254,8 @@ async def test_recursive_scan_filters_extensions_and_ignores_symlinks():
         "root.json",
     ]
     assert sftp.closed is True
+    assert len(manager.conn.commands) == 1
+    command, kwargs = manager.conn.commands[0]
+    assert command.startswith("LC_ALL=C find -P /home/cs2/configs")
+    assert "*.dll" not in command
+    assert kwargs == {"encoding": None}

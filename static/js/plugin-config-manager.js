@@ -54,6 +54,34 @@
                 return data;
             },
 
+            prepareSource(source, previous = null) {
+                return {
+                    ...(previous || {}),
+                    ...source,
+                    loaded: previous?.loaded || false,
+                    loading: false,
+                    files: previous?.files || [],
+                    fileCount: previous?.fileCount || 0,
+                    truncated: previous?.truncated || false,
+                    scanPath: ''
+                };
+            },
+
+            async reloadSources(preferredId = null) {
+                const data = await this.request(`/servers/${this.serverId}/plugin-configs/sources`);
+                this.gameDirectory = data.game_directory;
+                const previous = new Map(this.sources.map(source => [source.id, source]));
+                this.sources = data.sources.map(source => this.prepareSource(source, previous.get(source.id)));
+                const preferred = this.sources.find(source => source.id === preferredId);
+                const current = this.sources.find(source => source.id === this.activeSourceId);
+                const nextSourceId = preferred?.id || current?.id || this.sources[0]?.id || null;
+                if (nextSourceId !== this.activeSourceId) {
+                    this.activeSourceId = nextSourceId;
+                    this.clearEditor();
+                }
+                return this.sources;
+            },
+
             async open() {
                 if (this.initialized) return;
                 this.initialized = true;
@@ -65,10 +93,7 @@
                 window.addEventListener('beforeunload', this.beforeUnloadHandler);
                 this.loadingSources = true;
                 try {
-                    const data = await this.request(`/servers/${this.serverId}/plugin-configs/sources`);
-                    this.gameDirectory = data.game_directory;
-                    this.sources = data.sources.map(source => ({...source, loaded: false, loading: false, files: [], fileCount: 0, truncated: false}));
-                    if (this.sources.length) this.activeSourceId = this.sources[0].id;
+                    await this.reloadSources();
                 } catch (error) {
                     showError(`${translated('pluginConfigs.loadSourcesFailed', 'Failed to load configuration sources')}: ${error.message}`);
                 } finally {
@@ -144,18 +169,65 @@
             async loadSource(source) {
                 if (!this.confirmDiscard()) return;
                 source.loading = true;
+                source.loaded = true;
+                source.files = [];
+                source.fileCount = 0;
+                source.truncated = false;
+                source.scanPath = '.';
                 this.activeSourceId = source.id;
                 this.clearEditor();
                 try {
-                    const data = await this.request(`/servers/${this.serverId}/plugin-configs/sources/${source.id}/scan`, {method: 'POST'});
-                    source.files = data.files;
-                    source.fileCount = data.count;
-                    source.truncated = data.truncated;
-                    source.loaded = true;
+                    const response = await fetch(`/servers/${this.serverId}/plugin-configs/sources/${source.id}/scan`, {
+                        method: 'POST',
+                        headers: {'Authorization': `Bearer ${localStorage.getItem('access_token')}`}
+                    });
+                    if (!response.ok) {
+                        let detail = await response.text();
+                        try { detail = JSON.parse(detail).detail || detail; } catch (_) { /* keep text */ }
+                        throw new Error(detail);
+                    }
+                    if (!response.body) throw new Error(translated('pluginConfigs.streamUnavailable', 'Streaming response is unavailable'));
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    let completed = false;
+                    const handleEvent = event => {
+                        if (event.type === 'progress') {
+                            source.scanPath = event.directory;
+                            source.fileCount = event.count;
+                        } else if (event.type === 'file') {
+                            source.files.push(event.file);
+                            source.fileCount = source.files.length;
+                        } else if (event.type === 'complete') {
+                            source.files.sort((left, right) => left.tree_path.localeCompare(right.tree_path));
+                            source.fileCount = event.count;
+                            source.truncated = event.truncated;
+                            source.scanPath = '';
+                            completed = true;
+                        } else if (event.type === 'error') {
+                            throw new Error(event.detail || translated('pluginConfigs.scanFailed', 'Failed to scan configuration source'));
+                        }
+                    };
+                    while (true) {
+                        const {value, done} = await reader.read();
+                        buffer += decoder.decode(value || new Uint8Array(), {stream: !done});
+                        let newline;
+                        while ((newline = buffer.indexOf('\n')) >= 0) {
+                            const line = buffer.slice(0, newline).trim();
+                            buffer = buffer.slice(newline + 1);
+                            if (line) handleEvent(JSON.parse(line));
+                        }
+                        if (done) break;
+                    }
+                    if (buffer.trim()) handleEvent(JSON.parse(buffer));
+                    if (!completed) throw new Error(translated('pluginConfigs.streamInterrupted', 'Scan stream ended unexpectedly'));
                 } catch (error) {
+                    source.loaded = source.files.length > 0;
                     showError(`${translated('pluginConfigs.scanFailed', 'Failed to scan configuration source')}: ${error.message}`);
                 } finally {
                     source.loading = false;
+                    source.scanPath = '';
                 }
             },
 
@@ -166,8 +238,10 @@
                     const source = await this.request(`/servers/${this.serverId}/plugin-configs/sources`, {
                         method: 'POST', body: JSON.stringify({path: this.sourcePath.trim()})
                     });
-                    this.sources.push({...source, loaded: false, loading: false, files: [], fileCount: 0, truncated: false});
-                    if (this.activeSourceId === null) this.activeSourceId = source.id;
+                    const persistedSources = await this.reloadSources(source.id);
+                    if (!persistedSources.some(item => item.id === source.id && item.persisted)) {
+                        throw new Error(translated('pluginConfigs.persistenceFailed', 'The source was not found after saving'));
+                    }
                     this.sourcePath = '';
                     this.showAddSource = false;
                     this.showBrowser = false;
@@ -184,11 +258,7 @@
                 if (!window.confirm(translated('pluginConfigs.removeConfirm', 'Remove this configuration source?'))) return;
                 try {
                     await this.request(`/servers/${this.serverId}/plugin-configs/sources/${source.id}`, {method: 'DELETE'});
-                    this.sources = this.sources.filter(item => item.id !== source.id);
-                    if (this.activeSourceId === source.id) {
-                        this.activeSourceId = this.sources[0]?.id || null;
-                        this.clearEditor();
-                    }
+                    await this.reloadSources();
                     showSuccess(translated('pluginConfigs.sourceRemoved', 'Configuration source removed'));
                 } catch (error) {
                     showError(`${translated('pluginConfigs.removeSourceFailed', 'Failed to remove source')}: ${error.message}`);
@@ -198,14 +268,7 @@
             async restoreDefault() {
                 try {
                     const source = await this.request(`/servers/${this.serverId}/plugin-configs/sources/restore-default`, {method: 'POST'});
-                    const index = this.sources.findIndex(item => item.id === source.id);
-                    const prepared = {...source, loaded: false, loading: false, files: [], fileCount: 0, truncated: false};
-                    if (index >= 0) {
-                        this.sources[index] = {...this.sources[index], ...source};
-                    } else {
-                        this.sources.unshift(prepared);
-                    }
-                    if (this.activeSourceId === null) this.activeSourceId = source.id;
+                    await this.reloadSources(source.id);
                     showSuccess(translated('pluginConfigs.defaultRestored', 'Default source restored'));
                 } catch (error) {
                     showError(`${translated('pluginConfigs.restoreFailed', 'Failed to restore default source')}: ${error.message}`);

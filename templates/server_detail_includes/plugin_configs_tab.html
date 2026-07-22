@@ -94,6 +94,12 @@
                             <div class="mt-1" x-show="source.is_default">
                                 <span class="badge bg-info" data-i18n="pluginConfigs.defaultSource">Default</span>
                             </div>
+                            <div class="mt-1" x-show="source.persisted">
+                                <span class="badge bg-success-subtle text-success-emphasis">
+                                    <i class="bi bi-database-check"></i>
+                                    <span data-i18n="pluginConfigs.persisted">Saved</span>
+                                </span>
+                            </div>
                         </div>
                     </div>
                     <div class="d-flex gap-1 mt-2">
@@ -106,7 +112,13 @@
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
-                    <small class="d-block mt-1" x-show="source.loaded"
+                    <small class="d-block mt-1 text-info text-break" x-show="source.loading">
+                        <span data-i18n="pluginConfigs.scanning">Scanning</span>:
+                        <span x-text="source.fileCount || 0"></span>
+                        <span data-i18n="pluginConfigs.filesFound">files found</span>
+                        <span x-show="source.scanPath"> · <code x-text="source.scanPath"></code></span>
+                    </small>
+                    <small class="d-block mt-1" x-show="source.loaded && !source.loading"
                         :class="source.truncated ? 'text-warning' : 'text-success'">
                         <span x-text="source.fileCount || 0"></span>
                         <span data-i18n="pluginConfigs.filesFound">files found</span>

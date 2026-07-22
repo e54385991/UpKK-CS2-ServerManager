@@ -1,5 +1,6 @@
 """Route-level behavior for plugin configuration source and save APIs."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -56,6 +57,82 @@ async def test_removing_default_source_soft_disables_it(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_adding_source_commits_and_returns_persisted_id(monkeypatch):
+    server = SimpleNamespace(id=7, game_directory="/home/cs2")
+    manager = SimpleNamespace(disconnect=AsyncMock())
+    existing_result = SimpleNamespace(scalar_one_or_none=lambda: None)
+
+    async def assign_database_id(source):
+        source.id = 42
+
+    db = SimpleNamespace(
+        execute=AsyncMock(return_value=existing_result),
+        add=Mock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+        refresh=AsyncMock(side_effect=assign_database_id),
+    )
+    monkeypatch.setattr(
+        plugin_configs, "get_server_with_permission", AsyncMock(return_value=server)
+    )
+    monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
+    monkeypatch.setattr(
+        plugin_configs, "inspect_source", AsyncMock(return_value="directory")
+    )
+
+    response = await plugin_configs.create_source(
+        server_id=server.id,
+        request=plugin_configs.SourceCreateRequest(path="configs/custom"),
+        db=db,
+        current_user=SimpleNamespace(),
+    )
+
+    assert response["id"] == 42
+    assert response["path"] == "configs/custom"
+    assert response["persisted"] is True
+    db.commit.assert_awaited_once()
+    db.refresh.assert_awaited_once()
+    manager.disconnect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_scan_route_streams_files_and_disconnects(monkeypatch):
+    server = SimpleNamespace(game_directory="/home/cs2")
+    source = SimpleNamespace(relative_path="configs", source_type="directory")
+    manager = SimpleNamespace(disconnect=AsyncMock())
+
+    async def stream_scan(*_args):
+        yield {"type": "progress", "directory": ".", "count": 0}
+        yield {"type": "file", "file": {"tree_path": "plugin.cfg"}}
+        yield {"type": "complete", "count": 1, "truncated": False}
+
+    monkeypatch.setattr(
+        plugin_configs, "get_server_with_permission", AsyncMock(return_value=server)
+    )
+    monkeypatch.setattr(
+        plugin_configs, "_source_for_server", AsyncMock(return_value=source)
+    )
+    monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
+    monkeypatch.setattr(plugin_configs, "iter_source_scan", stream_scan)
+
+    response = await plugin_configs.load_source_files(
+        server_id=1,
+        source_id=2,
+        db=SimpleNamespace(),
+        current_user=SimpleNamespace(),
+    )
+    chunks = [chunk async for chunk in response.body_iterator]
+    events = [json.loads(line) for line in "".join(chunks).splitlines()]
+
+    assert [event["type"] for event in events] == [
+        "start", "progress", "file", "complete"
+    ]
+    assert response.media_type == "application/x-ndjson"
+    assert response.headers["x-accel-buffering"] == "no"
+    manager.disconnect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_save_rejects_stale_revision_without_writing(monkeypatch):
     server = SimpleNamespace(game_directory="/home/cs2")
     source = SimpleNamespace(
@@ -94,4 +171,3 @@ async def test_save_rejects_stale_revision_without_writing(monkeypatch):
     assert exc.value.status_code == 409
     atomic_write.assert_not_awaited()
     manager.disconnect.assert_awaited_once()
-
