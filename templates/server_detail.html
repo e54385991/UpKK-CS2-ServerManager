@@ -21,7 +21,8 @@
 </div>
 
 <div x-data="serverDetail({{ server.id }})"
-    @map-install-counterstrikesharp.window="executeAction('install_counterstrikesharp')">
+    @map-install-counterstrikesharp.window="executeAction('install_counterstrikesharp')"
+    @map-restart-server.window="executeAction('restart')">
     <!-- Back Button -->
     <div class="mb-3">
         <a href="/servers-ui" class="btn btn-outline-secondary">

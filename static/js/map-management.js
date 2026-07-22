@@ -67,6 +67,16 @@ function mapManagement(serverId) {
             bootstrap.Toast.getOrCreateInstance(toastElement, { autohide: true, delay: 5000 }).show();
         },
 
+        confirmRestartAfterChange() {
+            const confirmation = this.t(
+                'mapManagement.restartRequiredConfirm',
+                'Map management configuration has changed. The server must be restarted for the changes to take effect.\n\nRestart the server now?'
+            );
+            if (confirm(confirmation)) {
+                window.dispatchEvent(new CustomEvent('map-restart-server'));
+            }
+        },
+
         applyConfig(data) {
             this.status = { ...this.status, ...data };
             this.maps = Array.isArray(data.maps) ? data.maps : [];
@@ -225,6 +235,7 @@ function mapManagement(serverId) {
                     this.t('mapManagement.pluginConfigSaved', 'MapChooser settings saved successfully'),
                     'success'
                 );
+                this.confirmRestartAfterChange();
             } catch (error) {
                 this.pluginConfigError = error.message || String(error);
                 this.notify(this.pluginConfigError, 'error');
@@ -257,6 +268,7 @@ function mapManagement(serverId) {
                     this.t('mapManagement.saved', 'Map configuration saved successfully'),
                     'success'
                 );
+                this.confirmRestartAfterChange();
             } catch (error) {
                 this.error = error.message || String(error);
                 this.notify(this.error, 'error');
@@ -288,6 +300,7 @@ function mapManagement(serverId) {
                     this.t('mapManagement.added', 'Added {name} to the map pool', { name: addedName }),
                     'success'
                 );
+                this.confirmRestartAfterChange();
                 this.addForm = {
                     workshop_id: '',
                     name: '',
@@ -336,6 +349,7 @@ function mapManagement(serverId) {
                         : this.t('mapManagement.disabledSuccess', 'Disabled {name}', { name: map.name }),
                     'success'
                 );
+                this.confirmRestartAfterChange();
             } catch (error) {
                 this.error = error.message || String(error);
                 this.notify(this.error, 'error');
@@ -378,6 +392,7 @@ function mapManagement(serverId) {
                     this.t('mapManagement.deletedSuccess', 'Removed {name} from the map pool', { name: map.name }),
                     'success'
                 );
+                this.confirmRestartAfterChange();
             } catch (error) {
                 this.error = error.message || String(error);
                 this.notify(this.error, 'error');

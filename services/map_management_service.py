@@ -82,11 +82,96 @@ class PluginConfigError(ValueError):
     """Raised when a MapChooser config.json document or update is invalid."""
 
 
+def _jsonc_to_json(content: str) -> str:
+    """Remove JSONC comments and trailing commas while preserving positions."""
+    output = list(content)
+    index = 0
+    in_string = False
+    escaped = False
+
+    while index < len(content):
+        char = content[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+
+        if char == '"':
+            in_string = True
+            index += 1
+            continue
+
+        if content.startswith("//", index):
+            output[index] = output[index + 1] = " "
+            index += 2
+            while index < len(content) and content[index] not in "\r\n":
+                output[index] = " "
+                index += 1
+            continue
+
+        if content.startswith("/*", index):
+            comment_line = content.count("\n", 0, index) + 1
+            output[index] = output[index + 1] = " "
+            index += 2
+            while index < len(content) and not content.startswith("*/", index):
+                if content[index] not in "\r\n":
+                    output[index] = " "
+                index += 1
+            if index >= len(content):
+                raise PluginConfigError(
+                    f"Unterminated JSONC block comment at line {comment_line}"
+                )
+            output[index] = output[index + 1] = " "
+            index += 2
+            continue
+
+        index += 1
+
+    # Comments have become whitespace. A comma followed only by whitespace and
+    # a closing object/array delimiter is a JSONC trailing comma.
+    normalized = "".join(output)
+    output = list(normalized)
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(normalized):
+        char = normalized[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == ",":
+            lookahead = index + 1
+            while lookahead < len(normalized) and normalized[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(normalized) and normalized[lookahead] in "}]":
+                output[index] = " "
+        index += 1
+    return "".join(output)
+
+
 def parse_plugin_config(content: str) -> dict[str, Any]:
     if not isinstance(content, str) or not content.strip():
         raise PluginConfigError("config.json cannot be empty")
     if len(content.encode("utf-8")) > MAX_PLUGIN_CONFIG_BYTES:
         raise PluginConfigError("config.json exceeds the 256 KiB size limit")
+
+    # CounterStrikeSharp plugin configurations are commonly written by .NET
+    # tooling, which may prefix UTF-8 JSON with a BOM.  Python's json.loads
+    # rejects that marker when it receives an already-decoded string, so remove
+    # it at the document boundary.  update_plugin_config serializes the parsed
+    # object again and consequently also repairs the remote file on save.
+    content = _jsonc_to_json(content.lstrip("\ufeff"))
 
     def reject_nonstandard_number(value: str) -> None:
         raise PluginConfigError(f"config.json contains the non-standard number {value}")

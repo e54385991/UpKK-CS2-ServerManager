@@ -25,6 +25,7 @@ from jwt import InvalidTokenError
 
 from modules import Server, get_db, User, get_current_active_user, settings
 from services import SSHManager
+from services.github_credentials import get_effective_github_token
 
 logger = logging.getLogger(__name__)
 
@@ -1015,6 +1016,7 @@ async def download_archive_from_url(
             "error": None,
         }
 
+    github_token = await get_effective_github_token(db, current_user)
     task = asyncio.create_task(
         _run_bounded_file_task(current_user.id, lambda: _run_download_url_task(
             task_id,
@@ -1023,7 +1025,7 @@ async def download_archive_from_url(
             target_path,
             server,
             request.overwrite,
-            current_user.github_token if current_user.has_github_token else None,
+            github_token,
         ))
     )
     async with download_url_tasks_lock:

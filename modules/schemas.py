@@ -1433,6 +1433,8 @@ class SystemSettingsResponse(SQLModel):
     id: int
     default_proxy_mode: str
     github_proxy_url: Optional[str]
+    has_global_github_token: bool
+    global_github_token_prefix: Optional[str]
     email_enabled: bool
     email_provider: str
     email_from_address: Optional[str]
@@ -1449,6 +1451,8 @@ class SystemSettingsUpdate(SQLModel):
     """Schema for updating system settings"""
     default_proxy_mode: Optional[str] = None
     github_proxy_url: Optional[str] = None
+    global_github_token: Optional[str] = Field(default=None, max_length=255)
+    clear_global_github_token: bool = False
     email_enabled: Optional[bool] = None
     email_provider: Optional[str] = None
     email_from_address: Optional[str] = None
@@ -1466,6 +1470,16 @@ class SystemSettingsUpdate(SQLModel):
         if v is not None and v not in ('direct', 'panel', 'github_url'):
             raise ValueError('default_proxy_mode must be one of: direct, panel, github_url')
         return v
+
+    @field_validator('global_github_token')
+    @classmethod
+    def validate_global_github_token(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not v.strip():
+            return v
+        token = v.strip()
+        if not re.match(r'^(github_pat_[A-Za-z0-9_]+|gh[poushr]_[A-Za-z0-9_]+)$', token):
+            raise ValueError('Global GitHub token must be a valid Fine-grained or Classic token')
+        return token
     
     @field_validator('email_provider')
     @classmethod

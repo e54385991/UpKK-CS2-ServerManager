@@ -366,18 +366,16 @@ async def create_server(
     server_dict['auth_type'] = AuthType.PASSWORD  # Always use password authentication
     
     # Apply system default proxy settings if not explicitly set by user
-    system_settings = await SystemSettings.get_settings(db)
-    if system_settings:
-        # If user hasn't explicitly set proxy mode, apply system defaults
-        # Check if both proxy fields are in their default state (None/False)
-        if not server_dict.get('use_panel_proxy') and not server_dict.get('github_proxy'):
-            if system_settings.default_proxy_mode == 'panel':
-                server_dict['use_panel_proxy'] = True
-                server_dict['github_proxy'] = None
-            elif system_settings.default_proxy_mode == 'github_url' and system_settings.github_proxy_url:
-                server_dict['use_panel_proxy'] = False
-                server_dict['github_proxy'] = system_settings.github_proxy_url
-            # else: default_proxy_mode is 'direct', keep both as None/False
+    system_settings = await SystemSettings.get_or_create_settings(db)
+    # If user hasn't explicitly set proxy mode, apply system defaults.
+    if not server_dict.get('use_panel_proxy') and not server_dict.get('github_proxy'):
+        if system_settings.default_proxy_mode == 'panel':
+            server_dict['use_panel_proxy'] = True
+            server_dict['github_proxy'] = None
+        elif system_settings.default_proxy_mode == 'github_url' and system_settings.github_proxy_url:
+            server_dict['use_panel_proxy'] = False
+            server_dict['github_proxy'] = system_settings.github_proxy_url
+        # else: default_proxy_mode is 'direct', keep both as None/False
     
     server = Server(**server_dict, user_id=current_user.id, api_key=generate_api_key())
     db.add(server)

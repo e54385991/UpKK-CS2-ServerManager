@@ -212,6 +212,41 @@ class PluginConfigTests(unittest.TestCase):
         self.assertEqual(allow_extend["kind"], "boolean")
         self.assertTrue(allow_extend["known"])
 
+    def test_utf8_bom_is_accepted_and_removed_when_saved(self):
+        content = "\ufeff" + SAMPLE_PLUGIN_CONFIG
+
+        parsed = parse_plugin_config(content)
+        updated = update_plugin_config(content, {"AllowExtend": False})
+
+        self.assertTrue(parsed["AllowExtend"])
+        self.assertFalse(updated.startswith("\ufeff"))
+        self.assertFalse(json.loads(updated)["AllowExtend"])
+
+    def test_jsonc_comments_and_trailing_commas_are_supported(self):
+        content = r'''{
+  // A line comment
+  "AllowExtend": true,
+  "VoteStartSound": "https://example.com/audio/*keep*/.mp3", /* block comment */
+  "FutureNested": {
+    "enabled": true,
+  },
+}'''
+
+        parsed = parse_plugin_config(content)
+        updated = update_plugin_config(content, {"AllowExtend": False})
+
+        self.assertTrue(parsed["AllowExtend"])
+        self.assertEqual(
+            parsed["VoteStartSound"],
+            "https://example.com/audio/*keep*/.mp3",
+        )
+        self.assertEqual(parsed["FutureNested"], {"enabled": True})
+        self.assertFalse(json.loads(updated)["AllowExtend"])
+
+    def test_jsonc_rejects_unterminated_block_comment(self):
+        with self.assertRaisesRegex(PluginConfigError, "Unterminated JSONC block comment"):
+            parse_plugin_config('{"AllowExtend": true /* missing end')
+
     def test_visual_update_preserves_unknown_and_nested_settings(self):
         updated = update_plugin_config(
             SAMPLE_PLUGIN_CONFIG,

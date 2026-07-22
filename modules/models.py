@@ -780,8 +780,11 @@ class SystemSettings(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True, index=True)
     # Proxy configuration
-    default_proxy_mode: str = Field(default="direct", max_length=50)  # direct, panel, github_url
+    default_proxy_mode: str = Field(default="panel", max_length=50)  # direct, panel, github_url
     github_proxy_url: Optional[str] = Field(default=None, max_length=500)
+
+    # Shared GitHub API credential used only when a user has no personal token.
+    global_github_token: Optional[str] = Field(default=None, max_length=255)
     
     # Email configuration
     email_enabled: bool = Field(default=False)
@@ -805,6 +808,18 @@ class SystemSettings(SQLModel, table=True):
     
     def __repr__(self):
         return f"<SystemSettings(id={self.id}, proxy_mode='{self.default_proxy_mode}', email_enabled={self.email_enabled})>"
+
+    @property
+    def has_global_github_token(self) -> bool:
+        """Whether a non-blank global GitHub fallback token is configured."""
+        return bool((self.global_github_token or "").strip())
+
+    @property
+    def global_github_token_prefix(self) -> Optional[str]:
+        """Return a safe preview for the admin UI without exposing the token."""
+        if not self.has_global_github_token:
+            return None
+        return f"{self.global_github_token.strip()[:12]}..."
     
     @classmethod
     async def get_settings(cls, session: AsyncSession) -> Optional["SystemSettings"]:

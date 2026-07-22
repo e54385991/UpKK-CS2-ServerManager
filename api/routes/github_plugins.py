@@ -24,6 +24,7 @@ from modules import (
 from api.dependencies import locked_server_operation
 from modules.http_helper import http_helper
 from services import SSHManager
+from services.github_credentials import get_effective_github_token
 from services.discord_notification_service import EVENT_PLUGIN_UPDATE, discord_notification_service
 
 router = APIRouter(prefix="/api/github-plugins", tags=["github-plugins"])
@@ -176,8 +177,8 @@ async def get_github_releases(
         "User-Agent": "CS2-ServerManager"
     }
     
-    # Use user's GitHub token for authentication if available
-    github_token = current_user.github_token if current_user.has_github_token else None
+    # Prefer the user's token and use the system credential only as a fallback.
+    github_token = await get_effective_github_token(db, current_user)
     
     success, data, error = await http_helper.get(
         api_url,
@@ -1309,4 +1310,3 @@ async def uninstall_plugin(
         )
     finally:
         await ssh_manager.disconnect()
-

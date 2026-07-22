@@ -63,3 +63,51 @@ def test_alpine_components_do_not_run_automatic_init_twice():
             encoding="utf-8"
         )
         assert 'x-init="init()"' not in template
+
+
+def test_system_settings_support_global_github_fallback_without_echoing_secret():
+    template = (PROJECT_ROOT / "templates" / "system_settings.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'id="global-github-token"' in template
+    assert "settings.has_global_github_token" in template
+    assert "settings.global_github_token_prefix" in template
+    assert ".value = settings.global_github_token" not in template
+    assert "settings.default_proxy_mode || 'panel'" in template
+
+    for locale in ("en-US", "zh-CN"):
+        messages = json.loads(
+            (PROJECT_ROOT / "static" / "locales" / f"{locale}.json").read_text(
+                encoding="utf-8"
+            )
+        )["systemSettings"]
+        assert {
+            "globalGithubToken",
+            "globalGithubTokenHelp",
+            "globalGithubTokenConfigured",
+            "globalGithubTokenNotConfigured",
+            "clearGlobalGithubToken",
+        } <= messages.keys()
+
+
+def test_map_management_prompts_for_restart_after_every_config_mutation():
+    map_script = (PROJECT_ROOT / "static" / "js" / "map-management.js").read_text(
+        encoding="utf-8"
+    )
+    server_template = (PROJECT_ROOT / "templates" / "server_detail.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "confirmRestartAfterChange()" in map_script
+    assert map_script.count("this.confirmRestartAfterChange();") == 5
+    assert "new CustomEvent('map-restart-server')" in map_script
+    assert '@map-restart-server.window="executeAction(\'restart\')"' in server_template
+
+    for locale in ("en-US", "zh-CN"):
+        messages = json.loads(
+            (PROJECT_ROOT / "static" / "locales" / f"{locale}.json").read_text(
+                encoding="utf-8"
+            )
+        )["mapManagement"]
+        assert "restartRequiredConfirm" in messages

@@ -20,6 +20,7 @@ from modules import (
 )
 from api.dependencies import locked_server_operation
 from modules.http_helper import http_helper
+from services.github_credentials import get_effective_github_token
 
 router = APIRouter(prefix="/api/plugin-market", tags=["plugin-market"])
 
@@ -353,8 +354,7 @@ async def create_plugin(
     author = request.author
     
     if not title or not description:
-        # Use current user's GitHub token for authentication if available
-        github_token = current_user.github_token if current_user.has_github_token else None
+        github_token = await get_effective_github_token(db, current_user)
         repo_info = await fetch_github_repo_info(request.github_url, github_token=github_token)
         if repo_info.success:
             if not title and repo_info.repo_name:
@@ -741,8 +741,7 @@ async def install_plugin(
                 "User-Agent": "CS2-ServerManager"
             }
             
-            # Use current user's GitHub token for authentication if available
-            github_token = current_user.github_token if current_user.has_github_token else None
+            github_token = await get_effective_github_token(db, current_user)
             
             success, data, error = await http_helper.get(
                 api_url,
@@ -960,8 +959,7 @@ async def analyze_plugin_archive(
                 "User-Agent": "CS2-ServerManager"
             }
             
-            # Use current user's GitHub token for authentication if available
-            github_token = current_user.github_token if current_user.has_github_token else None
+            github_token = await get_effective_github_token(db, current_user)
             
             success, data, error = await http_helper.get(
                 api_url,
@@ -1027,8 +1025,7 @@ async def fetch_repo_info(
     Returns:
         Repository information
     """
-    # Use current user's GitHub token for authentication if available
-    github_token = current_user.github_token if current_user.has_github_token else None
+    github_token = await get_effective_github_token(db, current_user)
     return await fetch_github_repo_info(github_url, github_token=github_token)
 
 

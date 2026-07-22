@@ -40,6 +40,19 @@
                             <input type="url" class="form-control" id="github-proxy-url" name="github_proxy_url" placeholder="https://ghfast.top">
                             <div class="form-text" data-i18n="systemSettings.githubProxyUrlHelp">Enter GitHub proxy URL (e.g., https://ghfast.top)</div>
                         </div>
+
+                        <div class="mb-3">
+                            <label for="global-github-token" class="form-label" data-i18n="systemSettings.globalGithubToken">Global GitHub Token</label>
+                            <input type="password" class="form-control" id="global-github-token" name="global_github_token" maxlength="255" autocomplete="new-password" placeholder="github_pat_... or ghp_...">
+                            <div class="form-text" data-i18n="systemSettings.globalGithubTokenHelp">Used only when a user has not configured a personal GitHub token. Leave blank to keep the current token.</div>
+                            <div class="mt-2">
+                                <span id="global-github-token-status" class="badge bg-secondary" data-i18n="systemSettings.globalGithubTokenNotConfigured">Not configured</span>
+                            </div>
+                            <div class="form-check mt-2" id="clear-global-github-token-group" style="display: none;">
+                                <input class="form-check-input" type="checkbox" id="clear-global-github-token">
+                                <label class="form-check-label" for="clear-global-github-token" data-i18n="systemSettings.clearGlobalGithubToken">Remove the configured global token</label>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Email Settings Section -->
@@ -342,8 +355,11 @@ async function loadSettings() {
         const settings = await response.json();
         
         // Populate form
-        document.getElementById('proxy-mode').value = settings.default_proxy_mode || 'direct';
+        document.getElementById('proxy-mode').value = settings.default_proxy_mode || 'panel';
         document.getElementById('github-proxy-url').value = settings.github_proxy_url || '';
+        document.getElementById('global-github-token').value = '';
+        document.getElementById('clear-global-github-token').checked = false;
+        updateGlobalGithubTokenStatus(settings);
         document.getElementById('email-enabled').checked = settings.email_enabled || false;
         document.getElementById('email-provider').value = settings.email_provider || 'smtp';
         document.getElementById('email-from-address').value = settings.email_from_address || '';
@@ -365,6 +381,18 @@ async function loadSettings() {
         console.error('Error loading settings:', error);
         showError('Failed to load settings');
     }
+}
+
+function updateGlobalGithubTokenStatus(settings) {
+    const configured = Boolean(settings.has_global_github_token);
+    const statusBadge = document.getElementById('global-github-token-status');
+    const clearGroup = document.getElementById('clear-global-github-token-group');
+
+    statusBadge.className = `badge ${configured ? 'bg-success' : 'bg-secondary'}`;
+    statusBadge.textContent = configured
+        ? `${i18n.t('systemSettings.globalGithubTokenConfigured')} (${settings.global_github_token_prefix || '***'})`
+        : i18n.t('systemSettings.globalGithubTokenNotConfigured');
+    clearGroup.style.display = configured ? 'block' : 'none';
 }
 
 // Update proxy fields visibility
@@ -591,8 +619,15 @@ document.getElementById('settings-form').addEventListener('submit', async (e) =>
             smtp_host: document.getElementById('smtp-host').value || null,
             smtp_port: parseInt(document.getElementById('smtp-port').value) || 587,
             smtp_username: document.getElementById('smtp-username').value || null,
-            smtp_use_tls: document.getElementById('smtp-use-tls').checked
+            smtp_use_tls: document.getElementById('smtp-use-tls').checked,
+            clear_global_github_token: document.getElementById('clear-global-github-token').checked
         };
+
+        const globalGithubToken = document.getElementById('global-github-token').value.trim();
+        if (globalGithubToken) {
+            formData.global_github_token = globalGithubToken;
+            formData.clear_global_github_token = false;
+        }
         
         // Only include password if it was changed
         const smtpPassword = document.getElementById('smtp-password').value;
@@ -609,10 +644,17 @@ document.getElementById('settings-form').addEventListener('submit', async (e) =>
             body: JSON.stringify(formData)
         });
         
+        const savedSettings = await response.json();
         if (!response.ok) {
-            throw new Error('Failed to save settings');
+            const detail = Array.isArray(savedSettings.detail)
+                ? savedSettings.detail.map(item => item.msg).join('; ')
+                : savedSettings.detail;
+            throw new Error(detail || 'Failed to save settings');
         }
-        
+
+        document.getElementById('global-github-token').value = '';
+        document.getElementById('clear-global-github-token').checked = false;
+        updateGlobalGithubTokenStatus(savedSettings);
         showSuccess(i18n.t('systemSettings.settingsSaved'));
     } catch (error) {
         console.error('Error saving settings:', error);
