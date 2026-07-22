@@ -20,7 +20,8 @@
     </div>
 </div>
 
-<div x-data="serverDetail({{ server.id }})" x-init="init()">
+<div x-data="serverDetail({{ server.id }})" x-init="init()"
+    @map-install-counterstrikesharp.window="executeAction('install_counterstrikesharp')">
     <!-- Back Button -->
     <div class="mb-3">
         <a href="/servers-ui" class="btn btn-outline-secondary">
@@ -139,6 +140,13 @@
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="map-management-tab" data-bs-toggle="tab" data-bs-target="#map-management"
+                        type="button" role="tab"
+                        @click="window.dispatchEvent(new CustomEvent('map-management-open'))">
+                        <i class="bi bi-map"></i> <span data-i18n="mapManagement.title">Map Management</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
                     <button class="nav-link" id="plugin-auto-update-tab" data-bs-toggle="tab" data-bs-target="#plugin-auto-update" type="button"
                         role="tab">
                         <i class="bi bi-arrow-repeat"></i> <span data-i18n="pluginAutoUpdate.title">Plugin Automatic Updates</span>
@@ -178,6 +186,9 @@
                 <!-- File Manager Tab -->
                 {% include 'server_detail_includes/files_tab.html' %}
 
+                <!-- Map Management Tab -->
+                {% include 'server_detail_includes/map_management_tab.html' %}
+
                 <!-- Plugin Auto Update Tab -->
                 {% include 'server_detail_includes/plugin_auto_update_tab.html' %}
 
@@ -197,4 +208,5 @@
 
 {% block extra_js %}
 {% include 'server_detail_includes/scripts.html' %}
+<script src="{{ static_url('js/map-management.js') }}"></script>
 {% endblock %}

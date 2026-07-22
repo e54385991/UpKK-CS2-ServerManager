@@ -119,8 +119,8 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 #### 步骤 2: 克隆仓库 或 下载整个源码
 
 ```bash
-git clone https://github.com/e54385991/CS2-ServerManager.git
-cd CS2-ServerManager
+git clone https://github.com/e54385991/UpKK-CS2-ServerManager.git
+cd UpKK-CS2-ServerManager
 ```
 
 
@@ -326,8 +326,8 @@ For detailed server preparation instructions, please refer to [DEPLOYMENT.md](do
 #### Step 2: Clone Repository
 
 ```bash
-git clone https://github.com/e54385991/CS2-ServerManager.git
-cd CS2-ServerManager
+git clone https://github.com/e54385991/UpKK-CS2-ServerManager.git
+cd UpKK-CS2-ServerManager
 ```
 
 #### Step 3: Install Dependencies

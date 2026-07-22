@@ -27,7 +27,7 @@ sudo systemctl stop cs2-server-manager
 ### 3. Run Migration
 ```bash
 # Navigate to the repository directory
-cd /path/to/CS2-ServerManager
+cd /path/to/UpKK-CS2-ServerManager
 
 # Run the migration script
 mysql -u your_user -p cs2_manager < db/migrations/add_github_token.sql
@@ -169,7 +169,7 @@ ERROR 1060 (42S21): Duplicate column name 'github_token'
 For issues or questions:
 1. Check logs: `/var/log/cs2-server-manager/`
 2. Review documentation: `docs/GITHUB_TOKEN.md`
-3. Create an issue on GitHub: https://github.com/e54385991/CS2-ServerManager/issues
+3. Create an issue on GitHub: https://github.com/e54385991/UpKK-CS2-ServerManager/issues
 
 ## Validation Checklist
 

@@ -10,7 +10,7 @@
 ## Step 1: Start the Application
 
 ```bash
-cd /home/runner/work/CS2-ServerManager/CS2-ServerManager
+cd /home/runner/work/UpKK-CS2-ServerManager/UpKK-CS2-ServerManager
 uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -21,7 +21,7 @@ The application should start on `http://localhost:8000` (or configured port).
 In a separate terminal:
 
 ```bash
-cd /home/runner/work/CS2-ServerManager/CS2-ServerManager
+cd /home/runner/work/UpKK-CS2-ServerManager/UpKK-CS2-ServerManager
 python scripts/populate_plugins.py
 ```
 

@@ -26,7 +26,7 @@ The plugin_market_items table will be created automatically when the application
 Run the initialization script to populate the marketplace:
 
 ```bash
-cd /home/runner/work/CS2-ServerManager/CS2-ServerManager
+cd /home/runner/work/UpKK-CS2-ServerManager/UpKK-CS2-ServerManager
 python3 scripts/init_plugin_market.py
 ```
 
@@ -186,7 +186,7 @@ Expected: JSON with success status and installation details
 
 1. **Pull Latest Code**
    ```bash
-   cd /home/runner/work/CS2-ServerManager/CS2-ServerManager
+   cd /home/runner/work/UpKK-CS2-ServerManager/UpKK-CS2-ServerManager
    git pull origin main
    ```
 

@@ -53,8 +53,8 @@ On your **management server** (can be your local computer):
 
 ```bash
 # Clone the repository
-git clone https://github.com/e54385991/CS2-ServerManager.git
-cd CS2-ServerManager
+git clone https://github.com/e54385991/UpKK-CS2-ServerManager.git
+cd UpKK-CS2-ServerManager
 
 # Install Python dependencies
 pip install uv && uv sync --locked
@@ -197,8 +197,8 @@ sudo passwd cs2server
 
 ```bash
 # 克隆仓库
-git clone https://github.com/e54385991/CS2-ServerManager.git
-cd CS2-ServerManager
+git clone https://github.com/e54385991/UpKK-CS2-ServerManager.git
+cd UpKK-CS2-ServerManager
 
 # 安装 Python 依赖
 pip install uv && uv sync --locked

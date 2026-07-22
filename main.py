@@ -15,7 +15,7 @@ import uuid
 
 from modules import init_db, migrate_db, settings, Server, ServerResponse, setup_logging, _get_log_level
 from services import redis_manager
-from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market, plugin_auto_update, system_settings, gmail_oauth
+from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market, plugin_auto_update, system_settings, gmail_oauth, map_management
 
 # Initialize logging first (before anything else logs)
 # Get log level from settings
@@ -192,6 +192,7 @@ app.include_router(plugin_market.router)
 app.include_router(plugin_auto_update.router)
 app.include_router(system_settings.router)
 app.include_router(gmail_oauth.router)
+app.include_router(map_management.router)
 
 
 @app.get("/", response_class=HTMLResponse)

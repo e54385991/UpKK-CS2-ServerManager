@@ -251,7 +251,7 @@ When both are disabled:
 Run the verification script:
 
 ```bash
-cd /home/runner/work/CS2-ServerManager/CS2-ServerManager
+cd /home/runner/work/UpKK-CS2-ServerManager/UpKK-CS2-ServerManager
 python3 tests/verify_github_proxy_implementation.py
 ```
 

@@ -84,7 +84,7 @@ ghp_1234567890abcdefghijklmnopqrstuvwxyz
 ### 示例 Token 权限配置 / Example Token Permission
 
 ```
-Token Name: CS2-ServerManager
+Token Name: UpKK-CS2-ServerManager
 Expiration: 90 days
 Repository access: Only select repositories
   ├─ my-private-plugin-repo ✓

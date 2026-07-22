@@ -1,0 +1,420 @@
+<div class="tab-pane fade" id="map-management" role="tabpanel"
+    x-data="mapManagement({{ server.id }})"
+    @map-management-open.window="load()">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <h5 class="mb-1">
+                <i class="bi bi-map"></i>
+                <span data-i18n="mapManagement.title">Map Management</span>
+            </h5>
+            <p class="text-muted mb-0" data-i18n="mapManagement.description">
+                Manage the CS2-Upkk-PanelPLG-Mapchooser map pool and quickly add Steam Workshop maps.
+            </p>
+        </div>
+        <button type="button" class="btn btn-outline-secondary" @click="load(true)" :disabled="loading">
+            <i class="bi" :class="loading ? 'bi-arrow-repeat spin' : 'bi-arrow-clockwise'"></i>
+            <span data-i18n="common.refresh">Refresh</span>
+        </button>
+    </div>
+
+    <div x-show="loading && !loaded" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="text-muted mt-3 mb-0" data-i18n="mapManagement.checkingPrerequisites">
+            Checking CounterStrikeSharp and MapChooser...
+        </p>
+    </div>
+
+    <div x-show="error" x-cloak class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <span x-text="error"></span>
+    </div>
+
+    <template x-if="loaded && !status.counterstrikesharp_installed">
+        <div class="alert alert-warning">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <h6 class="alert-heading mb-1">
+                        <i class="bi bi-box-seam me-1"></i>
+                        <span data-i18n="mapManagement.counterStrikeSharpRequired">CounterStrikeSharp is required</span>
+                    </h6>
+                    <span data-i18n="mapManagement.counterStrikeSharpMissing">
+                        CounterStrikeSharp was not found on this server. Install the framework before managing maps.
+                    </span>
+                </div>
+                <button type="button" class="btn btn-warning"
+                    @click="window.dispatchEvent(new CustomEvent('map-install-counterstrikesharp'))">
+                    <i class="bi bi-download"></i>
+                    <span data-i18n="mapManagement.installCounterStrikeSharp">Install CounterStrikeSharp</span>
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <template x-if="loaded && status.counterstrikesharp_installed && !status.mapchooser_installed">
+        <div class="alert alert-warning">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <h6 class="alert-heading mb-1">
+                        <i class="bi bi-puzzle me-1"></i>
+                        <span data-i18n="mapManagement.mapChooserRequired">MapChooser.dll is required</span>
+                    </h6>
+                    <span data-i18n="mapManagement.mapChooserMissingPrefix">MapChooser.dll was not found. Install</span>
+                    <strong x-text="status.plugin_center_name || 'CS2-Upkk-PanelPLG-Mapchooser'"></strong>
+                    <span data-i18n="mapManagement.mapChooserMissingSuffix">from the Plugin Center, then restart the server.</span>
+                </div>
+                <a class="btn btn-warning" :href="status.plugin_center_url || '/plugin-market?search=CS2-Upkk-PanelPLG-Mapchooser'">
+                    <i class="bi bi-shop"></i>
+                    <span data-i18n="mapManagement.openPluginCenter">Open Plugin Center</span>
+                </a>
+            </div>
+        </div>
+    </template>
+
+    <div x-show="loaded && status.ready" x-cloak>
+        <div class="alert alert-success d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <i class="bi bi-check-circle-fill me-1"></i>
+                <strong data-i18n="mapManagement.ready">Map management is ready</strong>
+                <span class="ms-2 badge bg-success">CounterStrikeSharp</span>
+                <span class="ms-1 badge bg-success">MapChooser.dll</span>
+            </div>
+            <small class="text-break">
+                <span data-i18n="mapManagement.configPath">Configuration:</span>
+                <code x-text="status.maps_path"></code>
+            </small>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-xl-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="bi bi-plus-circle"></i>
+                            <span data-i18n="mapManagement.quickAdd">Quick Add Workshop Map</span>
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <form @submit.prevent="addMap()">
+                            <div class="mb-3">
+                                <label class="form-label" data-i18n="mapManagement.workshopIdOrUrl">Workshop ID or URL</label>
+                                <input type="text" class="form-control" x-model.trim="addForm.workshop_id" required
+                                    placeholder="https://steamcommunity.com/sharedfiles/filedetails/?id=..."
+                                    data-i18n-placeholder="mapManagement.workshopPlaceholder">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    <span data-i18n="mapManagement.mapName">Map name</span>
+                                    <small class="text-muted" data-i18n="mapManagement.optional">(optional)</small>
+                                </label>
+                                <input type="text" class="form-control" x-model.trim="addForm.name" maxlength="128"
+                                    data-i18n-placeholder="mapManagement.mapNamePlaceholder"
+                                    placeholder="Leave blank to fetch the Steam Workshop title">
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-5">
+                                    <label class="form-label" data-i18n="mapManagement.minPlayers">Minimum players</label>
+                                    <input type="number" class="form-control" min="0" max="64" x-model.number="addForm.min_players">
+                                </div>
+                                <div class="col-md-7">
+                                    <label class="form-label">
+                                        <span data-i18n="mapManagement.restrictedTimes">Restricted times</span>
+                                        <small class="text-muted" data-i18n="mapManagement.optional">(optional)</small>
+                                    </label>
+                                    <input type="text" class="form-control" x-model.trim="addForm.restricted_times"
+                                        placeholder="01:00-08:00;18:00-20:00">
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-4 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="mapEnabled" x-model="addForm.enabled">
+                                    <label class="form-check-label" for="mapEnabled" data-i18n="mapManagement.enabled">Enabled</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="mapOnlyNominate" x-model="addForm.only_nominate">
+                                    <label class="form-check-label" for="mapOnlyNominate" data-i18n="mapManagement.onlyNominate">Nomination only</label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100" :disabled="adding || !addForm.workshop_id">
+                                <span x-show="!adding">
+                                    <i class="bi bi-plus-lg"></i>
+                                    <span data-i18n="mapManagement.addMap">Add to map pool</span>
+                                </span>
+                                <span x-show="adding">
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                    <span data-i18n="mapManagement.addingMap">Adding map...</span>
+                                </span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-8">
+                <div class="card h-100">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <h6 class="mb-0 d-inline-block">
+                                <i class="bi bi-list-ul"></i>
+                                <span data-i18n="mapManagement.currentMaps">Current map pool</span>
+                            </h6>
+                            <span class="badge bg-primary ms-2"
+                                x-text="searchQuery ? `${filteredMaps().length}/${maps.length}` : maps.length"></span>
+                        </div>
+                        <div class="input-group input-group-sm map-search-input">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="search" class="form-control" x-model.debounce.200ms="searchQuery"
+                                data-i18n-placeholder="mapManagement.searchPlaceholder"
+                                placeholder="Search name, filename, or Workshop ID">
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div x-show="maps.length === 0" class="text-center text-muted py-5">
+                            <i class="bi bi-map fs-1 d-block mb-2"></i>
+                            <span data-i18n="mapManagement.noMaps">No maps are configured yet.</span>
+                        </div>
+                        <div x-show="maps.length > 0 && filteredMaps().length === 0" class="text-center text-muted py-5">
+                            <i class="bi bi-search fs-1 d-block mb-2"></i>
+                            <span data-i18n="mapManagement.noSearchResults">No matching maps found.</span>
+                        </div>
+                        <div x-show="filteredMaps().length > 0" class="table-responsive map-management-table">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="mapManagement.mapName">Map name</th>
+                                        <th data-i18n="mapManagement.workshopId">Workshop ID</th>
+                                        <th data-i18n="mapManagement.rules">Rules</th>
+                                        <th data-i18n="mapManagement.status">Status</th>
+                                        <th class="text-end" data-i18n="mapManagement.actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="(map, index) in filteredMaps()" :key="map.workshop_id + '-' + map.name + '-' + index">
+                                        <tr>
+                                            <td>
+                                                <strong x-text="map.name"></strong>
+                                                <small x-show="map.filename && map.filename !== map.name" class="text-muted d-block" x-text="map.filename"></small>
+                                            </td>
+                                            <td>
+                                                <template x-if="map.workshop_id !== '0'">
+                                                    <a :href="`https://steamcommunity.com/sharedfiles/filedetails/?id=${map.workshop_id}`"
+                                                        target="_blank" rel="noopener noreferrer" x-text="map.workshop_id"></a>
+                                                </template>
+                                                <span x-show="map.workshop_id === '0'" class="badge bg-dark"
+                                                    data-i18n="mapManagement.officialMap">Official map</span>
+                                            </td>
+                                            <td>
+                                                <span x-show="map.min_players" class="badge bg-secondary me-1"
+                                                    x-text="`${t('mapManagement.minPlayersShort', 'Min')} ${map.min_players}`"></span>
+                                                <span x-show="map.only_nominate" class="badge bg-info text-dark me-1"
+                                                    data-i18n="mapManagement.nominationOnlyShort">Nominate</span>
+                                                <small x-show="map.restricted_times" class="d-block text-muted mt-1" x-text="map.restricted_times"></small>
+                                                <span x-show="!map.min_players && !map.only_nominate && !map.restricted_times" class="text-muted">—</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge" :class="map.enabled ? 'bg-success' : 'bg-secondary'"
+                                                    x-text="map.enabled ? t('mapManagement.enabled', 'Enabled') : t('mapManagement.disabled', 'Disabled')"></span>
+                                            </td>
+                                            <td class="text-end text-nowrap">
+                                                <button type="button" class="btn btn-sm me-1"
+                                                    :class="map.enabled ? 'btn-outline-warning' : 'btn-outline-success'"
+                                                    :disabled="Boolean(mapActionKey)"
+                                                    @click="toggleMap(map)">
+                                                    <span x-show="mapActionKey === mapKey(map) && mapActionType === 'toggle'"
+                                                        class="spinner-border spinner-border-sm"></span>
+                                                    <i x-show="!(mapActionKey === mapKey(map) && mapActionType === 'toggle')"
+                                                        class="bi" :class="map.enabled ? 'bi-pause-circle' : 'bi-play-circle'"></i>
+                                                    <span x-text="map.enabled ? t('mapManagement.disableMap', 'Disable') : t('mapManagement.enableMap', 'Enable')"></span>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                                    :disabled="Boolean(mapActionKey)"
+                                                    @click="deleteMap(map)">
+                                                    <span x-show="mapActionKey === mapKey(map) && mapActionType === 'delete'"
+                                                        class="spinner-border spinner-border-sm"></span>
+                                                    <i x-show="!(mapActionKey === mapKey(map) && mapActionType === 'delete')"
+                                                        class="bi bi-trash"></i>
+                                                    <span data-i18n="mapManagement.deleteMap">Delete</span>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h6 class="mb-1">
+                        <i class="bi bi-sliders"></i>
+                        <span data-i18n="mapManagement.pluginConfigTitle">MapChooser visual settings</span>
+                    </h6>
+                    <small class="text-muted text-break">
+                        <span data-i18n="mapManagement.pluginConfigPath">Configuration:</span>
+                        <code x-text="status.plugin_config_path"></code>
+                    </small>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="loadPluginConfig()"
+                    :disabled="pluginConfigLoading || pluginConfigSaving">
+                    <i class="bi" :class="pluginConfigLoading ? 'bi-arrow-repeat spin' : 'bi-arrow-clockwise'"></i>
+                    <span data-i18n="mapManagement.reloadPluginConfig">Reload settings</span>
+                </button>
+            </div>
+            <div class="card-body">
+                <div x-show="pluginConfigError" x-cloak class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <span x-text="pluginConfigError"></span>
+                </div>
+
+                <div x-show="pluginConfigLoading && !pluginConfig.fields.length" class="text-center py-4">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    <span class="text-muted ms-2" data-i18n="mapManagement.loadingPluginConfig">Loading plugin settings...</span>
+                </div>
+
+                <template x-if="!pluginConfigLoading && !pluginConfig.file_exists && pluginConfig.fields.length">
+                    <div class="alert alert-info py-2">
+                        <i class="bi bi-file-earmark-plus me-1"></i>
+                        <span data-i18n="mapManagement.pluginConfigWillCreate">
+                            config.json does not exist yet. Saving will create it from the plugin defaults.
+                        </span>
+                    </div>
+                </template>
+
+                <template x-if="pluginConfig.unsupported_fields.length">
+                    <div class="alert alert-warning py-2">
+                        <i class="bi bi-shield-check me-1"></i>
+                        <span data-i18n="mapManagement.unsupportedConfigFields">
+                            Complex settings are kept unchanged and are not editable here:
+                        </span>
+                        <code x-text="pluginConfig.unsupported_fields.join(', ')"></code>
+                    </div>
+                </template>
+
+                <form x-show="pluginConfig.fields.length" @submit.prevent="savePluginConfig()">
+                    <div class="row g-3">
+                        <template x-for="group in pluginConfigGroups()" :key="group.name">
+                            <div class="col-12 col-xxl-6">
+                                <fieldset class="border rounded-3 p-3 h-100 map-plugin-config-group">
+                                    <legend class="float-none w-auto px-2 fs-6 fw-semibold mb-0"
+                                        x-text="pluginConfigGroupLabel(group.name)"></legend>
+                                    <div class="row g-3">
+                                        <template x-for="field in group.fields" :key="field.key">
+                                            <div class="col-12" :class="field.kind === 'boolean' ? '' : 'col-md-6'">
+                                                <template x-if="field.kind === 'boolean'">
+                                                    <div class="form-check form-switch pt-1">
+                                                        <input class="form-check-input" type="checkbox" role="switch"
+                                                            :id="pluginConfigFieldId(field.key)"
+                                                            x-model="pluginConfig.values[field.key]">
+                                                        <label class="form-check-label" :for="pluginConfigFieldId(field.key)">
+                                                            <span class="fw-medium" x-text="pluginConfigFieldLabel(field.key)"></span>
+                                                            <code class="small ms-1" x-show="field.known" x-text="field.key"></code>
+                                                        </label>
+                                                        <small class="text-muted d-block" x-show="pluginConfigFieldDescription(field.key)"
+                                                            x-text="pluginConfigFieldDescription(field.key)"></small>
+                                                    </div>
+                                                </template>
+                                                <template x-if="field.kind === 'integer' || field.kind === 'number'">
+                                                    <div>
+                                                        <label class="form-label mb-1" :for="pluginConfigFieldId(field.key)">
+                                                            <span x-text="pluginConfigFieldLabel(field.key)"></span>
+                                                            <code class="small ms-1" x-show="field.known" x-text="field.key"></code>
+                                                        </label>
+                                                        <input type="number" class="form-control"
+                                                            :id="pluginConfigFieldId(field.key)"
+                                                            :min="field.min ?? null" :max="field.max ?? null"
+                                                            :step="field.step ?? (field.kind === 'integer' ? 1 : 'any')"
+                                                            x-model.number="pluginConfig.values[field.key]" required>
+                                                        <small class="text-muted" x-show="pluginConfigFieldDescription(field.key)"
+                                                            x-text="pluginConfigFieldDescription(field.key)"></small>
+                                                    </div>
+                                                </template>
+                                                <template x-if="field.kind === 'string'">
+                                                    <div>
+                                                        <label class="form-label mb-1" :for="pluginConfigFieldId(field.key)">
+                                                            <span x-text="pluginConfigFieldLabel(field.key)"></span>
+                                                            <code class="small ms-1" x-show="field.known" x-text="field.key"></code>
+                                                        </label>
+                                                        <input type="text" class="form-control"
+                                                            :id="pluginConfigFieldId(field.key)"
+                                                            :maxlength="field.maxlength ?? 4096"
+                                                            x-model="pluginConfig.values[field.key]">
+                                                        <small class="text-muted" x-show="pluginConfigFieldDescription(field.key)"
+                                                            x-text="pluginConfigFieldDescription(field.key)"></small>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </fieldset>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+                        <small class="text-muted">
+                            <i class="bi bi-exclamation-circle me-1"></i>
+                            <span data-i18n="mapManagement.pluginConfigReloadHint">
+                                Reload the plugin or restart the server after saving for all changes to take effect.
+                            </span>
+                        </small>
+                        <button type="submit" class="btn btn-success"
+                            :disabled="pluginConfigSaving || pluginConfigLoading">
+                            <span x-show="!pluginConfigSaving">
+                                <i class="bi bi-save"></i>
+                                <span data-i18n="mapManagement.savePluginConfig">Save plugin settings</span>
+                            </span>
+                            <span x-show="pluginConfigSaving">
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                <span data-i18n="mapManagement.savingConfig">Saving...</span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="bi bi-file-earmark-code"></i>
+                    <span data-i18n="mapManagement.rawConfig">Edit maps.txt configuration</span>
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info py-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <span data-i18n="mapManagement.rawConfigHint">
+                        Advanced users can edit the complete Valve KeyValues file. The panel validates it before saving.
+                    </span>
+                </div>
+                <textarea class="form-control font-monospace map-config-editor" rows="22" spellcheck="false"
+                    x-model="content"></textarea>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+                    <small class="text-muted">
+                        <i class="bi bi-exclamation-circle me-1"></i>
+                        <span data-i18n="mapManagement.reloadHint">Reload or restart MapChooser after changing its map pool.</span>
+                    </small>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" @click="load(true)" :disabled="loading || saving">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                            <span data-i18n="mapManagement.reloadFile">Reload file</span>
+                        </button>
+                        <button type="button" class="btn btn-success" @click="saveConfig()" :disabled="saving || loading">
+                            <span x-show="!saving">
+                                <i class="bi bi-save"></i>
+                                <span data-i18n="mapManagement.saveConfig">Save configuration</span>
+                            </span>
+                            <span x-show="saving">
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                <span data-i18n="mapManagement.savingConfig">Saving...</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

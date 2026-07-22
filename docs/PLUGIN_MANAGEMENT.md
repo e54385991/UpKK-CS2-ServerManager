@@ -167,7 +167,7 @@ During uninstallation, the system will remove:
 To populate the database with sample plugins for testing:
 
 ```bash
-cd /home/runner/work/CS2-ServerManager/CS2-ServerManager
+cd /home/runner/work/UpKK-CS2-ServerManager/UpKK-CS2-ServerManager
 python scripts/populate_plugins.py
 ```
 
