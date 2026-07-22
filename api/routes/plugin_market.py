@@ -4,6 +4,7 @@ Provides endpoints for browsing, searching, and installing plugins from the mark
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 from typing import Optional, List
 import re
 import logging
@@ -17,6 +18,7 @@ from modules import (
     PluginUninstallRequest,
     DependencyInfo
 )
+from api.dependencies import locked_server_operation
 from modules.http_helper import http_helper
 
 router = APIRouter(prefix="/api/plugin-market", tags=["plugin-market"])
@@ -41,6 +43,7 @@ async def get_server_for_user(server_id: int, db: AsyncSession, current_user: Us
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Server not found"
         )
+    await db.commit()
     return server
 
 
@@ -616,7 +619,8 @@ async def install_plugin(
     install_dependencies: bool = Query(default=False, description="Whether to install dependencies"),
     upgrade_mode: bool = Query(default=False, description="Enable upgrade mode to auto-exclude config files"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    _operation_server: Server = Depends(locked_server_operation),
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from the market to a server.
@@ -666,7 +670,7 @@ async def install_plugin(
             detail="Plugin not found"
         )
     
-    # Verify server ownership
+    # Verify server ownership and keep the detached connection settings for install work.
     server = await get_server_for_user(server_id, db, current_user)
     
     # CRITICAL: Check SSH connectivity BEFORE any database modifications
@@ -941,7 +945,7 @@ async def analyze_plugin_archive(
             detail="Plugin not found"
         )
     
-    # Verify server ownership
+    # Verify server ownership and keep proxy settings for the release lookup.
     server = await get_server_for_user(server_id, db, current_user)
     
     # If download_url is not provided, fetch latest release
@@ -1034,7 +1038,8 @@ async def uninstall_market_plugin(
     server_id: int,
     request: PluginUninstallRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    _operation_server: Server = Depends(locked_server_operation),
 ):
     """
     Uninstall a market plugin from a server.
@@ -1061,9 +1066,9 @@ async def uninstall_market_plugin(
             detail="Plugin not found"
         )
     
-    # Verify server ownership
-    server = await get_server_for_user(server_id, db, current_user)
-    
+    # Verify server ownership; the uninstall route performs its own lookup as well.
+    await get_server_for_user(server_id, db, current_user)
+
     result = await uninstall_plugin(server_id, request, db, current_user)
     if result.success:
         from modules.models import ManagedPlugin

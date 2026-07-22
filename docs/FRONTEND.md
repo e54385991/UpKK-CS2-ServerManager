@@ -28,7 +28,7 @@ This project uses a modern, lightweight frontend stack that is fully localized (
 - Excellent for admin/management interfaces
 - Strong community and documentation
 
-**Version:** 5.3.2 (downloaded locally)
+**Version:** 5.3.8 (vendored locally)
 
 **Features Used:**
 - Responsive grid system
@@ -46,7 +46,7 @@ This project uses a modern, lightweight frontend stack that is fully localized (
 - No build step required
 - Ideal for interactive components without Vue/React overhead
 
-**Version:** 3.13.3 (downloaded locally)
+**Version:** 3.15.12 (vendored locally)
 
 **Usage:**
 - Server list state management
@@ -61,7 +61,11 @@ This project uses a modern, lightweight frontend stack that is fully localized (
 - SVG-based, scalable
 - Fully localized with web fonts
 
-**Version:** 1.11.2 (downloaded locally)
+**Version:** 1.13.1 (vendored locally)
+
+### 5. xterm.js
+
+The SSH and game consoles use `@xterm/xterm` 6.0.0 with the maintained scoped addons. The browser bundles are vendored locally, so console pages do not depend on a CDN.
 
 ## File Structure
 
@@ -83,6 +87,10 @@ templates/
 ├── home.html                      # Home page
 ├── servers.html                   # Server list page
 └── server_detail.html             # Server detail page
+
+package.json                       # Auditable frontend dependency versions
+package-lock.json                  # Reproducible npm dependency lock
+scripts/vendor_frontend.mjs        # Copies package assets into static/
 ```
 
 ## Key Features
@@ -94,6 +102,16 @@ All CSS, JavaScript, and font files are stored locally in the `static/` director
 - Works in offline/air-gapped environments
 - No privacy concerns from CDN tracking
 - Consistent versions across deployments
+
+To refresh the checked-in browser assets after changing `package.json`:
+
+```bash
+npm ci
+npm run vendor:frontend
+npm audit --omit=dev
+```
+
+Node.js is only needed when updating these assets; production continues to serve the checked-in files directly.
 
 ### 2. Responsive Design
 The interface adapts to different screen sizes:

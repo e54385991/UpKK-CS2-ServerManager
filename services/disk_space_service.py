@@ -3,7 +3,6 @@ Disk Space Cache Service
 Provides cached disk space information for server directories
 """
 import logging
-import re
 import shlex
 from typing import Optional, Dict, Tuple
 

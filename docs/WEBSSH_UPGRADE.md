@@ -9,7 +9,7 @@ This upgrade replaces the basic native terminal implementation with **xterm.js**
 ### 1. Added xterm.js Library
 - **Location**: `/static/xterm/`
 - **Files**:
-  - `xterm.js` - Core xterm.js library (v5.3.0)
+  - `xterm.js` - Core `@xterm/xterm` library (v6.0.0)
   - `xterm.css` - Terminal styling
   - `xterm-addon-fit.js` - Auto-fit terminal to container
   - `xterm-addon-web-links.js` - Clickable links in terminal

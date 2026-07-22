@@ -214,6 +214,10 @@
             target: 'host',
             commands: ''
         },
+        // Startup command preview
+        startupCommand: '',
+        loadingStartupCommand: false,
+        startupCommandError: '',
 
         // Helper function to format SSH error messages with i18n support
         formatSSHError(errorMessage, defaultPrefixKey) {
@@ -284,6 +288,7 @@
             await this.loadHistory();
             await this.loadS3Backups();
             await this.loadCustomCommands();
+            await this.loadStartupCommand();
             
             // Check actual deployment status
             await this.checkDeploymentStatus();
@@ -322,6 +327,91 @@
                 if (this.pluginUpdateStatusTimer) clearTimeout(this.pluginUpdateStatusTimer);
             }, { once: true });
             
+        },
+
+        async loadStartupCommand() {
+            this.loadingStartupCommand = true;
+            this.startupCommandError = '';
+
+            const fallbackMessage = window.i18n?.t('serverDetail.startupCommandLoadFailed')
+                || 'Failed to load startup command';
+
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/startup-command`);
+                let data = {};
+
+                try {
+                    data = await response.json();
+                } catch (_) {
+                    // Keep the user-facing fallback when the server returns no JSON body.
+                }
+
+                if (!response.ok) {
+                    const detail = typeof data.detail === 'string'
+                        ? data.detail
+                        : (typeof data.message === 'string' ? data.message : fallbackMessage);
+                    throw new Error(detail);
+                }
+
+                if (typeof data.startup_command !== 'string' || !data.startup_command.trim()) {
+                    throw new Error(fallbackMessage);
+                }
+
+                this.startupCommand = data.startup_command;
+            } catch (error) {
+                this.startupCommand = '';
+                this.startupCommandError = error?.message || fallbackMessage;
+            } finally {
+                this.loadingStartupCommand = false;
+            }
+        },
+
+        async writeClipboardText(text) {
+            if (navigator.clipboard?.writeText) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return;
+                } catch (_) {
+                    // Fall back for blocked clipboard permissions and non-secure contexts.
+                }
+            }
+
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.setAttribute('readonly', '');
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-9999px';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+
+            try {
+                textArea.focus();
+                textArea.select();
+                if (!document.execCommand('copy')) {
+                    throw new Error('Clipboard copy was rejected');
+                }
+            } finally {
+                document.body.removeChild(textArea);
+            }
+        },
+
+        async copyStartupCommand() {
+            if (!this.startupCommand) return;
+
+            try {
+                await this.writeClipboardText(this.startupCommand);
+                this.showToast(
+                    window.i18n?.t('serverDetail.startupCommandCopied')
+                        || 'Startup command copied to clipboard',
+                    'success'
+                );
+            } catch (_) {
+                this.showToast(
+                    window.i18n?.t('serverDetail.startupCommandCopyFailed')
+                        || 'Failed to copy startup command',
+                    'error'
+                );
+            }
         },
         
         async fetchCpuCount() {

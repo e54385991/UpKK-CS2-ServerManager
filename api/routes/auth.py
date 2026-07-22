@@ -4,8 +4,8 @@ Authentication routes for user registration and login
 from datetime import timedelta
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from anyio import to_thread
 from google.auth.transport import requests
 from google.oauth2 import id_token
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,12 +17,14 @@ from modules import (
     SteamApiKeyResponse, GitHubTokenStatusResponse, GenerateServerTokenRequest, GenerateServerTokenResponse,
     S3SettingsResponse, S3SettingsUpdate,
     ForgotPasswordRequest, ResetPasswordRequest, GoogleOAuthRequest,
-    get_db, get_password_hash, verify_password, create_access_token,
-    get_current_active_user, settings, generate_api_key
+    get_db, get_password_hash_async, verify_password_async, create_access_token,
+    get_current_active_user, settings, generate_api_key,
+    set_web_session_cookie, clear_web_session_cookie
 )
 from services.captcha_service import captcha_service
 from services.s3_backup_service import s3_backup_service
 from services.steam_api_service import steam_api_service
+from services.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
@@ -52,8 +54,9 @@ async def get_google_config():
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(user_data: UserCreate, request: Request, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
+    await enforce_rate_limit(request, "register", limit=5, window=3600, identity=user_data.username)
     # Validate CAPTCHA first
     is_valid = await captcha_service.validate_captcha(user_data.captcha_token, user_data.captcha_code)
     if not is_valid:
@@ -77,9 +80,10 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    
+
+    await db.commit()
     # Create new user
-    hashed_password = get_password_hash(user_data.password)
+    hashed_password = await get_password_hash_async(user_data.password)
     user = User(
         username=user_data.username,
         email=user_data.email,
@@ -95,9 +99,12 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 @router.post("/login", response_model=Token)
 async def login(
     user_data: UserLogin,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
     """Login and get access token"""
+    await enforce_rate_limit(request, "login", limit=10, window=60, identity=user_data.username)
     # Validate CAPTCHA first
     is_valid = await captcha_service.validate_captcha(user_data.captcha_token, user_data.captcha_code)
     if not is_valid:
@@ -108,8 +115,14 @@ async def login(
     
     # Find user by username
     user = await User.get_by_username(db, user_data.username)
-    
-    if not user or not verify_password(user_data.password, user.hashed_password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    await db.commit()
+    if not await verify_password_async(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -128,6 +141,7 @@ async def login(
         data={"sub": str(user.id), "username": user.username},
         expires_delta=access_token_expires
     )
+    set_web_session_cookie(request, response, access_token)
     
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -136,6 +150,21 @@ async def login(
 async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
     """Get current user information"""
     return current_user
+
+
+@router.post("/session")
+async def bootstrap_web_session(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Copy an already validated bearer token into the protected browser cookie."""
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required")
+    set_web_session_cookie(request, response, token)
+    return {"success": True}
 
 
 @router.post("/reset-password")
@@ -153,8 +182,9 @@ async def reset_password(
             detail="Invalid or expired CAPTCHA code"
         )
     
+    await db.commit()
     # Verify current password
-    if not verify_password(password_data.current_password, current_user.hashed_password):
+    if not await verify_password_async(password_data.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect"
@@ -168,7 +198,7 @@ async def reset_password(
         )
     
     # Update password
-    current_user.hashed_password = get_password_hash(password_data.new_password)
+    current_user.hashed_password = await get_password_hash_async(password_data.new_password)
     await db.commit()
     
     return {"success": True, "message": "Password reset successfully"}
@@ -440,7 +470,8 @@ async def generate_server_token(
 
 @router.post("/forgot-password")
 async def forgot_password(
-    request: ForgotPasswordRequest,
+    reset_request: ForgotPasswordRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Request password reset email"""
@@ -448,8 +479,10 @@ async def forgot_password(
     from modules import PasswordResetToken, settings, generate_api_key, get_current_time
     from services.email_service import email_service
     
+    await enforce_rate_limit(request, "forgot_password", limit=5, window=3600, identity=reset_request.email)
+
     # Validate CAPTCHA
-    is_valid = await captcha_service.validate_captcha(request.captcha_token, request.captcha_code)
+    is_valid = await captcha_service.validate_captcha(reset_request.captcha_token, reset_request.captcha_code)
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -457,7 +490,7 @@ async def forgot_password(
         )
     
     # Find user by email
-    user = await User.get_by_email(db, request.email)
+    user = await User.get_by_email(db, reset_request.email)
     
     # Always return success to prevent email enumeration
     # Even if user doesn't exist, return success message
@@ -495,14 +528,17 @@ async def forgot_password(
 
 @router.post("/reset-password-with-token")
 async def reset_password_with_token(
-    request: ResetPasswordRequest,
+    reset_request: ResetPasswordRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Reset password using reset token"""
     from modules import PasswordResetToken
     
+    await enforce_rate_limit(request, "reset_password", limit=10, window=3600)
+
     # Find token
-    token = await PasswordResetToken.get_by_token(db, request.token)
+    token = await PasswordResetToken.get_by_token(db, reset_request.token)
     
     if not token:
         raise HTTPException(
@@ -525,7 +561,7 @@ async def reset_password_with_token(
         )
     
     # Update password
-    user.hashed_password = get_password_hash(request.new_password)
+    user.hashed_password = await get_password_hash_async(reset_request.new_password)
     
     # Mark token as used
     token.used = True
@@ -540,6 +576,8 @@ async def reset_password_with_token(
 @router.post("/google-oauth", response_model=Token)
 async def google_oauth_login(
     oauth_data: GoogleOAuthRequest,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -550,6 +588,7 @@ async def google_oauth_login(
     Email is auto-bound from Google account.
     """
     logger = logging.getLogger(__name__)
+    await enforce_rate_limit(request, "google_oauth", limit=10, window=60)
     
     try:
         # Verify the Google ID token
@@ -562,10 +601,11 @@ async def google_oauth_login(
                     detail="Google OAuth is not configured. Please set GOOGLE_CLIENT_ID in environment variables."
                 )
             
-            idinfo = id_token.verify_oauth2_token(
+            idinfo = await to_thread.run_sync(
+                id_token.verify_oauth2_token,
                 oauth_data.id_token,
                 requests.Request(),
-                client_id
+                client_id,
             )
             
             # Get user info from token
@@ -602,6 +642,7 @@ async def google_oauth_login(
                 data={"sub": str(user.id), "username": user.username},
                 expires_delta=access_token_expires
             )
+            set_web_session_cookie(request, response, access_token)
             
             return {"access_token": access_token, "token_type": "bearer"}
         
@@ -628,9 +669,10 @@ async def google_oauth_login(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="An account with this email already exists. Please use regular login."
                 )
-            
+
+            await db.commit()
             # Create new user with Google OAuth
-            hashed_password = get_password_hash(oauth_data.password)
+            hashed_password = await get_password_hash_async(oauth_data.password)
             new_user = User(
                 username=oauth_data.username,
                 email=email,
@@ -649,6 +691,7 @@ async def google_oauth_login(
                 data={"sub": str(new_user.id), "username": new_user.username},
                 expires_delta=access_token_expires
             )
+            set_web_session_cookie(request, response, access_token)
             
             return {"access_token": access_token, "token_type": "bearer"}
             
@@ -660,5 +703,12 @@ async def google_oauth_login(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Google OAuth login failed: {str(e)}"
         )
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear the HTTP-only browser session cookie."""
+    clear_web_session_cookie(response)
+    return {"success": True}
 
 

@@ -71,4 +71,4 @@ echo "=========================================="
 echo ""
 
 # uv reads pyproject.toml/uv.lock, creates .venv if needed, and starts the app.
-"${UV_CMD[@]}" run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+"${UV_CMD[@]}" run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5

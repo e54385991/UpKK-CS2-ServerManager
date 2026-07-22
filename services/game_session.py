@@ -27,6 +27,17 @@ def normalize_session_manager(value: Any) -> str:
     return manager if manager in SUPPORTED_SESSION_MANAGERS else DEFAULT_SESSION_MANAGER
 
 
+def gslt_startup_parameter(value: Any, *, masked: bool = False) -> str | None:
+    """Return a safe GSLT startup parameter, or ``None`` when unconfigured."""
+    token = str(value or "").strip()
+    if not token:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9]+", token):
+        raise ValueError("Steam account token must only contain alphanumeric characters")
+    rendered_token = "***STEAM_TOKEN***" if masked else token
+    return f'+sv_setsteamaccount "{rendered_token}"'
+
+
 def session_manager_order(preferred: Any) -> tuple[str, ...]:
     """Check the configured manager first, then the other manager for migrations."""
     manager = normalize_session_manager(preferred)

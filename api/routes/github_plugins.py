@@ -3,10 +3,10 @@ GitHub Plugin Installation routes
 Provides endpoints for fetching GitHub releases and installing plugins from them
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from anyio import to_thread
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 import re
-import asyncio
 import logging
 import tempfile
 import os
@@ -19,9 +19,9 @@ from modules import (
     GitHubReleasesResponse, GitHubRelease, GitHubReleaseAsset,
     ArchiveAnalysisResponse, ArchiveContentItem,
     GitHubPluginInstallRequest, GitHubPluginInstallResponse,
-    PluginUninstallRequest, PluginUninstallResponse,
-    ActionResponse
+    PluginUninstallRequest, PluginUninstallResponse
 )
+from api.dependencies import locked_server_operation
 from modules.http_helper import http_helper
 from services import SSHManager
 from services.discord_notification_service import EVENT_PLUGIN_UPDATE, discord_notification_service
@@ -128,6 +128,7 @@ async def get_server_and_verify_ownership(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Server not found"
         )
+    await db.commit()
     return server
 
 
@@ -413,7 +414,7 @@ async def analyze_archive(
             if '/' not in path or path.endswith('/'):
                 is_dir = path.endswith('/') or any(
                     other_path.startswith(path.rstrip('/') + '/') 
-                    for other_path in [l.strip().split()[-1] if archive_type == 'zip' else l for l in lines]
+                    for other_path in [line.strip().split()[-1] if archive_type == 'zip' else line for line in lines]
                     if other_path != path
                 )
                 if not any(item.path == path.rstrip('/') for item in top_level_items):
@@ -517,7 +518,8 @@ async def install_github_plugin(
     server_id: int,
     request: GitHubPluginInstallRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    _operation_server: Server = Depends(locked_server_operation),
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from a GitHub release asset with WebSocket progress updates.
@@ -757,7 +759,7 @@ async def install_github_plugin(
                 # Clean up panel temp directory
                 try:
                     if os.path.exists(download_dir):
-                        shutil.rmtree(download_dir)
+                        await to_thread.run_sync(shutil.rmtree, download_dir)
                         logger.info(f"Cleaned up panel temp directory: {download_dir}")
                 except Exception as e:
                     logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
@@ -884,7 +886,7 @@ async def install_github_plugin(
                 # Found addons in subdirectory
                 addons_path = find_output.strip()
                 source_dir = addons_path.rsplit('/addons', 1)[0]
-                await progress(f"Found addons/ directory in subdirectory")
+                await progress("Found addons/ directory in subdirectory")
             elif request.custom_install_path:
                 # No addons directory found, but custom install path is specified
                 # Extract to the custom path (e.g., 'addons')
@@ -1231,7 +1233,8 @@ async def uninstall_plugin(
     server_id: int,
     request: PluginUninstallRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    _operation_server: Server = Depends(locked_server_operation),
 ) -> PluginUninstallResponse:
     """
     Uninstall a plugin by deleting selected files.

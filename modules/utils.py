@@ -4,7 +4,7 @@ Utility functions for the CS2 Server Manager
 import secrets
 import string
 import os
-from datetime import datetime, timezone
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 

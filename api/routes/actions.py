@@ -4,11 +4,9 @@ Server actions routes with WebSocket support for real-time deployment status
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 from typing import List, Optional, Set
 import asyncio
 import json
-import uuid
 import secrets
 import logging
 from contextlib import suppress
@@ -18,7 +16,7 @@ from modules import (
     ServerAction, ActionResponse, DeploymentLogResponse,
     BatchActionRequest, BatchActionResponse, BatchInstallPluginsRequest,
     BatchSendCommandRequest,
-    get_db, User, get_current_active_user, get_current_time
+    get_db, User, get_current_active_user, get_current_time, authenticate_websocket
 )
 from modules.database import async_session_maker
 from services import SSHManager, redis_manager
@@ -36,6 +34,7 @@ from services.game_session import (
     send_keys_command,
     session_name,
 )
+from services.maintenance_lock import maintenance_lock_service, OperationBusyError
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +46,11 @@ DEPLOYMENT_PROGRESS_CLEANUP_DELAY = 300  # 5 minutes - allows clients to fetch f
 # Store for background tasks to prevent garbage collection
 # Tasks are automatically removed when completed via callback
 _background_tasks: Set[asyncio.Task] = set()
+_batch_operation_semaphore = asyncio.Semaphore(8)
+_user_batch_semaphores: dict[int, asyncio.Semaphore] = {}
+_pending_batch_counts: dict[int, int] = {}
+_pending_batch_counts_lock = asyncio.Lock()
+MAX_PENDING_BATCH_OPERATIONS_PER_USER = 40
 
 DISCORD_ACTION_EVENT_TYPES = {
     "update": EVENT_MANUAL_UPDATE,
@@ -83,7 +87,25 @@ async def get_server_and_verify_ownership(
             detail="Server not found"
         )
     
+    await db.commit()
     return server
+
+
+async def acquire_server_action_lock(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Verify ownership and hold the cross-process lock for one mutating action."""
+    server = await get_server_and_verify_ownership(db, server_id, current_user)
+    await db.commit()
+    async with maintenance_lock_service.get(
+        server_id,
+        operation="server_action",
+        wait=False,
+        ttl=7200,
+    ):
+        yield server
 
 
 async def get_server_owner(db: AsyncSession, server: Server, current_user: User) -> User:
@@ -97,6 +119,7 @@ async def get_server_owner(db: AsyncSession, server: Server, current_user: User)
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Server owner not found"
         )
+    await db.commit()
     return owner
 
 
@@ -154,6 +177,58 @@ def _store_task(task: asyncio.Task) -> None:
     task.add_done_callback(_background_tasks.discard)
 
 
+async def shutdown_background_tasks() -> None:
+    tasks = list(_background_tasks)
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    _background_tasks.clear()
+
+
+async def _run_bounded_batch_operation(
+    server_id: int,
+    user_id: int,
+    batch_id: str,
+    operation: str,
+    callback,
+) -> None:
+    """Bound global fan-out and serialize destructive work per server."""
+    user_semaphore = _user_batch_semaphores.setdefault(user_id, asyncio.Semaphore(2))
+    try:
+        async with user_semaphore:
+            async with _batch_operation_semaphore:
+                try:
+                    async with maintenance_lock_service.get(
+                        server_id,
+                        operation=operation,
+                        wait=True,
+                        wait_timeout=30,
+                        ttl=7200,
+                    ):
+                        await callback()
+                except OperationBusyError as exc:
+                    await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(exc))
+    finally:
+        async with _pending_batch_counts_lock:
+            remaining = max(0, _pending_batch_counts.get(user_id, 1) - 1)
+            if remaining:
+                _pending_batch_counts[user_id] = remaining
+            else:
+                _pending_batch_counts.pop(user_id, None)
+
+
+async def _reserve_batch_capacity(user_id: int, operation_count: int) -> None:
+    async with _pending_batch_counts_lock:
+        pending = _pending_batch_counts.get(user_id, 0)
+        if pending + operation_count > MAX_PENDING_BATCH_OPERATIONS_PER_USER:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"A user may queue at most {MAX_PENDING_BATCH_OPERATIONS_PER_USER} server operations",
+            )
+        _pending_batch_counts[user_id] = pending + operation_count
+
+
 async def send_discord_action_notification(
     server: Optional[Server],
     action: str,
@@ -204,16 +279,22 @@ class DeploymentWebSocket:
     
     async def send_message(self, server_id: int, message: dict):
         """Send message to all connected clients for a server"""
-        if server_id in self.active_connections:
-            disconnected = []
-            for connection in self.active_connections[server_id]:
-                try:
-                    await connection.send_json(message)
-                except Exception:
-                    disconnected.append(connection)
-            
-            # Remove disconnected clients
-            for connection in disconnected:
+        connections = list(self.active_connections.get(server_id, ()))
+        if not connections:
+            return
+
+        async def send_with_timeout(connection: WebSocket) -> WebSocket | None:
+            try:
+                await asyncio.wait_for(connection.send_json(message), timeout=2.0)
+                return None
+            except Exception:
+                return connection
+
+        disconnected = await asyncio.gather(
+            *(send_with_timeout(connection) for connection in connections)
+        )
+        for connection in disconnected:
+            if connection is not None:
                 self.disconnect(connection, server_id)
 
 
@@ -234,6 +315,9 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
     
     On connection, sends all accumulated progress from Redis if available.
     """
+    user, server = await authenticate_websocket(websocket, server_id)
+    if user is None or server is None:
+        return
     await deployment_ws.connect(websocket, server_id)
     try:
         # Send accumulated progress on connection (for recovery after disconnect/restart)
@@ -251,7 +335,7 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
         
         while True:
             # Keep connection alive and receive any client messages
-            data = await websocket.receive_text()
+            await websocket.receive_text()
             # Echo back or handle client messages if needed
             await websocket.send_json({
                 "type": "ack",
@@ -424,10 +508,15 @@ async def server_action(
     server_id: int,
     action_data: ServerAction,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    locked_server: Server = Depends(acquire_server_action_lock),
 ):
     """Execute action on server (deploy, start, stop, restart, status)"""
-    server = await get_server_and_verify_ownership(db, server_id, current_user)
+    server = (
+        locked_server
+        if isinstance(locked_server, Server)
+        else await get_server_and_verify_ownership(db, server_id, current_user)
+    )
     
     # Check if server is already being deployed (prevent concurrent operations during deployment)
     action = action_data.action
@@ -467,6 +556,9 @@ async def server_action(
     
     # Send WebSocket notification
     await send_deployment_update(server_id, "status", f"Starting action: {action}")
+
+    async def progress_callback(message: str) -> None:
+        await send_deployment_update(server_id, "output", message)
     
     try:
         if action == "restart":
@@ -499,10 +591,7 @@ async def server_action(
             
             try:
                 await send_deployment_update(server_id, "status", "Connecting to server via SSH...")
-                success, message = await ssh_manager.deploy_cs2_server(server, 
-                                                                       lambda msg: asyncio.create_task(
-                                                                           send_deployment_update(server_id, "output", msg)
-                                                                       ))
+                success, message = await ssh_manager.deploy_cs2_server(server, progress_callback)
                 
                 if success:
                     server.status = ServerStatus.STOPPED
@@ -520,14 +609,11 @@ async def server_action(
                 await redis_manager.delete(deployment_lock_key)
                 # Clear deployment progress after a delay to allow clients to fetch final messages
                 # The progress cache will also auto-expire after 2 hours
-                asyncio.create_task(clear_deployment_progress_after_delay(server_id))
+                _store_task(asyncio.create_task(clear_deployment_progress_after_delay(server_id)))
             
         elif action == "start":
             await send_deployment_update(server_id, "status", "Starting server...")
-            success, message = await ssh_manager.start_server(server,
-                                                             lambda msg: asyncio.create_task(
-                                                                 send_deployment_update(server_id, "output", msg)
-                                                             ))
+            success, message = await ssh_manager.start_server(server, progress_callback)
             
             if success:
                 server.status = ServerStatus.RUNNING
@@ -616,10 +702,7 @@ async def server_action(
             # Add small delay to ensure cleanup
             await asyncio.sleep(0.5)
             
-            success, message = await ssh_manager.start_server(server,
-                                                             lambda msg: asyncio.create_task(
-                                                                 send_deployment_update(server_id, "output", msg)
-                                                             ))
+            success, message = await ssh_manager.start_server(server, progress_callback)
             if success:
                 server.status = ServerStatus.RUNNING
                 log.status = "success"
@@ -662,12 +745,7 @@ async def server_action(
         
         elif action == "update":
             await send_deployment_update(server_id, "status", "Updating server...")
-            # Store current status to restore after update
-            current_status = server.status
-            success, message = await ssh_manager.update_server(server,
-                                                              lambda msg: asyncio.create_task(
-                                                                  send_deployment_update(server_id, "output", msg)
-                                                              ))
+            success, message = await ssh_manager.update_server(server, progress_callback)
             
             if success:
                 # Keep the same status as before update (or set to STOPPED if it was running)
@@ -682,12 +760,7 @@ async def server_action(
         
         elif action == "validate":
             await send_deployment_update(server_id, "status", "Updating and validating server...")
-            # Store current status to restore after validate
-            current_status = server.status
-            success, message = await ssh_manager.validate_server(server,
-                                                                lambda msg: asyncio.create_task(
-                                                                    send_deployment_update(server_id, "output", msg)
-                                                                ))
+            success, message = await ssh_manager.validate_server(server, progress_callback)
             
             if success:
                 # Keep the same status as before validate
@@ -702,10 +775,7 @@ async def server_action(
         
         elif action == "install_metamod":
             await send_deployment_update(server_id, "status", "Installing Metamod:Source...")
-            success, message = await ssh_manager.install_metamod(server,
-                                                                lambda msg: asyncio.create_task(
-                                                                    send_deployment_update(server_id, "output", msg)
-                                                                ))
+            success, message = await ssh_manager.install_metamod(server, progress_callback)
             
             if success:
                 log.status = "success"
@@ -718,10 +788,7 @@ async def server_action(
         
         elif action == "install_counterstrikesharp":
             await send_deployment_update(server_id, "status", "Installing CounterStrikeSharp...")
-            success, message = await ssh_manager.install_counterstrikesharp(server,
-                                                                           lambda msg: asyncio.create_task(
-                                                                               send_deployment_update(server_id, "output", msg)
-                                                                           ))
+            success, message = await ssh_manager.install_counterstrikesharp(server, progress_callback)
             
             if success:
                 log.status = "success"
@@ -734,10 +801,7 @@ async def server_action(
         
         elif action == "update_metamod":
             await send_deployment_update(server_id, "status", "Updating Metamod:Source...")
-            success, message = await ssh_manager.update_metamod(server,
-                                                               lambda msg: asyncio.create_task(
-                                                                   send_deployment_update(server_id, "output", msg)
-                                                               ))
+            success, message = await ssh_manager.update_metamod(server, progress_callback)
             
             if success:
                 log.status = "success"
@@ -750,10 +814,7 @@ async def server_action(
         
         elif action == "update_counterstrikesharp":
             await send_deployment_update(server_id, "status", "Updating CounterStrikeSharp...")
-            success, message = await ssh_manager.update_counterstrikesharp(server,
-                                                                          lambda msg: asyncio.create_task(
-                                                                              send_deployment_update(server_id, "output", msg)
-                                                                          ))
+            success, message = await ssh_manager.update_counterstrikesharp(server, progress_callback)
             
             if success:
                 log.status = "success"
@@ -766,10 +827,7 @@ async def server_action(
         
         elif action == "install_cs2fixes":
             await send_deployment_update(server_id, "status", "Installing CS2Fixes...")
-            success, message = await ssh_manager.install_cs2fixes(server,
-                                                                 lambda msg: asyncio.create_task(
-                                                                     send_deployment_update(server_id, "output", msg)
-                                                                 ))
+            success, message = await ssh_manager.install_cs2fixes(server, progress_callback)
             
             if success:
                 log.status = "success"
@@ -782,10 +840,7 @@ async def server_action(
         
         elif action == "update_cs2fixes":
             await send_deployment_update(server_id, "status", "Updating CS2Fixes...")
-            success, message = await ssh_manager.update_cs2fixes(server,
-                                                                lambda msg: asyncio.create_task(
-                                                                    send_deployment_update(server_id, "output", msg)
-                                                                ))
+            success, message = await ssh_manager.update_cs2fixes(server, progress_callback)
             
             if success:
                 log.status = "success"
@@ -798,10 +853,7 @@ async def server_action(
         
         elif action == "install_swiftly":
             await send_deployment_update(server_id, "status", "Installing SwiftlyS2...")
-            success, message = await ssh_manager.install_swiftly(server,
-                                                                lambda msg: asyncio.create_task(
-                                                                    send_deployment_update(server_id, "output", msg)
-                                                                ))
+            success, message = await ssh_manager.install_swiftly(server, progress_callback)
             
             if success:
                 log.status = "success"
@@ -814,10 +866,7 @@ async def server_action(
         
         elif action == "update_swiftly":
             await send_deployment_update(server_id, "status", "Updating SwiftlyS2...")
-            success, message = await ssh_manager.update_swiftly(server,
-                                                               lambda msg: asyncio.create_task(
-                                                                   send_deployment_update(server_id, "output", msg)
-                                                               ))
+            success, message = await ssh_manager.update_swiftly(server, progress_callback)
             
             if success:
                 log.status = "success"
@@ -830,9 +879,6 @@ async def server_action(
         
         elif action == "backup_plugins":
             await send_deployment_update(server_id, "status", "Backing up plugins...")
-            progress_callback = lambda msg: asyncio.create_task(
-                send_deployment_update(server_id, "output", msg)
-            )
             success, message = await ssh_manager.backup_plugins(server, progress_callback)
             
             if success:
@@ -937,7 +983,7 @@ async def get_deployment_progress(
     or if the WebSocket connection was lost. Useful for recovering progress after
     program restart or SSH disconnect.
     """
-    server = await get_server_and_verify_ownership(db, server_id, current_user)
+    await get_server_and_verify_ownership(db, server_id, current_user)
     
     # Get accumulated progress from Redis
     progress = await redis_manager.get_deployment_progress(server_id)
@@ -958,7 +1004,7 @@ async def get_server_logs(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get deployment logs for a server"""
-    server = await get_server_and_verify_ownership(db, server_id, current_user)
+    await get_server_and_verify_ownership(db, server_id, current_user)
     
     logs = await DeploymentLog.get_logs_by_server(db, server_id, skip, limit)
     
@@ -980,7 +1026,6 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
     import logging
     logger = logging.getLogger(__name__)
     server = None
-    owner = None
     
     try:
         # Update status to in_progress
@@ -992,8 +1037,6 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
                 server = await Server.get_by_id(db, server_id)
             else:
                 server = await Server.get_by_id_and_user(db, server_id, user_id)
-            owner = await db.get(User, server.user_id) if server else None
-            
             if not server:
                 await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
                 return
@@ -1019,17 +1062,18 @@ async def execute_single_server_action(server_id: int, action: str, user_id: int
                     # Stop then start only after the selected manager is ready.
                     await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Stopping server...")
                     stop_success, stop_msg = await ssh_manager.stop_server(server)
-
-                    # Add small delay
-                    await asyncio.sleep(0.5)
-
-                    await redis_manager.set_batch_action_status(batch_id, server_id, "in_progress", "Starting server...")
-                    success, message = await ssh_manager.start_server(server)
-
-                    if success:
-                        new_status = ServerStatus.RUNNING
-                    else:
+                    if not stop_success:
+                        success = False
+                        message = f"Restart stopped because shutdown failed: {stop_msg}"
                         new_status = ServerStatus.ERROR
+                    else:
+                        # Add small delay before starting a fully stopped server.
+                        await asyncio.sleep(0.5)
+                        await redis_manager.set_batch_action_status(
+                            batch_id, server_id, "in_progress", "Starting server..."
+                        )
+                        success, message = await ssh_manager.start_server(server)
+                        new_status = ServerStatus.RUNNING if success else ServerStatus.ERROR
                     
             elif action == "stop":
                 success, message = await ssh_manager.stop_server(server)
@@ -1132,13 +1176,20 @@ async def batch_server_actions(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid servers found in the request"
         )
-    
+
+    await _reserve_batch_capacity(current_user.id, len(valid_server_ids))
     # Spawn background tasks for each server - these run in parallel
     # Tasks are stored to prevent garbage collection
     for server_id in valid_server_ids:
-        task = asyncio.create_task(
-            execute_single_server_action(server_id, request.action, current_user.id, current_user.is_admin, batch_id)
-        )
+        task = asyncio.create_task(_run_bounded_batch_operation(
+            server_id,
+            current_user.id,
+            batch_id,
+            f"batch_action:{request.action}",
+            lambda server_id=server_id: execute_single_server_action(
+                server_id, request.action, current_user.id, current_user.is_admin, batch_id
+            ),
+        ))
         _store_task(task)
     
     return BatchActionResponse(
@@ -1207,6 +1258,7 @@ async def execute_single_server_plugins(server_id: int, plugins: List[str], user
     import logging
     logger = logging.getLogger(__name__)
     server = None
+    owner = None
     
     try:
         # Update status to in_progress
@@ -1218,6 +1270,7 @@ async def execute_single_server_plugins(server_id: int, plugins: List[str], user
                 server = await Server.get_by_id(db, server_id)
             else:
                 server = await Server.get_by_id_and_user(db, server_id, user_id)
+            owner = await db.get(User, server.user_id) if server else None
             
             if not server:
                 await redis_manager.set_batch_action_status(batch_id, server_id, "failed", "Server not found")
@@ -1361,13 +1414,20 @@ async def batch_install_plugins(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid servers found in the request"
         )
-    
+
+    await _reserve_batch_capacity(current_user.id, len(valid_server_ids))
     # Spawn background tasks for each server - these run in parallel
     # Tasks are stored to prevent garbage collection
     for server_id in valid_server_ids:
-        task = asyncio.create_task(
-            execute_single_server_plugins(server_id, request.plugins, current_user.id, current_user.is_admin, batch_id)
-        )
+        task = asyncio.create_task(_run_bounded_batch_operation(
+            server_id,
+            current_user.id,
+            batch_id,
+            "batch_plugin_install",
+            lambda server_id=server_id: execute_single_server_plugins(
+                server_id, request.plugins, current_user.id, current_user.is_admin, batch_id
+            ),
+        ))
         _store_task(task)
     
     plugins_str = ", ".join(request.plugins)
@@ -1497,13 +1557,20 @@ async def batch_send_command(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid servers found in the request"
         )
-    
+
+    await _reserve_batch_capacity(current_user.id, len(valid_server_ids))
     # Spawn background tasks for each server - these run in parallel
     # Tasks are stored to prevent garbage collection
     for server_id in valid_server_ids:
-        task = asyncio.create_task(
-            execute_single_server_command(server_id, request.command, current_user.id, current_user.is_admin, batch_id)
-        )
+        task = asyncio.create_task(_run_bounded_batch_operation(
+            server_id,
+            current_user.id,
+            batch_id,
+            "batch_command",
+            lambda server_id=server_id: execute_single_server_command(
+                server_id, request.command, current_user.id, current_user.is_admin, batch_id
+            ),
+        ))
         _store_task(task)
     
     return BatchActionResponse(
@@ -1520,22 +1587,12 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
     WebSocket endpoint for SSH console access
     Provides interactive SSH terminal access to the server
     """
+    user, server = await authenticate_websocket(websocket, server_id)
+    if user is None or server is None:
+        return
     await websocket.accept()
     
     try:
-        # Get server details from database
-        from modules.database import async_session_maker
-        async with async_session_maker() as db:
-            server = await db.get(Server, server_id)
-            
-            if not server:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Server not found"
-                })
-                await websocket.close()
-                return
-        
         # Create SSH connection
         ssh_manager = SSHManager()
         success, msg = await ssh_manager.connect(server)
@@ -1554,6 +1611,8 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
         })
         
         # Handle interactive shell
+        process = None
+        output_task = None
         try:
             # Create interactive process with PTY for interactive shell
             # Request a PTY to enable interactive terminal features
@@ -1575,7 +1634,7 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
                             })
                         else:
                             break
-                except Exception as e:
+                except Exception:
                     pass
             
             # Start reading output
@@ -1605,6 +1664,14 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
                 "message": f"Console error: {str(e)}"
             })
         finally:
+            if output_task is not None:
+                output_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await output_task
+            if process is not None:
+                with suppress(Exception):
+                    process.terminate()
+                    await asyncio.wait_for(process.wait_closed(), timeout=2)
             await ssh_manager.disconnect()
     
     except WebSocketDisconnect:
@@ -1617,22 +1684,12 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
     WebSocket endpoint for game console access
     Uses an interactive PTY attachment to the configured screen/tmux session.
     """
+    user, server = await authenticate_websocket(websocket, server_id)
+    if user is None or server is None:
+        return
     await websocket.accept()
     
     try:
-        # Get server details from database
-        from modules.database import async_session_maker
-        async with async_session_maker() as db:
-            server = await db.get(Server, server_id)
-            
-            if not server:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Server not found"
-                })
-                await websocket.close()
-                return
-        
         # Create SSH connection using SSHManager (same as SSH console)
         ssh_manager = SSHManager()
         success, msg = await ssh_manager.connect(server)
@@ -1699,7 +1756,7 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                             })
                         else:
                             break
-                except Exception as e:
+                except Exception:
                     pass
             
             # Start reading output

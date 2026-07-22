@@ -11,11 +11,13 @@ import secrets
 import string
 import time
 import shlex
-import uuid
 
 from services.captcha_service import captcha_service
 from services.redis_manager import redis_manager
-from modules import get_current_active_user, User, SSHServerSudo, get_db, get_current_time
+from modules import (
+    get_current_active_user, User, SSHServerSudo, get_db, get_current_time,
+    authenticate_websocket,
+)
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
@@ -24,26 +26,33 @@ class SetupWebSocket:
     """WebSocket manager for setup progress updates"""
     
     def __init__(self):
-        self.active_connections: dict[str, WebSocket] = {}
+        self.active_connections: dict[str, tuple[int, WebSocket]] = {}
     
-    async def connect(self, websocket: WebSocket, session_id: str):
+    async def connect(self, websocket: WebSocket, session_id: str, user_id: int):
         """Connect a WebSocket client"""
+        existing = self.active_connections.get(session_id)
+        if existing is not None and existing[0] != user_id:
+            await websocket.close(code=4409, reason="Setup session is already in use")
+            return False
         await websocket.accept()
-        self.active_connections[session_id] = websocket
+        self.active_connections[session_id] = (user_id, websocket)
+        return True
     
-    def disconnect(self, session_id: str):
+    def disconnect(self, session_id: str, websocket: WebSocket | None = None):
         """Disconnect a WebSocket client"""
-        if session_id in self.active_connections:
+        current = self.active_connections.get(session_id)
+        if current is not None and (websocket is None or current[1] is websocket):
             del self.active_connections[session_id]
     
-    async def send_message(self, session_id: str, message: dict):
+    async def send_message(self, session_id: str, user_id: int, message: dict):
         """Send message to connected client for a session"""
-        if session_id in self.active_connections:
+        connection = self.active_connections.get(session_id)
+        if connection is not None and connection[0] == user_id:
             try:
-                await self.active_connections[session_id].send_json(message)
+                await asyncio.wait_for(connection[1].send_json(message), timeout=2.0)
             except Exception:
                 # Connection closed, remove it silently
-                self.disconnect(session_id)
+                self.disconnect(session_id, connection[1])
 
 
 setup_ws = SetupWebSocket()
@@ -143,8 +152,8 @@ async def run_sudo_command(conn: asyncssh.SSHClientConnection, command: str,
     Returns: (stdout, stderr, exit_code)
     """
     if sudo_password:
-        # Use echo to provide password to sudo
-        full_command = f"echo '{sudo_password}' | sudo -S {command}"
+        # Quote the password so credentials containing shell metacharacters stay data.
+        full_command = f"printf '%s\\n' {shlex.quote(sudo_password)} | sudo -S -- {command}"
     else:
         # Try passwordless sudo
         full_command = f"sudo {command}"
@@ -153,14 +162,14 @@ async def run_sudo_command(conn: asyncssh.SSHClientConnection, command: str,
     return result.stdout, result.stderr, result.exit_status
 
 
-async def send_setup_progress(session_id: Optional[str], log_message: str):
+async def send_setup_progress(session_id: Optional[str], user_id: int, log_message: str):
     """
     Helper to send setup progress via WebSocket if session_id is provided
     Silently fails if WebSocket connection is not available or fails
     """
     if session_id:
         try:
-            await setup_ws.send_message(session_id, {
+            await setup_ws.send_message(session_id, user_id, {
                 "type": "log",
                 "message": log_message,
                 "timestamp": get_current_time().isoformat()
@@ -186,7 +195,11 @@ async def setup_progress_websocket(websocket: WebSocket, session_id: str):
         "timestamp": "2024-01-01T00:00:00"
     }
     """
-    await setup_ws.connect(websocket, session_id)
+    user, _ = await authenticate_websocket(websocket)
+    if user is None:
+        return
+    if not await setup_ws.connect(websocket, session_id, user.id):
+        return
     try:
         # Send initial connection message
         await websocket.send_json({
@@ -204,7 +217,7 @@ async def setup_progress_websocket(websocket: WebSocket, session_id: str):
     except Exception:
         pass
     finally:
-        setup_ws.disconnect(session_id)
+        setup_ws.disconnect(session_id, websocket)
 
 
 @router.post("/auto-setup", response_model=ServerSetupResponse)
@@ -239,14 +252,15 @@ async def auto_setup_server(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired CAPTCHA code"
         )
-    
+
+    await db.commit()
     logs = []
     conn = None
     
     # Helper function to add log and send to WebSocket
     async def add_log(message: str):
         logs.append(message)
-        await send_setup_progress(setup_req.session_id, message)
+        await send_setup_progress(setup_req.session_id, current_user.id, message)
     
     try:
         # Generate CS2 user password if not provided
@@ -399,7 +413,7 @@ async def auto_setup_server(
                 if not os.path.exists(local_deb_path):
                     await add_log(f"⚠ 本地文件不存在: {local_deb_path}")
                 else:
-                    await add_log(f"正在上传 libssl1.1 到远程服务器...")
+                    await add_log("正在上传 libssl1.1 到远程服务器...")
                     
                     # Use SFTP to upload the file
                     async with conn.start_sftp_client() as sftp:

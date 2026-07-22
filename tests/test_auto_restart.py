@@ -8,7 +8,6 @@ Run this to verify the monitoring infrastructure works correctly.
 
 import asyncio
 import sys
-from datetime import datetime
 
 # Add current directory to path
 sys.path.insert(0, '.')
@@ -98,7 +97,7 @@ async def run_basic_monitoring_demo():
     
     # Stop monitoring
     monitor.stop_monitoring(2)
-    print(f"✓ Monitoring stopped")
+    print("✓ Monitoring stopped")
     print(f"✓ Total checks: {check_count}")
     print(f"✓ Total restarts: {restart_count}")
     print()

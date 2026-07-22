@@ -6,6 +6,7 @@ import httpx
 import logging
 import os
 import asyncio
+import anyio
 from typing import Optional, Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
@@ -31,22 +32,27 @@ class HTTPHelper:
     def __init__(self):
         """Initialize HTTP helper with connection pooling"""
         self._client: Optional[httpx.AsyncClient] = None
+        self._client_lock = asyncio.Lock()
     
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create the httpx client with connection pooling"""
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(10.0),
-                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-                follow_redirects=True  # Enable automatic redirect following
-            )
-        return self._client
+        if self._client is not None and not self._client.is_closed:
+            return self._client
+        async with self._client_lock:
+            if self._client is None or self._client.is_closed:
+                self._client = httpx.AsyncClient(
+                    timeout=httpx.Timeout(10.0),
+                    limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
+                    follow_redirects=True,
+                )
+            return self._client
     
     async def close(self):
         """Close the HTTP client"""
-        if self._client is not None and not self._client.is_closed:
-            await self._client.aclose()
-            self._client = None
+        async with self._client_lock:
+            client, self._client = self._client, None
+        if client is not None and not client.is_closed:
+            await client.aclose()
     
     async def make_request(
         self,
@@ -107,7 +113,7 @@ class HTTPHelper:
                         request_url = f"{proxy_base}/{url}"
                         logger.debug(f"Using GitHub proxy for download: {proxy_base}")
                     elif url.startswith(GITHUB_API_PREFIX):
-                        logger.debug(f"Skipping proxy for GitHub API request (proxy only works for downloads)")
+                        logger.debug("Skipping proxy for GitHub API request (proxy only works for downloads)")
                 
                 logger.debug(f"Making {method} request to {request_url} (attempt {attempt + 1}/{MAX_RETRIES})")
                 
@@ -265,12 +271,14 @@ class HTTPHelper:
                         bytes_downloaded = 0
                         
                         # Ensure parent directory exists
-                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                        parent_directory = os.path.dirname(local_path)
+                        if parent_directory:
+                            await asyncio.to_thread(os.makedirs, parent_directory, exist_ok=True)
                         
                         # Download file in chunks
-                        with open(local_path, "wb") as f:
+                        async with await anyio.open_file(local_path, "wb") as f:
                             async for chunk in response.aiter_bytes(chunk_size=DOWNLOAD_CHUNK_SIZE):
-                                f.write(chunk)
+                                await f.write(chunk)
                                 bytes_downloaded += len(chunk)
                                 
                                 # Send progress update

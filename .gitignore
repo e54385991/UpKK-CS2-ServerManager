@@ -101,6 +101,7 @@ celerybeat.pid
 .env
 .venv
 .uv-cache/
+node_modules/
 env/
 venv/
 ENV/

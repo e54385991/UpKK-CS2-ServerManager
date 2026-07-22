@@ -20,6 +20,7 @@ from services.discord_notification_service import (
     EVENT_S3_BACKUP,
     discord_notification_service,
 )
+from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ DISCORD_SCHEDULED_EVENT_TYPES = {
     "validate": EVENT_MANUAL_UPDATE,
     "backup_plugins": EVENT_PLUGIN_UPDATE,
 }
+MAX_CONCURRENT_SCHEDULED_TASKS = 4
 
 
 class ScheduledTaskService:
@@ -39,6 +41,7 @@ class ScheduledTaskService:
         self.running = False
         # Track running tasks to prevent duplicate execution
         self.running_tasks: Dict[int, asyncio.Task] = {}
+        self.running_server_ids: set[int] = set()
         
     async def start(self):
         """Start the background scheduled task service"""
@@ -49,16 +52,22 @@ class ScheduledTaskService:
             # Calculate next run times for all tasks on startup
             await self._calculate_all_next_runs()
     
-    def stop(self):
+    async def stop(self):
         """Stop the background scheduled task service"""
         self.running = False
-        if self.task and not self.task.done():
-            self.task.cancel()
+        tasks = []
+        if self.task:
+            tasks.append(self.task)
         # Cancel all running tasks
-        for task_id, task in list(self.running_tasks.items()):
+        tasks.extend(self.running_tasks.values())
+        for task in tasks:
             if not task.done():
                 task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self.task = None
         self.running_tasks.clear()
+        self.running_server_ids.clear()
         logger.info("Scheduled task service stopped")
     
     async def _execution_loop(self):
@@ -88,17 +97,33 @@ class ScheduledTaskService:
                     )
                 )
                 tasks = result.scalars().all()
-                
+
+                available_slots = max(
+                    0,
+                    MAX_CONCURRENT_SCHEDULED_TASKS
+                    - sum(not running.done() for running in self.running_tasks.values()),
+                )
                 for task in tasks:
+                    if available_slots <= 0:
+                        break
                     # Skip if task is already running
                     if task.id in self.running_tasks and not self.running_tasks[task.id].done():
                         logger.debug(f"Task {task.id} is already running, skipping")
+                        continue
+                    if task.server_id in self.running_server_ids:
+                        logger.debug(
+                            "Server %s already has a scheduled task running, skipping task %s",
+                            task.server_id,
+                            task.id,
+                        )
                         continue
                     
                     # Execute task in background
                     logger.info(f"Executing scheduled task {task.id}: {task.name} (action: {task.action})")
                     execution_task = asyncio.create_task(self._execute_task(task))
                     self.running_tasks[task.id] = execution_task
+                    self.running_server_ids.add(task.server_id)
+                    available_slots -= 1
                     
         except Exception as e:
             logger.error(f"Error checking scheduled tasks: {e}")
@@ -106,6 +131,7 @@ class ScheduledTaskService:
     async def _execute_task(self, task: ScheduledTask):
         """Execute a single scheduled task"""
         server = None
+        operation_lock = None
         try:
             # Get the server
             async with async_session_maker() as db:
@@ -129,6 +155,14 @@ class ScheduledTaskService:
                     "Server marked as SSH down for 3+ consecutive days"
                 )
                 return
+
+            operation_lock = maintenance_lock_service.get(
+                server.id,
+                operation=f"scheduled:{task.action}",
+                wait=False,
+                ttl=3600,
+            )
+            await operation_lock.acquire()
             
             # Create SSH manager using the pattern from main.py
             ssh_manager = SSHManager()
@@ -170,15 +204,20 @@ class ScheduledTaskService:
             finally:
                 await ssh_manager.disconnect()
                 
+        except OperationBusyError as e:
+            logger.info("Skipping scheduled task %s: %s", task.id, e)
+            await self._update_task_status(task.id, "skipped", str(e))
         except Exception as e:
             logger.error(f"Error executing task {task.id}: {e}")
             await self._update_task_status(task.id, "failed", str(e))
             if server:
                 await self._notify_task_result(server, task, False, str(e))
         finally:
+            if operation_lock is not None:
+                await operation_lock.__aexit__(None, None, None)
             # Remove from running tasks
-            if task.id in self.running_tasks:
-                del self.running_tasks[task.id]
+            self.running_tasks.pop(task.id, None)
+            self.running_server_ids.discard(task.server_id)
 
     async def _notify_task_result(
         self,
@@ -224,14 +263,10 @@ class ScheduledTaskService:
                 await log_progress("Stopping server...")
                 success, message = await ssh_manager.stop_server(server)
                 
-                # Always proceed to start, even if stop reports failure
-                # The start_server method has its own defensive checks
                 if not success:
-                    await log_progress(f"Stop returned: {message}")
-                    await log_progress("Proceeding with start (defensive checks will ensure cleanup)...")
-                else:
-                    await log_progress("Server stopped successfully, starting again...")
-                
+                    return False, f"Restart stopped because shutdown failed: {message}"
+
+                await log_progress("Server stopped successfully, starting again...")
                 # Add small delay to ensure cleanup
                 await asyncio.sleep(0.5)
                 

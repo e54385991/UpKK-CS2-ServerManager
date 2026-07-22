@@ -9,6 +9,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
+from anyio import to_thread
 
 from modules import SystemSettings
 
@@ -42,6 +43,7 @@ class EmailService:
         try:
             # Get system settings
             settings = await SystemSettings.get_or_create_settings(db)
+            await db.commit()
             
             if not settings.email_enabled:
                 logger.warning("Email sending is disabled in system settings")
@@ -67,6 +69,23 @@ class EmailService:
         html_content: str,
         text_content: Optional[str] = None
     ) -> bool:
+        return await to_thread.run_sync(
+            self._send_via_smtp_sync,
+            settings,
+            to_email,
+            subject,
+            html_content,
+            text_content,
+        )
+
+    def _send_via_smtp_sync(
+        self,
+        settings: SystemSettings,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        text_content: Optional[str] = None,
+    ) -> bool:
         """Send email via SMTP"""
         try:
             if not settings.smtp_host or not settings.smtp_username or not settings.smtp_password:
@@ -89,10 +108,10 @@ class EmailService:
             
             # Send email
             if settings.smtp_use_tls:
-                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port)
+                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
                 server.starttls()
             else:
-                server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port)
+                server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15)
             
             server.login(settings.smtp_username, settings.smtp_password)
             server.sendmail(settings.smtp_username, to_email, msg.as_string())
@@ -112,6 +131,23 @@ class EmailService:
         subject: str,
         html_content: str,
         text_content: Optional[str] = None
+    ) -> bool:
+        return await to_thread.run_sync(
+            self._send_via_gmail_api_sync,
+            settings,
+            to_email,
+            subject,
+            html_content,
+            text_content,
+        )
+
+    def _send_via_gmail_api_sync(
+        self,
+        settings: SystemSettings,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        text_content: Optional[str] = None,
     ) -> bool:
         """Send email via Gmail API with OAuth2"""
         try:

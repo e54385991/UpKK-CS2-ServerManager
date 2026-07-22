@@ -158,7 +158,6 @@ class ServerMonitor:
         """
         from modules.database import async_session_maker
         from modules.models import Server, ServerStatus
-        from sqlmodel import select
         from services.redis_manager import redis_manager
         
         logger.info(f"Starting panel-based monitoring for server {server_id}")
@@ -540,6 +539,16 @@ class ServerMonitor:
             self.monitoring_tasks[server_id].cancel()
             del self.monitoring_tasks[server_id]
             logger.info(f"Stopped monitoring for server {server_id}")
+
+    async def stop_all(self) -> None:
+        """Cancel and await every monitoring task before shared resources close."""
+        tasks = list(self.monitoring_tasks.values())
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self.monitoring_tasks.clear()
 
 
 # Global monitor instance

@@ -5,6 +5,7 @@ import redis.asyncio as aioredis
 import json
 import time
 import logging
+import asyncio
 from typing import Optional, Any
 from modules.config import settings
 
@@ -18,6 +19,7 @@ class RedisManager:
     INITIALIZED_SERVER_CACHE_TTL = 2592000  # 30 days in seconds
     
     def __init__(self):
+        self._coordination_retry_after = 0.0
         # Create Redis client with connection pool settings from config
         # The Redis class manages its own connection pool internally
         self.client = aioredis.Redis(
@@ -63,6 +65,94 @@ class RedisManager:
         except Exception as e:
             print(f"Redis delete error: {e}")
             return False
+
+    async def acquire_lock(self, key: str, token: str, expire: int) -> Optional[bool]:
+        """Atomically acquire a distributed lock; return None when Redis is unavailable."""
+        if time.monotonic() < self._coordination_retry_after:
+            return None
+        try:
+            result = await asyncio.wait_for(
+                self.client.set(key, token, nx=True, ex=expire),
+                timeout=0.75,
+            )
+            return bool(result)
+        except Exception as e:
+            self._coordination_retry_after = time.monotonic() + 10
+            logger.error("Redis lock acquire failed for %s: %s", key, e)
+            return None
+
+    async def is_lock_held(self, key: str) -> Optional[bool]:
+        """Check a coordination lock with the same short deadline/circuit breaker."""
+        if time.monotonic() < self._coordination_retry_after:
+            return None
+        try:
+            return bool(await asyncio.wait_for(self.client.exists(key), timeout=0.75))
+        except Exception as e:
+            self._coordination_retry_after = time.monotonic() + 10
+            logger.error("Redis lock check failed for %s: %s", key, e)
+            return None
+
+    async def refresh_lock(self, key: str, token: str, expire: int) -> bool:
+        """Extend a lock only when it is still owned by ``token``."""
+        if time.monotonic() < self._coordination_retry_after:
+            return False
+        script = """
+        if redis.call('get', KEYS[1]) == ARGV[1] then
+            return redis.call('expire', KEYS[1], ARGV[2])
+        end
+        return 0
+        """
+        try:
+            return bool(await asyncio.wait_for(
+                self.client.eval(script, 1, key, token, expire),
+                timeout=0.75,
+            ))
+        except Exception as e:
+            self._coordination_retry_after = time.monotonic() + 10
+            logger.error("Redis lock refresh failed for %s: %s", key, e)
+            return False
+
+    async def release_lock(self, key: str, token: str) -> bool:
+        """Release a distributed lock without deleting a newer owner's lock."""
+        if time.monotonic() < self._coordination_retry_after:
+            return False
+        script = """
+        if redis.call('get', KEYS[1]) == ARGV[1] then
+            return redis.call('del', KEYS[1])
+        end
+        return 0
+        """
+        try:
+            return bool(await asyncio.wait_for(
+                self.client.eval(script, 1, key, token),
+                timeout=0.75,
+            ))
+        except Exception as e:
+            self._coordination_retry_after = time.monotonic() + 10
+            logger.error("Redis lock release failed for %s: %s", key, e)
+            return False
+
+    async def hit_rate_limit(self, key: str, limit: int, window: int) -> tuple[bool, int]:
+        """Increment a fixed-window counter atomically and return (allowed, retry_after)."""
+        if time.monotonic() < self._coordination_retry_after:
+            return True, 0
+        script = """
+        local count = redis.call('incr', KEYS[1])
+        if count == 1 then redis.call('expire', KEYS[1], ARGV[2]) end
+        local ttl = redis.call('ttl', KEYS[1])
+        return {count, ttl}
+        """
+        try:
+            count, ttl = await asyncio.wait_for(
+                self.client.eval(script, 1, key, limit, window),
+                timeout=0.75,
+            )
+            return int(count) <= limit, max(1, int(ttl))
+        except Exception as e:
+            self._coordination_retry_after = time.monotonic() + 10
+            # Authentication must remain available during a cache outage; fail open and log.
+            logger.error("Redis rate limit failed for %s: %s", key, e)
+            return True, 0
     
     async def set_server_status(self, server_id: int, status: str, expire: int = 60) -> bool:
         """Cache server status"""

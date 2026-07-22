@@ -5,7 +5,7 @@ and game server login token (GSLT) generation
 """
 import logging
 from typing import Optional, Tuple, Dict
-from datetime import datetime, timedelta
+from datetime import datetime
 from modules.utils import get_current_time
 from modules.http_helper import http_helper
 
@@ -265,7 +265,7 @@ class SteamAPIService:
                 'raw_response': api_response
             }
             
-            logger.info(f"Successfully created game server account")
+            logger.info("Successfully created game server account")
             
             return True, result
             

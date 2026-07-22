@@ -52,35 +52,35 @@ def example_usage():
     print("4. 部署 CS2 服务器")
     print("-" * 60)
     print(f"POST {API_BASE_URL}/servers/{server_id}/actions")
-    print(f'Data: {{"action": "deploy"}}')
+    print('Data: {"action": "deploy"}')
     print()
     
     # 示例 5: 启动服务器
     print("5. 启动服务器")
     print("-" * 60)
     print(f"POST {API_BASE_URL}/servers/{server_id}/actions")
-    print(f'Data: {{"action": "start"}}')
+    print('Data: {"action": "start"}')
     print()
     
     # 示例 6: 检查服务器状态
     print("6. 检查服务器状态")
     print("-" * 60)
     print(f"POST {API_BASE_URL}/servers/{server_id}/actions")
-    print(f'Data: {{"action": "status"}}')
+    print('Data: {"action": "status"}')
     print()
     
     # 示例 7: 停止服务器
     print("7. 停止服务器")
     print("-" * 60)
     print(f"POST {API_BASE_URL}/servers/{server_id}/actions")
-    print(f'Data: {{"action": "stop"}}')
+    print('Data: {"action": "stop"}')
     print()
     
     # 示例 8: 重启服务器
     print("8. 重启服务器")
     print("-" * 60)
     print(f"POST {API_BASE_URL}/servers/{server_id}/actions")
-    print(f'Data: {{"action": "restart"}}')
+    print('Data: {"action": "restart"}')
     print()
     
     # 示例 9: 查看部署日志

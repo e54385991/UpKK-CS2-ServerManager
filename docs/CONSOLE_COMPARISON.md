@@ -37,7 +37,7 @@ Comparison of the old native terminal implementation vs the new xterm.js-based i
 ## After: xterm.js Implementation
 
 ### Technology
-- Industry-standard xterm.js (v5.3.0)
+- Industry-standard `@xterm/xterm` (v6.0.0)
 - Professional terminal emulator
 - Canvas/WebGL rendering
 - Addon system for extensions
@@ -57,7 +57,7 @@ Comparison of the old native terminal implementation vs the new xterm.js-based i
 
 ### Code Size
 - ~230 lines of JavaScript
-- Leverages xterm.js library (~277KB)
+- Leverages the vendored xterm.js library
 - Clean, maintainable code
 
 ### Performance

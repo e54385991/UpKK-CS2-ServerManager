@@ -127,15 +127,29 @@ cd UpKK-CS2-ServerManager
 
 #### 步骤 3: 配置数据库和 Redis
 
-编辑 `modules/config.py` 文件，配置必要的数据库和 Redis 服务器连接信息。
+先复制环境变量模板：
+
+```bash
+# Linux / macOS
+cp .env.example .env
+```
+
+```powershell
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+然后编辑项目根目录下的 `.env`，填写数据库、Redis、安全密钥和其他运行参数。完整配置项及默认建议值请参考 [`.env.example`](.env.example)；系统环境变量会覆盖 `.env` 中的同名配置。
 
 **⚠️ 重要提示**: 数据库和 Redis 配置是必需的，不可省略！
 
-**🔥 Redis 无密码特别说明**  
-如果你的 Redis 服务器**没有设置密码**，请务必这样配置（否则会报错）：
+**🔒 安全提示**: `.env` 已被 Git 忽略，请勿将它提交到版本库或发送给他人。生产环境必须为 `SECRET_KEY` 和 `JWT_SECRET_KEY` 分别生成足够长的随机值。
 
-```python
-REDIS_PASSWORD: Optional[str] = None   # 没有密码就写 None，不要写空字符串 "" 
+**🔥 Redis 无密码特别说明**  
+如果你的 Redis 服务器**没有设置密码**，请将值留空：
+
+```dotenv
+REDIS_PASSWORD=
 ```
 
 ##### 使用 [1Panel](https://github.com/1Panel-dev/1Panel) 部署示例 (推荐使用 1Panel 运行环境-Python 3.14 来部署更容易)
@@ -144,24 +158,21 @@ REDIS_PASSWORD: Optional[str] = None   # 没有密码就写 None，不要写空�
 
 ![1Panel 部署示例](images/1panel.png)
 
-```python
-# 文件位置: modules/config.py
-# MySQL Configuration
-MYSQL_HOST: str = "1Panel-mysql-KZBC"  # 您的 MySQL 容器名或地址
-MYSQL_PORT: int = 3306
-MYSQL_USER: str = "cs2_manager"
-MYSQL_PASSWORD: str = "password"  # 修改为您的密码
-MYSQL_DATABASE: str = "cs2_manager"
+```dotenv
+# 文件位置: .env
+MYSQL_HOST=1Panel-mysql-KZBC
+MYSQL_PORT=3306
+MYSQL_USER=cs2_manager
+MYSQL_PASSWORD=请修改为你的数据库密码
+MYSQL_DATABASE=cs2_manager
 
-# Redis Configuration
-REDIS_HOST: str = "1Panel-redis-oAZc"  # 您的 Redis 容器名或地址
-REDIS_PORT: int = 6379
-REDIS_PASSWORD: Optional[str] = "redis_rYpBai"  # 修改为您的密码
-REDIS_DB: int = 0
+REDIS_HOST=1Panel-redis-oAZc
+REDIS_PORT=6379
+REDIS_PASSWORD=请修改为你的Redis密码
+REDIS_DB=0
 
-# Security
-SECRET_KEY: str = "your-secret-key-change-this-in-production"  # 至少 32 位，建议随机生成
-JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"  # 至少 32 位，建议随机生成
+SECRET_KEY=请替换为至少32位的随机字符串
+JWT_SECRET_KEY=请替换为另一个至少32位的随机字符串
 ```
 
 #### 步骤 4: 启动服务
@@ -169,7 +180,7 @@ JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"  # 至少 
 使用 uvicorn 启动应用([1Panel](https://github.com/1Panel-dev/1Panel) 启动命令相同)：
 
 ```bash
-pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
 ```
 
 #### 步骤 5: 访问应用
@@ -338,14 +349,28 @@ pip install uv && uv sync --locked
 
 #### Step 4: Configure Database and Redis
 
-Edit the `modules/config.py` file to configure the necessary database and Redis server connection information.
+Copy the environment template first:
 
+```bash
+# Linux / macOS
+cp .env.example .env
+```
+
+```powershell
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+Then edit `.env` in the project root and enter the database, Redis, security-key, and other runtime settings. See [`.env.example`](.env.example) for the complete list and recommended defaults. System environment variables override matching values in `.env`.
+
+
+**🔒 Security Notice**: `.env` is ignored by Git. Never commit or share it. Generate separate, sufficiently long random values for `SECRET_KEY` and `JWT_SECRET_KEY` in production.
 
 **🔥 Special Note for Redis WITHOUT Password**  
-If your Redis server has **no password set**, you **must** configure it like this (otherwise it will error):
+If your Redis server has **no password set**, leave the value empty:
 
-```python
-REDIS_PASSWORD: Optional[str] = None   # No password → use None, NOT an empty string ""
+```dotenv
+REDIS_PASSWORD=
 ```
 
 
@@ -357,23 +382,21 @@ If you're using 1Panel to deploy MySQL and Redis, refer to the configuration bel
 
 ![1Panel Deployment Example](images/1panel.png)
 
-```python
-# MySQL Configuration
-MYSQL_HOST: str = "1Panel-mysql-KZBC"  # Your MySQL container name or address
-MYSQL_PORT: int = 3306
-MYSQL_USER: str = "cs2_manager"
-MYSQL_PASSWORD: str = "password"  # Change to your password
-MYSQL_DATABASE: str = "cs2_manager"
+```dotenv
+# File: .env
+MYSQL_HOST=1Panel-mysql-KZBC
+MYSQL_PORT=3306
+MYSQL_USER=cs2_manager
+MYSQL_PASSWORD=replace_with_your_database_password
+MYSQL_DATABASE=cs2_manager
 
-# Redis Configuration
-REDIS_HOST: str = "1Panel-redis-oAZc"  # Your Redis container name or address
-REDIS_PORT: int = 6379
-REDIS_PASSWORD: Optional[str] = "redis_rYpBai"  # Change to your password
-REDIS_DB: int = 0
+REDIS_HOST=1Panel-redis-oAZc
+REDIS_PORT=6379
+REDIS_PASSWORD=replace_with_your_redis_password
+REDIS_DB=0
 
-# Security
-SECRET_KEY: str = "your-secret-key-change-this-in-production"  # At least 32 characters, randomly generated recommended
-JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"  # At least 32 characters, randomly generated recommended
+SECRET_KEY=replace_with_a_random_string_of_at_least_32_characters
+JWT_SECRET_KEY=replace_with_a_different_random_string_of_at_least_32_characters
 ```
 
 #### Step 5: Start Service
@@ -381,7 +404,7 @@ JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"  # At leas
 Start the application using uvicorn (same command for 1Panel startup):
 
 ```bash
-pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
 ```
 
 #### Step 6: Access Application

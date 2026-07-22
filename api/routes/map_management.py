@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import posixpath
 import shlex
@@ -35,6 +34,7 @@ from services.map_management_service import (
     update_plugin_config,
     validate_restricted_times,
 )
+from services.maintenance_lock import maintenance_lock_service
 from services.ssh_manager import SSHManager
 
 
@@ -43,7 +43,8 @@ router = APIRouter(prefix="/servers/{server_id}/maps", tags=["map-management"])
 
 PLUGIN_CENTER_NAME = "CS2-Upkk-PanelPLG-Mapchooser"
 PLUGIN_CENTER_URL = "/plugin-market?search=CS2-Upkk-PanelPLG-Mapchooser"
-_map_write_locks: dict[int, asyncio.Lock] = {}
+# Backward-compatible test/introspection alias; writes use the distributed service below.
+_map_write_locks = maintenance_lock_service._locks
 
 
 class MapConfigUpdateRequest(BaseModel):
@@ -393,8 +394,7 @@ async def update_mapchooser_plugin_config(
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    write_lock = _map_write_locks.setdefault(server_id, asyncio.Lock())
-    async with write_lock:
+    async with maintenance_lock_service.get(server_id, operation="map_config", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
@@ -416,7 +416,7 @@ async def update_mapchooser_plugin_config(
                 updated_content = update_plugin_config(current_content, request.values)
             except PluginConfigError as exc:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"Invalid MapChooser config.json update: {exc}",
                 ) from exc
 
@@ -467,8 +467,7 @@ async def update_maps_config(
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    write_lock = _map_write_locks.setdefault(server_id, asyncio.Lock())
-    async with write_lock:
+    async with maintenance_lock_service.get(server_id, operation="map_add", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
@@ -477,7 +476,7 @@ async def update_maps_config(
                 parse_maps_config(request.content)
             except MapConfigError as exc:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=f"Invalid maps.txt: {exc}",
                 ) from exc
             current_content, _ = await _read_maps_config(
@@ -515,8 +514,7 @@ async def add_map(
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    write_lock = _map_write_locks.setdefault(server_id, asyncio.Lock())
-    async with write_lock:
+    async with maintenance_lock_service.get(server_id, operation="map_update", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
@@ -526,7 +524,7 @@ async def add_map(
                 restricted_times = validate_restricted_times(request.restricted_times)
             except MapConfigError as exc:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=str(exc),
                 ) from exc
             content, _ = await _read_maps_config(
@@ -540,7 +538,7 @@ async def add_map(
                 name = await _fetch_workshop_title(workshop_id) or ""
                 if not name:
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                         detail="Unable to retrieve the Workshop title. Enter the map name manually and try again.",
                     )
             try:
@@ -558,7 +556,7 @@ async def add_map(
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT
                     if "already exists" in str(exc)
-                    else status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    else status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail=str(exc),
                 ) from exc
 
@@ -585,8 +583,7 @@ async def update_map_enabled(
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    write_lock = _map_write_locks.setdefault(server_id, asyncio.Lock())
-    async with write_lock:
+    async with maintenance_lock_service.get(server_id, operation="map_delete", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
@@ -638,8 +635,7 @@ async def delete_map(
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    write_lock = _map_write_locks.setdefault(server_id, asyncio.Lock())
-    async with write_lock:
+    async with maintenance_lock_service.get(server_id, operation="map_batch", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)

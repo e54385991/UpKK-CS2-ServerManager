@@ -38,12 +38,15 @@ class SteamInfService:
             self.refresh_task = asyncio.create_task(self._refresh_loop())
             logger.info("Steam.inf periodic refresh started (every 24 hours)")
     
-    def stop(self):
+    async def stop(self):
         """Stop periodic refresh task"""
         self.running = False
         if self.refresh_task and not self.refresh_task.done():
             self.refresh_task.cancel()
-            logger.info("Steam.inf periodic refresh stopped")
+        if self.refresh_task:
+            await asyncio.gather(self.refresh_task, return_exceptions=True)
+        self.refresh_task = None
+        logger.info("Steam.inf periodic refresh stopped")
     
     async def _refresh_loop(self):
         """Periodic refresh loop"""
@@ -239,7 +242,7 @@ class SteamInfService:
                 
                 async with async_session_maker() as db:
                     # Only update if the version is different
-                    result = await db.execute(
+                    await db.execute(
                         update(ServerModel)
                         .where(ServerModel.id == server.id)
                         .values(current_game_version=version)

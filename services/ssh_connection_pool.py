@@ -6,7 +6,6 @@ import asyncssh
 import asyncio
 import time
 from typing import Optional, Dict, Tuple, List
-from datetime import datetime, timedelta
 from modules.models import Server, AuthType
 import logging
 
@@ -134,6 +133,7 @@ class SSHConnectionPool:
         # Connection storage: ConnectionKey -> PooledConnection
         self.connections: Dict[ConnectionKey, PooledConnection] = {}
         self.pool_lock = asyncio.Lock()
+        self._key_locks: Dict[ConnectionKey, asyncio.Lock] = {}
         
         # Cleanup task
         self.cleanup_task: Optional[asyncio.Task] = None
@@ -173,6 +173,7 @@ class SSHConnectionPool:
     
     async def _cleanup_stale_connections(self):
         """Remove stale, idle, or dead connections"""
+        stale_connections: list[PooledConnection] = []
         async with self.pool_lock:
             now = time.time()
             to_remove = []
@@ -210,13 +211,19 @@ class SSHConnectionPool:
             for key in to_remove:
                 pooled_conn = self.connections.pop(key, None)
                 if pooled_conn:
-                    await pooled_conn.close()
+                    stale_connections.append(pooled_conn)
             
             if to_remove:
                 logger.info(
                     f"Cleaned up {len(to_remove)} stale connection(s). "
                     f"Active: {len(self.connections)}"
                 )
+
+        if stale_connections:
+            await asyncio.gather(
+                *(connection.close() for connection in stale_connections),
+                return_exceptions=True,
+            )
     
     def _create_connection_key(self, server: Server) -> ConnectionKey:
         """Create a connection key from server configuration"""
@@ -226,6 +233,26 @@ class SSHConnectionPool:
             user=server.ssh_user,
             auth_type=server.auth_type
         )
+
+    async def _get_key_lock(self, key: ConnectionKey) -> asyncio.Lock:
+        """Return a per-target lock while holding the global map lock only briefly."""
+        async with self.pool_lock:
+            return self._key_locks.setdefault(key, asyncio.Lock())
+
+    async def _open_connection(self, server: Server) -> asyncssh.SSHClientConnection:
+        """Open one SSH connection without holding any pool-wide lock."""
+        common = {
+            "host": server.host,
+            "port": server.ssh_port,
+            "username": server.ssh_user,
+            "known_hosts": None,
+            "connect_timeout": 15,
+        }
+        if server.is_password_auth:
+            return await asyncssh.connect(password=server.ssh_password, **common)
+        if server.is_key_auth:
+            return await asyncssh.connect(client_keys=[server.ssh_key_path], **common)
+        raise ValueError(f"Unsupported auth type: {server.auth_type}")
     
     def _can_reconnect(self, pooled_conn: PooledConnection) -> Tuple[bool, str]:
         """
@@ -297,82 +324,41 @@ class SSHConnectionPool:
             )
         
         key = self._create_connection_key(server)
-        
-        async with self.pool_lock:
-            # Check if we have an existing connection
-            if key in self.connections:
-                pooled_conn = self.connections[key]
-                
-                # Check if connection has exceeded max lifetime
-                # This is critical for avoiding long-running connection bugs
-                now = time.time()
-                connection_age = now - pooled_conn.created_at
-                
-                if connection_age > self.max_lifetime:
-                    # Connection is too old, proactively reconnect
-                    logger.info(
-                        f"[SSH Pool] Connection exceeded max lifetime ({connection_age:.1f}s > {self.max_lifetime}s), "
-                        f"reconnecting: {key}"
-                    )
-                    await pooled_conn.close()
-                    del self.connections[key]
-                    # Fall through to create new connection below
-                elif pooled_conn.is_alive():
-                    # Connection is still alive and within max lifetime
-                    # Mark as in-use (simple counter update, already holding pool lock)
-                    pooled_conn.acquire()
-                    logger.debug(f"Reusing existing connection: {key}")
-                    return True, pooled_conn.conn, "Reused existing connection"
-                else:
-                    # Connection is dead, remove it
-                    logger.debug(f"Removing dead connection: {key}")
-                    await pooled_conn.close()
-                    del self.connections[key]
-            
-            # Create new connection
+        key_lock = await self._get_key_lock(key)
+
+        async with key_lock:
+            stale_connection = None
+            async with self.pool_lock:
+                pooled_conn = self.connections.get(key)
+                if pooled_conn is not None:
+                    connection_age = time.time() - pooled_conn.created_at
+                    if pooled_conn.is_alive() and connection_age <= self.max_lifetime:
+                        pooled_conn.acquire()
+                        logger.debug(f"Reusing existing connection: {key}")
+                        return True, pooled_conn.conn, "Reused existing connection"
+                    stale_connection = self.connections.pop(key, None)
+
+            if stale_connection is not None:
+                await stale_connection.close()
+
             try:
                 logger.debug(f"Creating new SSH connection: {key}")
-                
-                if server.is_password_auth:
-                    conn = await asyncssh.connect(
-                        host=server.host,
-                        port=server.ssh_port,
-                        username=server.ssh_user,
-                        password=server.ssh_password,
-                        known_hosts=None,
-                        connect_timeout=15
-                    )
-                elif server.is_key_auth:
-                    conn = await asyncssh.connect(
-                        host=server.host,
-                        port=server.ssh_port,
-                        username=server.ssh_user,
-                        client_keys=[server.ssh_key_path],
-                        known_hosts=None,
-                        connect_timeout=15
-                    )
-                else:
-                    return False, None, f"Unsupported auth type: {server.auth_type}"
-                
-                # Store in pool
+                conn = await self._open_connection(server)
                 pooled_conn = PooledConnection(conn, key)
-                # Mark as in-use (simple counter update, already holding pool lock)
                 pooled_conn.acquire()
-                self.connections[key] = pooled_conn
-                
-                logger.info(
-                    f"Created new SSH connection: {key}. "
-                    f"Total connections: {len(self.connections)}"
-                )
-                
+                async with self.pool_lock:
+                    self.connections[key] = pooled_conn
+                    total = len(self.connections)
+                logger.info(f"Created new SSH connection: {key}. Total connections: {total}")
                 return True, conn, "Connected successfully"
-                
             except asyncssh.PermissionDenied:
                 return False, None, "Authentication failed"
             except asyncio.TimeoutError:
                 return False, None, "SSH connection timeout - server may be unreachable or too slow to respond"
             except asyncssh.Error as e:
                 return False, None, f"SSH error: {str(e)}"
+            except ValueError as e:
+                return False, None, str(e)
             except Exception as e:
                 return False, None, f"Connection error: {str(e)}"
     
@@ -390,81 +376,41 @@ class SSHConnectionPool:
             Tuple[bool, Optional[connection], str]: (success, connection, message)
         """
         key = self._create_connection_key(server)
-        
-        async with self.pool_lock:
-            # Check if we have an existing connection
-            pooled_conn = self.connections.get(key)
-            
-            # Preserve reconnection history for rate limiting
-            reconnection_attempts = []
-            if pooled_conn:
-                reconnection_attempts = pooled_conn.reconnection_attempts.copy()
-                
-                # Check rate limiting using existing history
-                can_reconnect, limit_msg = self._can_reconnect(pooled_conn)
-                if not can_reconnect:
-                    logger.warning(f"[SSH Pool] Reconnection rate limit exceeded for {key}")
-                    return False, None, limit_msg
-                
-                # Close the existing connection
-                logger.info(f"[SSH Pool] Closing stale connection for reconnection: {key}")
-                await pooled_conn.close()
-                del self.connections[key]
-            else:
-                # No existing connection, check if we should create new tracking
-                logger.info(f"[SSH Pool] No existing connection to close, creating new one: {key}")
-            
-            # Create new connection
-            try:
-                logger.info(f"[SSH Pool] Creating new SSH connection after reconnect: {key}")
-                
-                if server.is_password_auth:
-                    conn = await asyncssh.connect(
-                        host=server.host,
-                        port=server.ssh_port,
-                        username=server.ssh_user,
-                        password=server.ssh_password,
-                        known_hosts=None,
-                        connect_timeout=15
-                    )
-                elif server.is_key_auth:
-                    conn = await asyncssh.connect(
-                        host=server.host,
-                        port=server.ssh_port,
-                        username=server.ssh_user,
-                        client_keys=[server.ssh_key_path],
-                        known_hosts=None,
-                        connect_timeout=15
-                    )
+        key_lock = await self._get_key_lock(key)
+
+        async with key_lock:
+            async with self.pool_lock:
+                pooled_conn = self.connections.get(key)
+                if pooled_conn is not None:
+                    can_reconnect, limit_msg = self._can_reconnect(pooled_conn)
+                    if not can_reconnect:
+                        return False, None, limit_msg
+                    reconnection_attempts = pooled_conn.reconnection_attempts.copy()
+                    self.connections.pop(key, None)
                 else:
-                    return False, None, f"Unsupported auth type: {server.auth_type}"
-                
-                # Store in pool with preserved reconnection history
+                    reconnection_attempts = []
+
+            if pooled_conn is not None:
+                await pooled_conn.close()
+
+            try:
+                conn = await self._open_connection(server)
                 new_pooled_conn = PooledConnection(conn, key)
                 new_pooled_conn.reconnection_attempts = reconnection_attempts
-                # Record this reconnection attempt AFTER creating the connection
                 self._record_reconnection(new_pooled_conn)
                 new_pooled_conn.acquire()
-                self.connections[key] = new_pooled_conn
-                
-                logger.info(
-                    f"[SSH Pool] ✓ Reconnection successful: {key}. "
-                    f"Total connections: {len(self.connections)}"
-                )
-                
+                async with self.pool_lock:
+                    self.connections[key] = new_pooled_conn
                 return True, conn, "Reconnected successfully"
-                
             except asyncssh.PermissionDenied:
-                logger.error(f"[SSH Pool] ✗ Reconnection failed: Authentication failed for {key}")
                 return False, None, "Authentication failed"
             except asyncio.TimeoutError:
-                logger.error(f"[SSH Pool] ✗ Reconnection failed: Connection timeout for {key}")
                 return False, None, "SSH connection timeout - server may be unreachable or too slow to respond"
             except asyncssh.Error as e:
-                logger.error(f"[SSH Pool] ✗ Reconnection failed: SSH error for {key}: {str(e)}")
                 return False, None, f"SSH error: {str(e)}"
+            except ValueError as e:
+                return False, None, str(e)
             except Exception as e:
-                logger.error(f"[SSH Pool] ✗ Reconnection failed: Connection error for {key}: {str(e)}")
                 return False, None, f"Connection error: {str(e)}"
     
     async def manual_reconnect(self, server: Server) -> Tuple[bool, Optional[asyncssh.SSHClientConnection], str]:
@@ -480,69 +426,30 @@ class SSHConnectionPool:
             Tuple[bool, Optional[connection], str]: (success, connection, message)
         """
         key = self._create_connection_key(server)
-        
-        async with self.pool_lock:
-            # Check if we have an existing connection
-            pooled_conn = self.connections.get(key)
-            
-            if pooled_conn:
-                # Close the existing connection
-                logger.info(f"[SSH Pool] Manual reconnection: Closing existing connection for {key}")
+        key_lock = await self._get_key_lock(key)
+
+        async with key_lock:
+            async with self.pool_lock:
+                pooled_conn = self.connections.pop(key, None)
+            if pooled_conn is not None:
                 await pooled_conn.close()
-                del self.connections[key]
-            else:
-                logger.info(f"[SSH Pool] Manual reconnection: No existing connection to close for {key}")
-            
-            # Create new connection
+
             try:
-                logger.info(f"[SSH Pool] Manual reconnection: Creating new SSH connection: {key}")
-                
-                if server.is_password_auth:
-                    conn = await asyncssh.connect(
-                        host=server.host,
-                        port=server.ssh_port,
-                        username=server.ssh_user,
-                        password=server.ssh_password,
-                        known_hosts=None,
-                        connect_timeout=15
-                    )
-                elif server.is_key_auth:
-                    conn = await asyncssh.connect(
-                        host=server.host,
-                        port=server.ssh_port,
-                        username=server.ssh_user,
-                        client_keys=[server.ssh_key_path],
-                        known_hosts=None,
-                        connect_timeout=15
-                    )
-                else:
-                    return False, None, f"Unsupported auth type: {server.auth_type}"
-                
-                # Store in pool with EMPTY reconnection history (reset counter)
+                conn = await self._open_connection(server)
                 new_pooled_conn = PooledConnection(conn, key)
-                new_pooled_conn.reconnection_attempts = []  # Reset to zero
                 new_pooled_conn.acquire()
-                self.connections[key] = new_pooled_conn
-                
-                logger.info(
-                    f"[SSH Pool] ✓ Manual reconnection successful: {key}. "
-                    f"Reconnection counter reset to 0. "
-                    f"Total connections: {len(self.connections)}"
-                )
-                
+                async with self.pool_lock:
+                    self.connections[key] = new_pooled_conn
                 return True, conn, "手动重连成功，计数已重置 | Manual reconnection successful, counter reset"
-                
             except asyncssh.PermissionDenied:
-                logger.error(f"[SSH Pool] ✗ Manual reconnection failed: Authentication failed for {key}")
                 return False, None, "认证失败 | Authentication failed"
             except asyncio.TimeoutError:
-                logger.error(f"[SSH Pool] ✗ Manual reconnection failed: Connection timeout for {key}")
                 return False, None, "连接超时 - 服务器可能无法访问或响应过慢 | SSH connection timeout - server may be unreachable or too slow to respond"
             except asyncssh.Error as e:
-                logger.error(f"[SSH Pool] ✗ Manual reconnection failed: SSH error for {key}: {str(e)}")
                 return False, None, f"SSH错误 | SSH error: {str(e)}"
+            except ValueError as e:
+                return False, None, str(e)
             except Exception as e:
-                logger.error(f"[SSH Pool] ✗ Manual reconnection failed: Connection error for {key}: {str(e)}")
                 return False, None, f"连接错误 | Connection error: {str(e)}"
     
     async def reset_reconnection_counter(self, server: Server) -> Tuple[bool, str]:
@@ -592,23 +499,25 @@ class SSHConnectionPool:
             server: Server instance
         """
         key = self._create_connection_key(server)
-        
-        async with self.pool_lock:
-            if key in self.connections:
-                pooled_conn = self.connections.pop(key)
+        key_lock = await self._get_key_lock(key)
+        async with key_lock:
+            async with self.pool_lock:
+                pooled_conn = self.connections.pop(key, None)
+            if pooled_conn is not None:
                 await pooled_conn.close()
                 logger.info(f"Removed connection: {key}")
     
     async def close_all(self):
         """Close all connections in the pool"""
         async with self.pool_lock:
-            logger.info(f"Closing all {len(self.connections)} connections")
-            
-            for key, pooled_conn in self.connections.items():
-                await pooled_conn.close()
-            
+            connections = list(self.connections.values())
             self.connections.clear()
-            logger.info("All connections closed")
+        logger.info(f"Closing all {len(connections)} connections")
+        await asyncio.gather(
+            *(connection.close() for connection in connections),
+            return_exceptions=True,
+        )
+        logger.info("All connections closed")
     
     async def get_pool_stats(self) -> Dict:
         """Get statistics about the connection pool"""

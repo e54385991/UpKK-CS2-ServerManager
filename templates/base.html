@@ -206,6 +206,12 @@
                     
                     if (response.ok) {
                         const user = await response.json();
+                        // Migrate existing localStorage-only sessions to the
+                        // HTTP-only cookie required by protected pages/WebSockets.
+                        await fetch('/api/auth/session', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
                         profileNav.style.display = 'block';
                         logoutNav.style.display = 'block';
                         loginNav.style.display = 'none';
@@ -238,7 +244,12 @@
             return false;
         }
         
-        function logout() {
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (error) {
+                console.warn('Failed to clear server session cookie:', error);
+            }
             localStorage.removeItem('access_token');
             window.location.href = '/login';
         }

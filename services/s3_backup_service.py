@@ -6,6 +6,7 @@ import os
 import shutil
 import tempfile
 import uuid
+from anyio import to_thread
 from typing import Any, Dict, List, Optional, Tuple
 
 from modules.models import Server, User
@@ -277,7 +278,7 @@ class S3BackupService:
                 await ssh_manager.disconnect()
             except Exception:
                 pass
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            await to_thread.run_sync(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
 
     async def list_backups(self, user: User, server: Server) -> Tuple[bool, List[Dict[str, Any]], str]:
         if not self.is_configured(user):

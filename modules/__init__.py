@@ -37,8 +37,10 @@ from .schemas import (
 )
 from .database import get_db, init_db, engine, async_session_maker, migrate_db
 from .auth import (
-    get_password_hash, verify_password, create_access_token,
+    get_password_hash, verify_password, get_password_hash_async, verify_password_async,
+    create_access_token, set_web_session_cookie, clear_web_session_cookie,
     get_current_user, get_current_active_user, get_current_admin_user,
+    get_current_web_user, get_current_web_admin, authenticate_websocket,
     get_optional_current_user, get_user_from_api_key, get_current_user_flexible
 )
 from .utils import generate_api_key, verify_api_key_format, get_current_time
@@ -152,10 +154,17 @@ __all__ = [
     'async_session_maker',
     'get_password_hash',
     'verify_password',
+    'get_password_hash_async',
+    'verify_password_async',
     'create_access_token',
+    'set_web_session_cookie',
+    'clear_web_session_cookie',
     'get_current_user',
     'get_current_active_user',
     'get_current_admin_user',
+    'get_current_web_user',
+    'get_current_web_admin',
+    'authenticate_websocket',
     'get_optional_current_user',
     'get_user_from_api_key',
     'get_current_user_flexible',

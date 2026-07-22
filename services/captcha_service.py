@@ -2,11 +2,11 @@
 CAPTCHA service for generating and validating CAPTCHAs
 Uses Redis for temporary storage of CAPTCHA codes
 """
-import io
 import secrets
 import string
-from typing import Tuple, Optional
+from typing import Tuple
 from captcha.image import ImageCaptcha
+from anyio import to_thread
 from services.redis_manager import redis_manager
 
 
@@ -14,7 +14,6 @@ class CaptchaService:
     """Service for CAPTCHA generation and validation"""
     
     def __init__(self):
-        self.image_captcha = ImageCaptcha(width=200, height=80)
         self.code_length = 4
         self.expiration_seconds = 300  # 5 minutes
     
@@ -23,6 +22,11 @@ class CaptchaService:
         # Use uppercase letters and digits, excluding confusing characters
         chars = string.ascii_uppercase.replace('O', '').replace('I', '') + string.digits.replace('0', '').replace('1', '')
         return ''.join(secrets.choice(chars) for _ in range(self.code_length))
+
+    @staticmethod
+    def _render_image(code: str) -> bytes:
+        image_data = ImageCaptcha(width=200, height=80).generate(code)
+        return image_data.getvalue() if hasattr(image_data, "getvalue") else image_data.read()
     
     async def generate_captcha(self) -> Tuple[str, bytes]:
         """
@@ -43,8 +47,7 @@ class CaptchaService:
         )
         
         # Generate CAPTCHA image
-        image_data = self.image_captcha.generate(code)
-        image_bytes = image_data.getvalue() if hasattr(image_data, 'getvalue') else image_data.read()
+        image_bytes = await to_thread.run_sync(self._render_image, code)
         
         return token, image_bytes
     

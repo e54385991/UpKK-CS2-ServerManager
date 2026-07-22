@@ -1,10 +1,11 @@
 """
 CAPTCHA API routes
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from services.captcha_service import captcha_service
+from services.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/api/captcha", tags=["captcha"])
 
@@ -20,17 +21,18 @@ class CaptchaRefreshRequest(BaseModel):
 
 
 @router.get("/generate")
-async def generate_captcha():
+async def generate_captcha(request: Request):
     """
     Generate a new CAPTCHA
     Returns the token in JSON and client should call /api/captcha/image/{token} to get the image
     """
+    await enforce_rate_limit(request, "captcha", limit=30, window=60)
     token, _ = await captcha_service.generate_captcha()
     return CaptchaResponse(token=token)
 
 
 @router.get("/image/{token}")
-async def get_captcha_image(token: str):
+async def get_captcha_image(token: str, request: Request):
     """
     Get CAPTCHA image for a specific token
     This endpoint regenerates the image for the existing token
@@ -39,6 +41,7 @@ async def get_captcha_image(token: str):
     # Instead, client should call /generate first to get a token
     # Then call this endpoint with that token
     # To prevent abuse, we generate a new captcha and return it
+    await enforce_rate_limit(request, "captcha", limit=30, window=60)
     new_token, image_bytes = await captcha_service.generate_captcha()
     
     return Response(
@@ -54,10 +57,11 @@ async def get_captcha_image(token: str):
 
 
 @router.post("/refresh")
-async def refresh_captcha(request: CaptchaRefreshRequest):
+async def refresh_captcha(refresh_request: CaptchaRefreshRequest, request: Request):
     """
     Refresh a CAPTCHA (invalidate old one and get new token)
     Client should call /api/captcha/image/{new_token} to get the new image
     """
-    new_token, _ = await captcha_service.refresh_captcha(request.old_token)
+    await enforce_rate_limit(request, "captcha", limit=30, window=60)
+    new_token, _ = await captcha_service.refresh_captcha(refresh_request.old_token)
     return CaptchaResponse(token=new_token)

@@ -15,17 +15,19 @@ import socket
 import tempfile
 import uuid
 import shutil
+import anyio
 from email.message import Message
 from email.utils import collapse_rfc2231_value
-from typing import AsyncIterator, Callable, Optional, Tuple, List, Dict, Any
+from typing import AsyncIterator, Awaitable, Callable, Optional, Tuple, List, Dict, Any
 from datetime import datetime
 from urllib.parse import unquote, urljoin, urlsplit
-from modules.models import Server, AuthType
+from modules.models import Server
 from services.game_session import (
     availability_command,
     cleanup_command,
     find_running_session_managers,
     force_stop_session_command,
+    gslt_startup_parameter,
     normalize_session_manager,
     session_name,
     start_session_command,
@@ -35,6 +37,46 @@ from services.server_monitor import server_monitor
 from services.ssh_connection_pool import ssh_connection_pool
 
 logger = logging.getLogger(__name__)
+_status_update_tasks: set[asyncio.Task] = set()
+
+
+def _schedule_status_update(server_id: int, success: bool) -> None:
+    task = asyncio.create_task(update_ssh_connection_status(server_id, success))
+    _status_update_tasks.add(task)
+    task.add_done_callback(_status_update_tasks.discard)
+
+
+async def shutdown_background_tasks() -> None:
+    """Await pending SSH status writes before the database engine is disposed."""
+    tasks = list(_status_update_tasks)
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    _status_update_tasks.clear()
+
+
+async def _cleanup_local_download_dir(download_dir: str, panel_temp_dir: str) -> None:
+    """Delete a potentially large local download tree without blocking the event loop."""
+    def cleanup() -> tuple[bool, bool]:
+        if not os.path.exists(download_dir):
+            return False, False
+        shutil.rmtree(download_dir)
+        parent_removed = False
+        try:
+            if os.path.exists(panel_temp_dir) and not os.listdir(panel_temp_dir):
+                os.rmdir(panel_temp_dir)
+                parent_removed = True
+        except OSError:
+            pass
+        return True, parent_removed
+
+    try:
+        download_removed, parent_removed = await anyio.to_thread.run_sync(cleanup)
+        if download_removed:
+            logger.info("Cleaned up panel temp directory: %s", download_dir)
+        if parent_removed:
+            logger.info("Cleaned up empty parent directory: %s", panel_temp_dir)
+    except Exception as exc:
+        logger.warning("Failed to clean up panel temp directory %s: %s", download_dir, exc)
 
 
 async def update_ssh_connection_status(server_id: int, success: bool):
@@ -141,6 +183,7 @@ class SSHManager:
     # SteamCMD retry configuration
     STEAMCMD_MAX_RETRIES = 5  # Maximum number of retry attempts (not counting the initial attempt)
     STEAMCMD_RETRY_DELAY = 5  # Initial delay in seconds between retries (will use exponential backoff)
+    CS2_EXECUTABLE_RELATIVE_PATH = "cs2/game/bin/linuxsteamrt64/cs2"
     
     # Metamod:Source CS2 dev builds live on the sourcemm dev page and GitHub prereleases.
     METAMOD_DOWNLOADS_URL = "https://www.sourcemm.net/downloads.php?branch=dev"
@@ -676,7 +719,7 @@ class SSHManager:
             self.conn = conn
             
             # Track SSH connection status in background (don't block on DB update)
-            asyncio.create_task(update_ssh_connection_status(server.id, success))
+            _schedule_status_update(server.id, success)
             
             return success, msg
         else:
@@ -706,20 +749,20 @@ class SSHManager:
                     return False, f"Unsupported auth type: {server.auth_type}"
                 
                 # Track successful connection
-                asyncio.create_task(update_ssh_connection_status(server.id, True))
+                _schedule_status_update(server.id, True)
                 
                 return True, "Connected successfully"
             except asyncssh.PermissionDenied:
-                asyncio.create_task(update_ssh_connection_status(server.id, False))
+                _schedule_status_update(server.id, False)
                 return False, "Authentication failed"
             except asyncio.TimeoutError:
-                asyncio.create_task(update_ssh_connection_status(server.id, False))
+                _schedule_status_update(server.id, False)
                 return False, "SSH connection timeout - server may be unreachable or too slow to respond"
             except asyncssh.Error as e:
-                asyncio.create_task(update_ssh_connection_status(server.id, False))
+                _schedule_status_update(server.id, False)
                 return False, f"SSH error: {str(e)}"
             except Exception as e:
-                asyncio.create_task(update_ssh_connection_status(server.id, False))
+                _schedule_status_update(server.id, False)
                 return False, f"Connection error: {str(e)}"
     
     async def execute_command(self, command: str, timeout: int = 30) -> Tuple[bool, str, str]:
@@ -755,7 +798,7 @@ class SSHManager:
                     success, conn, reconnect_msg = await ssh_connection_pool.reconnect(self.current_server)
                     if success:
                         self.conn = conn
-                        logger.info(f"[SSH Manager] Reconnection successful, retrying execute_command")
+                        logger.info("[SSH Manager] Reconnection successful, retrying execute_command")
                         # Retry once after reconnection
                         return await _do_execute()
                     else:
@@ -840,7 +883,7 @@ class SSHManager:
                     success, conn, reconnect_msg = await ssh_connection_pool.reconnect(self.current_server)
                     if success:
                         self.conn = conn
-                        logger.info(f"[SSH Manager] Reconnection successful, retrying execute_command_streaming")
+                        logger.info("[SSH Manager] Reconnection successful, retrying execute_command_streaming")
                         # Retry once after reconnection (clear accumulated output)
                         stdout_lines.clear()
                         stderr_lines.clear()
@@ -965,10 +1008,10 @@ class SSHManager:
                             await send_progress("✓ Permissions fixed for /home/cs2server")
                         else:
                             return False, (
-                                f"Cannot create directory in /home/cs2server: Permission denied.\n"
-                                f"Please ensure the directory has correct permissions:\n"
-                                f"sudo chown -R cs2server:cs2server /home/cs2server\n"
-                                f"sudo chmod 755 /home/cs2server"
+                                "Cannot create directory in /home/cs2server: Permission denied.\n"
+                                "Please ensure the directory has correct permissions:\n"
+                                "sudo chown -R cs2server:cs2server /home/cs2server\n"
+                                "sudo chmod 755 /home/cs2server"
                             )
                     else:
                         return False, (
@@ -1028,7 +1071,7 @@ class SSHManager:
             success, stdout, stderr = await self.execute_command(f"mkdir -p {server.game_directory}")
             if not success:
                 return False, f"Directory creation failed: {stderr}"
-            await send_progress(f"✓ Game directory created successfully")
+            await send_progress("✓ Game directory created successfully")
             
             # Download and install SteamCMD
             steamcmd_dir = f"{server.game_directory}/steamcmd"
@@ -1039,7 +1082,7 @@ class SSHManager:
             success, stdout, stderr = await self.execute_command(f"mkdir -p {steamcmd_dir}")
             if not success:
                 return False, f"SteamCMD directory creation failed: {stderr}"
-            await send_progress(f"✓ SteamCMD directory created")
+            await send_progress("✓ SteamCMD directory created")
             
             # Download SteamCMD with streaming output
             await send_progress("Downloading SteamCMD...")
@@ -1124,21 +1167,7 @@ class SSHManager:
                 finally:
                     # Clean up panel temp directory
                     if steamcmd_local_path:
-                        try:
-                            if os.path.exists(download_dir):
-                                shutil.rmtree(download_dir)
-                                logger.info(f"Cleaned up panel temp directory: {download_dir}")
-                                
-                                # Also clean up parent directory if empty
-                                try:
-                                    if os.path.exists(panel_temp_dir) and not os.listdir(panel_temp_dir):
-                                        os.rmdir(panel_temp_dir)
-                                        logger.info(f"Cleaned up empty parent directory: {panel_temp_dir}")
-                                except OSError:
-                                    # Directory not empty or other OS error, ignore
-                                    pass
-                        except Exception as e:
-                            logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
+                        await _cleanup_local_download_dir(download_dir, panel_temp_dir)
             else:
                 # Original Mode: Download directly on remote server
                 download_cmd = f"wget --progress=dot:mega https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -O {steamcmd_dir}/steamcmd_linux.tar.gz"
@@ -1154,9 +1183,9 @@ class SSHManager:
                     if not check_success or 'exists' not in check_stdout:
                         return False, f"SteamCMD download failed: {stderr if stderr else 'Download incomplete'}"
                     # File exists, continue despite wget exit code
-                    await send_progress(f"✓ SteamCMD download completed (file verified)")
+                    await send_progress("✓ SteamCMD download completed (file verified)")
                 else:
-                    await send_progress(f"✓ SteamCMD downloaded successfully")
+                    await send_progress("✓ SteamCMD downloaded successfully")
             
             # Extract SteamCMD
             await send_progress("Extracting SteamCMD...")
@@ -1166,13 +1195,16 @@ class SSHManager:
             )
             if not success:
                 return False, f"SteamCMD extraction failed: {stderr}"
-            await send_progress(f"✓ SteamCMD extracted successfully")
+            await send_progress("✓ SteamCMD extracted successfully")
             
             # Install CS2 server (App ID: 730) with streaming output and automatic retry
             await send_progress("=" * 60)
             await send_progress("Installing CS2 server via SteamCMD...")
             await send_progress("This will download approximately 30GB and may take 15-30 minutes")
-            await send_progress("Auto-retry is enabled: up to 3 automatic retries on network errors")
+            await send_progress(
+                "Auto-retry is enabled: up to 5 retries whenever the required "
+                "CS2 executable is still missing"
+            )
             await send_progress("Please be patient, you will see real-time progress below:")
             await send_progress("=" * 60)
             
@@ -1189,30 +1221,54 @@ class SSHManager:
             await send_progress("")
             await send_progress("即将执行的命令 / Commands to be executed:")
             await send_progress("=" * 60)
-            await send_progress(f"📝 SteamCMD Install Command:")
+            await send_progress("📝 SteamCMD Install Command:")
             await send_progress(f"   {install_cs2}")
             await send_progress("=" * 60)
             await send_progress("")
             
-            # Use retry mechanism for SteamCMD installation
+            async def verify_cs2_installation() -> bool:
+                executable_exists, executable_path = (
+                    await self._cs2_executable_exists_connected(server)
+                )
+                if executable_exists:
+                    await send_progress(
+                        f"✓ CS2 executable verified: {executable_path}"
+                    )
+                else:
+                    await send_progress(
+                        f"✗ CS2 executable is still missing: {executable_path}"
+                    )
+                return executable_exists
+
+            # A SteamCMD zero exit code is not sufficient: interrupted downloads
+            # can leave an incomplete tree. Verify the actual server executable
+            # after every attempt and retry even for otherwise non-retryable exits.
             success, stdout, stderr = await self._execute_steamcmd_with_retry(
                 install_cs2,
                 server,
                 progress_callback=send_progress,
-                timeout=1800  # 30 minutes per attempt
+                timeout=1800,  # 30 minutes per attempt
+                max_retries=self.STEAMCMD_MAX_RETRIES,
+                completion_check=verify_cs2_installation,
             )
             
             if not success:
-                # SteamCMD may restart itself during updates, which can cause non-zero exit codes
-                # Check if CS2 was actually installed successfully
-                await send_progress("Verifying CS2 installation...")
-                verify_cmd = f"test -f {server.game_directory}/cs2/game/bin/linuxsteamrt64/cs2 && echo 'installed'"
-                verify_success, verify_stdout, _ = await self.execute_command(verify_cmd)
-                
-                if not verify_success or 'installed' not in verify_stdout:
-                    await send_progress(f"CS2 installation failed!")
-                    await send_progress(f"Error details: {stderr}")
-                    return False, f"CS2 installation failed: {stderr if stderr else 'Installation incomplete'}"
+                executable_path = self._cs2_executable_path(server)
+                error_detail = stderr.strip() if stderr else "Installation incomplete"
+                alarm_message = (
+                    "🚨 CS2 部署失败报警：SteamCMD 初次执行及 5 次自动重试后，"
+                    f"仍未找到文件 {executable_path}。部署已中断；请重新部署或运行修复。"
+                    f" 错误详情：{error_detail}"
+                )
+                await send_progress(alarm_message)
+                logger.error(
+                    "CS2 deployment aborted for server %s: executable missing at %s "
+                    "after %s retries",
+                    server.id,
+                    executable_path,
+                    self.STEAMCMD_MAX_RETRIES,
+                )
+                return False, alarm_message
             
             # Fix steamclient.so symlink issue (required for CS2 to start)
             # See: https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers#Troubleshooting
@@ -1259,8 +1315,8 @@ class SSHManager:
             local_script_path = os.path.join(script_dir, "scripts", "cs2_autorestart.sh")
             
             try:
-                with open(local_script_path, 'r') as f:
-                    script_content = f.read()
+                async with await anyio.open_file(local_script_path, "r") as script_file:
+                    script_content = await script_file.read()
                 
                 # Create the script on remote server
                 create_script_cmd = f"cat > {autorestart_script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
@@ -1437,8 +1493,8 @@ class SSHManager:
                 local_script_path = os.path.join(script_dir, "scripts", "cs2_autorestart.sh")
                 
                 try:
-                    with open(local_script_path, 'r') as f:
-                        script_content = f.read()
+                    async with await anyio.open_file(local_script_path, "r") as script_file:
+                        script_content = await script_file.read()
                     
                     create_script_cmd = f"cat > {autorestart_script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
                     deploy_success, _, _ = await self.execute_command(create_script_cmd, timeout=10)
@@ -1515,17 +1571,51 @@ class SSHManager:
             f"Selected session manager '{manager}' is not installed on the remote host"
         )
 
+    @classmethod
+    def _cs2_executable_path(cls, server: Server) -> str:
+        """Return the required Linux CS2 executable path for a server."""
+        return posixpath.join(
+            server.game_directory.rstrip("/"),
+            cls.CS2_EXECUTABLE_RELATIVE_PATH,
+        )
+
+    async def _cs2_executable_exists_connected(
+        self,
+        server: Server,
+        timeout: int = 10,
+    ) -> Tuple[bool, str]:
+        """Check the required executable using the current SSH connection."""
+        executable_path = self._cs2_executable_path(server)
+        success, stdout, _ = await self.execute_command(
+            f"test -f {shlex.quote(executable_path)} && echo exists",
+            timeout=timeout,
+        )
+        return success and stdout.strip() == "exists", executable_path
+
+    @staticmethod
+    def _missing_cs2_executable_message(executable_path: str) -> str:
+        return (
+            f"CS2 可执行文件不存在：{executable_path}。"
+            "请重新部署服务器或运行修复/验证。"
+        )
+
     async def check_session_manager_available(
         self,
         server: Server,
         timeout: int = 10,
     ) -> Tuple[bool, str]:
-        """Preflight a future start/restart before stopping a live server."""
+        """Check start/restart prerequisites before stopping a live server."""
         success, message = await self.connect(server)
         if not success:
-            return False, f"Connection failed during session-manager preflight: {message}"
+            return False, f"Connection failed during start/restart preflight: {message}"
 
         try:
+            executable_exists, executable_path = (
+                await self._cs2_executable_exists_connected(server, timeout=timeout)
+            )
+            if not executable_exists:
+                return False, self._missing_cs2_executable_message(executable_path)
+
             return await self._configured_session_manager_available_connected(
                 server,
                 timeout=timeout,
@@ -1614,7 +1704,7 @@ class SSHManager:
             Processes quoted occurrences first, then unquoted to avoid partial exposure.
             Uses regex escaping to handle special characters safely.
             """
-            if value is None or value == '':
+            if value is None or value.strip() == '':
                 return cmd
             # Escape the value for safe string replacement (handles special characters)
             escaped_value = re.escape(value)
@@ -1626,6 +1716,14 @@ class SSHManager:
             return cmd
         
         try:
+            executable_exists, executable_path = (
+                await self._cs2_executable_exists_connected(server)
+            )
+            if not executable_exists:
+                message = self._missing_cs2_executable_message(executable_path)
+                await send_progress(f"✗ {message}")
+                return False, message
+
             manager = normalize_session_manager(server.session_manager)
             name = session_name(server.id)
             await send_progress(f"Using {manager} as the game session manager")
@@ -1741,9 +1839,10 @@ class SSHManager:
             elif server.game_port:
                 params.append(f"+clientport {server.game_port + 1}")
             
-            # Steam account token (GSLT) - required for public servers
-            if server.steam_account_token:
-                params.append(f'+sv_setsteamaccount "{server.steam_account_token}"')
+            # Steam account token (GSLT) - required only for public servers
+            gslt_parameter = gslt_startup_parameter(server.steam_account_token)
+            if gslt_parameter:
+                params.append(gslt_parameter)
             
             # Server password
             if server.server_password:
@@ -1792,8 +1891,8 @@ class SSHManager:
                 local_script_path = os.path.join(script_dir, "scripts", "cs2_autorestart.sh")
                 
                 try:
-                    with open(local_script_path, 'r') as f:
-                        script_content = f.read()
+                    async with await anyio.open_file(local_script_path, "r") as script_file:
+                        script_content = await script_file.read()
                     
                     # Create the script on remote server
                     create_script_cmd = f"cat > {autorestart_script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
@@ -1890,7 +1989,12 @@ class SSHManager:
             sanitized_cmd = sanitize_sensitive_value(sanitized_cmd, api_key, "***API_KEY***")
             sanitized_cmd = sanitize_sensitive_value(sanitized_cmd, server.server_password, "***PASSWORD***")
             sanitized_cmd = sanitize_sensitive_value(sanitized_cmd, server.rcon_password, "***RCON_PASSWORD***")
-            sanitized_cmd = sanitize_sensitive_value(sanitized_cmd, server.steam_account_token, "***STEAM_TOKEN***")
+            normalized_gslt = (server.steam_account_token or "").strip()
+            sanitized_cmd = sanitize_sensitive_value(
+                sanitized_cmd,
+                normalized_gslt,
+                "***STEAM_TOKEN***",
+            )
             await send_progress(sanitized_cmd)
             await send_progress("=" * 60)
             
@@ -1916,7 +2020,7 @@ class SSHManager:
             # Use execute_command_streaming to show real-time output
             try:
                 await self.execute_command_streaming(stream_cmd, output_callback=progress_callback, timeout=5)
-            except Exception as e:
+            except Exception:
                 # Timeout is expected - just continue
                 pass
             
@@ -2033,7 +2137,7 @@ class SSHManager:
                 core_check = f"ls -lt {server.game_directory}/cs2/game/bin/linuxsteamrt64/core* 2>/dev/null | head -1 || echo 'No core dump'"
                 _, core_output, _ = await self.execute_command(core_check)
                 
-                crash_info = f"Server crashed within 1 second of starting.\n\n"
+                crash_info = "Server crashed within 1 second of starting.\n\n"
                 crash_info += f"=== Console Log (last 100 lines) ===\n{crash_log[:3000]}\n\n"
                 if 'No core dump' not in core_output:
                     crash_info += f"=== Core Dump Found ===\n{core_output}\n"
@@ -2162,7 +2266,7 @@ class SSHManager:
             lib_check = f"cd {server.game_directory}/cs2/game/bin/linuxsteamrt64 && ldd ./cs2 2>&1 | grep 'not found' || echo 'all libraries found'"
             lib_success, lib_stdout, _ = await self.execute_command(lib_check, timeout=10)
             if 'not found' in lib_stdout:
-                diagnostics.append(f"\n=== Missing Libraries ===")
+                diagnostics.append("\n=== Missing Libraries ===")
                 diagnostics.append(lib_stdout.strip())
             
             # Check if steamclient.so exists (required)
@@ -2325,15 +2429,20 @@ class SSHManager:
             await self._send_progress_if_callback(progress_callback, f"Note: Error checking for stray CS2 processes: {str(e)}")
     
     async def _execute_steamcmd_with_retry(
-        self, 
-        command: str, 
+        self,
+        command: str,
         server: Server,
         progress_callback=None,
         timeout: int = 1800,
-        max_retries: int = None
+        max_retries: int = None,
+        completion_check: Optional[Callable[[], Awaitable[bool]]] = None,
     ) -> Tuple[bool, str, str]:
         """
-        Execute SteamCMD command with automatic retry on failure
+        Execute SteamCMD with retry and optional artifact verification.
+
+        When ``completion_check`` is supplied, its result is authoritative. This
+        handles both interrupted downloads with a zero exit code and completed
+        installs where SteamCMD returns a non-zero status after self-updating.
         
         Args:
             command: SteamCMD command to execute
@@ -2341,6 +2450,8 @@ class SSHManager:
             progress_callback: Optional async callback for progress updates
             timeout: Command timeout in seconds
             max_retries: Maximum number of retries (default: STEAMCMD_MAX_RETRIES, must be >= 0)
+            completion_check: Async check run after every exit/error. A false
+                result forces a retry regardless of SteamCMD's exit status.
         
         Returns:
             Tuple[bool, str, str]: (success, stdout, stderr)
@@ -2365,94 +2476,133 @@ class SSHManager:
                 else:
                     progress_callback(message)
         
+        async def completion_is_verified() -> Optional[bool]:
+            if completion_check is None:
+                return None
+            try:
+                return bool(await completion_check())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "SteamCMD completion check failed for server %s: %s",
+                    server.id,
+                    exc,
+                )
+                await send_progress(
+                    f"⚠ Could not verify SteamCMD completion: {exc}"
+                )
+                return False
+
         # Attempt counter (0 = initial attempt, 1+ = retries)
         for attempt in range(max_retries + 1):
+            stdout = ""
+            stderr = ""
+            retry_reason = ""
+            retryable = False
+
             try:
-                # Handle retry attempts (attempt > 0)
                 if attempt > 0:
-                    # Kill any existing steamcmd processes before retry
                     await self._kill_steamcmd_processes(server, progress_callback)
-                    
-                    # Calculate exponential backoff delay
                     delay = self.STEAMCMD_RETRY_DELAY * (2 ** (attempt - 1))
-                    await send_progress(f"⏳ Retry attempt {attempt}/{max_retries} - waiting {delay} seconds before retry...")
+                    await send_progress(
+                        f"⏳ Retry attempt {attempt}/{max_retries} - "
+                        f"waiting {delay} seconds before retry..."
+                    )
                     await asyncio.sleep(delay)
-                    await send_progress(f"🔄 Starting retry attempt {attempt}/{max_retries}...")
-                
-                # Execute the command with streaming output
+                    await send_progress(
+                        f"🔄 Starting retry attempt {attempt}/{max_retries}..."
+                    )
+
                 success, stdout, stderr = await self.execute_command_streaming(
                     command,
                     output_callback=progress_callback,
-                    timeout=timeout
+                    timeout=timeout,
                 )
-                
-                # Check if the command was successful
-                if success:
-                    if attempt > 0:
-                        await send_progress(f"✓ SteamCMD command succeeded on retry attempt {attempt}/{max_retries}")
-                    return True, stdout, stderr
-                
-                # Command failed - check if we should retry
-                # Common SteamCMD errors that are worth retrying:
-                # - Network errors (timeout, connection failed, etc.)
-                # - Temporary server issues
-                # - Download interruptions
-                stderr_lower = stderr.lower() if stderr else ""
-                stdout_lower = stdout.lower() if stdout else ""
-                
-                # Combine output for error checking
-                output_lower = ' '.join(filter(None, [stderr_lower, stdout_lower]))
-                
-                # Check for errors that suggest a retry would help (using class constant)
-                is_retryable = any(error in output_lower for error in self.STEAMCMD_RETRYABLE_ERRORS)
-                
-                if attempt < max_retries and is_retryable:
-                    # Log the error and prepare for retry
-                    if stderr:
-                        error_snippet = stderr[:200]
-                    elif stdout:
-                        error_snippet = stdout[:200]
-                    else:
-                        error_snippet = "Unknown error"
-                    await send_progress(f"⚠ SteamCMD failed with retryable error: {error_snippet}")
-                    logger.warning(f"SteamCMD attempt {attempt + 1} failed for server {server.id}: {error_snippet}")
-                    # Continue to next iteration to retry
-                    continue
-                else:
-                    # Either we've exhausted retries or the error is not retryable
-                    if attempt >= max_retries:
-                        await send_progress(f"✗ SteamCMD failed after {max_retries} retry attempts")
-                        logger.error(f"SteamCMD failed for server {server.id} after {max_retries} retries")
-                    else:
-                        await send_progress(f"✗ SteamCMD failed with non-retryable error")
-                        logger.error(f"SteamCMD failed for server {server.id} with non-retryable error")
-                    
-                    return False, stdout, stderr
-            
+
+                if not success:
+                    output_lower = " ".join(
+                        filter(None, [(stderr or "").lower(), (stdout or "").lower()])
+                    )
+                    retryable = any(
+                        error in output_lower
+                        for error in self.STEAMCMD_RETRYABLE_ERRORS
+                    )
+                    retry_reason = stderr or stdout or "Unknown error"
             except asyncio.TimeoutError:
-                # Timeout is also retryable
-                if attempt < max_retries:
-                    await send_progress(f"⚠ SteamCMD timeout on attempt {attempt + 1}")
-                    logger.warning(f"SteamCMD timeout for server {server.id} on attempt {attempt + 1}")
-                    continue
-                else:
-                    await send_progress(f"✗ SteamCMD timeout after {max_retries} retry attempts")
-                    logger.error(f"SteamCMD timeout for server {server.id} after {max_retries} retries")
-                    return False, "", "Command timeout after retries"
-            
-            except Exception as e:
-                # Unexpected exception
-                error_msg = str(e)
-                if attempt < max_retries:
-                    await send_progress(f"⚠ SteamCMD error on attempt {attempt + 1}: {error_msg}")
-                    logger.warning(f"SteamCMD error for server {server.id} on attempt {attempt + 1}: {error_msg}")
-                    continue
-                else:
-                    await send_progress(f"✗ SteamCMD error after {max_retries} retry attempts: {error_msg}")
-                    logger.error(f"SteamCMD error for server {server.id} after {max_retries} retries: {error_msg}")
-                    return False, "", f"Exception after retries: {error_msg}"
-        
-        # No fallback return needed - loop always executes at least once and all paths return
+                success = False
+                stderr = "Command timeout"
+                retry_reason = stderr
+                retryable = True
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                success = False
+                stderr = str(exc)
+                retry_reason = f"Unexpected error: {exc}"
+                retryable = True
+
+            completion_verified = await completion_is_verified()
+            if completion_verified is True:
+                if not success:
+                    await send_progress(
+                        "✓ SteamCMD exited with an error, but the required "
+                        "deployment file was verified"
+                    )
+                elif attempt > 0:
+                    await send_progress(
+                        f"✓ SteamCMD command succeeded on retry attempt "
+                        f"{attempt}/{max_retries}"
+                    )
+                return True, stdout, stderr
+
+            if completion_verified is False:
+                retryable = True
+                retry_reason = "Required deployment file is missing"
+                artifact_error = (
+                    "Required deployment file is missing after SteamCMD exit"
+                )
+                stderr = f"{stderr}; {artifact_error}" if stderr else artifact_error
+            elif success:
+                if attempt > 0:
+                    await send_progress(
+                        f"✓ SteamCMD command succeeded on retry attempt "
+                        f"{attempt}/{max_retries}"
+                    )
+                return True, stdout, stderr
+
+            error_snippet = retry_reason[:200] if retry_reason else "Unknown error"
+            if attempt < max_retries and retryable:
+                await send_progress(
+                    f"⚠ SteamCMD attempt {attempt + 1}/{max_retries + 1} "
+                    f"did not complete: {error_snippet}"
+                )
+                logger.warning(
+                    "SteamCMD attempt %s failed for server %s: %s",
+                    attempt + 1,
+                    server.id,
+                    error_snippet,
+                )
+                continue
+
+            if attempt >= max_retries:
+                await send_progress(
+                    f"✗ SteamCMD failed after {max_retries} retry attempts"
+                )
+                logger.error(
+                    "SteamCMD failed for server %s after %s retries",
+                    server.id,
+                    max_retries,
+                )
+            else:
+                await send_progress("✗ SteamCMD failed with non-retryable error")
+                logger.error(
+                    "SteamCMD failed for server %s with non-retryable error",
+                    server.id,
+                )
+            return False, stdout, stderr
+
+        raise RuntimeError("SteamCMD retry loop ended unexpectedly")
     
     async def update_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """Update CS2 server using SteamCMD (without validation)"""
@@ -2523,11 +2673,14 @@ class SSHManager:
             await send_progress("=" * 60)
             await send_progress("即将执行的命令 / Commands to be executed:")
             await send_progress("=" * 60)
-            await send_progress(f"📝 SteamCMD Update Command:")
+            await send_progress("📝 SteamCMD Update Command:")
             await send_progress(f"   {update_cmd}")
             await send_progress("=" * 60)
             await send_progress("Updating CS2 server files via SteamCMD...")
-            await send_progress("Auto-retry is enabled: up to 3 automatic retries on network errors")
+            await send_progress(
+                f"Auto-retry is enabled: up to {self.STEAMCMD_MAX_RETRIES} "
+                "automatic retries on network errors"
+            )
             
             # Use retry mechanism for SteamCMD update
             success, stdout, stderr = await self._execute_steamcmd_with_retry(
@@ -2658,12 +2811,15 @@ class SSHManager:
             await send_progress("=" * 60)
             await send_progress("即将执行的命令 / Commands to be executed:")
             await send_progress("=" * 60)
-            await send_progress(f"📝 SteamCMD Update + Validate Command:")
+            await send_progress("📝 SteamCMD Update + Validate Command:")
             await send_progress(f"   {update_cmd}")
             await send_progress("=" * 60)
             await send_progress("Updating and validating CS2 server files via SteamCMD...")
             await send_progress("This may take a while as all files will be validated...")
-            await send_progress("Auto-retry is enabled: up to 3 automatic retries on network errors")
+            await send_progress(
+                f"Auto-retry is enabled: up to {self.STEAMCMD_MAX_RETRIES} "
+                "automatic retries on network errors"
+            )
             
             # Use retry mechanism for SteamCMD validation
             success, stdout, stderr = await self._execute_steamcmd_with_retry(
@@ -2720,7 +2876,7 @@ class SSHManager:
                 return True, "running"
             return True, "stopped"
         
-        except Exception as e:
+        except Exception:
             return False, "unknown"
         finally:
             await self.disconnect()
@@ -2858,20 +3014,7 @@ class SSHManager:
                 finally:
                     # Clean up panel temp directory
                     if panel_archive_path:
-                        try:
-                            if os.path.exists(download_dir):
-                                shutil.rmtree(download_dir)
-                                logger.info(f"Cleaned up panel temp directory: {download_dir}")
-                                
-                                # Also clean up parent directory if empty
-                                try:
-                                    if os.path.exists(panel_temp_dir) and not os.listdir(panel_temp_dir):
-                                        os.rmdir(panel_temp_dir)
-                                        logger.info(f"Cleaned up empty parent directory: {panel_temp_dir}")
-                                except OSError:
-                                    pass
-                        except Exception as e:
-                            logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
+                        await _cleanup_local_download_dir(download_dir, panel_temp_dir)
             else:
                 # Original Mode: Download directly on remote server
                 actual_download_url = self._apply_github_download_proxy(metamod_url, server.github_proxy)
@@ -3157,20 +3300,7 @@ class SSHManager:
                 finally:
                     # Clean up panel temp directory
                     if panel_archive_path:
-                        try:
-                            if os.path.exists(download_dir):
-                                shutil.rmtree(download_dir)
-                                logger.info(f"Cleaned up panel temp directory: {download_dir}")
-                                
-                                # Also clean up parent directory if empty
-                                try:
-                                    if os.path.exists(panel_temp_dir) and not os.listdir(panel_temp_dir):
-                                        os.rmdir(panel_temp_dir)
-                                        logger.info(f"Cleaned up empty parent directory: {panel_temp_dir}")
-                                except OSError:
-                                    pass
-                        except Exception as e:
-                            logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
+                        await _cleanup_local_download_dir(download_dir, panel_temp_dir)
             else:
                 # Original Mode: Download directly on remote server (use GitHub proxy if configured)
                 # Apply GitHub proxy to download URL if configured
@@ -3178,7 +3308,7 @@ class SSHManager:
                 if server.github_proxy and server.github_proxy.strip():
                     proxy_base = server.github_proxy.strip().rstrip('/')
                     actual_download_url = f"{proxy_base}/{css_url}"
-                    await send_progress(f"Using GitHub proxy for download")
+                    await send_progress("Using GitHub proxy for download")
                 
                 # Download CounterStrikeSharp
                 await send_progress("Downloading CounterStrikeSharp...")
@@ -3455,7 +3585,7 @@ class SSHManager:
                     if server.github_proxy and server.github_proxy.strip():
                         proxy_base = server.github_proxy.strip().rstrip('/')
                         actual_download_url = f"{proxy_base}/{cs2fixes_url}"
-                        await send_progress(f"Using GitHub proxy for download")
+                        await send_progress("Using GitHub proxy for download")
                     
                     success_download, error = await http_helper.download_file(
                         actual_download_url,
@@ -3503,20 +3633,7 @@ class SSHManager:
                 finally:
                     # Clean up panel temp directory
                     if panel_archive_path:
-                        try:
-                            if os.path.exists(download_dir):
-                                shutil.rmtree(download_dir)
-                                logger.info(f"Cleaned up panel temp directory: {download_dir}")
-                                
-                                # Also clean up parent directory if empty
-                                try:
-                                    if os.path.exists(panel_temp_dir) and not os.listdir(panel_temp_dir):
-                                        os.rmdir(panel_temp_dir)
-                                        logger.info(f"Cleaned up empty parent directory: {panel_temp_dir}")
-                                except OSError:
-                                    pass
-                        except Exception as e:
-                            logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
+                        await _cleanup_local_download_dir(download_dir, panel_temp_dir)
             else:
                 # Original Mode: Download directly on remote server (use GitHub proxy if configured)
                 # Apply GitHub proxy to download URL if configured
@@ -3524,7 +3641,7 @@ class SSHManager:
                 if server.github_proxy and server.github_proxy.strip():
                     proxy_base = server.github_proxy.strip().rstrip('/')
                     actual_download_url = f"{proxy_base}/{cs2fixes_url}"
-                    await send_progress(f"Using GitHub proxy for download")
+                    await send_progress("Using GitHub proxy for download")
                 
                 # Download CS2Fixes
                 await send_progress(f"Downloading CS2Fixes from {cs2fixes_url}...")
@@ -3768,27 +3885,14 @@ class SSHManager:
                 finally:
                     # Clean up panel temp directory
                     if panel_archive_path:
-                        try:
-                            if os.path.exists(download_dir):
-                                shutil.rmtree(download_dir)
-                                logger.info(f"Cleaned up panel temp directory: {download_dir}")
-                                
-                                # Also clean up parent directory if empty
-                                try:
-                                    if os.path.exists(panel_temp_dir) and not os.listdir(panel_temp_dir):
-                                        os.rmdir(panel_temp_dir)
-                                        logger.info(f"Cleaned up empty parent directory: {panel_temp_dir}")
-                                except OSError:
-                                    pass
-                        except Exception as e:
-                            logger.warning(f"Failed to clean up panel temp directory {download_dir}: {e}")
+                        await _cleanup_local_download_dir(download_dir, panel_temp_dir)
             else:
                 # Original Mode: Download directly on remote server (use GitHub proxy if configured)
                 actual_download_url = swiftly_url
                 if server.github_proxy and server.github_proxy.strip():
                     proxy_base = server.github_proxy.strip().rstrip('/')
                     actual_download_url = f"{proxy_base}/{swiftly_url}"
-                    await send_progress(f"Using GitHub proxy for download")
+                    await send_progress("Using GitHub proxy for download")
                 
                 # Download SwiftlyS2
                 await send_progress("Downloading SwiftlyS2...")
@@ -3868,7 +3972,7 @@ class SSHManager:
             # We need to strip that top-level directory and copy the contents into csgo/
             csgo_dir = f"{cs2_dir}/game/csgo"
             extract_dir = f"{temp_dir}/extracted"
-            await send_progress(f"Extracting SwiftlyS2...")
+            await send_progress("Extracting SwiftlyS2...")
             extract_cmd = f"mkdir -p {extract_dir} && unzip -o {temp_dir}/swiftly.zip -d {extract_dir}"
             success, stdout, stderr = await self.execute_command(extract_cmd, timeout=120)
             
@@ -3898,7 +4002,7 @@ class SSHManager:
             
             if not verify_success or 'extracted' not in verify_out:
                 await self.execute_command(f"rm -rf {temp_dir}")
-                return False, f"SwiftlyS2 extraction failed: addons/swiftlys2 directory not created after copy"
+                return False, "SwiftlyS2 extraction failed: addons/swiftlys2 directory not created after copy"
             
             await send_progress("✓ SwiftlyS2 extracted successfully")
             
@@ -4100,7 +4204,7 @@ class SSHManager:
                 error_detail += f"Stderr: {tar_stderr.strip() if tar_stderr and tar_stderr.strip() else '(empty)'}\n"
                 error_detail += f"Stdout: {tar_stdout.strip() if tar_stdout and tar_stdout.strip() else '(empty)'}"
                 
-                await send_progress(f"✗ Backup creation failed - file not created")
+                await send_progress("✗ Backup creation failed - file not created")
                 await send_progress(f"Command: {tar_cmd}")
                 await send_progress(f"Exit successful: {tar_success}")
                 await send_progress(f"File created: {backup_file_created}")
@@ -4127,7 +4231,7 @@ class SSHManager:
                 stderr_info = f" (stderr: {tar_stderr.strip()})" if tar_stderr and tar_stderr.strip() else ""
                 await send_progress(f"[WARN] Tar returned non-zero exit code but file was created successfully{stderr_info}")
             
-            await send_progress(f"✓ Backup archive created successfully")
+            await send_progress("✓ Backup archive created successfully")
             
             # Get backup file size
             size_cmd = f"stat -f%z {shlex.quote(backup_path)} 2>/dev/null || stat -c%s {shlex.quote(backup_path)} 2>/dev/null"
@@ -4910,7 +5014,7 @@ class SSHManager:
                 if parent_dir:
                     try:
                         await sftp.stat(parent_dir)
-                    except:
+                    except asyncssh.SFTPNoSuchFile:
                         await sftp.makedirs(parent_dir)
                 async with sftp.open(file_path, 'w', encoding='utf-8') as f:
                     await f.write(content)
@@ -5554,7 +5658,7 @@ class SSHManager:
                 if parent_dir:
                     try:
                         await sftp.stat(parent_dir)
-                    except:
+                    except asyncssh.SFTPNoSuchFile:
                         await sftp.makedirs(parent_dir)
                 
                 # Upload file
@@ -5685,7 +5789,7 @@ class SSHManager:
                 if parent_dir:
                     try:
                         await sftp.stat(parent_dir)
-                    except:
+                    except asyncssh.SFTPNoSuchFile:
                         await sftp.makedirs(parent_dir)
                 
                 # Upload file with progress tracking
@@ -5693,9 +5797,9 @@ class SSHManager:
                 chunk_size = self.UPLOAD_CHUNK_SIZE
                 
                 async with await sftp.open(remote_path, 'wb') as remote_file:
-                    with open(local_path, 'rb') as local_file:
+                    async with await anyio.open_file(local_path, "rb") as local_file:
                         while True:
-                            chunk = local_file.read(chunk_size)
+                            chunk = await local_file.read(chunk_size)
                             if not chunk:
                                 break
                             

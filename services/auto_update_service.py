@@ -35,15 +35,16 @@ class AutoUpdateService:
             self.running = True
             self.task = asyncio.create_task(self._update_loop())
             logger.info("Auto-update service started")
-            # Do an immediate first check
-            await self._check_and_update_servers()
     
-    def stop(self):
+    async def stop(self):
         """Stop the background auto-update task"""
         self.running = False
         if self.task and not self.task.done():
             self.task.cancel()
-            logger.info("Auto-update service stopped")
+        if self.task:
+            await asyncio.gather(self.task, return_exceptions=True)
+        self.task = None
+        logger.info("Auto-update service stopped")
     
     async def _update_loop(self):
         """Main update check loop"""
@@ -60,7 +61,6 @@ class AutoUpdateService:
         """Check all servers with auto-update enabled and update if needed"""
         from modules.database import async_session_maker
         from modules.models import Server
-        from sqlmodel import select, update
         
         try:
             # Fetch server list quickly and close DB connection to avoid pool exhaustion
@@ -250,7 +250,7 @@ class AutoUpdateService:
         lock = maintenance_lock_service.get(server.id)
         
         # Try to acquire lock without blocking - if already locked, skip this update
-        if lock.locked():
+        if await maintenance_lock_service.is_locked(server.id):
             logger.warning(
                 f"Server {server.id} ({server.name}) update already in progress, "
                 f"skipping duplicate update request"

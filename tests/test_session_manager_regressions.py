@@ -45,6 +45,8 @@ class AvailabilityProbeManager(SSHManager):
 
     async def execute_command(self, command, *args, **kwargs):
         self.commands.append((command, kwargs.get("timeout")))
+        if command.startswith("test -f "):
+            return True, "exists\n", ""
         return self.available, "", ""
 
 
@@ -63,7 +65,10 @@ async def test_public_session_manager_preflight_checks_and_disconnects():
     assert "not installed" in message
     assert manager.connect_calls == 1
     assert manager.disconnect_calls == 1
-    assert manager.commands == [(availability_command("tmux"), 19)]
+    assert len(manager.commands) == 2
+    assert manager.commands[0][0].startswith("test -f ")
+    assert manager.commands[0][1] == 19
+    assert manager.commands[1] == (availability_command("tmux"), 19)
 
 
 class StopBeforePreflightProbeManager(SSHManager):
@@ -184,6 +189,7 @@ async def test_restart_route_aborts_before_stop_when_preflight_fails(monkeypatch
         ServerAction(action="restart"),
         db,
         SimpleNamespace(id=server.user_id, is_admin=False),
+        server,
     )
 
     assert response.success is False
@@ -307,6 +313,9 @@ async def test_game_console_disconnect_cleans_reader_process_and_ssh(
     async def find_running(*args, **kwargs):
         return "tmux"
 
+    async def authenticate(*args, **kwargs):
+        return SimpleNamespace(id=server.user_id, is_admin=False), server
+
     monkeypatch.setattr(
         database_module,
         "async_session_maker",
@@ -314,6 +323,7 @@ async def test_game_console_disconnect_cleans_reader_process_and_ssh(
     )
     monkeypatch.setattr(actions, "SSHManager", lambda: manager)
     monkeypatch.setattr(actions, "find_running_session_manager", find_running)
+    monkeypatch.setattr(actions, "authenticate_websocket", authenticate)
 
     await actions.game_console_websocket(websocket, server.id)
 

@@ -10,7 +10,7 @@
 ## ✅ Deliverables
 
 ### 1. Core Implementation
-- ✅ **xterm.js v5.3.0** - Industry standard terminal (used by VS Code, Azure)
+- ✅ **@xterm/xterm v6.0.0** - Industry standard terminal (used by VS Code, Azure)
 - ✅ **3 Independent Templates** - Modular, reusable console templates
 - ✅ **2 Terminal Addons** - Auto-fit and clickable links
 - ✅ **Zero Breaking Changes** - Full backward compatibility

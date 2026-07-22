@@ -19,7 +19,7 @@ from api.routes import file_manager
 from services.ssh_manager import SSHManager
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class FileManagerValidationTests(unittest.TestCase):

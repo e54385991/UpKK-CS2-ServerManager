@@ -4,7 +4,7 @@ Provides functionality to fetch repository metadata from GitHub API
 """
 import re
 import logging
-from typing import Optional, Tuple
+from typing import Tuple
 from modules.http_helper import http_helper
 
 logger = logging.getLogger(__name__)

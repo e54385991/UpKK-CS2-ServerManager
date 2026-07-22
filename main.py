@@ -5,16 +5,22 @@ Using SQLModel for seamless FastAPI integration
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import os
 import logging
 import uuid
+import asyncio
 
-from modules import init_db, migrate_db, settings, Server, ServerResponse, setup_logging, _get_log_level
+from modules import (
+    init_db, migrate_db, settings, Server, ServerResponse, User, get_db,
+    get_current_web_user, get_current_web_admin, setup_logging, _get_log_level,
+)
 from services import redis_manager
+from services.maintenance_lock import OperationBusyError
 from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market, plugin_auto_update, system_settings, gmail_oauth, map_management
 
 # Initialize logging first (before anything else logs)
@@ -106,52 +112,59 @@ async def startup_event():
 
 async def shutdown_event():
     """Cleanup on shutdown"""
-    # Stop SSH connection pool cleanup task and close all connections
+    await asyncio.gather(
+        actions.shutdown_background_tasks(),
+        file_manager.shutdown_background_tasks(),
+        plugin_auto_update.shutdown_background_tasks(),
+        return_exceptions=True,
+    )
+
+    # Stop and await every service which may still use SSH, Redis, HTTP or DB resources.
+    from services.a2s_cache_service import a2s_cache_service
+    from services.steam_inf_service import steam_inf_service
+    from services.auto_update_service import auto_update_service
+    from services.plugin_auto_update_service import plugin_auto_update_service
+    from services.scheduled_task_service import scheduled_task_service
+    from services.ssh_health_monitor import ssh_health_monitor
+    from services.server_monitor import server_monitor
+    from services.discord_notification_service import discord_notification_service
+    from services.ssh_manager import shutdown_background_tasks as shutdown_ssh_manager_tasks
+
+    service_results = await asyncio.gather(
+        a2s_cache_service.stop(),
+        steam_inf_service.stop(),
+        auto_update_service.stop(),
+        plugin_auto_update_service.stop(),
+        scheduled_task_service.stop(),
+        ssh_health_monitor.stop(),
+        server_monitor.stop_all(),
+        discord_notification_service.shutdown(),
+        shutdown_ssh_manager_tasks(),
+        return_exceptions=True,
+    )
+    for result in service_results:
+        if isinstance(result, Exception):
+            logger.error("Background service shutdown failed", exc_info=result)
+
+    # Shared transports close only after their consumers have stopped.
     from services.ssh_connection_pool import ssh_connection_pool
     await ssh_connection_pool.stop_cleanup()
     await ssh_connection_pool.close_all()
     print("SSH connection pool stopped")
-    
-    # Stop A2S cache service
-    from services.a2s_cache_service import a2s_cache_service
-    a2s_cache_service.stop()
-    
-    # Stop steam.inf version cache service
-    from services.steam_inf_service import steam_inf_service
-    steam_inf_service.stop()
-    
-    # Stop auto-update service
-    from services.auto_update_service import auto_update_service
-    auto_update_service.stop()
 
-    from services.plugin_auto_update_service import plugin_auto_update_service
-    plugin_auto_update_service.stop()
-    
-    # Stop scheduled task service
-    from services.scheduled_task_service import scheduled_task_service
-    scheduled_task_service.stop()
-    
-    # Stop SSH health monitoring daemon
-    from services.ssh_health_monitor import ssh_health_monitor
-    ssh_health_monitor.stop()
-    
-    # Stop all monitoring tasks
-    from services.server_monitor import server_monitor
-    
-    if server_monitor.monitoring_tasks:
-        print(f"Stopping {len(server_monitor.monitoring_tasks)} monitoring task(s)...")
-        for server_id in list(server_monitor.monitoring_tasks.keys()):
-            server_monitor.stop_monitoring(server_id)
-    
     await redis_manager.close()
+    from modules.http_helper import http_helper
+    from modules.database import engine
+    await http_helper.close()
+    await engine.dispose()
     print("CS2 Server Manager shutdown complete!")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle."""
-    await startup_event()
     try:
+        await startup_event()
         yield
     finally:
         await shutdown_event()
@@ -164,6 +177,12 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+
+@app.exception_handler(OperationBusyError)
+async def operation_busy_handler(request: Request, exc: OperationBusyError):
+    """Return a stable conflict response for distributed server-operation locks."""
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 # Mount static files
 if os.path.exists("static"):
@@ -232,37 +251,35 @@ async def servers_ui(request: Request):
 
 
 @app.get("/servers-ui/{server_id}", response_class=HTMLResponse)
-async def server_detail_ui(request: Request, server_id: int):
+async def server_detail_ui(
+    request: Request,
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_web_user),
+):
     """Server detail UI with real-time monitoring"""
-    from modules.database import async_session_maker
-    
-    async with async_session_maker() as db:
-        server = await db.get(Server, server_id)
-        
-        if not server:
-            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
-        
-        # Convert to Pydantic model for JSON serialization
-        server_data = ServerResponse.model_validate(server)
-        # Create a JSON string for the JavaScript code
-        server_json = server_data.model_dump_json()
-        
-        return templates.TemplateResponse(request, "server_detail.html", {
-            "server": server,  # Pass original SQLAlchemy object for template attribute access
-            "server_json": server_json  # Pass JSON string for JavaScript
-        })
+    server = await servers.get_server_with_permission(server_id, current_user, db)
+    server_data = ServerResponse.model_validate(server)
+    server_json = server_data.model_dump_json()
+
+    return templates.TemplateResponse(request, "server_detail.html", {
+        "server": server,
+        "server_json": server_json,
+    })
 
 
 @app.get("/servers/{server_id}/console-popup/{console_type}", response_class=HTMLResponse)
-async def console_popup(request: Request, server_id: int, console_type: str):
+async def console_popup(
+    request: Request,
+    server_id: int,
+    console_type: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_web_user),
+):
     """Console popup window"""
-    from modules.database import async_session_maker
-    
-    async with async_session_maker() as db:
-        server = await db.get(Server, server_id)
-        
-        if not server:
-            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
+    if console_type.lower() not in {"ssh", "game"}:
+        raise HTTPException(status_code=404, detail="Unsupported console type")
+    await servers.get_server_with_permission(server_id, current_user, db)
     
     return templates.TemplateResponse(request, "console_popup.html", {
         "server_id": server_id,
@@ -271,21 +288,20 @@ async def console_popup(request: Request, server_id: int, console_type: str):
 
 
 @app.get("/plugin-market", response_class=HTMLResponse)
-async def plugin_market_page(request: Request):
+async def plugin_market_page(request: Request, _: User = Depends(get_current_web_user)):
     """Plugin market page"""
     return templates.TemplateResponse(request, "plugin_market.html")
 
 
 @app.get("/servers/{server_id}/ssh-console", response_class=HTMLResponse)
-async def ssh_console(request: Request, server_id: int):
+async def ssh_console(
+    request: Request,
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_web_user),
+):
     """Independent SSH console page"""
-    from modules.database import async_session_maker
-    
-    async with async_session_maker() as db:
-        server = await db.get(Server, server_id)
-        
-        if not server:
-            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
+    await servers.get_server_with_permission(server_id, current_user, db)
     
     return templates.TemplateResponse(request, "ssh_console.html", {
         "server_id": server_id
@@ -293,15 +309,14 @@ async def ssh_console(request: Request, server_id: int):
 
 
 @app.get("/servers/{server_id}/game-console", response_class=HTMLResponse)
-async def game_console(request: Request, server_id: int):
+async def game_console(
+    request: Request,
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_web_user),
+):
     """Independent game console page"""
-    from modules.database import async_session_maker
-    
-    async with async_session_maker() as db:
-        server = await db.get(Server, server_id)
-        
-        if not server:
-            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
+    await servers.get_server_with_permission(server_id, current_user, db)
     
     return templates.TemplateResponse(request, "game_console.html", {
         "server_id": server_id
@@ -309,15 +324,16 @@ async def game_console(request: Request, server_id: int):
 
 
 @app.get("/servers/{server_id}/file-editor-popup", response_class=HTMLResponse)
-async def file_editor_popup(request: Request, server_id: int, file_path: str, file_name: str):
+async def file_editor_popup(
+    request: Request,
+    server_id: int,
+    file_path: str,
+    file_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_web_user),
+):
     """File editor popup window"""
-    from modules.database import async_session_maker
-    
-    async with async_session_maker() as db:
-        server = await db.get(Server, server_id)
-        
-        if not server:
-            raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
+    server = await servers.get_server_with_permission(server_id, current_user, db)
     
     # Fetch file content
     from services.ssh_manager import SSHManager
@@ -328,8 +344,16 @@ async def file_editor_popup(request: Request, server_id: int, file_path: str, fi
         raise HTTPException(status_code=500, detail=f"Failed to connect to server: {msg}")
     
     try:
-        # Read file content - execute_command returns (success, stdout, stderr)
-        success, stdout, stderr = await ssh_manager.execute_command(f"cat {file_path}")
+        valid, validation_error = await ssh_manager.validate_path_within_base(
+            server.game_directory,
+            file_path,
+            server,
+            require_regular=True,
+        )
+        if not valid:
+            raise HTTPException(status_code=403, detail=f"Access denied: {validation_error}")
+
+        success, stdout, stderr = await ssh_manager.read_file(file_path, server)
         
         if not success:
             raise HTTPException(status_code=500, detail=f"Failed to read file: {stderr}")
@@ -351,20 +375,20 @@ async def file_editor_popup(request: Request, server_id: int, file_path: str, fi
 
 
 @app.get("/setup-wizard", response_class=HTMLResponse)
-async def setup_wizard(request: Request):
+async def setup_wizard(request: Request, _: User = Depends(get_current_web_user)):
     """Server setup wizard UI - authentication checked client-side"""
     return templates.TemplateResponse(request, "server_setup_wizard.html")
 
 
 
 @app.get("/profile", response_class=HTMLResponse)
-async def profile_page(request: Request):
+async def profile_page(request: Request, _: User = Depends(get_current_web_user)):
     """User profile page"""
     return templates.TemplateResponse(request, "profile.html")
 
 
 @app.get("/system-settings", response_class=HTMLResponse)
-async def system_settings_page(request: Request):
+async def system_settings_page(request: Request, _: User = Depends(get_current_web_admin)):
     """System settings page (admin only - auth checked client-side)"""
     return templates.TemplateResponse(request, "system_settings.html")
 

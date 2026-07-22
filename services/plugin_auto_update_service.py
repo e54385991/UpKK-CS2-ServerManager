@@ -18,7 +18,7 @@ from services.discord_notification_service import (
     EVENT_PLUGIN_UPDATE,
     discord_notification_service,
 )
-from services.maintenance_lock import maintenance_lock_service
+from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.redis_manager import redis_manager
 from services.ssh_manager import SSHManager
 
@@ -200,11 +200,12 @@ class PluginAutoUpdateService:
         self.task = asyncio.create_task(self._loop())
         logger.info("Plugin auto-update service started")
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         self.running = False
         if self.task:
             self.task.cancel()
-            self.task = None
+            await asyncio.gather(self.task, return_exceptions=True)
+        self.task = None
 
     async def _loop(self) -> None:
         while self.running:
@@ -413,6 +414,11 @@ class PluginAutoUpdateService:
     ) -> Dict[str, Any]:
         try:
             return await self._check_server(server_id, force=force, plugin_id=plugin_id)
+        except OperationBusyError:
+            return {
+                "success": False,
+                "message": "Another maintenance operation is already running",
+            }
         except Exception as exc:
             logger.exception("Plugin update task failed for server %s (plugin %s)", server_id, plugin_id or "batch")
             await self._publish_status(
@@ -433,9 +439,12 @@ class PluginAutoUpdateService:
     async def _check_server(
         self, server_id: int, force: bool = False, plugin_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        lock = maintenance_lock_service.get(server_id)
-        if lock.locked():
-            return {"success": False, "message": "Another maintenance operation is already running"}
+        lock = maintenance_lock_service.get(
+            server_id,
+            operation="plugin_auto_update",
+            wait=False,
+            ttl=3600,
+        )
 
         async with lock:
             run_label = "Plugin test update" if plugin_id is not None else "Plugin update check"

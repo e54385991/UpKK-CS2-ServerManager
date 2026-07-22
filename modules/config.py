@@ -1,71 +1,79 @@
-"""
-Configuration module for CS2 Server Manager
-Handles Redis, MySQL connections and other basic settings
-Connection pool configurations are used by SQLAlchemy engine (which powers SQLModel)
-"""
-from pydantic_settings import BaseSettings, SettingsConfigDict
+"""Typed application settings loaded from the project-level ``.env`` file."""
+
+from pathlib import Path
 from typing import Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables"""
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    """Application settings loaded from environment variables and ``.env``."""
+
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE,
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
     
     # MySQL Configuration
-    MYSQL_HOST: str = "1Panel-mysql-KZBC"
-    MYSQL_PORT: int = 3306
-    MYSQL_USER: str = "cs2_manager"
-    MYSQL_PASSWORD: str = "7cfJBzXHcja5TeiS"
-    MYSQL_DATABASE: str = "cs2_manager"
+    MYSQL_HOST: str
+    MYSQL_PORT: int
+    MYSQL_USER: str
+    MYSQL_PASSWORD: str
+    MYSQL_DATABASE: str
     
     # MySQL Connection Pool Configuration
     # These settings optimize database connection management for better performance
-    MYSQL_POOL_SIZE: int = 5  # Number of connections to keep open in the pool
-    MYSQL_MAX_OVERFLOW: int = 10  # Maximum overflow connections when pool is full
-    MYSQL_POOL_TIMEOUT: int = 30  # Seconds to wait for a connection from the pool
-    MYSQL_POOL_RECYCLE: int = 3600  # Seconds before a connection is recycled (1 hour)
-    MYSQL_POOL_PRE_PING: bool = True  # Enable connection health check before use
-    MYSQL_ECHO: bool = False  # Enable/disable SQLAlchemy SQL query logging (sqlalchemy.engine.Engine)
+    MYSQL_POOL_SIZE: int
+    MYSQL_MAX_OVERFLOW: int
+    MYSQL_POOL_TIMEOUT: int
+    MYSQL_POOL_RECYCLE: int
+    MYSQL_POOL_PRE_PING: bool
+    MYSQL_ECHO: bool
     
     # Redis Configuration
-    REDIS_HOST: str = "1Panel-redis-oAZc"
-    REDIS_PORT: int = 6379
-    REDIS_PASSWORD: Optional[str] = "redis_rYpBai"
-    REDIS_DB: int = 0
+    REDIS_HOST: str
+    REDIS_PORT: int
+    REDIS_PASSWORD: Optional[str]
+    REDIS_DB: int
     
     # Redis Connection Pool Configuration
     # These settings optimize Redis connection management for better performance
-    REDIS_POOL_SIZE: int = 10  # Maximum number of connections in the pool
-    REDIS_HEALTH_CHECK_INTERVAL: int = 30  # Seconds between health checks
-    REDIS_SOCKET_CONNECT_TIMEOUT: int = 5  # Seconds for socket connection timeout
-    REDIS_SOCKET_TIMEOUT: int = 5  # Seconds for socket read/write timeout
+    REDIS_POOL_SIZE: int
+    REDIS_HEALTH_CHECK_INTERVAL: int
+    REDIS_SOCKET_CONNECT_TIMEOUT: int
+    REDIS_SOCKET_TIMEOUT: int
     
     # Application Configuration
-    API_HOST: str = "0.0.0.0"
-    API_PORT: int = 8000
-    DEBUG: bool = True
-    BACKEND_URL: str = "http://localhost:8000"  # Backend URL for server status reporting
+    API_HOST: str
+    API_PORT: int
+    DEBUG: bool
+    BACKEND_URL: str
     
     # Logging Configuration
     # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-    LOG_LEVEL: str = "INFO"  # General application logging level
-    ASYNCSSH_LOG_LEVEL: str = "WARNING"  # AsyncSSH library logging level (reduce verbosity)
+    LOG_LEVEL: str
+    ASYNCSSH_LOG_LEVEL: str
     
     # Security
-    SECRET_KEY: str = "your-secret-key-change-this-in-production"
-    JWT_SECRET_KEY: str = "your-jwt-secret-key-change-this-in-production"
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 1 week (7 days * 24 hours * 60 minutes)
+    SECRET_KEY: str
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int
     
     # SSH Authentication Configuration
     # Options: "password", "key", "both"
     # "password" - Only password authentication allowed
     # "key" - Only SSH key authentication allowed
     # "both" - Both password and key authentication allowed
-    SSH_AUTH_MODE: str = "password"  # Default to password only
+    SSH_AUTH_MODE: str
     
     # Google OAuth Configuration
-    GOOGLE_CLIENT_ID: Optional[str] = None  # Google OAuth Client ID from Google Cloud Console
+    GOOGLE_CLIENT_ID: Optional[str]
     # Google CallbackURL = https://your-domain.com/google-callback
     
     @property

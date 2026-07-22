@@ -9,8 +9,7 @@ from typing import Optional
 import json
 import math
 import os
-import tempfile
-import shutil
+from anyio import to_thread
 
 from modules import (
     Plugin, PluginCategory, InstalledPlugin,
@@ -18,9 +17,11 @@ from modules import (
     PluginCreate, Server,
     get_db, User, get_current_active_user
 )
+from api.dependencies import locked_server_operation
 from services import SSHManager
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
+MAX_PLUGIN_UPLOAD_BYTES = 512 * 1024 * 1024
 
 
 @router.get("/categories", response_model=list)
@@ -173,7 +174,8 @@ async def upload_plugin(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid category. Must be one of: {', '.join([c.value for c in PluginCategory])}"
         )
-    
+
+    await db.commit()
     # Create uploads directory if it doesn't exist
     upload_dir = os.path.join(os.getcwd(), "static", "uploads", "plugins")
     os.makedirs(upload_dir, exist_ok=True)
@@ -185,8 +187,19 @@ async def upload_plugin(
     
     try:
         # Save uploaded file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        def copy_upload() -> None:
+            with open(file_path, "wb") as buffer:
+                copied = 0
+                while chunk := file.file.read(1024 * 1024):
+                    copied += len(chunk)
+                    if copied > MAX_PLUGIN_UPLOAD_BYTES:
+                        raise HTTPException(
+                            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                            detail="Plugin archive exceeds the 512 MiB limit",
+                        )
+                    buffer.write(chunk)
+
+        await to_thread.run_sync(copy_upload)
         
         logger.info(f"Plugin file uploaded: {file_path}")
         
@@ -218,6 +231,10 @@ async def upload_plugin(
         
         return PluginResponse.model_validate(new_plugin)
         
+    except HTTPException:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
     except Exception as e:
         logger.exception(f"Error uploading plugin: {e}")
         # Clean up uploaded file if database operation fails
@@ -263,7 +280,8 @@ async def install_plugin(
     server_id: int,
     install_request: PluginInstallRequest,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _operation_server: Server = Depends(locked_server_operation),
 ):
     """Install a plugin on a specific server"""
     # Verify user owns the server
@@ -330,7 +348,8 @@ async def uninstall_plugin(
     server_id: int,
     installed_plugin_id: int,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _operation_server: Server = Depends(locked_server_operation),
 ):
     """Uninstall a plugin from a specific server"""
     import logging
@@ -364,7 +383,8 @@ async def uninstall_plugin(
     # Get plugin details for the name and path
     plugin = await db.get(Plugin, installed_plugin.plugin_id)
     plugin_name = plugin.display_name if plugin else "Plugin"
-    
+
+    await db.commit()
     # Remove plugin files from server
     if plugin:
         ssh_manager = SSHManager()
@@ -414,6 +434,7 @@ async def _install_plugin_to_server(
     import shlex
     
     logger = logging.getLogger(__name__)
+    await db.commit()
     ssh_manager = SSHManager()
     
     try:

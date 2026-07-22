@@ -165,15 +165,23 @@ async def test_backup_failure_skips_only_plugins_that_requested_backup(monkeypat
             return [item, unprotected_item]
 
     class Session:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *args): return False
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
         async def get(self, model, object_id):
-            if model is Server: return server
-            if model is User: return user
-            if model is ManagedPlugin: return items[object_id]
-        async def execute(self, statement): return Result()
-        async def commit(self): return None
-        def add(self, value): return None
+            if model is Server:
+                return server
+            if model is User:
+                return user
+            if model is ManagedPlugin:
+                return items[object_id]
+        async def execute(self, statement):
+            return Result()
+        async def commit(self):
+            return None
+        def add(self, value):
+            return None
 
     class BackupFails:
         async def backup_plugins(self, server):
@@ -241,19 +249,29 @@ async def test_plugin_restart_policy_restarts_running_server_once_for_multiple_i
     items = {item.id: item, ordinary_item.id: ordinary_item}
 
     class Result:
-        def scalars(self): return self
-        def all(self): return [item, ordinary_item]
+        def scalars(self):
+            return self
+        def all(self):
+            return [item, ordinary_item]
 
     class Session:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *args): return False
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
         async def get(self, model, object_id):
-            if model is Server: return server
-            if model is User: return user
-            if model is ManagedPlugin: return items[object_id]
-        async def execute(self, statement): return Result()
-        async def commit(self): return None
-        def add(self, value): return None
+            if model is Server:
+                return server
+            if model is User:
+                return user
+            if model is ManagedPlugin:
+                return items[object_id]
+        async def execute(self, statement):
+            return Result()
+        async def commit(self):
+            return None
+        def add(self, value):
+            return None
 
     calls = {"status": 0, "backup": 0, "preflight": 0, "stop": 0, "start": 0}
     class Manager:

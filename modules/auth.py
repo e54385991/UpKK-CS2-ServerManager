@@ -3,27 +3,30 @@ Authentication utilities for user management
 """
 from datetime import timedelta
 from typing import Optional
+from urllib.parse import urlsplit
 import bcrypt
-from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status, Header
-from fastapi.security import OAuth2PasswordBearer
+import jwt
+from jwt import InvalidTokenError
+from fastapi import Depends, HTTPException, status, Header, Request, Response, WebSocket
+from anyio import to_thread
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from .config import settings
-from .models import User
+from .models import User, Server
 from .schemas import TokenData
-from .database import get_db
+from .database import get_db, async_session_maker
 from .utils import get_current_time
 
 BCRYPT_ROUNDS = 12
 BCRYPT_MAX_PASSWORD_BYTES = 72
+WEB_SESSION_COOKIE = "upkk_access_token"
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 # Optional OAuth2 scheme (doesn't raise error if no token)
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 optional_oauth2_scheme = HTTPBearer(auto_error=False)
 
 
@@ -50,6 +53,112 @@ def get_password_hash(password: str) -> str:
         bcrypt.gensalt(rounds=BCRYPT_ROUNDS, prefix=b"2b")
     )
     return password_hash.decode("utf-8")
+
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """Run the CPU-expensive bcrypt verification outside the event loop."""
+    return await to_thread.run_sync(verify_password, plain_password, hashed_password)
+
+
+async def get_password_hash_async(password: str) -> str:
+    """Run the CPU-expensive bcrypt hash outside the event loop."""
+    return await to_thread.run_sync(get_password_hash, password)
+
+
+def set_web_session_cookie(request: Request, response: Response, token: str) -> None:
+    """Set the HTTP-only cookie used only to protect HTML and WebSocket routes."""
+    response.set_cookie(
+        key=WEB_SESSION_COOKIE,
+        value=token,
+        max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        path="/",
+    )
+
+
+def clear_web_session_cookie(response: Response) -> None:
+    """Remove the browser session cookie without changing bearer-token behavior."""
+    response.delete_cookie(WEB_SESSION_COOKIE, path="/", samesite="lax")
+
+
+def _decode_user_id(token: str) -> int:
+    payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise InvalidTokenError("Token subject is missing")
+    return int(user_id)
+
+
+async def _get_active_user_for_token(token: str, db: AsyncSession) -> Optional[User]:
+    try:
+        user_id = _decode_user_id(token)
+    except (InvalidTokenError, ValueError, TypeError):
+        return None
+
+    user = await db.get(User, user_id)
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
+async def get_current_web_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Authenticate browser page navigation with the HTTP-only session cookie."""
+    token = request.cookies.get(WEB_SESSION_COOKIE)
+    user = await _get_active_user_for_token(token, db) if token else None
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            detail="Authentication required",
+            headers={"Location": "/login"},
+        )
+    return user
+
+
+async def get_current_web_admin(
+    current_user: User = Depends(get_current_web_user),
+) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required")
+    return current_user
+
+
+async def authenticate_websocket(
+    websocket: WebSocket,
+    server_id: Optional[int] = None,
+) -> tuple[Optional[User], Optional[Server]]:
+    """Authenticate a WebSocket before accepting it and optionally check server ownership."""
+    origin = websocket.headers.get("origin")
+    host = websocket.headers.get("host")
+    if origin and host and urlsplit(origin).netloc.lower() != host.lower():
+        await websocket.close(code=4403, reason="Invalid WebSocket origin")
+        return None, None
+
+    token = websocket.cookies.get(WEB_SESSION_COOKIE)
+    if not token:
+        await websocket.close(code=4401, reason="Authentication required")
+        return None, None
+
+    async with async_session_maker() as db:
+        user = await _get_active_user_for_token(token, db)
+        if user is None:
+            await websocket.close(code=4401, reason="Invalid or expired session")
+            return None, None
+
+        server = None
+        if server_id is not None:
+            server = await db.get(Server, server_id)
+            if server is None or (not user.is_admin and server.user_id != user.id):
+                await websocket.close(code=4404, reason="Server not found")
+                return None, None
+
+        # Detach data from the short-lived transaction before network I/O.
+        await db.commit()
+        return user, server
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -83,7 +192,7 @@ async def get_current_user(
             raise credentials_exception
         user_id = int(user_id_str)
         token_data = TokenData(user_id=user_id)
-    except (JWTError, ValueError):
+    except (InvalidTokenError, ValueError):
         raise credentials_exception
     
     result = await db.execute(select(User).where(User.id == token_data.user_id))
@@ -117,7 +226,7 @@ async def get_optional_current_user(
         if user_id_str is None:
             return None
         user_id = int(user_id_str)
-    except (JWTError, ValueError):
+    except (InvalidTokenError, ValueError):
         return None
     
     result = await db.execute(select(User).where(User.id == user_id))
@@ -194,7 +303,7 @@ async def get_current_user_flexible(
                 user = await db.get(User, user_id)
                 if user and user.is_active:
                     return user
-        except (JWTError, ValueError):
+        except (InvalidTokenError, ValueError):
             pass  # Fall through to API key authentication
     
     # Try API key authentication

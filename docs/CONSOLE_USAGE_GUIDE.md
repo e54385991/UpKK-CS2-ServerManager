@@ -166,7 +166,7 @@ xterm.js supports many addons. To add search:
 
 1. Download addon:
 ```bash
-curl -L https://cdn.jsdelivr.net/npm/xterm-addon-search@0.13.0/lib/xterm-addon-search.js \
+curl -L https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.16.0/lib/addon-search.js \
   -o static/xterm/xterm-addon-search.js
 ```
 
@@ -185,11 +185,11 @@ searchAddon.findNext('error');
 ```
 
 ### Available Addons
-- **xterm-addon-search**: Find in terminal
-- **xterm-addon-unicode11**: Better Unicode support
-- **xterm-addon-serialize**: Serialize terminal state
-- **xterm-addon-attach**: Attach to WebSocket directly
-- **xterm-addon-image**: Display images in terminal
+- **@xterm/addon-search**: Find in terminal
+- **@xterm/addon-unicode11**: Better Unicode support
+- **@xterm/addon-serialize**: Serialize terminal state
+- **@xterm/addon-attach**: Attach to WebSocket directly
+- **@xterm/addon-image**: Display images in terminal
 
 ### Terminal Size Management
 
@@ -316,8 +316,8 @@ fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace"
 ### React Component
 ```jsx
 import React, { useEffect, useRef } from 'react';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 
 function SSHConsole({ serverId }) {
     const terminalRef = useRef(null);
@@ -369,8 +369,8 @@ function SSHConsole({ serverId }) {
 </template>
 
 <script>
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 
 export default {
     props: ['serverId'],

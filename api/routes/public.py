@@ -47,7 +47,6 @@ async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_ac
     from modules.models import Server
     from modules.database import async_session_maker
     from services.a2s_cache_service import a2s_cache_service
-    from sqlmodel import select
     
     logger = logging.getLogger(__name__)
     logger.info(f"=== A2S-CACHE ENDPOINT CALLED for user {current_user.id} ===")

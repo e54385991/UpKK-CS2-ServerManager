@@ -6,6 +6,7 @@ Reference: https://developer.valvesoftware.com/wiki/Server_queries
 
 import a2s
 import asyncio
+from anyio import to_thread
 from typing import Optional, Dict, Tuple
 import logging
 
@@ -29,13 +30,10 @@ class A2SQueryService:
             Tuple[bool, Optional[Dict]]: (success, server_info_dict or None)
         """
         try:
-            # Run the synchronous a2s query in a thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
             address = (host, port)
             
             # Query server info
-            info = await loop.run_in_executor(
-                None,
+            info = await to_thread.run_sync(
                 lambda: a2s.info(address, timeout=timeout)
             )
             
@@ -90,12 +88,10 @@ class A2SQueryService:
             Tuple[bool, Optional[list]]: (success, player_list or None)
         """
         try:
-            loop = asyncio.get_event_loop()
             address = (host, port)
             
             # Query player info
-            players = await loop.run_in_executor(
-                None,
+            players = await to_thread.run_sync(
                 lambda: a2s.players(address, timeout=timeout)
             )
             
@@ -134,12 +130,10 @@ class A2SQueryService:
             Tuple[bool, Optional[Dict]]: (success, rules_dict or None)
         """
         try:
-            loop = asyncio.get_event_loop()
             address = (host, port)
             
             # Query rules
-            rules = await loop.run_in_executor(
-                None,
+            rules = await to_thread.run_sync(
                 lambda: a2s.rules(address, timeout=timeout)
             )
             

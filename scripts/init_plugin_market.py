@@ -4,7 +4,6 @@ This script should be run once to populate the plugin marketplace
 """
 import asyncio
 import json
-from sqlalchemy.ext.asyncio import AsyncSession
 from modules.database import async_session_maker
 from modules.models import PluginMarketItem
 

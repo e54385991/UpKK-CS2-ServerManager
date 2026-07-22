@@ -17,6 +17,7 @@ from services.game_session import (
     find_running_session_manager,
     find_running_session_managers,
     force_stop_session_command,
+    gslt_startup_parameter,
     send_keys_command,
     session_exists_command,
     session_manager_order,
@@ -72,6 +73,59 @@ def test_schema_accepts_only_supported_session_managers():
 
     with pytest.raises(ValidationError):
         ServerUpdate(session_manager=None)
+
+
+@pytest.mark.parametrize("token", [None, "", " ", "\t\r\n"])
+def test_unconfigured_gslt_does_not_create_a_startup_parameter(token):
+    assert gslt_startup_parameter(token) is None
+    assert ServerUpdate(steam_account_token=token).steam_account_token is None
+    create_request = ServerCreate(
+        name="Server without GSLT",
+        host="127.0.0.1",
+        ssh_user="steam",
+        ssh_password="secret",
+        captcha_token="token",
+        captcha_code="1234",
+        steam_account_token=token,
+    )
+    assert create_request.steam_account_token is None
+
+
+def test_configured_gslt_creates_the_expected_startup_parameter():
+    assert (
+        gslt_startup_parameter("  ABC123token  ")
+        == '+sv_setsteamaccount "ABC123token"'
+    )
+    assert (
+        gslt_startup_parameter("ABC123token", masked=True)
+        == '+sv_setsteamaccount "***STEAM_TOKEN***"'
+    )
+
+
+@pytest.mark.parametrize("token", [None, "", " ", "\t\r\n"])
+@pytest.mark.asyncio
+async def test_startup_preview_omits_gslt_parameter_when_unconfigured(
+    monkeypatch,
+    token,
+):
+    server = Server(
+        id=42,
+        user_id=1,
+        name="Preview without GSLT",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+        steam_account_token=token,
+    )
+
+    async def get_server(*args, **kwargs):
+        return server
+
+    monkeypatch.setattr(server_routes, "get_server_with_permission", get_server)
+    result = await server_routes.get_startup_command(42, db=None, current_user=None)
+
+    assert "+sv_setsteamaccount" not in result["startup_command"]
+    assert "+sv_setsteamaccount" not in result["cs2_command"]
 
 
 @pytest.mark.asyncio

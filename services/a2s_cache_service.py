@@ -30,25 +30,24 @@ class A2SCacheService:
             self.running = True
             self.task = asyncio.create_task(self._query_loop())
             logger.info("A2S cache service started")
-            # Do an immediate first query
-            await self._query_all_servers()
             
         # Start Steam version caching
         if self.steam_version_task is None or self.steam_version_task.done():
             self.steam_version_task = asyncio.create_task(self._steam_version_loop())
             logger.info("Steam version cache started")
-            # Do an immediate first fetch
-            await self._cache_steam_version()
     
-    def stop(self):
+    async def stop(self):
         """Stop the background A2S query task"""
         self.running = False
-        if self.task and not self.task.done():
-            self.task.cancel()
-            logger.info("A2S cache service stopped")
-        if self.steam_version_task and not self.steam_version_task.done():
-            self.steam_version_task.cancel()
-            logger.info("Steam version cache stopped")
+        tasks = [task for task in (self.task, self.steam_version_task) if task is not None]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self.task = None
+        self.steam_version_task = None
+        logger.info("A2S cache and Steam version services stopped")
     
     async def _query_loop(self):
         """Main query loop"""
@@ -139,7 +138,8 @@ class A2SCacheService:
     async def _query_and_cache_server(self, server):
         """Query a single server and cache the result"""
         try:
-            start_time = asyncio.get_event_loop().time()
+            loop = asyncio.get_running_loop()
+            start_time = loop.time()
             
             # Use configured A2S host/port or fall back to server host/game_port
             query_host = server.a2s_query_host or server.host
@@ -151,7 +151,7 @@ class A2SCacheService:
             )
             
             # Calculate response time
-            response_time = int((asyncio.get_event_loop().time() - start_time) * 1000)
+            response_time = int((loop.time() - start_time) * 1000)
             
             # Query players if server info was successful
             players_success = False
@@ -190,7 +190,7 @@ class A2SCacheService:
                     from modules.database import async_session_maker
                     try:
                         async with async_session_maker() as db:
-                            from sqlmodel import select, update
+                            from sqlmodel import update
                             from modules.models import Server
                             await db.execute(
                                 update(Server)
@@ -245,7 +245,7 @@ class A2SCacheService:
                         parsed = json.loads(cached)
                         if isinstance(parsed, dict):
                             return parsed
-                    except:
+                    except (json.JSONDecodeError, TypeError):
                         pass
                 logger.warning(f"Invalid cached data type for server {server_id}: {type(cached)}")
             return None

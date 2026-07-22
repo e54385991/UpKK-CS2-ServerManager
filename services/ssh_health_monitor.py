@@ -42,14 +42,14 @@ class SSHHealthMonitor:
         self.monitor_task = asyncio.create_task(self._monitor_loop())
         logger.info("SSH health monitoring daemon started")
     
-    def stop(self):
+    async def stop(self):
         """Stop the SSH health monitoring daemon"""
-        if not self.running:
-            return
-        
         self.running = False
         if self.monitor_task:
-            self.monitor_task.cancel()
+            if not self.monitor_task.done():
+                self.monitor_task.cancel()
+            await asyncio.gather(self.monitor_task, return_exceptions=True)
+        self.monitor_task = None
         logger.info("SSH health monitoring daemon stopped")
     
     async def _monitor_loop(self):
@@ -78,7 +78,7 @@ class SSHHealthMonitor:
             async with async_session_maker() as db:
                 # Get all servers with SSH health monitoring enabled
                 result = await db.execute(
-                    select(Server).where(Server.enable_ssh_health_monitoring == True)
+                    select(Server).where(Server.enable_ssh_health_monitoring.is_(True))
                 )
                 servers = result.scalars().all()
                 

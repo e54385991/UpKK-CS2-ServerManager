@@ -25,6 +25,15 @@ def _task_done(task: asyncio.Task) -> None:
         logger.error("Manual plugin update check failed: %s", task.exception())
 
 
+async def shutdown_background_tasks() -> None:
+    tasks = list(_background_tasks)
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    _background_tasks.clear()
+
+
 async def owned_server(db: AsyncSession, server_id: int, user: User) -> Server:
     server = await Server.get_by_id(db, server_id) if user.is_admin else await Server.get_by_id_and_user(db, server_id, user.id)
     if not server:
@@ -141,7 +150,7 @@ async def unmanage_plugin(server_id: int, plugin_id: int, db: AsyncSession = Dep
 @router.post("/run", response_model=ActionResponse, status_code=status.HTTP_202_ACCEPTED)
 async def run_now(server_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     await owned_server(db, server_id, current_user)
-    if maintenance_lock_service.get(server_id).locked():
+    if await maintenance_lock_service.is_locked(server_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Another maintenance operation is already running")
     task = asyncio.create_task(plugin_auto_update_service.check_server(server_id, force=True))
     _background_tasks.add(task)
@@ -159,7 +168,7 @@ async def test_plugin_update(
     """Run the normal protected update pipeline for one managed plugin."""
     await owned_server(db, server_id, current_user)
     await owned_plugin(db, server_id, plugin_id)
-    if maintenance_lock_service.get(server_id).locked():
+    if await maintenance_lock_service.is_locked(server_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Another maintenance operation is already running")
     task = asyncio.create_task(plugin_auto_update_service.check_plugin(server_id, plugin_id))
     _background_tasks.add(task)

@@ -11,7 +11,6 @@ import httpx
 import os
 import posixpath
 import tempfile
-import shutil
 import asyncio
 import uuid
 import time
@@ -19,8 +18,10 @@ import logging
 import ipaddress
 import re
 import socket
+import anyio
 from urllib.parse import quote, unquote, urlsplit
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 
 from modules import Server, get_db, User, get_current_active_user, settings
 from services import SSHManager
@@ -34,6 +35,7 @@ STREAMING_DOWNLOAD_THRESHOLD_BYTES = 3 * 1024 * 1024  # 3MB
 DOWNLOAD_TICKET_TTL_SECONDS = 60
 REMOTE_NAME_MAX_BYTES = 255
 DOWNLOAD_URL_MAX_LENGTH = 4096
+MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024
 GITHUB_API_VERSION = "2022-11-28"
 GITHUB_ACTIONS_ARTIFACT_URL_RE = re.compile(
     r"^/([^/]+)/([^/]+)/actions/runs/[0-9]+/artifacts/([0-9]+)/?$"
@@ -63,6 +65,25 @@ download_url_tasks_lock = asyncio.Lock()
 # without exposing the long-lived JWT in a URL.
 download_tickets: Dict[str, Dict[str, Any]] = {}
 download_tickets_lock = asyncio.Lock()
+_file_task_semaphore = asyncio.Semaphore(4)
+_file_user_semaphores: dict[int, asyncio.Semaphore] = {}
+
+
+async def _run_bounded_file_task(user_id: int, callback) -> None:
+    user_semaphore = _file_user_semaphores.setdefault(user_id, asyncio.Semaphore(2))
+    async with user_semaphore:
+        async with _file_task_semaphore:
+            await callback()
+
+
+async def shutdown_background_tasks() -> None:
+    tasks = list(_download_url_task_refs.values()) + list(_extraction_task_refs.values())
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    _download_url_task_refs.clear()
+    _extraction_task_refs.clear()
 
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 
@@ -142,8 +163,9 @@ async def get_server_for_user(server_id: int, db: AsyncSession, current_user: Us
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
+            detail="Server not found"
         )
+    await db.commit()
     return server
 
 
@@ -214,7 +236,7 @@ async def get_current_active_user_for_download(
             if user_id_str is None:
                 raise credentials_exception
             user_id = int(user_id_str)
-        except (JWTError, ValueError):
+        except (InvalidTokenError, ValueError):
             raise credentials_exception
     else:
         raise credentials_exception
@@ -252,22 +274,22 @@ def _validate_direct_child_name(name: str, label: str = "name") -> str:
     """Validate a single remote path component without changing its value."""
     if not isinstance(name, str) or not name or not name.strip():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{label} cannot be empty"
         )
     if name in (".", "..") or posixpath.basename(name) != name or "/" in name or "\\" in name:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{label} must be a direct child name and cannot contain path separators"
         )
     if any(ord(char) < 32 or ord(char) == 127 for char in name):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{label} cannot contain control characters"
         )
     if len(name.encode("utf-8")) > REMOTE_NAME_MAX_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{label} is too long (maximum {REMOTE_NAME_MAX_BYTES} UTF-8 bytes)"
         )
     return name
@@ -289,14 +311,14 @@ def _normalize_source_folder(source_folder: Optional[str]) -> Optional[str]:
         or any(ord(char) < 32 or ord(char) == 127 for char in value)
     ):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="source_folder must be a safe relative POSIX directory path"
         )
 
     normalized = posixpath.normpath(value)
     if normalized in ("", ".", "..") or normalized.startswith("../"):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="source_folder cannot escape the archive root"
         )
     return normalized
@@ -306,12 +328,12 @@ def _validate_download_url(url: str) -> str:
     """Apply transport-level validation before passing a URL to remote curl."""
     if not isinstance(url, str) or not url or len(url) > DOWNLOAD_URL_MAX_LENGTH:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"URL is required and must not exceed {DOWNLOAD_URL_MAX_LENGTH} characters"
         )
     if any(ord(char) < 32 or ord(char) == 127 for char in url):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="URL cannot contain control characters"
         )
 
@@ -320,35 +342,35 @@ def _validate_download_url(url: str) -> str:
         port = parsed.port  # Accessing this validates malformed ports.
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Invalid URL: {exc}"
         ) from exc
 
     if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Only absolute HTTP and HTTPS URLs are supported"
         )
     if parsed.username is not None or parsed.password is not None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="URLs containing embedded credentials are not supported"
         )
     if parsed.fragment:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="URL fragments are not supported"
         )
     if port is not None and not 1 <= port <= 65535:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="URL port is outside the valid range"
         )
 
     hostname = parsed.hostname.rstrip(".").lower()
     if hostname == "localhost" or hostname.endswith(".localhost"):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Localhost download URLs are not allowed"
         )
     try:
@@ -366,12 +388,12 @@ def _validate_download_url(url: str) -> str:
             pass
         else:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Non-canonical numeric IPv4 download URLs are not allowed"
             )
     if address is not None and not address.is_global:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Non-public IP address download URLs are not allowed"
         )
 
@@ -399,7 +421,7 @@ def _download_archive_filename(
             if allow_unresolved:
                 return None
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="filename is required when the URL path has no filename"
             )
 
@@ -408,7 +430,7 @@ def _download_archive_filename(
         if allow_unresolved and not (requested_filename and requested_filename.strip()):
             return None
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 "Unsupported archive filename. Supported formats: .zip, .7z, .tar, "
                 ".tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .gz, .bz2"
@@ -679,10 +701,17 @@ async def upload_file(
         os.close(temp_fd)
         temp_file = temp_path
         
-        # Write uploaded content to temp file
-        with open(temp_path, 'wb') as f:
-            content = await file.read()
-            f.write(content)
+        # Stream to disk without buffering the full upload or blocking the event loop.
+        uploaded_bytes = 0
+        async with await anyio.open_file(temp_path, "wb") as target:
+            while chunk := await file.read(1024 * 1024):
+                uploaded_bytes += len(chunk)
+                if uploaded_bytes > MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        detail="Uploaded file exceeds the 4 GiB limit",
+                    )
+                await target.write(chunk)
         
         # Upload to server using SSH
         ssh_manager = SSHManager()
@@ -933,7 +962,7 @@ async def download_archive_from_url(
 
     if not request.destination_path or not request.destination_path.strip():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="destination_path cannot be empty",
         )
     destination_path = posixpath.normpath(request.destination_path)
@@ -987,7 +1016,7 @@ async def download_archive_from_url(
         }
 
     task = asyncio.create_task(
-        _run_download_url_task(
+        _run_bounded_file_task(current_user.id, lambda: _run_download_url_task(
             task_id,
             url,
             destination_path,
@@ -995,7 +1024,7 @@ async def download_archive_from_url(
             server,
             request.overwrite,
             current_user.github_token if current_user.has_github_token else None,
-        )
+        ))
     )
     async with download_url_tasks_lock:
         _download_url_task_refs[task_id] = task
@@ -1350,7 +1379,7 @@ async def extract_archive(
         }
     
     # Start extraction task in background and store reference
-    task = asyncio.create_task(_run_extraction_task(
+    task = asyncio.create_task(_run_bounded_file_task(current_user.id, lambda: _run_extraction_task(
         task_id,
         archive_path,
         destination_path,
@@ -1358,7 +1387,7 @@ async def extract_archive(
         request.overwrite,
         source_folder,
         bool(request.strip_source_folder and source_folder),
-    ))
+    )))
     
     # Store task reference for proper cleanup/tracking
     async with extraction_tasks_lock:

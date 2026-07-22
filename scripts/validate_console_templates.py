@@ -4,7 +4,6 @@ Template Validation Script
 Validates that all console templates are syntactically correct
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -23,7 +22,7 @@ def validate_html_templates():
         template_path = templates_dir / template_name
         
         if not template_path.exists():
-            errors.append(f"❌ Template not found: {template_name}")
+            errors.append(f"FAIL: Template not found: {template_name}")
             continue
         
         with open(template_path, 'r', encoding='utf-8') as f:
@@ -43,7 +42,7 @@ def validate_html_templates():
             "Has fit addon": 'FitAddon' in content,
         }
         
-        print(f"\n✓ Validating {template_name}...")
+        print(f"\nPASS: Validating {template_name}...")
         
         failed_checks = []
         for check_name, passed in checks.items():
@@ -51,9 +50,9 @@ def validate_html_templates():
                 failed_checks.append(check_name)
         
         if failed_checks:
-            errors.append(f"❌ {template_name}: Failed checks - {', '.join(failed_checks)}")
+            errors.append(f"FAIL: {template_name}: Failed checks - {', '.join(failed_checks)}")
         else:
-            print(f"  ✓ All checks passed for {template_name}")
+            print(f"  PASS: All checks passed for {template_name}")
     
     return errors
 
@@ -69,19 +68,19 @@ def validate_static_files():
     
     errors = []
     
-    print("\n✓ Validating static files...")
+    print("\nPASS: Validating static files...")
     
     if not static_dir.exists():
-        errors.append(f"❌ Static directory not found: {static_dir}")
+        errors.append(f"FAIL: Static directory not found: {static_dir}")
         return errors
     
     for filename in required_files:
         filepath = static_dir / filename
         if not filepath.exists():
-            errors.append(f"❌ Missing file: static/xterm/{filename}")
+            errors.append(f"FAIL: Missing file: static/xterm/{filename}")
         else:
             size = filepath.stat().st_size
-            print(f"  ✓ {filename} ({size:,} bytes)")
+            print(f"  PASS: {filename} ({size:,} bytes)")
     
     return errors
 
@@ -91,10 +90,10 @@ def validate_routes():
     
     errors = []
     
-    print("\n✓ Validating routes...")
+    print("\nPASS: Validating routes...")
     
     if not main_py.exists():
-        errors.append("❌ main.py not found")
+        errors.append("FAIL: main.py not found")
         return errors
     
     with open(main_py, 'r', encoding='utf-8') as f:
@@ -108,9 +107,9 @@ def validate_routes():
     
     for route, template in required_routes.items():
         if route in content and template in content:
-            print(f"  ✓ Route exists: /servers/{{id}}/{route} -> {template}")
+            print(f"  PASS: Route exists: /servers/{{id}}/{route} -> {template}")
         else:
-            errors.append(f"❌ Route not found or not using correct template: {route}")
+            errors.append(f"FAIL: Route not found or not using correct template: {route}")
     
     return errors
 
@@ -130,13 +129,13 @@ def main():
     # Print results
     print("\n" + "=" * 60)
     if all_errors:
-        print("❌ VALIDATION FAILED")
+        print("VALIDATION FAILED")
         print("=" * 60)
         for error in all_errors:
             print(error)
         sys.exit(1)
     else:
-        print("✅ ALL VALIDATIONS PASSED")
+        print("ALL VALIDATIONS PASSED")
         print("=" * 60)
         print("\nWebSSH console templates are ready to use!")
         print("\nAccess URLs:")

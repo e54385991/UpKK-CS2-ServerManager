@@ -5,8 +5,7 @@ Authentication is done via API key rather than JWT
 """
 from fastapi import APIRouter, Header, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select, SQLModel
-from datetime import datetime
+from sqlmodel import SQLModel
 from typing import Optional
 
 from modules import Server, DeploymentLog, ServerStatus, get_db

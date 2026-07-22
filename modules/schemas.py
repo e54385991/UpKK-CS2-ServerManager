@@ -4,7 +4,7 @@ Using SQLModel for seamless FastAPI integration
 """
 from sqlmodel import SQLModel, Field
 from pydantic import EmailStr, field_validator, model_validator
-from typing import Optional, Dict, List, Annotated, Literal
+from typing import Optional, Dict, List, Literal
 from datetime import datetime
 from .models import ServerStatus
 import re
@@ -399,10 +399,12 @@ class ServerCreate(SQLModel):
     @classmethod
     def validate_steam_account_token(cls, v):
         """Validate Steam account token format to prevent command injection"""
-        if v is None or v.strip() == '':
-            return v
-        # Steam GSLT tokens are alphanumeric with no special characters that could cause shell injection
+        if v is None:
+            return None
         v = v.strip()
+        if not v:
+            return None
+        # Steam GSLT tokens are alphanumeric with no special characters that could cause shell injection
         if not re.match(r'^[A-Za-z0-9]+$', v):
             raise ValueError('Steam account token must only contain alphanumeric characters')
         return v
@@ -501,10 +503,12 @@ class ServerUpdate(SQLModel):
     @classmethod
     def validate_steam_account_token(cls, v):
         """Validate Steam account token format to prevent command injection"""
-        if v is None or v.strip() == '':
-            return v
-        # Steam GSLT tokens are alphanumeric with no special characters that could cause shell injection
+        if v is None:
+            return None
         v = v.strip()
+        if not v:
+            return None
+        # Steam GSLT tokens are alphanumeric with no special characters that could cause shell injection
         if not re.match(r'^[A-Za-z0-9]+$', v):
             raise ValueError('Steam account token must only contain alphanumeric characters')
         return v
@@ -624,12 +628,20 @@ BATCH_ACTION_PATTERN = f"^({'|'.join(ALLOWED_BATCH_ACTIONS)})$"
 
 # Allowed plugins for batch installation
 ALLOWED_PLUGINS = ["metamod", "counterstrikesharp", "cs2fixes"]
+MAX_BATCH_SERVERS = 20
+
+
+def _unique_server_ids(server_ids: List[int]) -> List[int]:
+    """Prevent duplicate work while preserving the caller's order."""
+    return list(dict.fromkeys(server_ids))
 
 
 class BatchActionRequest(SQLModel):
     """Schema for batch server actions"""
-    server_ids: List[int] = Field(..., min_length=1, description="List of server IDs to perform action on")
+    server_ids: List[int] = Field(..., min_length=1, max_length=MAX_BATCH_SERVERS, description="List of server IDs to perform action on")
     action: str = Field(..., description="Action to perform on all servers")
+
+    _deduplicate_server_ids = field_validator("server_ids")(_unique_server_ids)
     
     @field_validator('action')
     @classmethod
@@ -642,8 +654,10 @@ class BatchActionRequest(SQLModel):
 
 class BatchInstallPluginsRequest(SQLModel):
     """Schema for batch plugin installation"""
-    server_ids: List[int] = Field(..., min_length=1, description="List of server IDs to install plugins on")
-    plugins: List[str] = Field(..., min_length=1, description="List of plugins to install")
+    server_ids: List[int] = Field(..., min_length=1, max_length=MAX_BATCH_SERVERS, description="List of server IDs to install plugins on")
+    plugins: List[str] = Field(..., min_length=1, max_length=len(ALLOWED_PLUGINS), description="List of plugins to install")
+
+    _deduplicate_server_ids = field_validator("server_ids")(_unique_server_ids)
     
     @field_validator('plugins')
     @classmethod
@@ -665,8 +679,10 @@ class BatchActionResponse(SQLModel):
 
 class BatchSendCommandRequest(SQLModel):
     """Schema for batch send command to game servers"""
-    server_ids: List[int] = Field(..., min_length=1, description="List of server IDs to send command to")
+    server_ids: List[int] = Field(..., min_length=1, max_length=MAX_BATCH_SERVERS, description="List of server IDs to send command to")
     command: str = Field(..., min_length=1, max_length=500, description="Command to send to game servers")
+
+    _deduplicate_server_ids = field_validator("server_ids")(_unique_server_ids)
     
     @field_validator('command')
     @classmethod

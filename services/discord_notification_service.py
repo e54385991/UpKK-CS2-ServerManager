@@ -146,6 +146,16 @@ class DiscordNotificationService:
         task.add_done_callback(self._background_tasks.discard)
         return True
 
+    async def shutdown(self) -> None:
+        """Cancel and await queued webhook deliveries during application shutdown."""
+        tasks = list(self._background_tasks)
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._background_tasks.clear()
+
     def _is_rate_limited(
         self,
         server: Server,

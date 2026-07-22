@@ -2,6 +2,7 @@
 Server management routes
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from anyio import to_thread
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from typing import List, Dict, Any
@@ -21,7 +22,7 @@ from modules import (
     S3BackupItem, S3RestoreRequest,
     CleanupScanResponse, CleanupDeleteRequest, CleanupDeleteResponse,
     DiscordSettingsResponse, DiscordSettingsUpdate, DiscordTestRequest,
-    get_db, User, UserResponse, get_current_active_user, get_current_admin_user, get_optional_current_user, generate_api_key,
+    get_db, User, UserResponse, get_current_active_user, get_current_admin_user, generate_api_key,
     get_current_time, SystemSettings, ServerStatus
 )
 from modules.config import settings as app_settings
@@ -33,6 +34,7 @@ from services.ssh_manager import SSHManager
 from services.discord_notification_service import discord_notification_service
 from services.game_session import (
     find_running_session_manager,
+    gslt_startup_parameter,
     normalize_session_manager,
     send_keys_command,
     session_name,
@@ -59,9 +61,10 @@ async def get_server_with_permission(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
+            detail="Server not found"
         )
     
+    await db.commit()
     return server
 
 
@@ -76,6 +79,7 @@ async def get_server_owner_user(db: AsyncSession, server: Server, current_user: 
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Server owner not found"
         )
+    await db.commit()
     return owner
 
 
@@ -272,7 +276,8 @@ async def create_server(
             detail=f"A server with the same host ({server_data.host}) and game directory ({server_data.game_directory}) already exists. "
                    f"If you want to add a new server on this host, please use a different game directory or manually delete the existing directory on the server first."
         )
-    
+
+    await db.commit()
     # Validate SSH connection before creating server (password authentication only)
     conn = None
     try:
@@ -302,7 +307,7 @@ async def create_server(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail=f"SSH connection to {server_data.host}:{server_data.ssh_port} timed out. The server may be unreachable or too slow to respond. Please check the network connection and server status."
             )
-        except asyncssh.ConnectionLost as e:
+        except asyncssh.ConnectionLost:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Connection to {server_data.host}:{server_data.ssh_port} was lost. Please check if the server is reachable."
@@ -719,7 +724,7 @@ async def restore_server_s3_backup(
             await ssh_manager.disconnect()
         except Exception:
             pass
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        await to_thread.run_sync(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
 
 
 @router.get("/{server_id}/custom-commands", response_model=List[CustomCommandResponse])
@@ -966,7 +971,7 @@ async def get_monitoring_logs(
     logger = logging.getLogger(__name__)
     
     # Verify server exists and user has access
-    server = await get_server_with_permission(server_id, current_user, db)
+    await get_server_with_permission(server_id, current_user, db)
     
     # Get logs from Redis
     try:
@@ -1229,7 +1234,7 @@ async def check_server_deployment(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server not found"
+            detail="Server not found"
         )
     
     # Check if cs2 binary exists
@@ -1418,8 +1423,12 @@ async def get_startup_command(
     elif server.game_port:
         params.append(f"+clientport {server.game_port + 1}")
 
-    if server.steam_account_token:
-        params.append('+sv_setsteamaccount "***STEAM_TOKEN***"')
+    gslt_parameter = gslt_startup_parameter(
+        server.steam_account_token,
+        masked=True,
+    )
+    if gslt_parameter:
+        params.append(gslt_parameter)
 
     if server.server_password:
         params.append('+sv_password "***PASSWORD***"')
