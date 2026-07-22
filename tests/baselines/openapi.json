@@ -10715,6 +10715,52 @@
         ]
       }
     },
+    "/servers/{server_id}/confirm-deployment": {
+      "post": {
+        "description": "Manually record a completed deployment when remote verification is unavailable.",
+        "operationId": "confirm_server_deployment_servers__server_id__confirm_deployment_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Confirm Server Deployment",
+        "tags": [
+          "servers"
+        ]
+      }
+    },
     "/servers/{server_id}/console-popup/{console_type}": {
       "get": {
         "description": "Console popup window",

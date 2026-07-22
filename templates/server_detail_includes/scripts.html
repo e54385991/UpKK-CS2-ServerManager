@@ -78,6 +78,7 @@
             message: '',
             error: false
         },
+        confirmingDeployment: false,
         // Operation status modal
         operationMessages: [],
         currentOperationName: '',
@@ -441,20 +442,62 @@
                 const response = await authFetch(`/servers/${this.serverId}/check-deployment`);
                 if (response.ok) {
                     const data = await response.json();
-                    this.deploymentStatus.isDeployed = data.is_deployed;
+                    // Preserve a recorded deployment when SSH verification itself is unavailable.
+                    // A successful check that reports a missing binary still takes precedence.
+                    this.deploymentStatus.isDeployed = data.is_deployed ||
+                        (data.error && Boolean(this.server.last_deployed));
                     this.deploymentStatus.message = data.message;
                     this.deploymentStatus.error = data.error || false;
                 } else {
-                    // If check fails, assume not deployed
-                    this.deploymentStatus.isDeployed = false;
+                    this.deploymentStatus.isDeployed = Boolean(this.server.last_deployed);
                     this.deploymentStatus.error = true;
                 }
             } catch (err) {
                 console.warn('Error checking deployment status:', err.message);
-                this.deploymentStatus.isDeployed = false;
+                this.deploymentStatus.isDeployed = Boolean(this.server.last_deployed);
                 this.deploymentStatus.error = true;
             } finally {
                 this.deploymentStatus.checking = false;
+            }
+        },
+
+        async confirmDeploymentManually() {
+            const fallbackConfirmMessage =
+                'Only confirm this if CS2 has already finished installing. This skips the remote file check and records the deployment as complete. Continue?';
+            const confirmMessage = window.i18n?.t('serverDetail.confirmDeploymentManuallyPrompt') || fallbackConfirmMessage;
+
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            this.confirmingDeployment = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/confirm-deployment`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.detail || data.message || 'Failed to confirm deployment');
+                }
+
+                this.deploymentStatus.isDeployed = true;
+                this.deploymentStatus.error = false;
+                this.deploymentStatus.message = data.message;
+                this.server.status = data.status;
+                this.server.last_deployed = data.last_deployed;
+                this.showToast(
+                    window.i18n?.t('serverDetail.deploymentManuallyConfirmed') || 'Deployment marked as complete',
+                    'success'
+                );
+                await this.loadHistory();
+            } catch (err) {
+                this.showToast(
+                    `${window.i18n?.t('serverDetail.deploymentManualConfirmFailed') || 'Failed to confirm deployment'}: ${err.message}`,
+                    'error'
+                );
+            } finally {
+                this.confirmingDeployment = false;
             }
         },
         

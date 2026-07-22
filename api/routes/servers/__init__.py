@@ -33,6 +33,7 @@ from .crud import (
 )
 from .maintenance import (
     check_server_deployment,
+    confirm_server_deployment,
     delete_server_cleanup_items,
     get_all_servers_disk_space,
     get_server_cpu_count,
@@ -81,6 +82,7 @@ ENDPOINT_ORDER = (
     "get_server_cpu_count",
     "get_server_disk_space",
     "check_server_deployment",
+    "confirm_server_deployment",
     "manual_ssh_reconnect",
     "get_ssh_health_status",
     "get_startup_command",

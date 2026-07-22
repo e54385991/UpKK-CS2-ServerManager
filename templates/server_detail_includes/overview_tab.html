@@ -64,7 +64,7 @@
                                 
                                 <!-- Deploy Alert for Undeployed Servers -->
                                 <div x-show="!deploymentStatus.isDeployed && !deploymentStatus.checking" x-cloak class="alert alert-warning mt-3" role="alert">
-                                    <div class="d-flex align-items-center">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
                                         <i class="bi bi-exclamation-triangle-fill me-2" style="font-size: 1.5rem;"></i>
                                         <div class="flex-grow-1">
                                             <h6 class="alert-heading mb-1" data-i18n="serverDetail.notDeployed">Server Not Deployed</h6>
@@ -72,16 +72,22 @@
                                                 This server has not been deployed yet. Deploy it to install CS2 and start using it.
                                             </p>
                                         </div>
-                                        <button @click="
-                                            document.querySelector('#actions-tab').click(); 
-                                            setTimeout(() => {
-                                                executeAction('deploy');
-                                                const msg = window.i18n?.t('serverDetail.deploymentCommandSent') || 'Deployment command sent to server. Please check the console and logs for progress.';
-                                                showInfo(msg);
-                                            }, 100)
-                                        " class="btn btn-warning">
-                                            <i class="bi bi-cloud-download"></i> <span data-i18n="serverDetail.deployNow">Deploy Now</span>
-                                        </button>
+                                        <div class="d-flex gap-2">
+                                            <button @click="
+                                                document.querySelector('#actions-tab').click();
+                                                setTimeout(() => {
+                                                    executeAction('deploy');
+                                                    const msg = window.i18n?.t('serverDetail.deploymentCommandSent') || 'Deployment command sent to server. Please check the console and logs for progress.';
+                                                    showInfo(msg);
+                                                }, 100)
+                                            " class="btn btn-warning">
+                                                <i class="bi bi-cloud-download"></i> <span data-i18n="serverDetail.deployNow">Deploy Now</span>
+                                            </button>
+                                            <button @click="confirmDeploymentManually()" class="btn btn-outline-warning" :disabled="confirmingDeployment">
+                                                <i class="bi" :class="confirmingDeployment ? 'bi-arrow-repeat spin' : 'bi-check-circle'"></i>
+                                                <span data-i18n="serverDetail.confirmDeploymentManually">Confirm Deployment Complete</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 

@@ -54,6 +54,31 @@ def test_startup_command_messages_exist_in_all_locales():
         assert keys <= messages.keys()
 
 
+def test_manual_deployment_confirmation_is_available_and_localized():
+    overview = (
+        PROJECT_ROOT / "templates" / "server_detail_includes" / "overview_tab.html"
+    ).read_text(encoding="utf-8")
+    scripts = (PROJECT_ROOT / "templates" / "server_detail_includes" / "scripts.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "confirmDeploymentManually()" in overview
+    assert "async confirmDeploymentManually()" in scripts
+    assert "`/servers/${this.serverId}/confirm-deployment`" in scripts
+    assert "data.error && Boolean(this.server.last_deployed)" in scripts
+
+    for locale in ("en-US", "zh-CN"):
+        messages = json.loads(
+            (PROJECT_ROOT / "static" / "locales" / f"{locale}.json").read_text(encoding="utf-8")
+        )["serverDetail"]
+        assert {
+            "confirmDeploymentManually",
+            "confirmDeploymentManuallyPrompt",
+            "deploymentManuallyConfirmed",
+            "deploymentManualConfirmFailed",
+        } <= messages.keys()
+
+
 def test_alpine_components_do_not_run_automatic_init_twice():
     for template_name in ("server_detail.html", "servers.html", "server_setup_wizard.html"):
         template = (PROJECT_ROOT / "templates" / template_name).read_text(encoding="utf-8")

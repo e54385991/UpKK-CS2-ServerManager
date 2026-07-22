@@ -335,6 +335,46 @@ async def check_server_deployment(
         }
 
 
+@router.post("/{server_id}/confirm-deployment")
+async def confirm_server_deployment(
+    server_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Manually record a completed deployment when remote verification is unavailable."""
+    server = await get_server_with_permission(server_id, current_user, db)
+
+    if await redis_manager.get(f"deployment_lock:{server_id}"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A deployment is currently in progress and cannot be confirmed manually",
+        )
+
+    server.last_deployed = get_current_time()
+    if server.status != ServerStatus.RUNNING:
+        server.status = ServerStatus.STOPPED
+
+    db.add(
+        DeploymentLog(
+            server_id=server_id,
+            action="manual_deployment_confirmation",
+            status="success",
+            output="Deployment manually confirmed by the user",
+        )
+    )
+    await db.commit()
+    await db.refresh(server)
+
+    await redis_manager.set_server_status(server_id, server.status.value)
+
+    return {
+        "success": True,
+        "message": "Deployment marked as complete",
+        "status": server.status.value,
+        "last_deployed": server.last_deployed,
+    }
+
+
 @router.post(
     "/{server_id}/ssh-reconnect",
     description=(
