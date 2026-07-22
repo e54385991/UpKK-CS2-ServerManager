@@ -267,8 +267,9 @@
 
             async restoreDefault() {
                 try {
-                    const source = await this.request(`/servers/${this.serverId}/plugin-configs/sources/restore-default`, {method: 'POST'});
-                    await this.reloadSources(source.id);
+                    const response = await this.request(`/servers/${this.serverId}/plugin-configs/sources/restore-default`, {method: 'POST'});
+                    const restoredSources = response.sources || [response];
+                    await this.reloadSources(restoredSources[0]?.id);
                     showSuccess(translated('pluginConfigs.defaultRestored', 'Default source restored'));
                 } catch (error) {
                     showError(`${translated('pluginConfigs.restoreFailed', 'Failed to restore default source')}: ${error.message}`);

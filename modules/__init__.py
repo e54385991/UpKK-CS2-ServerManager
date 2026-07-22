@@ -25,6 +25,7 @@ from .database import async_session_maker, engine, get_db, init_db, migrate_db
 from .logging_config import _get_log_level, setup_logging
 from .models import (
     DEFAULT_PLUGIN_CONFIG_SOURCE_PATH,
+    DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS,
     AuthType,
     Base,
     CustomCommand,
@@ -144,6 +145,7 @@ __all__ = [
     "ManagedPlugin",
     "PluginConfigSource",
     "DEFAULT_PLUGIN_CONFIG_SOURCE_PATH",
+    "DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS",
     "PluginCategory",
     "SSHServerSudo",
     "SystemSettings",

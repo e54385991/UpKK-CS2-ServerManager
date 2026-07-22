@@ -191,24 +191,68 @@ async def migrate_plugins(conn: AsyncConnection) -> None:
             )
         )
 
+    # Replace the original Advertisement-only default with the CSS configs root.
+    # If that root was already registered, keep the existing row and retire the
+    # old default to avoid violating the per-server path uniqueness constraint.
     await conn.execute(
         text("""
-            INSERT INTO plugin_config_sources
-                (server_id, relative_path, path_hash, source_type, is_default, is_enabled)
-            SELECT
-                servers.id,
-                'cs2/game/csgo/addons/counterstrikesharp/configs/Advertisement',
-                '8a2ee85b3e0335ec0d294b4a6e110dc46a956a4d2fc045c33265a71812165e49',
-                'directory',
-                1,
-                1
-            FROM servers
-            LEFT JOIN plugin_config_sources sources
-                ON sources.server_id = servers.id
-                AND sources.path_hash = '8a2ee85b3e0335ec0d294b4a6e110dc46a956a4d2fc045c33265a71812165e49'
-            WHERE sources.id IS NULL
+            UPDATE plugin_config_sources old_source
+            INNER JOIN plugin_config_sources replacement
+                ON replacement.server_id = old_source.server_id
+                AND replacement.path_hash = 'ffc956aa71ba63427df3e0c25b9bc7b2a233a59c16fba95c8fa08eeb6c58c590'
+            SET replacement.is_default = 1,
+                replacement.is_enabled = old_source.is_enabled,
+                old_source.is_default = 0,
+                old_source.is_enabled = 0
+            WHERE old_source.path_hash = '8a2ee85b3e0335ec0d294b4a6e110dc46a956a4d2fc045c33265a71812165e49'
+                AND old_source.is_default = 1
         """)
     )
+    await conn.execute(
+        text("""
+            UPDATE plugin_config_sources old_source
+            LEFT JOIN plugin_config_sources replacement
+                ON replacement.server_id = old_source.server_id
+                AND replacement.path_hash = 'ffc956aa71ba63427df3e0c25b9bc7b2a233a59c16fba95c8fa08eeb6c58c590'
+            SET old_source.relative_path = 'cs2/game/csgo/addons/counterstrikesharp/configs',
+                old_source.path_hash = 'ffc956aa71ba63427df3e0c25b9bc7b2a233a59c16fba95c8fa08eeb6c58c590'
+            WHERE old_source.path_hash = '8a2ee85b3e0335ec0d294b4a6e110dc46a956a4d2fc045c33265a71812165e49'
+                AND old_source.is_default = 1
+                AND replacement.id IS NULL
+        """)
+    )
+
+    for relative_path, digest in (
+        (
+            "cs2/game/csgo/addons/counterstrikesharp/configs",
+            "ffc956aa71ba63427df3e0c25b9bc7b2a233a59c16fba95c8fa08eeb6c58c590",
+        ),
+        (
+            "cs2/game/csgo/cfg",
+            "554abb15735aeb89dc5f6f6ab0deef3c5ee3fa8bbce7eddd755d4802ecfb0469",
+        ),
+    ):
+        await conn.execute(
+            text("""
+                UPDATE plugin_config_sources
+                SET is_default = 1
+                WHERE path_hash = :digest
+            """),
+            {"digest": digest},
+        )
+        await conn.execute(
+            text("""
+                INSERT INTO plugin_config_sources
+                    (server_id, relative_path, path_hash, source_type, is_default, is_enabled)
+                SELECT servers.id, :relative_path, :digest, 'directory', 1, 1
+                FROM servers
+                LEFT JOIN plugin_config_sources sources
+                    ON sources.server_id = servers.id
+                    AND sources.path_hash = :digest
+                WHERE sources.id IS NULL
+            """),
+            {"relative_path": relative_path, "digest": digest},
+        )
 
     result = await conn.execute(
         text("""

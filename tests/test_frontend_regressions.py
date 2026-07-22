@@ -88,6 +88,15 @@ def test_plugin_market_loads_admin_accessible_servers_for_plugin_management():
     assert "formatPluginManagementServerName(server)" in template
 
 
+def test_plugin_config_restore_supports_multiple_default_sources():
+    script = (PROJECT_ROOT / "static" / "js" / "plugin-config-manager.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const restoredSources = response.sources || [response];" in script
+    assert "await this.reloadSources(restoredSources[0]?.id);" in script
+
+
 def test_alpine_components_do_not_run_automatic_init_twice():
     for template_name in ("server_detail.html", "servers.html", "server_setup_wizard.html"):
         template = (PROJECT_ROOT / "templates" / template_name).read_text(encoding="utf-8")

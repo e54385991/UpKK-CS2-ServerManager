@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+import hashlib
+
 from .common import *
 
 router = APIRouter(prefix="/servers", tags=["servers"])
@@ -146,16 +148,17 @@ async def create_server(
     server = Server(**server_dict, user_id=current_user.id, api_key=generate_api_key())
     db.add(server)
     await db.flush()
-    db.add(
-        PluginConfigSource(
-            server_id=server.id,
-            relative_path=DEFAULT_PLUGIN_CONFIG_SOURCE_PATH,
-            path_hash="8a2ee85b3e0335ec0d294b4a6e110dc46a956a4d2fc045c33265a71812165e49",
-            source_type="directory",
-            is_default=True,
-            is_enabled=True,
+    for default_path in DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS:
+        db.add(
+            PluginConfigSource(
+                server_id=server.id,
+                relative_path=default_path,
+                path_hash=hashlib.sha256(default_path.encode("utf-8")).hexdigest(),
+                source_type="directory",
+                is_default=True,
+                is_enabled=True,
+            )
         )
-    )
     await db.commit()
     await db.refresh(server)
 

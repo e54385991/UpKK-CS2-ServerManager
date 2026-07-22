@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 from sqlmodel import Column, Field, SQLModel, select
 
-DEFAULT_PLUGIN_CONFIG_SOURCE_PATH = "cs2/game/csgo/addons/counterstrikesharp/configs/Advertisement"
+DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS = (
+    "cs2/game/csgo/addons/counterstrikesharp/configs",
+    "cs2/game/csgo/cfg",
+)
+# Preserve the original singular public constant for integrations that use it.
+DEFAULT_PLUGIN_CONFIG_SOURCE_PATH = DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS[0]
 
 Base = SQLModel
 

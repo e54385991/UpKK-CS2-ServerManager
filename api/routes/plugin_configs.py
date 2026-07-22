@@ -16,7 +16,7 @@ from sqlmodel import select
 
 from api.routes.servers import get_server_with_permission
 from modules import (
-    DEFAULT_PLUGIN_CONFIG_SOURCE_PATH,
+    DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS,
     PluginConfigSource,
     User,
     get_current_active_user,
@@ -256,30 +256,38 @@ async def restore_default_source(
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
-    digest = path_hash(DEFAULT_PLUGIN_CONFIG_SOURCE_PATH)
-    result = await db.execute(
-        select(PluginConfigSource).where(
-            PluginConfigSource.server_id == server_id,
-            PluginConfigSource.path_hash == digest,
+    restored_sources = []
+    for default_path in DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS:
+        digest = path_hash(default_path)
+        result = await db.execute(
+            select(PluginConfigSource).where(
+                PluginConfigSource.server_id == server_id,
+                PluginConfigSource.path_hash == digest,
+            )
         )
-    )
-    source = result.scalar_one_or_none()
-    if source is None:
-        source = PluginConfigSource(
-            server_id=server_id,
-            relative_path=DEFAULT_PLUGIN_CONFIG_SOURCE_PATH,
-            path_hash=digest,
-            source_type="directory",
-            is_default=True,
-            is_enabled=True,
-        )
-    else:
-        source.is_default = True
-        source.is_enabled = True
-    db.add(source)
+        source = result.scalar_one_or_none()
+        if source is None:
+            source = PluginConfigSource(
+                server_id=server_id,
+                relative_path=default_path,
+                path_hash=digest,
+                source_type="directory",
+                is_default=True,
+                is_enabled=True,
+            )
+        else:
+            source.is_default = True
+            source.is_enabled = True
+        db.add(source)
+        restored_sources.append(source)
+
     await db.commit()
-    await db.refresh(source)
-    return _source_payload(source, server.game_directory)
+    for source in restored_sources:
+        await db.refresh(source)
+
+    payloads = [_source_payload(source, server.game_directory) for source in restored_sources]
+    # Keep the first source at the top level for compatibility with older clients.
+    return {**payloads[0], "sources": payloads}
 
 
 @router.get("/browse")

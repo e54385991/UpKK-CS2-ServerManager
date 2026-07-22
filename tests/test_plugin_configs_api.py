@@ -8,6 +8,8 @@ import pytest
 from fastapi import HTTPException
 
 from api.routes import plugin_configs
+from modules import DEFAULT_PLUGIN_CONFIG_SOURCE_PATH, DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS
+from services.plugin_config_service import path_hash
 
 
 class _LockContext:
@@ -21,6 +23,48 @@ class _LockContext:
 class _LockService:
     def get(self, *_args, **_kwargs):
         return _LockContext()
+
+
+def test_default_configuration_sources_cover_css_configs_and_game_cfg():
+    assert DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS == (
+        "cs2/game/csgo/addons/counterstrikesharp/configs",
+        "cs2/game/csgo/cfg",
+    )
+    assert DEFAULT_PLUGIN_CONFIG_SOURCE_PATH == DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS[0]
+
+
+@pytest.mark.asyncio
+async def test_restore_default_source_restores_both_directories(monkeypatch):
+    missing = SimpleNamespace(scalar_one_or_none=lambda: None)
+    db = SimpleNamespace(
+        execute=AsyncMock(side_effect=[missing, missing]),
+        add=Mock(),
+        commit=AsyncMock(),
+        refresh=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        plugin_configs,
+        "get_server_with_permission",
+        AsyncMock(return_value=SimpleNamespace(game_directory="/home/cs2")),
+    )
+
+    response = await plugin_configs.restore_default_source(
+        server_id=7,
+        db=db,
+        current_user=SimpleNamespace(),
+    )
+
+    restored = [call.args[0] for call in db.add.call_args_list]
+    assert [source.relative_path for source in restored] == list(DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS)
+    assert [source.path_hash for source in restored] == [
+        path_hash(source_path) for source_path in DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS
+    ]
+    assert all(source.is_default and source.is_enabled for source in restored)
+    assert [source["path"] for source in response["sources"]] == list(
+        DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS
+    )
+    db.commit.assert_awaited_once()
+    assert db.refresh.await_count == 2
 
 
 @pytest.mark.asyncio

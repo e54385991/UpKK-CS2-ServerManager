@@ -9,6 +9,7 @@ import pytest
 from modules import migrations
 from modules.migrations import MIGRATION_STEPS, MigrationStep
 from modules.migrations.common import column_exists, table_exists
+from modules.migrations.plugins import migrate_plugins
 
 
 def test_migration_step_order_preserves_the_legacy_sequence():
@@ -74,3 +75,41 @@ async def test_metadata_helpers_cover_existing_and_missing_objects():
         "table": "servers",
         "column": "missing",
     }
+
+
+class _ExistingPluginSchemaConnection:
+    def __init__(self):
+        self.calls = []
+
+    async def execute(self, statement, parameters=None):
+        self.calls.append((str(statement), parameters))
+        return _Result(("exists",))
+
+
+@pytest.mark.asyncio
+async def test_plugin_migration_replaces_advertisement_default_with_two_roots():
+    connection = _ExistingPluginSchemaConnection()
+
+    await migrate_plugins(connection)
+
+    inserts = [
+        parameters
+        for sql, parameters in connection.calls
+        if "INSERT INTO plugin_config_sources" in sql
+    ]
+    assert inserts == [
+        {
+            "relative_path": "cs2/game/csgo/addons/counterstrikesharp/configs",
+            "digest": "ffc956aa71ba63427df3e0c25b9bc7b2a233a59c16fba95c8fa08eeb6c58c590",
+        },
+        {
+            "relative_path": "cs2/game/csgo/cfg",
+            "digest": "554abb15735aeb89dc5f6f6ab0deef3c5ee3fa8bbce7eddd755d4802ecfb0469",
+        },
+    ]
+    migration_sql = "\n".join(sql for sql, _parameters in connection.calls)
+    assert "old_source.is_enabled = 0" in migration_sql
+    assert (
+        "old_source.relative_path = 'cs2/game/csgo/addons/counterstrikesharp/configs'"
+        in migration_sql
+    )

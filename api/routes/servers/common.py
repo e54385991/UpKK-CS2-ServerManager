@@ -20,7 +20,7 @@ from sqlmodel import select
 
 from api.dependencies import require_server_access
 from modules import (
-    DEFAULT_PLUGIN_CONFIG_SOURCE_PATH,
+    DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS,
     ActionResponse,
     AuthType,
     CleanupDeleteRequest,
