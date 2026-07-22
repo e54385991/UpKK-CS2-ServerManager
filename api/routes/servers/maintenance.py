@@ -295,9 +295,7 @@ async def check_server_deployment(
             "message": str
         }
     """
-    server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    if not server:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+    server = await get_server_with_permission(server_id, current_user, db)
 
     # Check if cs2 binary exists
     ssh_manager = SSHManager()

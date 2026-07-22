@@ -834,13 +834,48 @@ async function loadUserInfo() {
             if (currentUser.is_admin) {
                 document.getElementById('admin-section').style.display = 'block';
             }
+            return currentUser;
         } else {
             window.location.href = '/login';
+            return null;
         }
     } catch (error) {
         console.error('Error loading user info:', error);
         window.location.href = '/login';
+        return null;
     }
+}
+
+async function getServersAvailableForPluginManagement() {
+    if (!currentUser) {
+        await loadUserInfo();
+    }
+
+    const response = await fetch(
+        currentUser?.is_admin ? '/servers/admin/all' : '/servers',
+        {
+            headers: {
+                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
+            }
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch servers: ${response.status}`);
+    }
+
+    const servers = await response.json();
+    if (!Array.isArray(servers)) {
+        throw new Error('Invalid server list response format');
+    }
+    return servers;
+}
+
+function formatPluginManagementServerName(server) {
+    const name = server.host ? `${server.name} (${server.host})` : server.name;
+    return currentUser?.is_admin && server.user?.username
+        ? `${name} — ${server.user.username}`
+        : name;
 }
 
 // Load categories
@@ -1480,39 +1515,21 @@ async function showInstallModal(pluginId, pluginName) {
     // Reset upgrade mode checkbox
     document.getElementById('upgrade-mode-checkbox').checked = false;
     
-    // Load user's servers
+    // Load all servers for admins; regular users only receive their own servers.
     try {
-        const response = await fetch('/servers', {
-            headers: {
-                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
-            }
-        });
-        
-        if (response.ok) {
-            const servers = await response.json();
-            const select = document.getElementById('install-server-select');
-            select.innerHTML = '<option value="">Select a server...</option>';
-            
-            // Check if servers is an array
-            if (Array.isArray(servers)) {
-                if (servers.length === 0) {
-                    select.innerHTML = '<option value="">No servers available</option>';
-                } else {
-                    servers.forEach(server => {
-                        const option = document.createElement('option');
-                        option.value = server.id;
-                        option.textContent = server.name;
-                        select.appendChild(option);
-                    });
-                }
-            } else {
-                console.error('Servers response is not an array:', servers);
-                select.innerHTML = '<option value="">Error loading servers</option>';
-            }
+        const servers = await getServersAvailableForPluginManagement();
+        const select = document.getElementById('install-server-select');
+        select.innerHTML = '<option value="">Select a server...</option>';
+
+        if (servers.length === 0) {
+            select.innerHTML = '<option value="">No servers available</option>';
         } else {
-            console.error('Failed to fetch servers:', response.status);
-            const select = document.getElementById('install-server-select');
-            select.innerHTML = '<option value="">Failed to load servers</option>';
+            servers.forEach(server => {
+                const option = document.createElement('option');
+                option.value = server.id;
+                option.textContent = formatPluginManagementServerName(server);
+                select.appendChild(option);
+            });
         }
     } catch (error) {
         console.error('Error loading servers:', error);
@@ -2200,31 +2217,14 @@ async function showUninstallModal(pluginId, pluginName) {
 
 async function loadServersForUninstall() {
     try {
-        const response = await fetch('/servers', {
-            headers: {
-                'Authorization': 'Bearer ' + localStorage.getItem('access_token')
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to fetch servers');
-        }
-        
-        const data = await response.json();
+        const servers = await getServersAvailableForPluginManagement();
         const select = document.getElementById('uninstall-server-select');
         select.innerHTML = '<option value="">' + (window.i18n ? window.i18n.t('pluginMarket.installModal.serverPlaceholder') : 'Select a server...') + '</option>';
-        
-        // Validate response is an array
-        if (!Array.isArray(data)) {
-            console.error('Invalid server list response format:', data);
-            showError('Invalid server list response');
-            return;
-        }
-        
-        data.forEach(server => {
+
+        servers.forEach(server => {
             const option = document.createElement('option');
             option.value = server.id;
-            option.textContent = `${server.name} (${server.host})`;
+            option.textContent = formatPluginManagementServerName(server);
             select.appendChild(option);
         });
     } catch (error) {

@@ -79,6 +79,15 @@ def test_manual_deployment_confirmation_is_available_and_localized():
         } <= messages.keys()
 
 
+def test_plugin_market_loads_admin_accessible_servers_for_plugin_management():
+    template = (PROJECT_ROOT / "templates" / "plugin_market.html").read_text(encoding="utf-8")
+
+    assert "async function getServersAvailableForPluginManagement()" in template
+    assert "currentUser?.is_admin ? '/servers/admin/all' : '/servers'" in template
+    assert template.count("getServersAvailableForPluginManagement()") == 3
+    assert "formatPluginManagementServerName(server)" in template
+
+
 def test_alpine_components_do_not_run_automatic_init_twice():
     for template_name in ("server_detail.html", "servers.html", "server_setup_wizard.html"):
         template = (PROJECT_ROOT / "templates" / template_name).read_text(encoding="utf-8")

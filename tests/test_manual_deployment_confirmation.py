@@ -75,3 +75,29 @@ async def test_manual_deployment_confirmation_rejects_active_deployment(monkeypa
         )
 
     assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_deployment_check_uses_admin_aware_server_access(monkeypatch):
+    server = SimpleNamespace(game_directory="/srv/cs2")
+    permission_checks = []
+
+    async def get_server(server_id, current_user, db):
+        permission_checks.append((server_id, current_user.id, db))
+        return server
+
+    class _FailingSSHManager:
+        async def connect(self, _server):
+            return False, "connection refused"
+
+    monkeypatch.setattr(maintenance, "get_server_with_permission", get_server)
+    monkeypatch.setattr(maintenance, "SSHManager", _FailingSSHManager)
+
+    db = _FakeSession()
+    result = await maintenance.check_server_deployment(
+        42, db=db, current_user=SimpleNamespace(id=7, is_admin=True)
+    )
+
+    assert permission_checks == [(42, 7, db)]
+    assert result["is_deployed"] is False
+    assert result["error"] is True
