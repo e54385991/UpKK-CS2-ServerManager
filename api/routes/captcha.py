@@ -1,9 +1,11 @@
 """
 CAPTCHA API routes
 """
+
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
+
 from services.captcha_service import captcha_service
 from services.rate_limit import enforce_rate_limit
 
@@ -12,11 +14,13 @@ router = APIRouter(prefix="/api/captcha", tags=["captcha"])
 
 class CaptchaResponse(BaseModel):
     """Response model for CAPTCHA generation"""
+
     token: str
 
 
 class CaptchaRefreshRequest(BaseModel):
     """Request model for CAPTCHA refresh"""
+
     old_token: str
 
 
@@ -43,7 +47,7 @@ async def get_captcha_image(token: str, request: Request):
     # To prevent abuse, we generate a new captcha and return it
     await enforce_rate_limit(request, "captcha", limit=30, window=60)
     new_token, image_bytes = await captcha_service.generate_captcha()
-    
+
     return Response(
         content=image_bytes,
         media_type="image/png",
@@ -51,8 +55,8 @@ async def get_captcha_image(token: str, request: Request):
             "X-Captcha-Token": new_token,
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
-            "Expires": "0"
-        }
+            "Expires": "0",
+        },
     )
 
 

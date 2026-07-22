@@ -1,13 +1,15 @@
 """
 S3-compatible storage service for plugin backups.
 """
+
 import asyncio
 import os
 import shutil
 import tempfile
 import uuid
-from anyio import to_thread
 from typing import Any, Dict, List, Optional, Tuple
+
+from anyio import to_thread
 
 from modules.models import Server, User
 
@@ -67,7 +69,7 @@ class S3BackupService:
         count = getattr(user, "s3_retention_count", None)
         try:
             count = int(count)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return DEFAULT_S3_RETENTION_COUNT
         if count <= 0:
             return DEFAULT_S3_RETENTION_COUNT
@@ -101,19 +103,23 @@ class S3BackupService:
                 key = obj.get("Key")
                 if not key or key.endswith("/"):
                     continue
-                items.append({
-                    "key": key,
-                    "filename": key.rsplit("/", 1)[-1],
-                    "size": int(obj.get("Size") or 0),
-                    "last_modified": obj.get("LastModified"),
-                    "etag": (obj.get("ETag") or "").strip('"') or None,
-                })
+                items.append(
+                    {
+                        "key": key,
+                        "filename": key.rsplit("/", 1)[-1],
+                        "size": int(obj.get("Size") or 0),
+                        "last_modified": obj.get("LastModified"),
+                        "etag": (obj.get("ETag") or "").strip('"') or None,
+                    }
+                )
         self._sort_backups_newest_first(items)
         return items
 
     def _get_client(self, user: User):
         if boto3 is None:
-            raise RuntimeError("boto3 is not installed. Please install dependencies from requirements.txt.")
+            raise RuntimeError(
+                "boto3 is not installed. Please install dependencies from requirements.txt."
+            )
 
         client_kwargs: Dict[str, Any] = {
             "aws_access_key_id": user.s3_access_key_id,
@@ -147,11 +153,13 @@ class S3BackupService:
         steps: List[Dict[str, str]] = []
 
         def add_step(name: str, status: str, message: str):
-            steps.append({
-                "name": name,
-                "status": status,
-                "message": message,
-            })
+            steps.append(
+                {
+                    "name": name,
+                    "status": status,
+                    "message": message,
+                }
+            )
 
         if not self.is_configured(user):
             add_step("configuration", "failed", "S3-compatible storage is not fully configured.")
@@ -216,11 +224,17 @@ class S3BackupService:
             except (BotoCoreError, ClientError, RuntimeError) as exc:
                 add_step("delete", "failed", str(exc))
                 cleanup_message = f"S3 delete test failed: {exc}"
-                failure_message = f"{failure_message}\n{cleanup_message}" if failure_message else cleanup_message
+                failure_message = (
+                    f"{failure_message}\n{cleanup_message}" if failure_message else cleanup_message
+                )
 
             if failure_message:
                 return False, failure_message, steps
-            return True, "S3-compatible storage test succeeded: list, upload, download, and delete all passed.", steps
+            return (
+                True,
+                "S3-compatible storage test succeeded: list, upload, download, and delete all passed.",
+                steps,
+            )
         except (BotoCoreError, ClientError, RuntimeError) as exc:
             add_step("connection", "failed", str(exc))
             return False, f"S3 connection test failed: {exc}", steps
@@ -248,7 +262,9 @@ class S3BackupService:
 
         try:
             await send_progress("Downloading backup archive to panel for S3 upload...")
-            download_success, download_error = await ssh_manager.download_file(backup_path, local_path, server)
+            download_success, download_error = await ssh_manager.download_file(
+                backup_path, local_path, server
+            )
             if not download_success:
                 return False, f"Failed to download backup before S3 upload: {download_error}", None
 
@@ -280,7 +296,9 @@ class S3BackupService:
                 pass
             await to_thread.run_sync(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
 
-    async def list_backups(self, user: User, server: Server) -> Tuple[bool, List[Dict[str, Any]], str]:
+    async def list_backups(
+        self, user: User, server: Server
+    ) -> Tuple[bool, List[Dict[str, Any]], str]:
         if not self.is_configured(user):
             return True, [], "S3-compatible storage is not configured."
 
@@ -321,7 +339,7 @@ class S3BackupService:
                 old_items = items[retention_count:]
                 deleted_count = 0
                 for index in range(0, len(old_items), 1000):
-                    batch = old_items[index:index + 1000]
+                    batch = old_items[index : index + 1000]
                     if not batch:
                         continue
                     response = s3_client.delete_objects(

@@ -2,9 +2,11 @@
 Routes for a2s-cache - requires authentication to filter by user
 Separate router to avoid /servers prefix issues
 """
+
 from fastapi import APIRouter, Depends
-from modules.models import User
+
 from modules.auth import get_current_active_user
+from modules.models import User
 from modules.utils import get_current_time
 
 # Create a router with NO prefix
@@ -29,7 +31,7 @@ async def test_a2s_cache():
         "status": "ok",
         "message": "Public test endpoint working",
         "timestamp": get_current_time().isoformat(),
-        "public": True
+        "public": True,
     }
 
 
@@ -37,20 +39,21 @@ async def test_a2s_cache():
 async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_active_user)):
     """
     Get cached A2S information for current user's servers.
-    
+
     Requires authentication to filter servers by user UID.
     Returns only the servers belonging to the authenticated user.
     """
     import logging
-    
+
+    from modules.database import async_session_maker
+
     # Import dependencies inside function
     from modules.models import Server
-    from modules.database import async_session_maker
     from services.a2s_cache_service import a2s_cache_service
-    
+
     logger = logging.getLogger(__name__)
     logger.info(f"=== A2S-CACHE ENDPOINT CALLED for user {current_user.id} ===")
-    
+
     # Initialize response
     response = {
         "servers": {},
@@ -60,18 +63,18 @@ async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_ac
             "router": "cache",
             "version": "4.0-user-filtered",
             "user_id": current_user.id,
-            "authenticated": True
-        }
+            "authenticated": True,
+        },
     }
-    
+
     try:
         # Use a separate session
         async with async_session_maker() as session:
             # Get servers for current user only
             servers = await Server.get_all_by_user(session, current_user.id)
-            
+
             logger.info(f"Found {len(servers)} servers for user {current_user.id}")
-            
+
             # Get cached data for each server
             for server in servers:
                 try:
@@ -83,9 +86,9 @@ async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_ac
                     logger.error(f"Error getting cache for server {server.id}: {e}")
                     response["servers"][str(server.id)] = {
                         "success": False,
-                        "error": "Cache unavailable"
+                        "error": "Cache unavailable",
                     }
-        
+
         # Add Steam latest version to response
         try:
             steam_version = await a2s_cache_service.get_latest_steam_version()
@@ -93,12 +96,11 @@ async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_ac
                 response["steam_latest_version"] = steam_version
         except Exception as e:
             logger.error(f"Error getting Steam version: {e}")
-        
+
         logger.info(f"Successfully returning data for {len(response['servers'])} servers")
     except Exception as e:
         logger.error(f"Error in a2s-cache endpoint: {e}", exc_info=True)
         response["error"] = str(e)
-    
+
     logger.info("=== A2S-CACHE ENDPOINT COMPLETE ===")
     return response
-

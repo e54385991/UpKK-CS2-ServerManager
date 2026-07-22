@@ -2,17 +2,18 @@
 Auto-Update Service for CS2 Servers
 Periodically checks server versions against Steam API and triggers updates when needed
 """
+
 import asyncio
 import logging
 import math
 from typing import Optional, Set, Tuple
-from modules.utils import get_current_time
 
-from services.steam_api_service import steam_api_service
-from services.ssh_manager import SSHManager
-from services.steam_inf_service import steam_inf_service
+from modules.utils import get_current_time
 from services.discord_notification_service import EVENT_AUTO_UPDATE, discord_notification_service
 from services.maintenance_lock import maintenance_lock_service
+from services.ssh_manager import SSHManager
+from services.steam_api_service import steam_api_service
+from services.steam_inf_service import steam_inf_service
 
 logger = logging.getLogger(__name__)
 
@@ -22,20 +23,20 @@ class AutoUpdateService:
 
     VERSION_VERIFICATION_TIMEOUT_SECONDS = 5 * 60
     VERSION_VERIFICATION_POLL_INTERVAL_SECONDS = 30
-    
+
     def __init__(self):
         self.check_interval = 60  # Check every minute (configurable, supports debugging)
         self.task: Optional[asyncio.Task] = None
         self.running = False
         self.updating_servers: Set[int] = set()  # Track servers currently being updated
-        
+
     async def start(self):
         """Start the background auto-update task"""
         if self.task is None or self.task.done():
             self.running = True
             self.task = asyncio.create_task(self._update_loop())
             logger.info("Auto-update service started")
-    
+
     async def stop(self):
         """Stop the background auto-update task"""
         self.running = False
@@ -45,7 +46,7 @@ class AutoUpdateService:
             await asyncio.gather(self.task, return_exceptions=True)
         self.task = None
         logger.info("Auto-update service stopped")
-    
+
     async def _update_loop(self):
         """Main update check loop"""
         while self.running:
@@ -53,62 +54,70 @@ class AutoUpdateService:
                 await self._check_and_update_servers()
             except Exception as e:
                 logger.error(f"Error in auto-update loop: {e}")
-            
+
             # Wait for next interval
             await asyncio.sleep(self.check_interval)
-    
+
     async def _check_and_update_servers(self):
         """Check all servers with auto-update enabled and update if needed"""
         from modules.database import async_session_maker
         from modules.models import Server
-        
+
         try:
             # Fetch server list quickly and close DB connection to avoid pool exhaustion
             async with async_session_maker() as db:
                 servers = await Server.get_all_with_auto_update(db)
-            
+
             logger.info(f"Checking {len(servers)} servers with auto-update enabled")
-            
+
             # Check and update each server
             # DB session is already closed, so SSH operations won't hold DB connections
             for server in servers:
                 # Skip if server is currently being updated (prevent duplicate runs)
                 if server.id in self.updating_servers:
                     logger.debug(
-                        f"Skipping server {server.id} ({server.name}) - "
-                        f"update already in progress"
+                        f"Skipping server {server.id} ({server.name}) - update already in progress"
                     )
                     continue
-                
+
                 # Skip servers that are marked as down due to SSH failures
                 if server.should_skip_background_checks():
-                    logger.info(f"Skipping auto-update check for server {server.id} ({server.name}) - marked as SSH down for 3+ days")
+                    logger.info(
+                        f"Skipping auto-update check for server {server.id} ({server.name}) - marked as SSH down for 3+ days"
+                    )
                     continue
-                
+
                 # Check if we should check this server based on its configured interval
                 interval_hours = server.update_check_interval_hours or 1
-                if not steam_api_service.should_check_version(server.last_update_check, interval_hours):
+                if not steam_api_service.should_check_version(
+                    server.last_update_check, interval_hours
+                ):
                     logger.debug(
                         f"Skipping server {server.id} ({server.name}) - "
                         f"checked recently (interval: {interval_hours}h)"
                     )
                     continue
-                
+
                 await self._check_and_update_server(server)
-                
+
         except Exception as e:
             logger.error(f"Error checking servers for updates: {e}")
-    
+
     async def _check_and_update_server(self, server):
         """Check a single server and run a long update outside the check timeout."""
         try:
+
             async def _do_check():
-                from modules.database import async_session_maker
                 from sqlalchemy import update as sql_update
+
+                from modules.database import async_session_maker
                 from modules.models import Server
+
                 async with async_session_maker() as db:
                     await db.execute(
-                        sql_update(Server).where(Server.id == server.id).values(last_update_check=get_current_time())
+                        sql_update(Server)
+                        .where(Server.id == server.id)
+                        .values(last_update_check=get_current_time())
                     )
                     await db.commit()
 
@@ -120,7 +129,11 @@ class AutoUpdateService:
                     return None
                 success, result = await steam_api_service.check_version(current_version)
                 if not success:
-                    logger.warning("Steam version check failed for server %s: %s", server.id, result.get("error"))
+                    logger.warning(
+                        "Steam version check failed for server %s: %s",
+                        server.id,
+                        result.get("error"),
+                    )
                     return None
                 if result.get("up_to_date", True):
                     return None
@@ -186,7 +199,9 @@ class AutoUpdateService:
                 if final_check is None:
                     try:
                         if deadline is None:
-                            check_success, candidate = await steam_api_service.check_version(observed_version)
+                            check_success, candidate = await steam_api_service.check_version(
+                                observed_version
+                            )
                         else:
                             remaining = deadline - loop.time()
                             if remaining <= 0:
@@ -196,7 +211,9 @@ class AutoUpdateService:
                                 timeout=remaining,
                             )
                     except asyncio.TimeoutError:
-                        await log_progress("Version verification window expired during the Steam API check")
+                        await log_progress(
+                            "Version verification window expired during the Steam API check"
+                        )
                         break
                     if check_success:
                         final_check = candidate
@@ -235,10 +252,14 @@ class AutoUpdateService:
         """Compare dotted steam.inf versions with Steam's numeric fallback format."""
         if not observed_version or not required_version:
             return False
-        observed_digits = "".join(character for character in observed_version if character.isdigit())
-        required_digits = "".join(character for character in required_version if character.isdigit())
+        observed_digits = "".join(
+            character for character in observed_version if character.isdigit()
+        )
+        required_digits = "".join(
+            character for character in required_version if character.isdigit()
+        )
         return bool(observed_digits and observed_digits == required_digits)
-    
+
     async def _trigger_server_update(
         self,
         server,
@@ -248,7 +269,7 @@ class AutoUpdateService:
     ):
         """Trigger update for a server and restart it"""
         lock = maintenance_lock_service.get(server.id)
-        
+
         # Try to acquire lock without blocking - if already locked, skip this update
         if await maintenance_lock_service.is_locked(server.id):
             logger.warning(
@@ -256,15 +277,15 @@ class AutoUpdateService:
                 f"skipping duplicate update request"
             )
             return
-        
+
         async with lock:
             # Mark server as being updated
             self.updating_servers.add(server.id)
-            
+
             # Create deployment log for auto-update
             from modules.database import async_session_maker
             from modules.models import DeploymentLog
-            
+
             log_id = None
             output_messages = []
             notification_details = {
@@ -275,15 +296,13 @@ class AutoUpdateService:
             try:
                 async with async_session_maker() as db:
                     log = DeploymentLog(
-                        server_id=server.id,
-                        action="auto_update",
-                        status="in_progress"
+                        server_id=server.id, action="auto_update", status="in_progress"
                     )
                     db.add(log)
                     await db.commit()
                     await db.refresh(log)
                     log_id = log.id
-                
+
                 logger.info(f"Triggering auto-update for server {server.id} ({server.name})")
 
                 discord_notification_service.queue_notify(
@@ -296,17 +315,17 @@ class AutoUpdateService:
                     details=notification_details,
                     state="in_progress",
                 )
-                
+
                 # Create SSH manager
                 ssh_manager = SSHManager()
-                
+
                 # Define progress callback
                 async def log_progress(msg: str):
                     logger.info(f"[Server {server.id}] {msg}")
                     output_messages.append(msg)
-                
+
                 await log_progress("Starting auto-update...")
-                
+
                 # Run update command (this handles connection, update, and restart if server was running)
                 # The update_server method will:
                 # 1. Connect to SSH
@@ -316,8 +335,7 @@ class AutoUpdateService:
                 # 5. Disconnect SSH
                 logger.info(f"Running update on server {server.id}")
                 update_success, update_message = await ssh_manager.update_server(
-                    server,
-                    progress_callback=log_progress
+                    server, progress_callback=log_progress
                 )
 
                 # A SteamCMD process can return a failure status after having
@@ -335,14 +353,16 @@ class AutoUpdateService:
                     error_msg = f"Update failed: {update_message}"
                     notification_details["Operation Result"] = update_message
                     logger.error(f"Update failed for server {server.id}: {update_message}")
-                    
+
                     # Update log as failed
                     async with async_session_maker() as db:
                         log_to_update = await db.get(DeploymentLog, log_id)
                         if log_to_update:
                             log_to_update.status = "failed"
                             log_to_update.error_message = error_msg
-                            log_to_update.output = "\n".join(output_messages) if output_messages else None
+                            log_to_update.output = (
+                                "\n".join(output_messages) if output_messages else None
+                            )
                             await db.commit()
                     discord_notification_service.queue_notify(
                         server,
@@ -366,12 +386,14 @@ class AutoUpdateService:
                 # remote steam.inf for the required version. A readable but
                 # stale file must keep polling rather than fail immediately.
                 notification_details["Verification Window"] = "Up to 5 minutes"
-                version_verified, observed_version, latest_required_version = (
-                    await self._wait_for_updated_version(
-                        server,
-                        required_version,
-                        log_progress,
-                    )
+                (
+                    version_verified,
+                    observed_version,
+                    latest_required_version,
+                ) = await self._wait_for_updated_version(
+                    server,
+                    required_version,
+                    log_progress,
                 )
 
                 notification_details["Observed Version"] = observed_version or "Unavailable"
@@ -384,7 +406,9 @@ class AutoUpdateService:
                     )
 
                 if not version_verified:
-                    expected_version = latest_required_version or required_version or "current Steam version"
+                    expected_version = (
+                        latest_required_version or required_version or "current Steam version"
+                    )
                     error_msg = (
                         "Update verification failed: steam.inf could not be read"
                         if not observed_version
@@ -399,17 +423,26 @@ class AutoUpdateService:
                             log_to_update.output = "\n".join(output_messages)
                             await db.commit()
                     discord_notification_service.queue_notify(
-                        server, EVENT_AUTO_UPDATE, "auto_update", False, error_msg,
-                        title="Automatic update failed", details=notification_details,
+                        server,
+                        EVENT_AUTO_UPDATE,
+                        "auto_update",
+                        False,
+                        error_msg,
+                        title="Automatic update failed",
+                        details=notification_details,
                     )
                     return
-                
+
                 logger.info(f"Auto-update completed successfully for server {server.id}")
-                await log_progress(f"Auto-update verified successfully via steam.inf: {observed_version}")
-                
+                await log_progress(
+                    f"Auto-update verified successfully via steam.inf: {observed_version}"
+                )
+
                 # Update last_update_time in database
                 from sqlalchemy import update as sql_update
+
                 from modules.models import Server
+
                 async with async_session_maker() as db:
                     await db.execute(
                         sql_update(Server)
@@ -417,7 +450,7 @@ class AutoUpdateService:
                         .values(last_update_time=get_current_time())
                     )
                     await db.commit()
-                
+
                 # Update log as success
                 async with async_session_maker() as db:
                     log_to_update = await db.get(DeploymentLog, log_id)
@@ -440,11 +473,11 @@ class AutoUpdateService:
                     title="Automatic update completed",
                     details=notification_details,
                 )
-                    
+
             except Exception as e:
                 error_msg = f"Error during auto-update: {str(e)}"
                 logger.error(f"Error triggering update for server {server.id}: {e}")
-                
+
                 # Update log as failed
                 try:
                     async with async_session_maker() as db:

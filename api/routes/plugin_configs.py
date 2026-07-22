@@ -41,7 +41,6 @@ from services.plugin_config_service import (
 )
 from services.ssh_manager import SSHManager
 
-
 router = APIRouter(
     prefix="/servers/{server_id}/plugin-configs",
     tags=["plugin-configs"],
@@ -110,12 +109,16 @@ def _file_for_source(server, source: PluginConfigSource, requested_path: str) ->
     else:
         allowed = source_path == "." or relative.startswith(source_path.rstrip("/") + "/")
     if not allowed:
-        raise HTTPException(status_code=403, detail="File is outside the selected configuration source")
+        raise HTTPException(
+            status_code=403, detail="File is outside the selected configuration source"
+        )
     if (
         source.source_type == "directory"
         and posixpath.splitext(relative)[1].lower() not in SUPPORTED_DIRECTORY_EXTENSIONS
     ):
-        raise HTTPException(status_code=415, detail="File extension is not enabled for directory scanning")
+        raise HTTPException(
+            status_code=415, detail="File extension is not enabled for directory scanning"
+        )
     return relative
 
 
@@ -131,7 +134,9 @@ def _remote_error(exc: Exception) -> HTTPException:
     if isinstance(exc, PluginConfigError):
         return HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, (asyncssh.Error, OSError)):
-        return HTTPException(status_code=502, detail=f"Remote configuration operation failed: {exc}")
+        return HTTPException(
+            status_code=502, detail=f"Remote configuration operation failed: {exc}"
+        )
     return HTTPException(status_code=500, detail="Plugin configuration operation failed")
 
 
@@ -157,14 +162,18 @@ async def list_sources(
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
     result = await db.execute(
-        select(PluginConfigSource).where(
+        select(PluginConfigSource)
+        .where(
             PluginConfigSource.server_id == server_id,
             PluginConfigSource.is_enabled.is_(True),
-        ).order_by(PluginConfigSource.is_default.desc(), PluginConfigSource.relative_path)
+        )
+        .order_by(PluginConfigSource.is_default.desc(), PluginConfigSource.relative_path)
     )
     return {
         "game_directory": server.game_directory,
-        "sources": [_source_payload(source, server.game_directory) for source in result.scalars().all()],
+        "sources": [
+            _source_payload(source, server.game_directory) for source in result.scalars().all()
+        ],
     }
 
 
@@ -313,29 +322,24 @@ async def load_source_files(
             async for event in iter_source_scan(
                 manager, server, source.relative_path, source.source_type
             ):
-                yield json.dumps(
-                    event, ensure_ascii=False, separators=(",", ":")
-                ) + "\n"
+                yield json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
         except HTTPException as exc:
-            yield json.dumps(
-                {"type": "error", "detail": exc.detail}, ensure_ascii=False
-            ) + "\n"
+            yield json.dumps({"type": "error", "detail": exc.detail}, ensure_ascii=False) + "\n"
         except PluginConfigError as exc:
-            yield json.dumps(
-                {"type": "error", "detail": str(exc)}, ensure_ascii=False
-            ) + "\n"
+            yield json.dumps({"type": "error", "detail": str(exc)}, ensure_ascii=False) + "\n"
         except (asyncssh.Error, OSError) as exc:
-            yield json.dumps(
-                {
-                    "type": "error",
-                    "detail": f"Remote configuration scan failed: {exc}",
-                },
-                ensure_ascii=False,
-            ) + "\n"
+            yield (
+                json.dumps(
+                    {
+                        "type": "error",
+                        "detail": f"Remote configuration scan failed: {exc}",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
         except Exception:
-            yield json.dumps(
-                {"type": "error", "detail": "Plugin configuration scan failed"}
-            ) + "\n"
+            yield json.dumps({"type": "error", "detail": "Plugin configuration scan failed"}) + "\n"
         finally:
             if manager is not None:
                 await manager.disconnect()
@@ -382,9 +386,7 @@ async def save_config_file(
     server = await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)
     relative = _file_for_source(server, source, request.path)
-    async with maintenance_lock_service.get(
-        server_id, operation="plugin_config_save", wait=False
-    ):
+    async with maintenance_lock_service.get(server_id, operation="plugin_config_save", wait=False):
         manager = await _connect(server)
         try:
             current_content = await read_text_file(manager, server, relative)

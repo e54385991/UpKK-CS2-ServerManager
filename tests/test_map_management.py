@@ -2,8 +2,8 @@
 
 import asyncio
 import json
-from types import SimpleNamespace
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
@@ -27,8 +27,7 @@ from services.map_management_service import (
     validate_restricted_times,
 )
 
-
-SAMPLE_CONFIG = '''// Keep this comment
+SAMPLE_CONFIG = """// Keep this comment
 "Maplist"
 {
     "Dust Workshop"
@@ -43,15 +42,15 @@ SAMPLE_CONFIG = '''// Keep this comment
         "future_field" "preserve me"
     }
 }
-'''
+"""
 
-SAMPLE_PLUGIN_CONFIG = '''{
+SAMPLE_PLUGIN_CONFIG = """{
   "AllowExtend": true,
   "RTVPercent": 0.6,
   "FutureScalar": "keep and edit",
   "FutureNested": {"enabled": true}
 }
-'''
+"""
 
 
 class MapConfigTests(unittest.TestCase):
@@ -80,7 +79,9 @@ class MapConfigTests(unittest.TestCase):
         self.assertIn('"future_field" "preserve me"', updated)
         self.assertIn('"workshop_id"\t"3298427415"', updated)
         parsed = parse_maps_config(updated)
-        self.assertEqual([item["workshop_id"] for item in parsed.maps], ["3070591565", "3298427415"])
+        self.assertEqual(
+            [item["workshop_id"] for item in parsed.maps], ["3070591565", "3298427415"]
+        )
         self.assertEqual(parsed.maps[1]["min_players"], "4")
 
     def test_quick_add_rejects_duplicate_id_and_name(self):
@@ -101,12 +102,7 @@ class MapConfigTests(unittest.TestCase):
         invalid_documents = (
             '"NotMaplist"\n{\n}\n',
             '"Maplist"\n{\n"No ID" { "enabled" "1" }\n}\n',
-            (
-                '"Maplist"\n{\n'
-                '"A" { "workshop_id" "123456" }\n'
-                '"B" { "workshop_id" "123456" }\n'
-                '}\n'
-            ),
+            ('"Maplist"\n{\n"A" { "workshop_id" "123456" }\n"B" { "workshop_id" "123456" }\n}\n'),
         )
         for document in invalid_documents:
             with self.subTest(document=document), self.assertRaises(MapConfigError):
@@ -114,8 +110,12 @@ class MapConfigTests(unittest.TestCase):
 
     def test_default_config_is_valid_and_revision_is_stable(self):
         self.assertEqual(parse_maps_config(DEFAULT_MAPS_CONFIG).maps, [])
-        self.assertEqual(content_revision(DEFAULT_MAPS_CONFIG), content_revision(DEFAULT_MAPS_CONFIG))
-        self.assertNotEqual(content_revision(DEFAULT_MAPS_CONFIG), content_revision(DEFAULT_MAPS_CONFIG + "\n"))
+        self.assertEqual(
+            content_revision(DEFAULT_MAPS_CONFIG), content_revision(DEFAULT_MAPS_CONFIG)
+        )
+        self.assertNotEqual(
+            content_revision(DEFAULT_MAPS_CONFIG), content_revision(DEFAULT_MAPS_CONFIG + "\n")
+        )
 
     def test_workshop_id_accepts_numeric_id_and_steam_url_only(self):
         self.assertEqual(normalize_workshop_id("3070591565"), "3070591565")
@@ -130,7 +130,9 @@ class MapConfigTests(unittest.TestCase):
                 normalize_workshop_id(invalid)
 
     def test_names_and_restricted_times_are_safe_for_reference_parser(self):
-        self.assertEqual(sanitize_map_name('  Map "Quoted"\\Folder\nName  '), "Map 'Quoted'/Folder Name")
+        self.assertEqual(
+            sanitize_map_name('  Map "Quoted"\\Folder\nName  '), "Map 'Quoted'/Folder Name"
+        )
         self.assertEqual(
             validate_restricted_times("01:00-08:00; 18:00-20:00"),
             "01:00-08:00;18:00-20:00",
@@ -193,9 +195,12 @@ class MapConfigTests(unittest.TestCase):
             }
             if callback is set_map_enabled:
                 kwargs["enabled"] = False
-            with self.subTest(callback=callback.__name__), self.assertRaisesRegex(
-                MapConfigError,
-                "was not found",
+            with (
+                self.subTest(callback=callback.__name__),
+                self.assertRaisesRegex(
+                    MapConfigError,
+                    "was not found",
+                ),
             ):
                 callback(**kwargs)
 
@@ -223,14 +228,14 @@ class PluginConfigTests(unittest.TestCase):
         self.assertFalse(json.loads(updated)["AllowExtend"])
 
     def test_jsonc_comments_and_trailing_commas_are_supported(self):
-        content = r'''{
+        content = r"""{
   // A line comment
   "AllowExtend": true,
   "VoteStartSound": "https://example.com/audio/*keep*/.mp3", /* block comment */
   "FutureNested": {
     "enabled": true,
   },
-}'''
+}"""
 
         parsed = parse_plugin_config(content)
         updated = update_plugin_config(content, {"AllowExtend": False})
@@ -316,9 +321,7 @@ class MapRouteTests(unittest.TestCase):
         map_management._map_write_locks.clear()
 
     def test_status_reports_missing_mapchooser_and_install_target(self):
-        ssh = FakeSSHManager(
-            status_output="counterstrikesharp=1\nmapchooser=0\nmaps_file=0\n"
-        )
+        ssh = FakeSSHManager(status_output="counterstrikesharp=1\nmapchooser=0\nmaps_file=0\n")
         with (
             patch.object(map_management, "SSHManager", return_value=ssh),
             patch.object(
@@ -344,9 +347,7 @@ class MapRouteTests(unittest.TestCase):
         self.assertIn("CounterStrikeSharp.API.dll", ssh.commands[0])
 
     def test_get_config_enforces_prerequisites(self):
-        ssh = FakeSSHManager(
-            status_output="counterstrikesharp=0\nmapchooser=0\nmaps_file=0\n"
-        )
+        ssh = FakeSSHManager(status_output="counterstrikesharp=0\nmapchooser=0\nmaps_file=0\n")
         with (
             patch.object(map_management, "SSHManager", return_value=ssh),
             patch.object(
@@ -530,9 +531,7 @@ class MapRouteTests(unittest.TestCase):
 
     def test_get_plugin_config_returns_dynamic_visual_fields(self):
         ssh = FakeSSHManager(
-            status_output=(
-                "counterstrikesharp=1\nmapchooser=1\nmaps_file=1\nconfig_file=1\n"
-            ),
+            status_output=("counterstrikesharp=1\nmapchooser=1\nmaps_file=1\nconfig_file=1\n"),
             content=SAMPLE_PLUGIN_CONFIG,
         )
         with (
@@ -556,9 +555,7 @@ class MapRouteTests(unittest.TestCase):
 
     def test_update_plugin_config_checks_revision_and_atomically_writes(self):
         ssh = FakeSSHManager(
-            status_output=(
-                "counterstrikesharp=1\nmapchooser=1\nmaps_file=1\nconfig_file=1\n"
-            ),
+            status_output=("counterstrikesharp=1\nmapchooser=1\nmaps_file=1\nconfig_file=1\n"),
             content=SAMPLE_PLUGIN_CONFIG,
         )
         request = map_management.PluginConfigUpdateRequest(

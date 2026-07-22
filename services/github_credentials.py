@@ -25,8 +25,6 @@ async def get_effective_github_token(
         return personal_token
 
     settings = await SystemSettings.get_settings(db)
-    global_token = (
-        getattr(settings, "global_github_token", None) if settings else None
-    )
+    global_token = getattr(settings, "global_github_token", None) if settings else None
     normalized_token = (global_token or "").strip()
     return normalized_token or None

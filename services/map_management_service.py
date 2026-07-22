@@ -8,14 +8,13 @@ quick-add operation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import math
 import re
+from dataclasses import dataclass
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
-
 
 DEFAULT_MAPS_CONFIG = '"Maplist"\n{\n}\n'
 MAX_MAPS_CONFIG_BYTES = 1024 * 1024
@@ -40,11 +39,14 @@ DEFAULT_PLUGIN_CONFIG: dict[str, object] = {
     "ChangeMapUse_host_workshop_map": False,
     "DisplayHudTimeleftRemaining": 0,
 }
-DEFAULT_PLUGIN_CONFIG_CONTENT = json.dumps(
-    DEFAULT_PLUGIN_CONFIG,
-    ensure_ascii=False,
-    indent=2,
-) + "\n"
+DEFAULT_PLUGIN_CONFIG_CONTENT = (
+    json.dumps(
+        DEFAULT_PLUGIN_CONFIG,
+        ensure_ascii=False,
+        indent=2,
+    )
+    + "\n"
+)
 
 # The form is generated from the keys that really exist in config.json.  These
 # specifications only add useful input constraints and grouping for known
@@ -123,9 +125,7 @@ def _jsonc_to_json(content: str) -> str:
                     output[index] = " "
                 index += 1
             if index >= len(content):
-                raise PluginConfigError(
-                    f"Unterminated JSONC block comment at line {comment_line}"
-                )
+                raise PluginConfigError(f"Unterminated JSONC block comment at line {comment_line}")
             output[index] = output[index + 1] = " "
             index += 2
             continue
@@ -214,14 +214,11 @@ def build_plugin_config_fields(config: dict[str, Any]) -> tuple[list[dict[str, A
             continue
 
         expected_kind = str(spec.get("kind", inferred_kind))
-        valid_kind = (
-            inferred_kind == expected_kind
-            or (expected_kind == "number" and inferred_kind == "integer")
+        valid_kind = inferred_kind == expected_kind or (
+            expected_kind == "number" and inferred_kind == "integer"
         )
         if not valid_kind:
-            raise PluginConfigError(
-                f"{key} must be a {expected_kind}, not {inferred_kind}"
-            )
+            raise PluginConfigError(f"{key} must be a {expected_kind}, not {inferred_kind}")
 
         field: dict[str, Any] = {
             "key": key,
@@ -247,7 +244,11 @@ def _validated_plugin_value(key: str, value: Any, kind: str, spec: dict[str, obj
             raise PluginConfigError(f"{key} must be an integer")
         normalized = value
     elif kind == "number":
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+        ):
             raise PluginConfigError(f"{key} must be a finite number")
         normalized = float(value)
     elif kind == "string":
@@ -634,7 +635,7 @@ def _find_map_node(content: str, *, name: str, workshop_id: str) -> _Node:
     assert root.children is not None
     matches = [
         node
-        for node, item in zip(root.children, maps)
+        for node, item in zip(root.children, maps, strict=False)
         if item["name"] == name and item["workshop_id"] == workshop_id
     ]
     if not matches:

@@ -6,18 +6,17 @@ need a database, Redis, a live SSH server, or a browser runtime.
 """
 
 import asyncio
+import shlex
+import unittest
 from html.parser import HTMLParser
 from pathlib import Path
-import shlex
 from types import SimpleNamespace
-import unittest
 from unittest.mock import patch
 
 from fastapi import HTTPException
 
 from api.routes import file_manager
 from services.ssh_manager import SSHManager
-
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -97,10 +96,7 @@ class FileManagerValidationTests(unittest.TestCase):
         valid_urls = (
             "https://example.com/releases/server.tar.gz?token=opaque",
             "https://example.com/downloads/latest?id=opaque",
-            (
-                "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
-                "29046667365/artifacts/8210241957"
-            ),
+            ("https://github.com/Source2ZE/CS2Fixes/actions/runs/29046667365/artifacts/8210241957"),
             "http://8.8.8.8/archive.zip",
             "https://[2606:4700:4700::1111]/archive.7z",
         )
@@ -162,10 +158,7 @@ class FileManagerValidationTests(unittest.TestCase):
     def test_download_filename_can_be_deferred_for_suffixless_redirect_urls(self):
         suffixless_urls = (
             "https://example.com/download?id=1",
-            (
-                "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
-                "29046667365/artifacts/8210241957"
-            ),
+            ("https://github.com/Source2ZE/CS2Fixes/actions/runs/29046667365/artifacts/8210241957"),
         )
         for url in suffixless_urls:
             with self.subTest(url=url):
@@ -179,8 +172,7 @@ class FileManagerValidationTests(unittest.TestCase):
 
     def test_github_actions_artifact_url_parser_is_canonical_and_host_bound(self):
         artifact_url = (
-            "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
-            "29046667365/artifacts/8210241957"
+            "https://github.com/Source2ZE/CS2Fixes/actions/runs/29046667365/artifacts/8210241957"
         )
         self.assertEqual(
             file_manager._parse_github_actions_artifact_url(artifact_url),
@@ -200,13 +192,9 @@ class FileManagerValidationTests(unittest.TestCase):
 
     def test_github_actions_artifact_resolution_uses_metadata_and_manual_redirect(self):
         artifact_url = (
-            "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
-            "29046667365/artifacts/8210241957"
+            "https://github.com/Source2ZE/CS2Fixes/actions/runs/29046667365/artifacts/8210241957"
         )
-        api_url = (
-            "https://api.github.com/repos/Source2ZE/CS2Fixes/"
-            "actions/artifacts/8210241957"
-        )
+        api_url = "https://api.github.com/repos/Source2ZE/CS2Fixes/actions/artifacts/8210241957"
         signed_url = "https://objects.githubusercontent.com/artifact.zip?signature=secret"
 
         class FakeGithubClient:
@@ -314,8 +302,7 @@ class ArchivePureHelperTests(unittest.TestCase):
 
     def test_redirected_download_accepts_plain_content_disposition_filename(self):
         headers = (
-            "HTTP/1.1 200 OK\r\n"
-            'Content-Disposition: attachment; filename="artifact.7z"\r\n\r\n'
+            'HTTP/1.1 200 OK\r\nContent-Disposition: attachment; filename="artifact.7z"\r\n\r\n'
         )
         filename, error = SSHManager._filename_from_download_response(
             headers,
@@ -381,9 +368,7 @@ class ArchivePureHelperTests(unittest.TestCase):
 
     def test_tar_listing_escape_decoder_preserves_backslashes_and_controls(self):
         self.assertEqual(
-            SSHManager._decode_tar_listing_name(
-                r"addons\\plugins\\example.dll"
-            ),
+            SSHManager._decode_tar_listing_name(r"addons\\plugins\\example.dll"),
             (r"addons\plugins\example.dll", None),
         )
         self.assertEqual(
@@ -603,7 +588,7 @@ class RemoteDownloadSsrfTests(unittest.TestCase):
                 manager = SSHManager(use_pool=False)
                 manager.conn = object()
 
-                async def execute(command, timeout=30):
+                async def execute(command, timeout=30, stdout=stdout):
                     self.assertIn("getent", command)
                     self.assertIn("ahosts", command)
                     return True, stdout, ""
@@ -625,8 +610,7 @@ class RemoteDownloadSsrfTests(unittest.TestCase):
         async def execute(command, timeout=30):
             return (
                 True,
-                "8.8.8.8 STREAM public.example\n"
-                "2606:4700:4700::1111 STREAM public.example\n",
+                "8.8.8.8 STREAM public.example\n2606:4700:4700::1111 STREAM public.example\n",
                 "",
             )
 
@@ -642,10 +626,7 @@ class RemoteDownloadSsrfTests(unittest.TestCase):
 
     def test_redirect_location_is_joined_then_revalidated(self):
         current_url = "https://downloads.example.com/releases/current/start"
-        headers = (
-            "HTTP/1.1 302 Found\r\n"
-            "Location: ../release.zip?signature=opaque\r\n\r\n"
-        )
+        headers = "HTTP/1.1 302 Found\r\nLocation: ../release.zip?signature=opaque\r\n\r\n"
         next_url, is_redirect, error = SSHManager._redirect_url_from_response(
             headers,
             current_url,
@@ -666,10 +647,7 @@ class RemoteDownloadSsrfTests(unittest.TestCase):
         )
         for location in unsafe_locations:
             with self.subTest(location=location):
-                headers = (
-                    "HTTP/1.1 302 Found\r\n"
-                    f"Location: {location}\r\n\r\n"
-                )
+                headers = f"HTTP/1.1 302 Found\r\nLocation: {location}\r\n\r\n"
                 next_url, is_redirect, error = SSHManager._redirect_url_from_response(
                     headers,
                     "https://downloads.example.com/start",
@@ -781,9 +759,7 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
         self.assertTrue(success, error)
         self.assertEqual(manager.tool_candidates, [("tar",)])
         self.assertIn(" -tvJf ", manager.commands[0][0])
-        self.assertTrue(
-            all("--quoting-style=c" in command for command, _ in manager.commands)
-        )
+        self.assertTrue(all("--quoting-style=c" in command for command, _ in manager.commands))
         self.assertIn("--numeric-owner", manager.commands[0][0])
         self.assertIn("--full-time", manager.commands[0][0])
         self.assertIn("--utc", manager.commands[0][0])
@@ -799,7 +775,7 @@ class ArchiveRemoteCommandTests(unittest.TestCase):
                 (
                     True,
                     'drwxr-xr-x 0/0 0 2026-07-15 04:00:00 "backup\\\\cfg/"\n'
-                    '-rw-r--r-- 0/0 1 2026-07-15 04:00:00 '
+                    "-rw-r--r-- 0/0 1 2026-07-15 04:00:00 "
                     '"backup\\\\cfg\\\\server.cfg"\n',
                     "",
                 ),
@@ -1160,8 +1136,7 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
     def test_github_artifact_task_updates_target_and_sends_only_signed_url_to_ssh(self):
         task_id = "github-artifact-download-test"
         artifact_url = (
-            "https://github.com/Source2ZE/CS2Fixes/actions/runs/"
-            "29046667365/artifacts/8210241957"
+            "https://github.com/Source2ZE/CS2Fixes/actions/runs/29046667365/artifacts/8210241957"
         )
         signed_url = "https://objects.githubusercontent.com/artifact.zip?signature=secret"
         file_manager.download_url_tasks[task_id] = {
@@ -1286,9 +1261,9 @@ class FileManagerDomRegressionTests(unittest.TestCase):
             "Bootstrap must be the sole visibility controller for the folder modal",
         )
 
-        scripts = (
-            PROJECT_ROOT / "templates/server_detail_includes/scripts.html"
-        ).read_text(encoding="utf-8")
+        scripts = (PROJECT_ROOT / "templates/server_detail_includes/scripts.html").read_text(
+            encoding="utf-8"
+        )
         self.assertIn(
             "bootstrap.Modal.getOrCreateInstance(modalElement)",
             scripts,

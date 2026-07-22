@@ -89,10 +89,12 @@ class SteamCMDRetryProbe(SSHManager):
 
     async def execute_command_streaming(self, *args, **kwargs):
         self.command_calls += 1
-        return self.command_results[min(
-            self.command_calls - 1,
-            len(self.command_results) - 1,
-        )]
+        return self.command_results[
+            min(
+                self.command_calls - 1,
+                len(self.command_results) - 1,
+            )
+        ]
 
     async def _kill_steamcmd_processes(self, *args, **kwargs):
         self.kill_calls += 1
@@ -126,9 +128,7 @@ async def test_deployment_artifact_missing_forces_exactly_five_retries():
 @pytest.mark.asyncio
 async def test_deployment_accepts_verified_file_after_interrupted_command():
     server = server_fixture()
-    manager = SteamCMDRetryProbe(
-        [(False, "", "SteamCMD interrupted without a retryable keyword")]
-    )
+    manager = SteamCMDRetryProbe([(False, "", "SteamCMD interrupted without a retryable keyword")])
     verification_results = iter([False, False, True])
 
     async def executable_appears_on_third_attempt():

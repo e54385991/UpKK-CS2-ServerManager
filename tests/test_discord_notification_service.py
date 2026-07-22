@@ -11,14 +11,13 @@ from services.discord_notification_service import (
     EVENT_MANUAL_UPDATE,
     EVENT_PLUGIN_UPDATE,
     EVENT_S3_BACKUP,
+    IN_PROGRESS_COLOR,
     MAX_FIELD_NAME_LENGTH,
     MAX_FIELD_VALUE_LENGTH,
     SUCCESS_COLOR,
     TEST_COLOR,
-    IN_PROGRESS_COLOR,
     DiscordNotificationService,
 )
-
 
 VALID_WEBHOOK = "https://discord.com/api/webhooks/1234567890/test-token"
 
@@ -80,7 +79,10 @@ def test_build_payload_uses_success_and_failure_embed_templates():
     assert success_payload["allowed_mentions"] == {"parse": []}
     assert success_payload["embeds"][0]["color"] == SUCCESS_COLOR
     assert failure_payload["embeds"][0]["color"] == ERROR_COLOR
-    assert success_payload["embeds"][0]["footer"]["text"] == "CS2 Server Manager - Discord notifications"
+    assert (
+        success_payload["embeds"][0]["footer"]["text"]
+        == "CS2 Server Manager - Discord notifications"
+    )
     assert any(
         field["name"] == "Result" and field["value"] == "Failed"
         for field in failure_payload["embeds"][0]["fields"]
@@ -90,13 +92,20 @@ def test_build_payload_uses_success_and_failure_embed_templates():
 def test_build_payload_supports_in_progress_state():
     service = DiscordNotificationService()
     payload = service.build_payload(
-        make_server(), EVENT_AUTO_UPDATE, "auto_update", True,
-        "Starting update", title="Automatic update started", state="in_progress",
+        make_server(),
+        EVENT_AUTO_UPDATE,
+        "auto_update",
+        True,
+        "Starting update",
+        title="Automatic update started",
+        state="in_progress",
     )
     embed = payload["embeds"][0]
     assert embed["color"] == IN_PROGRESS_COLOR
     assert "is starting" in embed["description"]
-    assert any(field["name"] == "Result" and field["value"] == "In Progress" for field in embed["fields"])
+    assert any(
+        field["name"] == "Result" and field["value"] == "In Progress" for field in embed["fields"]
+    )
 
 
 def test_build_payload_truncates_discord_field_limits():
@@ -188,13 +197,16 @@ def test_queue_notify_returns_before_background_delivery_and_respects_s3_switch(
             discord_notifications_enabled=True,
             discord_notify_s3_backups=False,
         )
-        assert service.queue_notify(
-            disabled_server,
-            EVENT_S3_BACKUP,
-            "s3_backup_upload",
-            True,
-            "S3 upload completed",
-        ) is False
+        assert (
+            service.queue_notify(
+                disabled_server,
+                EVENT_S3_BACKUP,
+                "s3_backup_upload",
+                True,
+                "S3 upload completed",
+            )
+            is False
+        )
         assert calls == []
 
         enabled_server = make_server(

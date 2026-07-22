@@ -16,14 +16,13 @@ from services.plugin_config_service import (
     validate_raw_content,
 )
 
-
-MULTIADDON_CONFIG = '''// Extra addon settings, this is only executed once on plugin load
+MULTIADDON_CONFIG = """// Extra addon settings, this is only executed once on plugin load
 mm_addon_mount_download 1
 mm_extra_addons \t\t\t\t"3232287131,3658046927,3716458508"
 mm_extra_addons_timeout\t\t\t120
 mm_cache_clients_with_addons 0
 mm_block_disconnect_messages 1
-'''
+"""
 
 
 def test_cfg_visual_fields_and_update_preserve_everything_except_value():
@@ -47,9 +46,7 @@ def test_cfg_visual_fields_and_update_preserve_everything_except_value():
         [{"id": parsed.fields[1].field_id, "value": "111,222"}],
     )
 
-    assert updated == MULTIADDON_CONFIG.replace(
-        '"3232287131,3658046927,3716458508"', '"111,222"'
-    )
+    assert updated == MULTIADDON_CONFIG.replace('"3232287131,3658046927,3716458508"', '"111,222"')
 
 
 def test_cfg_keeps_double_slash_inside_quotes_and_handles_duplicate_commands():
@@ -127,7 +124,9 @@ def test_path_normalization_accepts_relative_and_in_root_absolute_paths(requeste
     assert normalize_relative_path("/home/cs2", requested) == expected
 
 
-@pytest.mark.parametrize("requested", ["../outside", "/etc/passwd", "cfg\\test.cfg", "cfg/\x00test"])
+@pytest.mark.parametrize(
+    "requested", ["../outside", "/etc/passwd", "cfg\\test.cfg", "cfg/\x00test"]
+)
 def test_path_normalization_rejects_unsafe_paths(requested):
     with pytest.raises(PluginConfigError):
         normalize_relative_path("/home/cs2", requested)
@@ -139,7 +138,9 @@ def test_registered_directory_and_file_scope_are_enforced():
     exact_file = SimpleNamespace(source_type="file", relative_path="custom/plugin.data")
 
     assert _file_for_source(server, directory, "cs2/game/csgo/cfg/test.cfg").endswith("test.cfg")
-    assert _file_for_source(server, exact_file, "/home/cs2/custom/plugin.data") == "custom/plugin.data"
+    assert (
+        _file_for_source(server, exact_file, "/home/cs2/custom/plugin.data") == "custom/plugin.data"
+    )
 
     with pytest.raises(HTTPException) as outside:
         _file_for_source(server, directory, "cs2/game/csgo/server.dll")
@@ -230,13 +231,27 @@ def _entry(name, entry_type, size=0, mtime=1):
 async def test_recursive_scan_filters_extensions_and_ignores_symlinks():
     base = "/home/cs2/configs"
     sftp = _FakeSFTP({base: []})
-    output = b"\0".join([
-        b"D", b"", b"D", b"Nested",
-        b"F", b"root.json", b"20", b"10.0",
-        b"F", b"Nested/server.cfg", b"40", b"12.0",
-        b"F", b"Nested/notes.txt", b"50", b"13.0",
-        b"",
-    ])
+    output = b"\0".join(
+        [
+            b"D",
+            b"",
+            b"D",
+            b"Nested",
+            b"F",
+            b"root.json",
+            b"20",
+            b"10.0",
+            b"F",
+            b"Nested/server.cfg",
+            b"40",
+            b"12.0",
+            b"F",
+            b"Nested/notes.txt",
+            b"50",
+            b"13.0",
+            b"",
+        ]
+    )
     process = _FakeFindProcess([output[:19], output[19:47], output[47:]])
     manager = _FakeSSHManager(sftp, process)
 

@@ -1,23 +1,27 @@
 """
 System settings routes (admin only)
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from services.email_service import email_service
 
 from modules import (
-    get_db, User, get_current_admin_user,
-    SystemSettings, SystemSettingsResponse, SystemSettingsUpdate,
-    EmailTestRequest
+    EmailTestRequest,
+    SystemSettings,
+    SystemSettingsResponse,
+    SystemSettingsUpdate,
+    User,
+    get_current_admin_user,
+    get_db,
 )
+from services.email_service import email_service
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 
 @router.get("/settings", response_model=SystemSettingsResponse)
 async def get_system_settings(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_admin_user)
 ):
     """Get system settings (admin only)"""
     settings = await SystemSettings.get_or_create_settings(db)
@@ -28,15 +32,15 @@ async def get_system_settings(
 async def update_system_settings(
     settings_update: SystemSettingsUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Update system settings (admin only)"""
     settings = await SystemSettings.get_or_create_settings(db)
-    
+
     # Update fields if provided
     update_data = settings_update.model_dump(exclude_unset=True)
-    clear_global_github_token = update_data.pop('clear_global_github_token', False)
-    global_github_token = update_data.pop('global_github_token', None)
+    clear_global_github_token = update_data.pop("clear_global_github_token", False)
+    global_github_token = update_data.pop("global_github_token", None)
     for field, value in update_data.items():
         setattr(settings, field, value)
 
@@ -44,11 +48,11 @@ async def update_system_settings(
         settings.global_github_token = None
     elif global_github_token and global_github_token.strip():
         settings.global_github_token = global_github_token.strip()
-    
+
     db.add(settings)
     await db.commit()
     await db.refresh(settings)
-    
+
     return settings
 
 
@@ -56,10 +60,10 @@ async def update_system_settings(
 async def test_email(
     request: EmailTestRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Send a test email to verify email configuration (admin only)"""
-    
+
     # Create test email content
     html_content = f"""
     <!DOCTYPE html>
@@ -95,7 +99,7 @@ async def test_email(
     </body>
     </html>
     """
-    
+
     text_content = f"""
     Email Test Successful
     
@@ -110,23 +114,16 @@ async def test_email(
     ---
     This is an automated test message from CS2 Server Manager.
     """
-    
+
     # Send test email
     success = await email_service.send_email(
-        db,
-        request.test_email,
-        "CS2 Server Manager - Email Test",
-        html_content,
-        text_content
+        db, request.test_email, "CS2 Server Manager - Email Test", html_content, text_content
     )
-    
+
     if success:
-        return {
-            "success": True,
-            "message": f"Test email sent successfully to {request.test_email}"
-        }
+        return {"success": True, "message": f"Test email sent successfully to {request.test_email}"}
     else:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send test email. Please check your email configuration and server logs."
+            detail="Failed to send test email. Please check your email configuration and server logs.",
         )

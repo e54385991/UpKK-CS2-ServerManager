@@ -11,7 +11,7 @@ def _assert_forced_gamedata_copy(command: str) -> None:
     primary, forced = command.rsplit(" && cd ", 1)
     assert primary
     assert "find . -path '*/gamedata/*' -type f" in forced
-    assert 'relative=${source#./}' in forced
+    assert "relative=${source#./}" in forced
     assert "--no-dereference --remove-destination" in forced
     assert '"$source" "$destination"' in forced
     assert forced.endswith("{} +")
@@ -128,10 +128,8 @@ async def test_counterstrikesharp_update_fails_when_unzip_fails():
     assert "permission denied" in message
     assert manager.disconnected is True
     unzip_index = next(
-        index for index, command in enumerate(manager.commands)
-        if command.startswith("unzip -o ")
+        index for index, command in enumerate(manager.commands) if command.startswith("unzip -o ")
     )
     assert not any(
-        "addons/counterstrikesharp" in command
-        for command in manager.commands[unzip_index + 1:]
+        "addons/counterstrikesharp" in command for command in manager.commands[unzip_index + 1 :]
     )

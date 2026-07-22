@@ -1,4 +1,5 @@
 """Per-server operation locks shared across tasks and application processes."""
+
 import asyncio
 import logging
 import time
@@ -110,7 +111,9 @@ class MaintenanceLockService:
                     distributed_acquired = True
                     break
                 if not wait or time.monotonic() >= deadline:
-                    raise OperationBusyError(f"Server {server_id} already has an operation in progress")
+                    raise OperationBusyError(
+                        f"Server {server_id} already has an operation in progress"
+                    )
                 await asyncio.sleep(0.25)
 
             if distributed_acquired:

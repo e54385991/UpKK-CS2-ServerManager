@@ -2,12 +2,14 @@
 HTTP Helper module for common HTTP request handling
 Provides a centralized utility for making HTTP requests with error handling
 """
-import httpx
+
+import asyncio
 import logging
 import os
-import asyncio
+from typing import Any, Dict, Optional, Tuple
+
 import anyio
-from typing import Optional, Dict, Any, Tuple
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +30,12 @@ RETRY_DELAY = 1.0  # Initial delay in seconds
 
 class HTTPHelper:
     """Helper class for making HTTP requests with common error handling"""
-    
+
     def __init__(self):
         """Initialize HTTP helper with connection pooling"""
         self._client: Optional[httpx.AsyncClient] = None
         self._client_lock = asyncio.Lock()
-    
+
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create the httpx client with connection pooling"""
         if self._client is not None and not self._client.is_closed:
@@ -46,14 +48,14 @@ class HTTPHelper:
                     follow_redirects=True,
                 )
             return self._client
-    
+
     async def close(self):
         """Close the HTTP client"""
         async with self._client_lock:
             client, self._client = self._client, None
         if client is not None and not client.is_closed:
             await client.aclose()
-    
+
     async def make_request(
         self,
         method: str,
@@ -64,11 +66,11 @@ class HTTPHelper:
         json: Optional[Dict[str, Any]] = None,
         timeout: int = 10,
         proxy: Optional[str] = None,
-        github_token: Optional[str] = None
+        github_token: Optional[str] = None,
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
         Make an HTTP request with error handling, retry logic, and connection pooling
-        
+
         Args:
             method: HTTP method (GET, POST, etc.)
             url: Request URL
@@ -79,7 +81,7 @@ class HTTPHelper:
             timeout: Request timeout in seconds (default: 10)
             proxy: Optional proxy URL to use for this request
             github_token: Optional GitHub personal access token for authentication
-            
+
         Returns:
             Tuple[bool, Optional[Dict], Optional[str]]:
                 - success: Whether the request was successful
@@ -87,36 +89,42 @@ class HTTPHelper:
                 - error_message: Error message if failed
         """
         last_error = None
-        
+
         for attempt in range(MAX_RETRIES):
             try:
                 if attempt > 0:
                     delay = RETRY_DELAY * (2 ** (attempt - 1))  # Exponential backoff
-                    logger.info(f"Retry attempt {attempt + 1}/{MAX_RETRIES} after {delay}s delay...")
+                    logger.info(
+                        f"Retry attempt {attempt + 1}/{MAX_RETRIES} after {delay}s delay..."
+                    )
                     await asyncio.sleep(delay)
-                
+
                 # Add GitHub token to headers if provided and URL is a GitHub API request
                 request_headers = headers.copy() if headers else {}
                 if github_token and github_token.strip() and url.startswith(GITHUB_API_PREFIX):
                     request_headers["Authorization"] = f"Bearer {github_token.strip()}"
                     logger.debug("Added GitHub token to request headers for authentication")
-                
+
                 # Apply proxy to URL if provided
                 # IMPORTANT: GitHub proxy services like ghfast.top only work for file downloads,
                 # NOT for API requests (api.github.com). Only proxy actual file downloads.
                 request_url = url
                 if proxy and proxy.strip():
-                    proxy_base = proxy.strip().rstrip('/')
+                    proxy_base = proxy.strip().rstrip("/")
                     # Only proxy GitHub file downloads, not API requests
                     # Proxy services don't support API endpoints
                     if url.startswith(GITHUB_PREFIX) and GITHUB_DOWNLOAD_PATTERN in url:
                         request_url = f"{proxy_base}/{url}"
                         logger.debug(f"Using GitHub proxy for download: {proxy_base}")
                     elif url.startswith(GITHUB_API_PREFIX):
-                        logger.debug("Skipping proxy for GitHub API request (proxy only works for downloads)")
-                
-                logger.debug(f"Making {method} request to {request_url} (attempt {attempt + 1}/{MAX_RETRIES})")
-                
+                        logger.debug(
+                            "Skipping proxy for GitHub API request (proxy only works for downloads)"
+                        )
+
+                logger.debug(
+                    f"Making {method} request to {request_url} (attempt {attempt + 1}/{MAX_RETRIES})"
+                )
+
                 client = await self._get_client()
                 response = await client.request(
                     method=method,
@@ -126,9 +134,9 @@ class HTTPHelper:
                     data=data,
                     json=json,
                     timeout=timeout,
-                    follow_redirects=True  # Enable redirect following
+                    follow_redirects=True,  # Enable redirect following
                 )
-                
+
                 # Check if response is successful
                 if response.status_code >= 200 and response.status_code < 300:
                     try:
@@ -148,33 +156,33 @@ class HTTPHelper:
                         return False, None, error_msg
                     # Retry on 5xx errors (server errors)
                     continue
-                    
+
             except httpx.TimeoutException as e:
                 error_msg = f"Request timeout: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
                 # Retry on timeout
                 continue
-                
+
             except httpx.RequestError as e:
                 error_msg = f"Request error: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
                 # Retry on network errors
                 continue
-                
+
             except Exception as e:
                 error_msg = f"Unexpected error: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
                 # Retry on unexpected errors
                 continue
-        
+
         # All retries failed
         final_error = f"Request failed after {MAX_RETRIES} attempts. Last error: {last_error}"
         logger.error(final_error)
         return False, None, final_error
-    
+
     async def get(
         self,
         url: str,
@@ -182,11 +190,11 @@ class HTTPHelper:
         params: Optional[Dict[str, Any]] = None,
         timeout: int = 10,
         proxy: Optional[str] = None,
-        github_token: Optional[str] = None
+        github_token: Optional[str] = None,
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
         Make a GET request
-        
+
         Args:
             url: Request URL
             headers: Optional HTTP headers
@@ -194,12 +202,20 @@ class HTTPHelper:
             timeout: Request timeout in seconds
             proxy: Optional proxy URL to use for this request
             github_token: Optional GitHub personal access token for authentication
-            
+
         Returns:
             Tuple[bool, Optional[Dict], Optional[str]]: (success, response_data, error_message)
         """
-        return await self.make_request("GET", url, headers=headers, params=params, timeout=timeout, proxy=proxy, github_token=github_token)
-    
+        return await self.make_request(
+            "GET",
+            url,
+            headers=headers,
+            params=params,
+            timeout=timeout,
+            proxy=proxy,
+            github_token=github_token,
+        )
+
     async def post(
         self,
         url: str,
@@ -209,11 +225,11 @@ class HTTPHelper:
         json: Optional[Dict[str, Any]] = None,
         timeout: int = 10,
         proxy: Optional[str] = None,
-        github_token: Optional[str] = None
+        github_token: Optional[str] = None,
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
         Make a POST request
-        
+
         Args:
             url: Request URL
             headers: Optional HTTP headers
@@ -223,23 +239,33 @@ class HTTPHelper:
             timeout: Request timeout in seconds
             proxy: Optional proxy URL to use for this request
             github_token: Optional GitHub personal access token for authentication
-            
+
         Returns:
             Tuple[bool, Optional[Dict], Optional[str]]: (success, response_data, error_message)
         """
-        return await self.make_request("POST", url, headers=headers, params=params, data=data, json=json, timeout=timeout, proxy=proxy, github_token=github_token)
-    
+        return await self.make_request(
+            "POST",
+            url,
+            headers=headers,
+            params=params,
+            data=data,
+            json=json,
+            timeout=timeout,
+            proxy=proxy,
+            github_token=github_token,
+        )
+
     async def download_file(
         self,
         url: str,
         local_path: str,
         headers: Optional[Dict[str, str]] = None,
         timeout: int = 300,
-        progress_callback=None
+        progress_callback=None,
     ) -> Tuple[bool, Optional[str]]:
         """
         Download a file with progress tracking and retry logic
-        
+
         Args:
             url: Download URL
             local_path: Local file path to save to
@@ -247,53 +273,61 @@ class HTTPHelper:
             timeout: Request timeout in seconds (default: 300 for large files)
             progress_callback: Optional async callback function for progress updates
                              Called with (bytes_downloaded, total_bytes)
-            
+
         Returns:
             Tuple[bool, Optional[str]]: (success, error_message)
         """
         last_error = None
-        
+
         for attempt in range(MAX_RETRIES):
             try:
                 if attempt > 0:
                     delay = RETRY_DELAY * (2 ** (attempt - 1))  # Exponential backoff
-                    logger.info(f"Retry attempt {attempt + 1}/{MAX_RETRIES} after {delay}s delay...")
+                    logger.info(
+                        f"Retry attempt {attempt + 1}/{MAX_RETRIES} after {delay}s delay..."
+                    )
                     await asyncio.sleep(delay)
-                
-                logger.debug(f"Downloading file from {url} to {local_path} (attempt {attempt + 1}/{MAX_RETRIES})")
-                
+
+                logger.debug(
+                    f"Downloading file from {url} to {local_path} (attempt {attempt + 1}/{MAX_RETRIES})"
+                )
+
                 client = await self._get_client()
-                
-                async with client.stream("GET", url, headers=headers, timeout=timeout, follow_redirects=True) as response:
+
+                async with client.stream(
+                    "GET", url, headers=headers, timeout=timeout, follow_redirects=True
+                ) as response:
                     if response.status_code >= 200 and response.status_code < 300:
                         # Get total file size if available
                         total_bytes = int(response.headers.get("Content-Length", 0))
                         bytes_downloaded = 0
-                        
+
                         # Ensure parent directory exists
                         parent_directory = os.path.dirname(local_path)
                         if parent_directory:
                             await asyncio.to_thread(os.makedirs, parent_directory, exist_ok=True)
-                        
+
                         # Download file in chunks
                         async with await anyio.open_file(local_path, "wb") as f:
                             async for chunk in response.aiter_bytes(chunk_size=DOWNLOAD_CHUNK_SIZE):
                                 await f.write(chunk)
                                 bytes_downloaded += len(chunk)
-                                
+
                                 # Send progress update
                                 if progress_callback:
                                     if asyncio.iscoroutinefunction(progress_callback):
                                         await progress_callback(bytes_downloaded, total_bytes)
                                     else:
                                         progress_callback(bytes_downloaded, total_bytes)
-                        
+
                         logger.debug(f"Download successful: {bytes_downloaded} bytes")
                         return True, None
                     else:
                         # Read error response body for streaming response
                         error_body = await response.aread()
-                        error_text = error_body.decode('utf-8', errors='ignore')[:500]  # Limit to 500 chars
+                        error_text = error_body.decode("utf-8", errors="ignore")[
+                            :500
+                        ]  # Limit to 500 chars
                         error_msg = f"HTTP {response.status_code}: {error_text}"
                         logger.error(f"Download failed: {error_msg}")
                         last_error = error_msg
@@ -302,28 +336,28 @@ class HTTPHelper:
                             return False, error_msg
                         # Retry on 5xx errors (server errors)
                         continue
-                        
+
             except httpx.TimeoutException as e:
                 error_msg = f"Download timeout: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
                 # Retry on timeout
                 continue
-                
+
             except httpx.RequestError as e:
                 error_msg = f"Download error: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
                 # Retry on network errors
                 continue
-                
+
             except Exception as e:
                 error_msg = f"Unexpected download error: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
                 # Retry on unexpected errors
                 continue
-        
+
         # All retries failed
         final_error = f"Download failed after {MAX_RETRIES} attempts. Last error: {last_error}"
         logger.error(final_error)

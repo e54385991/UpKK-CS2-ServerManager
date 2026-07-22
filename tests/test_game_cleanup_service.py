@@ -2,6 +2,7 @@
 """
 Unit tests for game directory cleanup classification and deletion safeguards.
 """
+
 import asyncio
 import importlib.util
 import unittest
@@ -58,7 +59,9 @@ class GameCleanupServiceTests(unittest.TestCase):
         return f"{file_type}\t{size}\t{modified}\t{path}\0"
 
     def test_path_safety_stays_inside_game_directory(self):
-        self.assertTrue(self.service.is_path_safe(self.server, f"{self.base}/cs2/game/csgo/server.log"))
+        self.assertTrue(
+            self.service.is_path_safe(self.server, f"{self.base}/cs2/game/csgo/server.log")
+        )
         self.assertFalse(self.service.is_path_safe(self.server, "/home/cs2server/other/server.log"))
         self.assertFalse(self.service.is_path_safe(self.server, f"{self.base}/../other/server.log"))
         self.assertFalse(self.service.is_path_safe(self.server, f"{self.base}/bad\npath.log"))
@@ -93,9 +96,11 @@ class GameCleanupServiceTests(unittest.TestCase):
         self.assertEqual(data["total_size"], 190)
 
     def test_direct_child_scan_uses_recursive_directory_size(self):
-        ssh = FakeSSHManager([
-            self.record("d", 1024, f"{self.workshop}/content"),
-        ])
+        ssh = FakeSSHManager(
+            [
+                self.record("d", 1024, f"{self.workshop}/content"),
+            ]
+        )
 
         success, records, error = asyncio.run(
             self.service._scan_direct_children(ssh, self.server, self.workshop)
@@ -108,32 +113,40 @@ class GameCleanupServiceTests(unittest.TestCase):
 
     def test_archive_delete_rejects_non_candidate_paths(self):
         async def fake_scan(ssh_manager, server):
-            return True, {
-                "safe_items": [],
-                "archive_items": [{
-                    "path": f"{self.base}/leftover.zip",
-                    "name": "leftover.zip",
-                    "type": "file",
-                    "size": 30,
-                    "modified": 1000,
-                    "category": "archive",
-                    "reason": "Common leftover archive file",
-                    "danger_level": "confirm",
-                }],
-                "workshop_summary": {
-                    "path": self.workshop,
-                    "item_count": 0,
-                    "size": 0,
-                    "items": [],
+            return (
+                True,
+                {
+                    "safe_items": [],
+                    "archive_items": [
+                        {
+                            "path": f"{self.base}/leftover.zip",
+                            "name": "leftover.zip",
+                            "type": "file",
+                            "size": 30,
+                            "modified": 1000,
+                            "category": "archive",
+                            "reason": "Common leftover archive file",
+                            "danger_level": "confirm",
+                        }
+                    ],
+                    "workshop_summary": {
+                        "path": self.workshop,
+                        "item_count": 0,
+                        "size": 0,
+                        "items": [],
+                    },
+                    "total_size": 30,
                 },
-                "total_size": 30,
-            }, ""
+                "",
+            )
 
         self.service.scan = fake_scan
         ssh = FakeSSHManager()
 
         success, result, error = asyncio.run(
-            self.service.delete(ssh, self.server, "archives", paths=[f"{self.base}/not-archive.txt"])
+            self.service.delete(
+                ssh, self.server, "archives", paths=[f"{self.base}/not-archive.txt"]
+            )
         )
 
         self.assertFalse(success)
@@ -142,38 +155,42 @@ class GameCleanupServiceTests(unittest.TestCase):
 
     def test_workshop_delete_requires_confirmation_and_keeps_root_directory(self):
         async def fake_scan(ssh_manager, server):
-            return True, {
-                "safe_items": [],
-                "archive_items": [],
-                "workshop_summary": {
-                    "path": self.workshop,
-                    "item_count": 2,
-                    "size": 80,
-                    "items": [
-                        {
-                            "path": f"{self.workshop}/123",
-                            "name": "123",
-                            "type": "directory",
-                            "size": 60,
-                            "modified": 1000,
-                            "category": "workshop",
-                            "reason": "Steam Workshop content",
-                            "danger_level": "danger",
-                        },
-                        {
-                            "path": f"{self.workshop}/temp",
-                            "name": "temp",
-                            "type": "directory",
-                            "size": 20,
-                            "modified": 1000,
-                            "category": "workshop",
-                            "reason": "Steam Workshop content",
-                            "danger_level": "danger",
-                        },
-                    ],
+            return (
+                True,
+                {
+                    "safe_items": [],
+                    "archive_items": [],
+                    "workshop_summary": {
+                        "path": self.workshop,
+                        "item_count": 2,
+                        "size": 80,
+                        "items": [
+                            {
+                                "path": f"{self.workshop}/123",
+                                "name": "123",
+                                "type": "directory",
+                                "size": 60,
+                                "modified": 1000,
+                                "category": "workshop",
+                                "reason": "Steam Workshop content",
+                                "danger_level": "danger",
+                            },
+                            {
+                                "path": f"{self.workshop}/temp",
+                                "name": "temp",
+                                "type": "directory",
+                                "size": 20,
+                                "modified": 1000,
+                                "category": "workshop",
+                                "reason": "Steam Workshop content",
+                                "danger_level": "danger",
+                            },
+                        ],
+                    },
+                    "total_size": 80,
                 },
-                "total_size": 80,
-            }, ""
+                "",
+            )
 
         self.service.scan = fake_scan
 
@@ -187,7 +204,9 @@ class GameCleanupServiceTests(unittest.TestCase):
 
         ssh = FakeSSHManager()
         success, result, error = asyncio.run(
-            self.service.delete(ssh, self.server, "workshop", confirmation_text=WORKSHOP_CONFIRMATION_TEXT)
+            self.service.delete(
+                ssh, self.server, "workshop", confirmation_text=WORKSHOP_CONFIRMATION_TEXT
+            )
         )
         self.assertTrue(success, error)
         self.assertEqual(ssh.deleted_paths, [f"{self.workshop}/123", f"{self.workshop}/temp"])

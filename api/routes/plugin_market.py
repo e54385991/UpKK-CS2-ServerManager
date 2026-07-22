@@ -2,25 +2,38 @@
 Plugin Market routes
 Provides endpoints for browsing, searching, and installing plugins from the market
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+
+import logging
+import re
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from typing import Optional, List
-import re
-import logging
 
-from modules import (
-    MarketPlugin, PluginCategory, get_db, User,
-    get_current_active_user, get_current_admin_user,
-    MarketPluginCreate, MarketPluginUpdate, MarketPluginResponse,
-    MarketPluginListResponse, GitHubRepoInfo, ActionResponse,
-    Server, GitHubPluginInstallRequest, GitHubPluginInstallResponse,
-    PluginUninstallRequest,
-    DependencyInfo
-)
 from api.dependencies import locked_server_operation
+from modules import (
+    ActionResponse,
+    DependencyInfo,
+    GitHubPluginInstallRequest,
+    GitHubPluginInstallResponse,
+    GitHubRepoInfo,
+    MarketPlugin,
+    MarketPluginCreate,
+    MarketPluginListResponse,
+    MarketPluginResponse,
+    MarketPluginUpdate,
+    PluginCategory,
+    PluginUninstallRequest,
+    Server,
+    User,
+    get_current_active_user,
+    get_current_admin_user,
+    get_db,
+)
 from modules.http_helper import http_helper
 from services.github_credentials import get_effective_github_token
+from services.plugin_installation import install_github_plugin
 
 router = APIRouter(prefix="/api/plugin-market", tags=["plugin-market"])
 
@@ -28,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 # Regex to validate GitHub repository URL (supports both https and git formats)
 GITHUB_REPO_PATTERN = re.compile(
-    r'^(?:https://github\.com/|git@github\.com:)([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:/.*)?$'
+    r"^(?:https://github\.com/|git@github\.com:)([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:/.*)?$"
 )
 
 
@@ -38,12 +51,9 @@ async def get_server_for_user(server_id: int, db: AsyncSession, current_user: Us
         server = await Server.get_by_id(db, server_id)
     else:
         server = await Server.get_by_id_and_user(db, server_id, current_user.id)
-    
+
     if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Server not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
     await db.commit()
     return server
 
@@ -52,13 +62,13 @@ def parse_github_url(url: str) -> tuple[str, str]:
     """
     Parse GitHub repository URL to extract owner and repo name.
     Supports both https:// and git@ formats.
-    
+
     Args:
         url: GitHub repository URL
-    
+
     Returns:
         Tuple of (owner, repo_name)
-    
+
     Raises:
         ValueError: If URL is invalid
     """
@@ -71,39 +81,39 @@ def parse_github_url(url: str) -> tuple[str, str]:
 def parse_dependency_ids(dependencies: Optional[str]) -> list[int]:
     """
     Parse comma-separated dependency IDs into a list of integers.
-    
+
     Args:
         dependencies: Comma-separated plugin IDs or None
-    
+
     Returns:
         List of plugin IDs as integers
-    
+
     Raises:
         ValueError: If any dependency ID is invalid
     """
     if not dependencies:
         return []
-    
+
     dep_ids = []
-    for dep in dependencies.split(','):
+    for dep in dependencies.split(","):
         dep = dep.strip()
         if not dep:
             continue
         if not dep.isdigit():
             raise ValueError(f"Invalid dependency ID: {dep}")
         dep_ids.append(int(dep))
-    
+
     return dep_ids
 
 
 async def validate_dependencies(db: AsyncSession, dependency_ids: list[int]) -> None:
     """
     Validate that all dependency plugin IDs exist in the database.
-    
+
     Args:
         db: Database session
         dependency_ids: List of plugin IDs to validate
-    
+
     Raises:
         HTTPException: If any dependency plugin is not found
     """
@@ -112,127 +122,115 @@ async def validate_dependencies(db: AsyncSession, dependency_ids: list[int]) -> 
         if not dep_plugin:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Dependency plugin with ID {dep_id} not found"
+                detail=f"Dependency plugin with ID {dep_id} not found",
             )
 
 
-async def fetch_github_repo_info(github_url: str, github_proxy: Optional[str] = None, github_token: Optional[str] = None) -> GitHubRepoInfo:
+async def fetch_github_repo_info(
+    github_url: str, github_proxy: Optional[str] = None, github_token: Optional[str] = None
+) -> GitHubRepoInfo:
     """
     Fetch repository information from GitHub API.
-    
+
     Args:
         github_url: GitHub repository URL
         github_proxy: Optional GitHub proxy URL
         github_token: Optional GitHub personal access token for authentication
-    
+
     Returns:
         GitHubRepoInfo with parsed data
     """
     try:
         owner, repo = parse_github_url(github_url)
     except ValueError as e:
-        return GitHubRepoInfo(
-            success=False,
-            error=str(e)
-        )
-    
+        return GitHubRepoInfo(success=False, error=str(e))
+
     # Fetch repo info from GitHub API
     api_url = f"https://api.github.com/repos/{owner}/{repo}"
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "CS2-ServerManager"
-    }
-    
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"}
+
     success, data, error = await http_helper.get(
-        api_url,
-        headers=headers,
-        timeout=30,
-        proxy=github_proxy,
-        github_token=github_token
+        api_url, headers=headers, timeout=30, proxy=github_proxy, github_token=github_token
     )
-    
+
     if not success:
-        return GitHubRepoInfo(
-            success=False,
-            error=f"Failed to fetch repository info: {error}"
-        )
-    
+        return GitHubRepoInfo(success=False, error=f"Failed to fetch repository info: {error}")
+
     # Extract repo name and description
     repo_name = data.get("name", repo)
     description = data.get("description", "")
-    
+
     # Fetch README to get first 200 characters
     readme_url = f"https://api.github.com/repos/{owner}/{repo}/readme"
     readme_success, readme_data, _ = await http_helper.get(
-        readme_url,
-        headers=headers,
-        timeout=30,
-        proxy=github_proxy,
-        github_token=github_token
+        readme_url, headers=headers, timeout=30, proxy=github_proxy, github_token=github_token
     )
-    
+
     if readme_success and isinstance(readme_data, dict):
         # GitHub API returns base64-encoded content
         import base64
+
         content = readme_data.get("content", "")
         if content:
             try:
-                decoded = base64.b64decode(content).decode('utf-8')
+                decoded = base64.b64decode(content).decode("utf-8")
                 # Remove markdown headers and extract first 200 chars
-                lines = [line.strip() for line in decoded.split('\n') if line.strip() and not line.strip().startswith('#')]
+                lines = [
+                    line.strip()
+                    for line in decoded.split("\n")
+                    if line.strip() and not line.strip().startswith("#")
+                ]
                 if lines:
-                    description = ' '.join(lines)[:200]
+                    description = " ".join(lines)[:200]
             except Exception as e:
                 logger.warning(f"Failed to decode README: {e}")
-    
+
     return GitHubRepoInfo(
         success=True,
         repo_name=repo_name,
         description=description if description else None,
-        author=owner
+        author=owner,
     )
 
 
 async def populate_dependency_details(
-    db: AsyncSession, 
-    plugins: List[MarketPlugin]
+    db: AsyncSession, plugins: List[MarketPlugin]
 ) -> List[MarketPluginResponse]:
     """
     Populate dependency details for a list of plugins.
-    
+
     Args:
         db: Database session
         plugins: List of MarketPlugin objects
-    
+
     Returns:
         List of MarketPluginResponse with dependency details populated
     """
     responses = []
-    
+
     for plugin in plugins:
         response = MarketPluginResponse.model_validate(plugin)
-        
+
         # Populate dependency details if plugin has dependencies
         if plugin.dependencies:
             try:
                 dep_ids = parse_dependency_ids(plugin.dependencies)
                 dependency_details = []
-                
+
                 for dep_id in dep_ids:
                     dep_plugin = await MarketPlugin.get_by_id(db, dep_id)
                     if dep_plugin:
-                        dependency_details.append(DependencyInfo(
-                            id=dep_plugin.id,
-                            title=dep_plugin.title
-                        ))
-                
+                        dependency_details.append(
+                            DependencyInfo(id=dep_plugin.id, title=dep_plugin.title)
+                        )
+
                 response.dependency_details = dependency_details if dependency_details else None
             except ValueError:
                 # Invalid dependency format, skip
                 pass
-        
+
         responses.append(response)
-    
+
     return responses
 
 
@@ -243,17 +241,17 @@ async def list_plugins(
     category: Optional[str] = Query(None, description="Filter by category"),
     search: Optional[str] = Query(None, description="Search query"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ) -> MarketPluginListResponse:
     """
     List plugins from the market with pagination, filtering, and search.
-    
+
     Args:
         page: Page number (starts from 1)
         page_size: Number of items per page
         category: Optional category filter
         search: Optional search query (searches in title, description, author)
-    
+
     Returns:
         List of plugins with pagination info
     """
@@ -265,34 +263,30 @@ async def list_plugins(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid category. Valid categories: {', '.join([c.value for c in PluginCategory])}"
-            )
-    
+                detail=f"Invalid category. Valid categories: {', '.join([c.value for c in PluginCategory])}",
+            ) from None
+
     # Calculate skip
     skip = (page - 1) * page_size
-    
+
     # Search plugins
     plugins, total = await MarketPlugin.search_plugins(
-        db,
-        category=category_enum,
-        search_query=search,
-        skip=skip,
-        limit=page_size
+        db, category=category_enum, search_query=search, skip=skip, limit=page_size
     )
-    
+
     # Calculate total pages
     total_pages = (total + page_size - 1) // page_size
-    
+
     # Populate dependency details for each plugin
     plugin_responses = await populate_dependency_details(db, plugins)
-    
+
     return MarketPluginListResponse(
         success=True,
         plugins=plugin_responses,
         total=total,
         page=page,
         page_size=page_size,
-        total_pages=total_pages
+        total_pages=total_pages,
     )
 
 
@@ -300,24 +294,21 @@ async def list_plugins(
 async def get_plugin(
     plugin_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ) -> MarketPluginResponse:
     """
     Get details of a specific plugin.
-    
+
     Args:
         plugin_id: Plugin ID
-    
+
     Returns:
         Plugin details
     """
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
     if not plugin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Plugin not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+
     # Populate dependency details
     plugin_responses = await populate_dependency_details(db, [plugin])
     return plugin_responses[0]
@@ -327,16 +318,16 @@ async def get_plugin(
 async def create_plugin(
     request: MarketPluginCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
 ) -> MarketPluginResponse:
     """
     Add a new plugin to the market (admin only).
-    
+
     Auto-fetches repository info if title/description not provided.
-    
+
     Args:
         request: Plugin creation request
-    
+
     Returns:
         Created plugin
     """
@@ -345,14 +336,14 @@ async def create_plugin(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Plugin with this GitHub URL already exists"
+            detail="Plugin with this GitHub URL already exists",
         )
-    
+
     # Auto-fetch repo info if title or description not provided
     title = request.title
     description = request.description
     author = request.author
-    
+
     if not title or not description:
         github_token = await get_effective_github_token(db, current_user)
         repo_info = await fetch_github_repo_info(request.github_url, github_token=github_token)
@@ -363,27 +354,24 @@ async def create_plugin(
                 description = repo_info.description
             if not author and repo_info.author:
                 author = repo_info.author
-    
+
     # Validate category
     try:
         category_enum = PluginCategory(request.category)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid category. Valid categories: {', '.join([c.value for c in PluginCategory])}"
-        )
-    
+            detail=f"Invalid category. Valid categories: {', '.join([c.value for c in PluginCategory])}",
+        ) from None
+
     # Validate dependencies if provided
     if request.dependencies:
         try:
             dep_ids = parse_dependency_ids(request.dependencies)
             await validate_dependencies(db, dep_ids)
         except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
-            )
-    
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
     # Create plugin
     plugin = MarketPlugin(
         github_url=request.github_url,
@@ -396,15 +384,15 @@ async def create_plugin(
         is_recommended=request.is_recommended,
         icon_url=request.icon_url,
         dependencies=request.dependencies,
-        custom_install_path=request.custom_install_path
+        custom_install_path=request.custom_install_path,
     )
-    
+
     db.add(plugin)
     await db.commit()
     await db.refresh(plugin)
-    
+
     logger.info(f"Plugin '{plugin.title}' added to market by admin {current_user.username}")
-    
+
     return MarketPluginResponse.model_validate(plugin)
 
 
@@ -413,25 +401,22 @@ async def update_plugin(
     plugin_id: int,
     request: MarketPluginUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
 ) -> MarketPluginResponse:
     """
     Update a plugin in the market (admin only).
-    
+
     Args:
         plugin_id: Plugin ID
         request: Plugin update request
-    
+
     Returns:
         Updated plugin
     """
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
     if not plugin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Plugin not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+
     # Update fields
     if request.title is not None:
         plugin.title = request.title
@@ -447,8 +432,8 @@ async def update_plugin(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid category. Valid categories: {', '.join([c.value for c in PluginCategory])}"
-            )
+                detail=f"Invalid category. Valid categories: {', '.join([c.value for c in PluginCategory])}",
+            ) from None
     if request.tags is not None:
         plugin.tags = request.tags
     if request.is_recommended is not None:
@@ -464,18 +449,15 @@ async def update_plugin(
                 dep_ids = parse_dependency_ids(request.dependencies)
                 await validate_dependencies(db, dep_ids)
             except ValueError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=str(e)
-                )
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
         plugin.dependencies = request.dependencies
-    
+
     db.add(plugin)
     await db.commit()
     await db.refresh(plugin)
-    
+
     logger.info(f"Plugin '{plugin.title}' updated by admin {current_user.username}")
-    
+
     return MarketPluginResponse.model_validate(plugin)
 
 
@@ -483,34 +465,28 @@ async def update_plugin(
 async def delete_plugin(
     plugin_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
 ) -> ActionResponse:
     """
     Delete a plugin from the market (admin only).
-    
+
     Args:
         plugin_id: Plugin ID
-    
+
     Returns:
         Success response
     """
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
     if not plugin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Plugin not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+
     plugin_title = plugin.title
     await db.delete(plugin)
     await db.commit()
-    
+
     logger.info(f"Plugin '{plugin_title}' deleted by admin {current_user.username}")
-    
-    return ActionResponse(
-        success=True,
-        message=f"Plugin '{plugin_title}' deleted successfully"
-    )
+
+    return ActionResponse(success=True, message=f"Plugin '{plugin_title}' deleted successfully")
 
 
 @router.get("/plugins/{plugin_id}/releases")
@@ -519,36 +495,33 @@ async def get_plugin_releases(
     server_id: Optional[int] = Query(None, description="Optional server ID for GitHub proxy"),
     count: int = Query(5, ge=1, le=10, description="Number of releases to fetch"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Fetch available releases for a market plugin.
-    
+
     Args:
         plugin_id: Plugin ID from market
         server_id: Optional server ID to use server's GitHub proxy
         count: Number of releases to fetch (max 10)
-    
+
     Returns:
         List of releases with download URLs
     """
     from api.routes.github_plugins import get_github_releases
-    
+
     # Get plugin
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
     if not plugin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Plugin not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+
     # Fetch releases using the existing github_plugins endpoint logic
     return await get_github_releases(
         repo_url=plugin.github_url,
         count=count,
         server_id=server_id,
         db=db,
-        current_user=current_user
+        current_user=current_user,
     )
 
 
@@ -556,53 +529,49 @@ async def get_plugin_releases(
 # These files are typically user-configured and should be preserved
 CONFIG_FILE_EXTENSIONS = [
     # 最常見的核心配置格式（幾乎每個項目都會用到）
-    '.ini',          # Windows 傳統、很多老專案、Python configparser
-    '.cfg',          # 通用配置（遊戲、伺服器、軟體常見）
-    '.conf',         # Linux/Unix 系統服務最愛（nginx.conf, apache2.conf）
-    '.config',       # 一些框架/工具的偏好（.gitconfig 其實是 .git/config）
-    '.json',         # 前端、後端 API、Node.js、VS Code settings
-    '.jsonc',        # JSON with Comments（VS Code、TypeScript 常用）
-    '.json_c',        # JSON with Comments（VS Code、TypeScript 常用）
-    '.json5',        # JSON5（支援註解、尾隨逗號、無引號 key）
-    '.yaml',         # DevOps 王者（Kubernetes、Docker Compose、GitHub Actions、Ansible）
-    '.yml',          # YAML 的最常見縮寫形式
-    '.toml',         # Python (pyproject.toml)、Rust (Cargo.toml)、現代新寵
-    '.env',          # 環境變數（dotenv 最經典，幾乎所有後端框架都支援）
-    
+    ".ini",  # Windows 傳統、很多老專案、Python configparser
+    ".cfg",  # 通用配置（遊戲、伺服器、軟體常見）
+    ".conf",  # Linux/Unix 系統服務最愛（nginx.conf, apache2.conf）
+    ".config",  # 一些框架/工具的偏好（.gitconfig 其實是 .git/config）
+    ".json",  # 前端、後端 API、Node.js、VS Code settings
+    ".jsonc",  # JSON with Comments（VS Code、TypeScript 常用）
+    ".json_c",  # JSON with Comments（VS Code、TypeScript 常用）
+    ".json5",  # JSON5（支援註解、尾隨逗號、無引號 key）
+    ".yaml",  # DevOps 王者（Kubernetes、Docker Compose、GitHub Actions、Ansible）
+    ".yml",  # YAML 的最常見縮寫形式
+    ".toml",  # Python (pyproject.toml)、Rust (Cargo.toml)、現代新寵
+    ".env",  # 環境變數（dotenv 最經典，幾乎所有後端框架都支援）
     # 傳統/企業/特定生態系
-    '.xml',          # Java 生態、老企業系統、Maven pom.xml、Spring
-    '.properties',   # Java Properties 格式（.properties / application.properties）
-    '.prop',         # 少見但有些專案用
-    '.setting',      # 某些軟體的設定檔
-    '.settings',     # 多數情況是資料夾，但有些是 .settings 檔
-    
+    ".xml",  # Java 生態、老企業系統、Maven pom.xml、Spring
+    ".properties",  # Java Properties 格式（.properties / application.properties）
+    ".prop",  # 少見但有些專案用
+    ".setting",  # 某些軟體的設定檔
+    ".settings",  # 多數情況是資料夾，但有些是 .settings 檔
     # 特定語言/工具專屬或高度相關
-    '.hcl',          # HashiCorp 配置語言（Terraform .tf 其實是 HCL，但有時單獨 .hcl）
-    '.tf',           # Terraform 配置（雖然不是純副檔名，但常被當配置掃描）
-    '.tfvars',       # Terraform 變數檔
-    '.php',          # WordPress wp-config.php、Laravel config/*.php
-    '.py',           # Python 有時直接用 .py 當配置（settings.py）
-    '.js',           # Next.js / Nuxt config、雖然不推薦但常見 .config.js
-    '.cson',         # CoffeeScript Object Notation（Atom 編輯器用過）
-    '.plist',        # macOS / iOS 偏好設定（Info.plist、.plist）
-    
+    ".hcl",  # HashiCorp 配置語言（Terraform .tf 其實是 HCL，但有時單獨 .hcl）
+    ".tf",  # Terraform 配置（雖然不是純副檔名，但常被當配置掃描）
+    ".tfvars",  # Terraform 變數檔
+    ".php",  # WordPress wp-config.php、Laravel config/*.php
+    ".py",  # Python 有時直接用 .py 當配置（settings.py）
+    ".js",  # Next.js / Nuxt config、雖然不推薦但常見 .config.js
+    ".cson",  # CoffeeScript Object Notation（Atom 編輯器用過）
+    ".plist",  # macOS / iOS 偏好設定（Info.plist、.plist）
     # 備份、臨時、使用者覆蓋類
-    '.bak',          # 備份配置（常見於手動修改前）
-    '.old',          # 同上
-    '.example',      # 範例配置（.env.example、config.yaml.example）
-    '.dist',         # 分發用範例（config.dist.json）
-    '.sample',       # 同上
-    '.local',        # 個人本地覆蓋（settings.local.json）
-    '.user',         # 使用者特定設定
-    '.override',     # 有些框架用來覆蓋預設
-    
+    ".bak",  # 備份配置（常見於手動修改前）
+    ".old",  # 同上
+    ".example",  # 範例配置（.env.example、config.yaml.example）
+    ".dist",  # 分發用範例（config.dist.json）
+    ".sample",  # 同上
+    ".local",  # 個人本地覆蓋（settings.local.json）
+    ".user",  # 使用者特定設定
+    ".override",  # 有些框架用來覆蓋預設
     # 其他偶爾出現但真實存在的
-    '.md',           # 極少，但有些人把配置寫在 markdown 裡（不推薦）
-    '.yaml.tpl',     # Helm chart 的模板
-    '.j2',           # Ansible Jinja2 模板（雖然是模板但常被掃描）
-    '.envrc',        # direnv 工具用的本地環境變數
-    '.secrets',      # 有時用來放機密（不安全，但存在）
-    '.secret', 
+    ".md",  # 極少，但有些人把配置寫在 markdown 裡（不推薦）
+    ".yaml.tpl",  # Helm chart 的模板
+    ".j2",  # Ansible Jinja2 模板（雖然是模板但常被掃描）
+    ".envrc",  # direnv 工具用的本地環境變數
+    ".secrets",  # 有時用來放機密（不安全，但存在）
+    ".secret",
 ]
 
 
@@ -610,28 +579,36 @@ CONFIG_FILE_EXTENSIONS = [
 async def install_plugin(
     plugin_id: int,
     server_id: int = Query(..., description="Server ID to install plugin on"),
-    download_url: Optional[str] = Query(None, description="Specific release download URL (if not provided, uses latest)"),
-    exclude_dirs: list[str] = Query(default=[], description="Directories to exclude (deprecated, use exclude_files)"),
+    download_url: Optional[str] = Query(
+        None, description="Specific release download URL (if not provided, uses latest)"
+    ),
+    exclude_dirs: list[str] = Query(
+        default=[], description="Directories to exclude (deprecated, use exclude_files)"
+    ),
     exclude_files: list[str] = Query(default=[], description="Files to exclude from installation"),
     # Installing dependencies is explicitly opt-in for a market install.  The
     # automatic updater never follows a market dependency graph; it only
     # updates the managed item selected by the server owner.
-    install_dependencies: bool = Query(default=False, description="Whether to install dependencies"),
-    upgrade_mode: bool = Query(default=False, description="Enable upgrade mode to auto-exclude config files"),
+    install_dependencies: bool = Query(
+        default=False, description="Whether to install dependencies"
+    ),
+    upgrade_mode: bool = Query(
+        default=False, description="Enable upgrade mode to auto-exclude config files"
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     _operation_server: Server = Depends(locked_server_operation),
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from the market to a server.
-    
+
     This endpoint:
     1. Checks SSH connectivity to server first
     2. Fetches the plugin from market
     3. Installs dependencies first (if any and install_dependencies=True)
     4. Gets the specified release or latest release from GitHub
     5. Installs using the existing GitHub plugin installation logic
-    
+
     Args:
         plugin_id: Plugin ID from market
         server_id: Server ID to install on
@@ -640,7 +617,7 @@ async def install_plugin(
         exclude_files: Optional files to exclude from extraction
         install_dependencies: Whether to automatically install dependencies
         upgrade_mode: When enabled, auto-excludes common config files (.ini, .cfg, .json, etc.)
-    
+
     Returns:
         Installation result
     """
@@ -651,41 +628,42 @@ async def install_plugin(
     # Validate download_url if provided
     if download_url:
         # Ensure it's a GitHub releases download URL
-        if not download_url.startswith('https://github.com/') or '/releases/download/' not in download_url:
+        if (
+            not download_url.startswith("https://github.com/")
+            or "/releases/download/" not in download_url
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid download URL. Must be a GitHub releases download URL."
+                detail="Invalid download URL. Must be a GitHub releases download URL.",
             )
-        release_parts = download_url.split('/releases/download/', 1)[1].split('/', 1)
+        release_parts = download_url.split("/releases/download/", 1)[1].split("/", 1)
         if len(release_parts) == 2:
             selected_release_tag = release_parts[0]
             selected_release_id = f"tag:{selected_release_tag}"
             selected_asset_name = release_parts[1]
-    
+
     # Get plugin and server (read-only, no locking)
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
     if not plugin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Plugin not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+
     # Verify server ownership and keep the detached connection settings for install work.
     server = await get_server_for_user(server_id, db, current_user)
-    
+
     # CRITICAL: Check SSH connectivity BEFORE any database modifications
     # This prevents database locks when SSH connection hangs or fails
     from services import SSHManager
+
     ssh_manager = SSHManager()
     ssh_success, ssh_msg = await ssh_manager.connect(server)
     await ssh_manager.disconnect()
-    
+
     if not ssh_success:
         return GitHubPluginInstallResponse(
             success=False,
-            message=f"Cannot connect to server via SSH: {ssh_msg}. Please check server connectivity before installing plugins."
+            message=f"Cannot connect to server via SSH: {ssh_msg}. Please check server connectivity before installing plugins.",
         )
-    
+
     # Install dependencies first if requested and present
     installed_deps = []
     if install_dependencies and plugin.dependencies:
@@ -698,23 +676,25 @@ async def install_plugin(
                     # Recursively install dependency (without its own dependencies to avoid infinite loops)
                     # Pass upgrade_mode to protect config files in dependencies too
                     dep_result = await install_plugin(
-                        dep_id, 
+                        dep_id,
                         server_id,
                         download_url=None,  # Always use latest version for dependencies to avoid version conflicts
                         exclude_dirs=exclude_dirs,
                         exclude_files=exclude_files,
                         install_dependencies=False,  # Don't recursively install dependencies of dependencies
                         upgrade_mode=upgrade_mode,  # Preserve config files in dependencies when upgrading
-                        db=db, 
-                        current_user=current_user
+                        db=db,
+                        current_user=current_user,
                     )
                     if dep_result.success:
                         installed_deps.append(dep_plugin.title)
                     else:
-                        logger.warning(f"Failed to install dependency {dep_plugin.title}: {dep_result.message}")
+                        logger.warning(
+                            f"Failed to install dependency {dep_plugin.title}: {dep_result.message}"
+                        )
         except ValueError as e:
             logger.error(f"Error parsing dependencies: {e}")
-    
+
     # Increment download count in a separate short transaction to avoid locks
     try:
         plugin.download_count += 1
@@ -724,73 +704,69 @@ async def install_plugin(
         # Log but don't fail the installation if download count update fails
         logger.error(f"Failed to update download count: {e}")
         await db.rollback()
-    
+
     # Refresh plugin to avoid stale data
     await db.refresh(plugin)
-    
+
     try:
         # If download_url is not provided, fetch latest release from GitHub
         if not download_url:
             # Fetch releases from GitHub (use local parse_github_url function)
             owner, repo = parse_github_url(plugin.github_url)
-            
+
             # Get latest release
             api_url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
-            headers = {
-                "Accept": "application/vnd.github+json",
-                "User-Agent": "CS2-ServerManager"
-            }
-            
+            headers = {"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"}
+
             github_token = await get_effective_github_token(db, current_user)
-            
+
             success, data, error = await http_helper.get(
                 api_url,
                 headers=headers,
                 timeout=30,
                 proxy=server.github_proxy,
-                github_token=github_token
+                github_token=github_token,
             )
-            
+
             if not success:
                 message = f"Failed to fetch latest release: {error}"
                 if installed_deps:
                     message += f" (Dependencies installed: {', '.join(installed_deps)})"
-                return GitHubPluginInstallResponse(
-                    success=False,
-                    message=message
-                )
-            
+                return GitHubPluginInstallResponse(success=False, message=message)
+
             # Find suitable asset (exclude Windows, prefer Linux archives)
             assets = data.get("assets", [])
             selected_release_id = str(data.get("id") or "")
             selected_release_tag = data.get("tag_name") or "unknown"
             download_url = None
-            
+
             for asset in assets:
                 asset_name = asset.get("name", "").lower()
-                
+
                 # Skip Windows assets
-                if 'windows' in asset_name or '-win-' in asset_name or '_win_' in asset_name or asset_name.endswith('-win.zip'):
+                if (
+                    "windows" in asset_name
+                    or "-win-" in asset_name
+                    or "_win_" in asset_name
+                    or asset_name.endswith("-win.zip")
+                ):
                     continue
-                
+
                 # Check for archive files
-                if any(asset_name.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]):
+                if any(
+                    asset_name.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]
+                ):
                     download_url = asset.get("browser_download_url")
                     selected_asset_name = asset.get("name")
                     break
-            
+
             if not download_url:
                 message = "No suitable release asset found for installation"
                 if installed_deps:
                     message += f" (Dependencies installed: {', '.join(installed_deps)})"
-                return GitHubPluginInstallResponse(
-                    success=False,
-                    message=message
-                )
-        
+                return GitHubPluginInstallResponse(success=False, message=message)
+
         # Use existing installation logic
-        from api.routes.github_plugins import install_github_plugin
-        
         # If upgrade_mode is enabled, add config file extension patterns to exclude_files
         final_exclude_files = list(exclude_files)  # Make a copy
         if upgrade_mode:
@@ -798,17 +774,19 @@ async def install_plugin(
             for ext in CONFIG_FILE_EXTENSIONS:
                 # Add pattern that matches files with this extension anywhere in the archive
                 final_exclude_files.append(f"*{ext}")
-            logger.info(f"Upgrade mode enabled: auto-excluding config files with extensions {CONFIG_FILE_EXTENSIONS}")
-        
+            logger.info(
+                f"Upgrade mode enabled: auto-excluding config files with extensions {CONFIG_FILE_EXTENSIONS}"
+            )
+
         install_request = GitHubPluginInstallRequest(
             download_url=download_url,
             exclude_dirs=exclude_dirs,
             exclude_files=final_exclude_files,
-            custom_install_path=plugin.custom_install_path
+            custom_install_path=plugin.custom_install_path,
         )
-        
+
         result = await install_github_plugin(server_id, install_request, db, current_user)
-        
+
         # Increment install count if successful (separate transaction)
         if result.success:
             try:
@@ -821,6 +799,7 @@ async def install_plugin(
                 await db.rollback()
 
             from services.plugin_auto_update_service import derive_asset_glob, upsert_managed_plugin
+
             await upsert_managed_plugin(
                 server_id=server.id,
                 source_type="market",
@@ -835,43 +814,34 @@ async def install_plugin(
                 exclude_dirs=exclude_dirs,
                 exclude_files=final_exclude_files,
             )
-            
+
             # Add dependency info to success message
             if installed_deps:
                 result.message += f" (Dependencies also installed: {', '.join(installed_deps)})"
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(f"Error installing plugin: {e}", exc_info=True)
         message = f"Installation error: {str(e)}"
         if installed_deps:
             message += f" (Dependencies installed: {', '.join(installed_deps)})"
-        return GitHubPluginInstallResponse(
-            success=False,
-            message=message
-        )
+        return GitHubPluginInstallResponse(success=False, message=message)
 
 
 @router.get("/categories")
-async def list_categories(
-    current_user: User = Depends(get_current_active_user)
-) -> dict:
+async def list_categories(current_user: User = Depends(get_current_active_user)) -> dict:
     """
     Get list of available plugin categories.
-    
+
     Returns:
         List of category values and names
     """
     categories = [
-        {"value": c.value, "name": c.value.replace("_", " ").title()}
-        for c in PluginCategory
+        {"value": c.value, "name": c.value.replace("_", " ").title()} for c in PluginCategory
     ]
-    
-    return {
-        "success": True,
-        "categories": categories
-    }
+
+    return {"success": True, "categories": categories}
 
 
 @router.get("/plugins-for-dependencies")
@@ -879,133 +849,124 @@ async def list_plugins_for_dependencies(
     exclude_id: Optional[int] = Query(None, description="Plugin ID to exclude (for editing)"),
     search: Optional[str] = Query(None, description="Search query for filtering plugins"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
 ) -> dict:
     """
     Get list of plugins for dependency selection (admin only).
     Returns only essential fields for efficiency.
     Supports backend search for better performance with large plugin lists.
-    
+
     Args:
         exclude_id: Optional plugin ID to exclude (prevents self-dependency when editing)
         search: Optional search query to filter plugins by title
-    
+
     Returns:
         List of plugins with id and title only
     """
     # Get plugins with optional search
     plugins, _ = await MarketPlugin.search_plugins(
-        db, 
+        db,
         search_query=search,
-        skip=0, 
-        limit=100  # Reduced limit since we now support search
+        skip=0,
+        limit=100,  # Reduced limit since we now support search
     )
-    
+
     # Filter and map to minimal format
     plugin_list = [
-        {"id": p.id, "title": p.title}
-        for p in plugins
-        if exclude_id is None or p.id != exclude_id
+        {"id": p.id, "title": p.title} for p in plugins if exclude_id is None or p.id != exclude_id
     ]
-    
-    return {
-        "success": True,
-        "plugins": plugin_list
-    }
+
+    return {"success": True, "plugins": plugin_list}
 
 
 @router.get("/plugins/{plugin_id}/analyze-archive")
 async def analyze_plugin_archive(
     plugin_id: int,
     server_id: int = Query(..., description="Server ID for analysis"),
-    download_url: Optional[str] = Query(None, description="Specific release download URL (if not provided, uses latest)"),
+    download_url: Optional[str] = Query(
+        None, description="Specific release download URL (if not provided, uses latest)"
+    ),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Analyze a plugin archive to show its directory structure.
     This allows users to select which directories to exclude during installation.
-    
+
     Args:
         plugin_id: Plugin ID from market
         server_id: Server ID for SSH connection
         download_url: Optional specific release download URL (if not provided, uses latest)
-    
+
     Returns:
         Archive analysis with directory structure
     """
     from api.routes.github_plugins import analyze_archive as analyze_github_archive
-    
+
     # Get plugin
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
     if not plugin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Plugin not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+
     # Verify server ownership and keep proxy settings for the release lookup.
     server = await get_server_for_user(server_id, db, current_user)
-    
+
     # If download_url is not provided, fetch latest release
     if not download_url:
         try:
             owner, repo = parse_github_url(plugin.github_url)
-            
+
             # Get latest release
             api_url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
-            headers = {
-                "Accept": "application/vnd.github+json",
-                "User-Agent": "CS2-ServerManager"
-            }
-            
+            headers = {"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"}
+
             github_token = await get_effective_github_token(db, current_user)
-            
+
             success, data, error = await http_helper.get(
                 api_url,
                 headers=headers,
                 timeout=30,
                 proxy=server.github_proxy,
-                github_token=github_token
+                github_token=github_token,
             )
-            
+
             if not success:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to fetch latest release: {error}"
+                    detail=f"Failed to fetch latest release: {error}",
                 )
-            
+
             # Find suitable asset
             assets = data.get("assets", [])
             for asset in assets:
                 asset_name = asset.get("name", "").lower()
-                
+
                 # Skip Windows assets
-                if 'windows' in asset_name or '-win-' in asset_name or '_win_' in asset_name or asset_name.endswith('-win.zip'):
+                if (
+                    "windows" in asset_name
+                    or "-win-" in asset_name
+                    or "_win_" in asset_name
+                    or asset_name.endswith("-win.zip")
+                ):
                     continue
-                
+
                 # Check for archive files
-                if any(asset_name.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]):
+                if any(
+                    asset_name.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]
+                ):
                     download_url = asset.get("browser_download_url")
                     break
-            
+
             if not download_url:
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="No suitable release asset found"
+                    status_code=status.HTTP_404_NOT_FOUND, detail="No suitable release asset found"
                 )
         except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
-            )
-    
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
     # Use the existing analyze_archive function
     return await analyze_github_archive(
-        server_id=server_id,
-        download_url=download_url,
-        db=db,
-        current_user=current_user
+        server_id=server_id, download_url=download_url, db=db, current_user=current_user
     )
 
 
@@ -1013,15 +974,15 @@ async def analyze_plugin_archive(
 async def fetch_repo_info(
     github_url: str = Query(..., description="GitHub repository URL"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
 ) -> GitHubRepoInfo:
     """
     Fetch repository information from GitHub (admin only).
     Helper endpoint for auto-filling plugin details.
-    
+
     Args:
         github_url: GitHub repository URL
-    
+
     Returns:
         Repository information
     """
@@ -1040,35 +1001,33 @@ async def uninstall_market_plugin(
 ):
     """
     Uninstall a market plugin from a server.
-    
+
     This is a wrapper around the GitHub plugin uninstall endpoint that:
     1. Verifies the plugin exists in the market
     2. Calls the uninstall function with the provided file list
-    
+
     Args:
         plugin_id: Plugin ID from market
         server_id: Server ID to uninstall from (query parameter)
         request: Uninstall request with list of files to delete
-    
+
     Returns:
         Uninstallation result
     """
     from api.routes.github_plugins import uninstall_plugin
-    
+
     # Get plugin (just to verify it exists)
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
     if not plugin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Plugin not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+
     # Verify server ownership; the uninstall route performs its own lookup as well.
     await get_server_for_user(server_id, db, current_user)
 
     result = await uninstall_plugin(server_id, request, db, current_user)
     if result.success:
         from modules.models import ManagedPlugin
+
         tracked = await db.execute(
             select(ManagedPlugin).where(
                 ManagedPlugin.server_id == server_id,

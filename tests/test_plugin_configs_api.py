@@ -41,9 +41,7 @@ async def test_removing_default_source_soft_disables_it(monkeypatch):
     monkeypatch.setattr(
         plugin_configs, "get_server_with_permission", AsyncMock(return_value=SimpleNamespace())
     )
-    monkeypatch.setattr(
-        plugin_configs, "_source_for_server", AsyncMock(return_value=source)
-    )
+    monkeypatch.setattr(plugin_configs, "_source_for_server", AsyncMock(return_value=source))
 
     response = await plugin_configs.delete_source(
         server_id=1, source_id=2, db=db, current_user=SimpleNamespace()
@@ -76,9 +74,7 @@ async def test_adding_source_commits_and_returns_persisted_id(monkeypatch):
         plugin_configs, "get_server_with_permission", AsyncMock(return_value=server)
     )
     monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
-    monkeypatch.setattr(
-        plugin_configs, "inspect_source", AsyncMock(return_value="directory")
-    )
+    monkeypatch.setattr(plugin_configs, "inspect_source", AsyncMock(return_value="directory"))
 
     response = await plugin_configs.create_source(
         server_id=server.id,
@@ -109,9 +105,7 @@ async def test_scan_route_streams_files_and_disconnects(monkeypatch):
     monkeypatch.setattr(
         plugin_configs, "get_server_with_permission", AsyncMock(return_value=server)
     )
-    monkeypatch.setattr(
-        plugin_configs, "_source_for_server", AsyncMock(return_value=source)
-    )
+    monkeypatch.setattr(plugin_configs, "_source_for_server", AsyncMock(return_value=source))
     monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
     monkeypatch.setattr(plugin_configs, "iter_source_scan", stream_scan)
 
@@ -124,9 +118,7 @@ async def test_scan_route_streams_files_and_disconnects(monkeypatch):
     chunks = [chunk async for chunk in response.body_iterator]
     events = [json.loads(line) for line in "".join(chunks).splitlines()]
 
-    assert [event["type"] for event in events] == [
-        "start", "progress", "file", "complete"
-    ]
+    assert [event["type"] for event in events] == ["start", "progress", "file", "complete"]
     assert response.media_type == "application/x-ndjson"
     assert response.headers["x-accel-buffering"] == "no"
     manager.disconnect.assert_awaited_once()
@@ -135,21 +127,15 @@ async def test_scan_route_streams_files_and_disconnects(monkeypatch):
 @pytest.mark.asyncio
 async def test_save_rejects_stale_revision_without_writing(monkeypatch):
     server = SimpleNamespace(game_directory="/home/cs2")
-    source = SimpleNamespace(
-        source_type="file", relative_path="cs2/game/csgo/cfg/plugin.cfg"
-    )
+    source = SimpleNamespace(source_type="file", relative_path="cs2/game/csgo/cfg/plugin.cfg")
     manager = SimpleNamespace(disconnect=AsyncMock())
     atomic_write = AsyncMock()
     monkeypatch.setattr(
         plugin_configs, "get_server_with_permission", AsyncMock(return_value=server)
     )
-    monkeypatch.setattr(
-        plugin_configs, "_source_for_server", AsyncMock(return_value=source)
-    )
+    monkeypatch.setattr(plugin_configs, "_source_for_server", AsyncMock(return_value=source))
     monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
-    monkeypatch.setattr(
-        plugin_configs, "read_text_file", AsyncMock(return_value="setting 1\n")
-    )
+    monkeypatch.setattr(plugin_configs, "read_text_file", AsyncMock(return_value="setting 1\n"))
     monkeypatch.setattr(plugin_configs, "atomic_write_text_file", atomic_write)
     monkeypatch.setattr(plugin_configs, "maintenance_lock_service", _LockService())
     request = plugin_configs.ConfigSaveRequest(

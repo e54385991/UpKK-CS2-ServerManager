@@ -1,4 +1,5 @@
 """Auto-update completion must be gated by a fresh steam.inf read."""
+
 import pytest
 
 from modules.models import AuthType, DeploymentLog, Server
@@ -77,8 +78,12 @@ class SteamCMDRecoveryFailureSSHManager:
 
 def make_server():
     return Server(
-        id=77, user_id=1, name="Verifier", host="127.0.0.1",
-        ssh_user="steam", auth_type=AuthType.PASSWORD,
+        id=77,
+        user_id=1,
+        name="Verifier",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
     )
 
 
@@ -129,14 +134,19 @@ def install_trigger_fakes(
     "observed,steam_up_to_date,expected_success",
     [("1.41.6.9", False, True), ("1.41.6.8", False, False), ("1.41.7.0", True, True)],
 )
-async def test_terminal_notification_depends_on_steam_inf(monkeypatch, observed, steam_up_to_date, expected_success):
+async def test_terminal_notification_depends_on_steam_inf(
+    monkeypatch, observed, steam_up_to_date, expected_success
+):
     state = FakeDatabaseState()
 
     async def refresh_version(server):
         return True, observed
 
     async def final_steam_check(version):
-        return True, {"up_to_date": steam_up_to_date, "required_version": "1.41.7.0" if steam_up_to_date else "1.41.6.9"}
+        return True, {
+            "up_to_date": steam_up_to_date,
+            "required_version": "1.41.7.0" if steam_up_to_date else "1.41.6.9",
+        }
 
     notifications = install_trigger_fakes(
         monkeypatch,
@@ -148,8 +158,10 @@ async def test_terminal_notification_depends_on_steam_inf(monkeypatch, observed,
     service = AutoUpdateService()
     service.VERSION_VERIFICATION_TIMEOUT_SECONDS = 0
     await service._trigger_server_update(
-        make_server(), current_version="1.41.6.8",
-        required_version="1.41.6.9", version_source="steam.inf",
+        make_server(),
+        current_version="1.41.6.8",
+        required_version="1.41.6.9",
+        version_source="steam.inf",
     )
 
     assert notifications[0]["title"] == "Automatic update started"
@@ -208,8 +220,9 @@ async def test_steamcmd_reported_failure_is_reconciled_when_version_catches_up(m
     assert notifications[-1]["details"]["Observed Version"] == "1.41.7.0"
     assert notifications[-1]["success"] is True
     assert "reported a failure" in notifications[-1]["message"]
-    assert "fresh steam.inf verification passed" in (
-        notifications[-1]["details"]["SteamCMD Reconciliation"]
+    assert (
+        "fresh steam.inf verification passed"
+        in (notifications[-1]["details"]["SteamCMD Reconciliation"])
     )
     assert "recovery start succeeded" in notifications[-1]["details"]["Operation Result"]
     assert state.log.status == "success"

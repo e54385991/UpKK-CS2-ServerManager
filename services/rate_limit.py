@@ -1,4 +1,5 @@
 """Small Redis-backed limits for public CPU- and network-heavy endpoints."""
+
 import hashlib
 
 from fastapi import HTTPException, Request, status

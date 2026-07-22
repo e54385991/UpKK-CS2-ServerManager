@@ -26,7 +26,6 @@ from services.game_session import (
     stop_session_command,
 )
 
-
 TMUX_PREFIX = f"tmux -L {TMUX_SOCKET_NAME} -f /dev/null"
 
 
@@ -92,10 +91,7 @@ def test_unconfigured_gslt_does_not_create_a_startup_parameter(token):
 
 
 def test_configured_gslt_creates_the_expected_startup_parameter():
-    assert (
-        gslt_startup_parameter("  ABC123token  ")
-        == '+sv_setsteamaccount "ABC123token"'
-    )
+    assert gslt_startup_parameter("  ABC123token  ") == '+sv_setsteamaccount "ABC123token"'
     assert (
         gslt_startup_parameter("ABC123token", masked=True)
         == '+sv_setsteamaccount "***STEAM_TOKEN***"'
@@ -165,7 +161,9 @@ async def test_startup_preview_uses_selected_manager_and_masks_secrets(
     assert result["session_manager"] == manager
     assert command_marker in result["startup_command"]
     assert "taskset -c 0-3" in result["startup_command"]
-    assert result["startup_command"].index(command_marker) < result["startup_command"].index("taskset")
+    assert result["startup_command"].index(command_marker) < result["startup_command"].index(
+        "taskset"
+    )
     for secret in (
         server.api_key,
         server.server_password,
@@ -215,13 +213,10 @@ def test_session_exists_commands_match_the_complete_session_name():
     tmux_command = session_exists_command("tmux", "cs2server_1")
 
     assert screen_command == (
-        "screen -list 2>/dev/null | "
-        "grep -E '[.]cs2server_1([[:space:]]|$)' >/dev/null"
+        "screen -list 2>/dev/null | grep -E '[.]cs2server_1([[:space:]]|$)' >/dev/null"
     )
     assert "grep -F cs2server_1" not in screen_command
-    assert tmux_command == (
-        f"{TMUX_PREFIX} has-session -t =cs2server_1 2>/dev/null"
-    )
+    assert tmux_command == (f"{TMUX_PREFIX} has-session -t =cs2server_1 2>/dev/null")
     assert "=cs2server_1" in tmux_command
 
 
@@ -263,10 +258,7 @@ def test_screen_send_keys_shell_quotes_the_complete_literal_input():
 
     command = send_keys_command("screen", "cs2server_3", command_text)
 
-    assert command == (
-        "screen -S cs2server_3 -X stuff "
-        f"{shlex.quote(command_text + chr(10))}"
-    )
+    assert command == (f"screen -S cs2server_3 -X stuff {shlex.quote(command_text + chr(10))}")
 
 
 def test_tmux_send_keys_uses_literal_mode_and_a_separate_enter_key():
@@ -344,8 +336,6 @@ def test_all_running_managers_are_returned_in_detection_order(preferred):
         assert timeout == 10
         return True, "", ""
 
-    detected = asyncio.run(
-        find_running_session_managers(execute_command, preferred, name)
-    )
+    detected = asyncio.run(find_running_session_managers(execute_command, preferred, name))
 
     assert detected == expected

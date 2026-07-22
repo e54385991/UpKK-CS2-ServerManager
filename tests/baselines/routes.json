@@ -1,0 +1,152 @@
+[
+  {
+    "kind": "Route",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "openapi",
+    "path": "/openapi.json"
+  },
+  {
+    "kind": "Route",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "swagger_ui_html",
+    "path": "/docs"
+  },
+  {
+    "kind": "Route",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "swagger_ui_redirect",
+    "path": "/docs/oauth2-redirect"
+  },
+  {
+    "kind": "Route",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "redoc_html",
+    "path": "/redoc"
+  },
+  {
+    "kind": "Mount",
+    "methods": [],
+    "name": "static",
+    "path": "/static"
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  },
+  {
+    "kind": "_IncludedRouter",
+    "methods": [],
+    "name": null,
+    "path": null
+  }
+]

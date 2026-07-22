@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.routes.servers import get_server_with_permission
 from modules import Server, User, get_current_active_user, get_db
 from modules.http_helper import http_helper
+from services.maintenance_lock import maintenance_lock_service
 from services.map_management_service import (
     DEFAULT_MAPS_CONFIG,
     DEFAULT_PLUGIN_CONFIG_CONTENT,
@@ -34,9 +35,7 @@ from services.map_management_service import (
     update_plugin_config,
     validate_restricted_times,
 )
-from services.maintenance_lock import maintenance_lock_service
 from services.ssh_manager import SSHManager
-
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/servers/{server_id}/maps", tags=["map-management"])
@@ -404,9 +403,8 @@ async def update_mapchooser_plugin_config(
                 server,
                 bool(prerequisites["plugin_config_file_exists"]),
             )
-            if (
-                request.expected_revision
-                and request.expected_revision != content_revision(current_content)
+            if request.expected_revision and request.expected_revision != content_revision(
+                current_content
             ):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -484,9 +482,8 @@ async def update_maps_config(
                 server,
                 bool(prerequisites["maps_file_exists"]),
             )
-            if (
-                request.expected_revision
-                and request.expected_revision != content_revision(current_content)
+            if request.expected_revision and request.expected_revision != content_revision(
+                current_content
             ):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,

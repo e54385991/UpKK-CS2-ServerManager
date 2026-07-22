@@ -2,15 +2,17 @@
 Initialize plugin market with default plugins
 This script should be run once to populate the plugin marketplace
 """
+
 import asyncio
 import json
+
 from modules.database import async_session_maker
 from modules.models import PluginMarketItem
 
 
 async def populate_plugin_market():
     """Populate plugin market with default plugins"""
-    
+
     plugins = [
         {
             "name": "cs2kz-metamod",
@@ -104,7 +106,12 @@ async def populate_plugin_market():
             "short_description": "Professional match management system for CS2 competitive play",
             "author": "shobhit-pathak",
             "github_url": "https://github.com/shobhit-pathak/MatchZy",
-            "related_urls": json.dumps(["https://github.com/roflmuffin/CounterStrikeSharp", "https://github.com/alliedmodders/metamod-source"]),
+            "related_urls": json.dumps(
+                [
+                    "https://github.com/roflmuffin/CounterStrikeSharp",
+                    "https://github.com/alliedmodders/metamod-source",
+                ]
+            ),
             "tags": "match,competitive,tournament,scrim,stats",
             "icon_url": None,
         },
@@ -128,39 +135,46 @@ async def populate_plugin_market():
             "short_description": "Essential admin commands and moderation tools for CS2 servers",
             "author": "connercsbn",
             "github_url": "https://github.com/connercsbn/SimpleAdmin",
-            "related_urls": json.dumps(["https://github.com/roflmuffin/CounterStrikeSharp", "https://github.com/alliedmodders/metamod-source"]),
+            "related_urls": json.dumps(
+                [
+                    "https://github.com/roflmuffin/CounterStrikeSharp",
+                    "https://github.com/alliedmodders/metamod-source",
+                ]
+            ),
             "tags": "admin,moderation,commands,management,kick,ban",
             "icon_url": None,
         },
     ]
-    
+
     async with async_session_maker() as session:
         # Check if plugins already exist
         from sqlmodel import select
+
         result = await session.execute(select(PluginMarketItem))
         existing = result.scalars().all()
-        
+
         if existing:
             print(f"Plugin market already has {len(existing)} plugins. Skipping initialization.")
             return
-        
+
         print(f"Adding {len(plugins)} plugins to the market...")
         for plugin_data in plugins:
             plugin = PluginMarketItem(**plugin_data)
             session.add(plugin)
-        
+
         await session.commit()
         print(f"✓ Successfully added {len(plugins)} plugins to the market!")
-        
+
         # Display summary by category
         result = await session.execute(select(PluginMarketItem))
         all_plugins = result.scalars().all()
-        
+
         from collections import defaultdict
+
         by_category = defaultdict(list)
         for p in all_plugins:
             by_category[p.category].append(p.display_name)
-        
+
         print("\nPlugins by category:")
         for category, plugin_names in sorted(by_category.items()):
             print(f"  {category}: {len(plugin_names)} plugins")

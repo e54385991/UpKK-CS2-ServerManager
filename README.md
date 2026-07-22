@@ -9,6 +9,23 @@
 [English](#english) | [中文](#chinese)
 
 ---
+
+## Development quality baseline / 开发质量基线
+
+Install the locked development dependencies, then run the same checks used by
+GitHub Actions. The command validates formatting, lint, tests, compatibility
+contracts, templates, and Python/frontend dependency advisories.
+
+安装锁定的开发依赖后，可运行与 GitHub Actions 完全相同的检查，包括格式、静态检查、
+测试、兼容契约、模板以及 Python/前端依赖漏洞审计。
+
+```bash
+uv sync --locked --group dev
+uv run python scripts/check_baseline.py
+```
+
+---
+
 ## ⚠️ 重要网络要求（部署前必读）
 
 <div align="center">

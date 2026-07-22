@@ -1,0 +1,358 @@
+"""File Manager files endpoints."""
+
+# ruff: noqa: F403,F405
+
+from .common import *
+
+router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
+
+
+@router.get("", response_model=DirectoryListResponse)
+async def list_directory(
+    server_id: int,
+    path: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """List directory contents"""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    # Use server's game directory as base if no path specified
+    if not path:
+        path = server.game_directory
+
+    # Security: ensure path is within server's directory
+    if not is_path_safe(server.game_directory, path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside server directory",
+        )
+
+    # List directory using SSH
+    ssh_manager = SSHManager()
+    success, files, error = await ssh_manager.list_directory(path, server)
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+
+    return DirectoryListResponse(path=path, files=files)
+
+
+@router.get("/content")
+async def get_file_content(
+    server_id: int,
+    path: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get file content for viewing/editing"""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    # Security check
+    if not is_path_safe(server.game_directory, path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside server directory",
+        )
+
+    # Read file using SSH
+    ssh_manager = SSHManager()
+    success, content, error = await ssh_manager.read_file(path, server)
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+
+    return {"path": path, "content": content}
+
+
+@router.put("/content")
+async def update_file_content(
+    server_id: int,
+    path: str,
+    request: FileContentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Update file content"""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    # Security check
+    if not is_path_safe(server.game_directory, path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside server directory",
+        )
+
+    # Write file using SSH
+    ssh_manager = SSHManager()
+    success, error = await ssh_manager.write_file(path, request.content, server)
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+
+    return {"success": True, "message": "File updated successfully"}
+
+
+@router.post("/upload")
+async def upload_file(
+    server_id: int,
+    path: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Upload file to server"""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    # Construct remote path
+    remote_path = remote_join(path, file.filename)
+
+    # Security check
+    if not is_path_safe(server.game_directory, remote_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside server directory",
+        )
+
+    # Save uploaded file to temp location
+    temp_file = None
+    try:
+        # Create temporary file
+        temp_fd, temp_path = tempfile.mkstemp()
+        os.close(temp_fd)
+        temp_file = temp_path
+
+        # Stream to disk without buffering the full upload or blocking the event loop.
+        uploaded_bytes = 0
+        async with await anyio.open_file(temp_path, "wb") as target:
+            while chunk := await file.read(1024 * 1024):
+                uploaded_bytes += len(chunk)
+                if uploaded_bytes > MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        detail="Uploaded file exceeds the 4 GiB limit",
+                    )
+                await target.write(chunk)
+
+        # Upload to server using SSH
+        ssh_manager = SSHManager()
+        success, error = await ssh_manager.upload_file(temp_path, remote_path, server)
+
+        if not success:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+
+        return {
+            "success": True,
+            "message": "File uploaded successfully",
+            "path": remote_path,
+            "filename": file.filename,
+        }
+
+    finally:
+        # Clean up temp file
+        if temp_file and os.path.exists(temp_file):
+            os.unlink(temp_file)
+
+
+@router.get("/download")
+async def download_file(
+    server_id: int,
+    path: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user_for_download),
+):
+    """Download file from server"""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    # Security check
+    if not is_path_safe(server.game_directory, path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside server directory",
+        )
+
+    filename = posixpath.basename(path) or "download"
+    ssh_manager = SSHManager()
+
+    try:
+        size_success, file_size, size_error = await ssh_manager.get_file_size(path, server)
+        if not size_success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=size_error
+            )
+
+        if file_size is None or file_size > STREAMING_DOWNLOAD_THRESHOLD_BYTES:
+
+            async def remote_file_iterator():
+                try:
+                    async for chunk in ssh_manager.stream_file(path, server):
+                        yield chunk
+                finally:
+                    await ssh_manager.disconnect()
+
+            return StreamingResponse(
+                remote_file_iterator(),
+                media_type="application/octet-stream",
+                headers=_download_headers(filename, file_size),
+            )
+
+        temp_fd, temp_path = tempfile.mkstemp()
+        os.close(temp_fd)
+
+        success, error = await ssh_manager.download_file(path, temp_path, server)
+        if not success:
+            _cleanup_temp_file(temp_path)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+
+        await ssh_manager.disconnect()
+
+        return FileResponse(
+            path=temp_path,
+            filename=filename,
+            media_type="application/octet-stream",
+            headers=_download_headers(filename, file_size),
+            background=BackgroundTask(_cleanup_temp_file, temp_path),
+        )
+
+    except HTTPException:
+        await ssh_manager.disconnect()
+        raise
+    except Exception as e:
+        await ssh_manager.disconnect()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error downloading file: {str(e)}",
+        ) from e
+
+
+@router.post("/download-ticket")
+async def create_download_ticket(
+    server_id: int,
+    request: DownloadTicketRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Create a short-lived one-time ticket for browser-native downloads."""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    if not is_path_safe(server.game_directory, request.path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside server directory",
+        )
+
+    ticket = await _create_download_ticket(current_user.id, server_id, request.path)
+    return {"ticket": ticket, "expires_in": DOWNLOAD_TICKET_TTL_SECONDS}
+
+
+@router.post("/mkdir")
+async def create_directory(
+    server_id: int,
+    path: str,
+    request: CreateDirectoryRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Create a new directory"""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    directory_name = _validate_direct_child_name(request.name, "Directory name")
+
+    # Construct full path
+    new_dir_path = remote_join(path, directory_name)
+
+    # Security check
+    if not is_path_safe(server.game_directory, new_dir_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside server directory",
+        )
+
+    # Create directory using SSH
+    ssh_manager = SSHManager()
+    try:
+        success, error = await ssh_manager.create_directory(new_dir_path, server)
+    finally:
+        await ssh_manager.disconnect()
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+
+    return {"success": True, "message": "Directory created successfully", "path": new_dir_path}
+
+
+@router.delete("")
+async def delete_path(
+    server_id: int,
+    path: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Delete file or directory"""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    # Security check
+    if not is_path_safe(server.game_directory, path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside server directory",
+        )
+
+    # Don't allow deleting the root game directory
+    if posixpath.normpath(path) == posixpath.normpath(server.game_directory):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete server root directory"
+        )
+
+    # Delete using SSH
+    ssh_manager = SSHManager()
+    success, error = await ssh_manager.delete_path(path, server)
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+
+    return {"success": True, "message": "Deleted successfully"}
+
+
+@router.post("/rename")
+async def rename_file_or_directory(
+    server_id: int,
+    path: str,
+    request: RenameRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Rename file or directory"""
+    server = await get_server_for_user(server_id, db, current_user)
+
+    # Construct full paths
+    old_path = remote_join(path, request.old_name)
+    new_path = remote_join(path, request.new_name)
+
+    # Security check - both paths must be within server directory
+    if not is_path_safe(server.game_directory, old_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: source path is outside server directory",
+        )
+
+    if not is_path_safe(server.game_directory, new_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: destination path is outside server directory",
+        )
+
+    # Don't allow renaming the root game directory
+    if posixpath.normpath(old_path) == posixpath.normpath(server.game_directory):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Cannot rename server root directory"
+        )
+
+    # Rename using SSH
+    ssh_manager = SSHManager()
+    success, error = await ssh_manager.rename_path(old_path, new_path, server)
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+
+    return {"success": True, "message": "Renamed successfully", "new_path": new_path}

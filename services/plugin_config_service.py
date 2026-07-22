@@ -19,7 +19,6 @@ import asyncssh
 from modules import Server
 from services.ssh_manager import SSHManager
 
-
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_SOURCE_FILES = 2000
 SCAN_READ_BYTES = 64 * 1024
@@ -28,8 +27,16 @@ SCAN_IDLE_TIMEOUT = 30
 SCAN_STOP_TIMEOUT = 2
 SCAN_ERROR_BYTES = 4096
 SUPPORTED_DIRECTORY_EXTENSIONS = {
-    ".json", ".jsonc", ".cfg", ".ini", ".conf", ".toml",
-    ".yaml", ".yml", ".vdf", ".txt",
+    ".json",
+    ".jsonc",
+    ".cfg",
+    ".ini",
+    ".conf",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".vdf",
+    ".txt",
 }
 
 
@@ -169,7 +176,7 @@ class _JsoncParser:
                 end = content.find("*/", index + 2)
                 if end < 0:
                     raise PluginConfigError(f"Unterminated JSONC comment at line {line}")
-                segment = content[index:end + 2]
+                segment = content[index : end + 2]
                 line += segment.count("\n")
                 index = end + 2
                 continue
@@ -231,9 +238,7 @@ class _JsoncParser:
     def _take(self, kind: Optional[str] = None) -> _JsonToken:
         token = self._peek()
         if kind is not None and token.kind != kind:
-            raise PluginConfigError(
-                f"Expected {kind!r} at line {token.line}, found {token.kind!r}"
-            )
+            raise PluginConfigError(f"Expected {kind!r} at line {token.line}, found {token.kind!r}")
         self.index += 1
         return token
 
@@ -244,7 +249,10 @@ class _JsoncParser:
 
     @staticmethod
     def _group(path: list[Any]) -> str:
-        return " / ".join(str(part) if not isinstance(part, int) else f"[{part}]" for part in path) or "General"
+        return (
+            " / ".join(str(part) if not isinstance(part, int) else f"[{part}]" for part in path)
+            or "General"
+        )
 
     def _value(self, path: list[Any], label: str) -> None:
         token = self._peek()
@@ -293,18 +301,20 @@ class _JsoncParser:
             return
         else:
             raise PluginConfigError(f"Expected a JSON value at line {token.line}")
-        self.fields.append(ConfigField(
-            field_id="json:" + self._pointer(path),
-            key=label,
-            group=self._group(path[:-1]),
-            kind=kind,
-            value=token.value,
-            line=token.line,
-            start=token.start,
-            end=token.end,
-            original=self.content[token.start:token.end],
-            style="json",
-        ))
+        self.fields.append(
+            ConfigField(
+                field_id="json:" + self._pointer(path),
+                key=label,
+                group=self._group(path[:-1]),
+                kind=kind,
+                value=token.value,
+                line=token.line,
+                start=token.start,
+                end=token.end,
+                original=self.content[token.start : token.end],
+                style="json",
+            )
+        )
 
     def parse(self) -> list[ConfigField]:
         self._value([], "$root")
@@ -336,10 +346,8 @@ def _find_inline_comment(value: str, markers: Iterable[str]) -> tuple[str, str]:
             quote = char
         else:
             for marker in markers:
-                if value.startswith(marker, index) and (
-                    index == 0 or value[index - 1].isspace()
-                ):
-                    return value[:index], value[index + len(marker):].strip()
+                if value.startswith(marker, index) and (index == 0 or value[index - 1].isspace()):
+                    return value[:index], value[index + len(marker) :].strip()
         index += 1
     return value, ""
 
@@ -402,19 +410,21 @@ def _parse_cfg(content: str) -> list[ConfigField]:
         value_end = value_start + len(value_part)
         kind, value, style = _decode_line_value(value_part)
         comment = "\n".join([*pending_comments, *([inline_comment] if inline_comment else [])])
-        fields.append(ConfigField(
-            field_id=f"cfg:{line_number}:{match.group(2)}",
-            key=match.group(2),
-            group="General",
-            kind=kind,
-            value=value,
-            line=line_number,
-            comment=comment,
-            start=value_start,
-            end=value_end,
-            original=value_part,
-            style=style,
-        ))
+        fields.append(
+            ConfigField(
+                field_id=f"cfg:{line_number}:{match.group(2)}",
+                key=match.group(2),
+                group="General",
+                kind=kind,
+                value=value,
+                line=line_number,
+                comment=comment,
+                start=value_start,
+                end=value_end,
+                original=value_part,
+                style=style,
+            )
+        )
         pending_comments = []
     return fields
 
@@ -450,19 +460,21 @@ def _parse_ini(content: str) -> list[ConfigField]:
         kind, value, style = _decode_line_value(value_part)
         key = match.group(2).strip()
         comment = "\n".join([*pending_comments, *([inline_comment] if inline_comment else [])])
-        fields.append(ConfigField(
-            field_id=f"ini:{line_number}:{section}:{key}",
-            key=key,
-            group=section,
-            kind=kind,
-            value=value,
-            line=line_number,
-            comment=comment,
-            start=value_start,
-            end=value_end,
-            original=value_part,
-            style=style,
-        ))
+        fields.append(
+            ConfigField(
+                field_id=f"ini:{line_number}:{section}:{key}",
+                key=key,
+                group=section,
+                kind=kind,
+                value=value,
+                line=line_number,
+                comment=comment,
+                start=value_start,
+                end=value_end,
+                original=value_part,
+                style=style,
+            )
+        )
         pending_comments = []
     return fields
 
@@ -502,7 +514,14 @@ def _serialize_field(item: ConfigField, value: Any) -> str:
             return "true" if value else "false"
         template = item.style.partition(":")[2] or "true"
         lowered = template.lower()
-        pairs = {"true": "false", "false": "true", "yes": "no", "no": "yes", "on": "off", "off": "on"}
+        pairs = {
+            "true": "false",
+            "false": "true",
+            "yes": "no",
+            "no": "yes",
+            "on": "off",
+            "off": "on",
+        }
         positive = lowered in {"true", "yes", "on"}
         selected = lowered if value == positive else pairs[lowered]
         return _match_case(template, selected)
@@ -511,7 +530,11 @@ def _serialize_field(item: ConfigField, value: Any) -> str:
             raise PluginConfigError(f"{item.key} must be an integer")
         return str(value)
     if item.kind == "number":
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+        ):
             raise PluginConfigError(f"{item.key} must be a finite number")
         return json.dumps(value, allow_nan=False, separators=(",", ":"))
     if item.kind != "string" or not isinstance(value, str):
@@ -630,13 +653,17 @@ async def browse_directory(
             }:
                 continue
             child_relative = posixpath.normpath(posixpath.join(relative_path, entry.filename))
-            items.append({
-                "name": entry.filename,
-                "path": child_relative,
-                "type": "directory" if entry_type == asyncssh.FILEXFER_TYPE_DIRECTORY else "file",
-                "selectable": True,
-                "size": entry.attrs.size or 0,
-            })
+            items.append(
+                {
+                    "name": entry.filename,
+                    "path": child_relative,
+                    "type": "directory"
+                    if entry_type == asyncssh.FILEXFER_TYPE_DIRECTORY
+                    else "file",
+                    "selectable": True,
+                    "size": entry.attrs.size or 0,
+                }
+            )
         return sorted(items, key=lambda item: (item["type"] != "directory", item["name"].lower()))
     finally:
         sftp.exit()
@@ -687,8 +714,10 @@ async def iter_source_scan(
 
     try:
         actual_type = (
-            "directory" if attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY
-            else "file" if attrs.type == asyncssh.FILEXFER_TYPE_REGULAR
+            "directory"
+            if attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY
+            else "file"
+            if attrs.type == asyncssh.FILEXFER_TYPE_REGULAR
             else "unsupported"
         )
         if actual_type != source_type:
@@ -740,12 +769,8 @@ async def iter_source_scan(
                     raise PluginConfigError(
                         "Configuration source contains a non-UTF-8 path"
                     ) from exc
-                if "\\" in value or any(
-                    ord(char) < 32 or ord(char) == 127 for char in value
-                ):
-                    raise PluginConfigError(
-                        "Configuration source contains an unsafe path"
-                    )
+                if "\\" in value or any(ord(char) < 32 or ord(char) == 127 for char in value):
+                    raise PluginConfigError("Configuration source contains an unsafe path")
                 return value
 
             async def handle_token(raw_token: bytes) -> AsyncIterator[dict[str, Any]]:
@@ -783,12 +808,8 @@ async def iter_source_scan(
                     size = int(values[1])
                     modified = float(values[2])
                 except ValueError as exc:
-                    raise PluginConfigError(
-                        "Remote scan returned invalid file metadata"
-                    ) from exc
-                game_relative = posixpath.normpath(
-                    posixpath.join(relative_path, tree_path)
-                )
+                    raise PluginConfigError("Remote scan returned invalid file metadata") from exc
+                game_relative = posixpath.normpath(posixpath.join(relative_path, tree_path))
                 count += 1
                 yield {
                     "type": "file",
@@ -821,7 +842,7 @@ async def iter_source_scan(
                     if delimiter < 0:
                         break
                     raw_token = bytes(buffer[:delimiter])
-                    del buffer[:delimiter + 1]
+                    del buffer[: delimiter + 1]
                     async for event in handle_token(raw_token):
                         yield event
                     if truncated:
@@ -832,15 +853,11 @@ async def iter_source_scan(
             if not truncated:
                 if buffer or record_type is not None:
                     raise PluginConfigError("Remote scan returned an incomplete record")
-                result = await asyncio.wait_for(
-                    process.wait(), timeout=SCAN_IDLE_TIMEOUT
-                )
+                result = await asyncio.wait_for(process.wait(), timeout=SCAN_IDLE_TIMEOUT)
                 process_finished = True
                 stderr = await stderr_task
                 if result.exit_status != 0:
-                    raise PluginConfigError(
-                        stderr or "Remote configuration scan failed"
-                    )
+                    raise PluginConfigError(stderr or "Remote configuration scan failed")
         yield {"type": "complete", "truncated": truncated, "count": count}
     finally:
         if process is not None and not process_finished:
@@ -864,9 +881,7 @@ async def scan_source(
     """Collect the streaming scanner for non-streaming callers and tests."""
     files: list[dict[str, Any]] = []
     complete: dict[str, Any] = {"truncated": False, "count": 0}
-    async for event in iter_source_scan(
-        ssh_manager, server, relative_path, source_type
-    ):
+    async for event in iter_source_scan(ssh_manager, server, relative_path, source_type):
         if event["type"] == "file":
             files.append(event["file"])
         elif event["type"] == "complete":

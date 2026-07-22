@@ -2,14 +2,16 @@
 Script to populate the database with sample CounterStrikeSharp plugins
 Run this after the database tables are created
 """
+
 import asyncio
-from modules import Plugin, PluginCategory, async_session_maker
 import json
+
+from modules import Plugin, PluginCategory, async_session_maker
 
 
 async def populate_sample_plugins():
     """Add sample plugins to the database"""
-    
+
     sample_plugins = [
         # Utility Plugins
         {
@@ -24,7 +26,7 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "teleport_manager",
@@ -38,7 +40,7 @@ async def populate_sample_plugins():
             "dependencies": json.dumps([1]),  # Depends on admin_management (ID will be 1)
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": False,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "player_stats",
@@ -52,9 +54,8 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
-        
         # Chat Plugins
         {
             "name": "enhanced_chat",
@@ -68,7 +69,7 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "chat_translator",
@@ -82,9 +83,8 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
-        
         # Gameplay Plugins
         {
             "name": "deathmatch",
@@ -98,7 +98,7 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "retakes",
@@ -112,7 +112,7 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "aim_training",
@@ -126,9 +126,8 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": False,
-            "enabled": True
+            "enabled": True,
         },
-        
         # Cosmetic Plugins
         {
             "name": "player_models",
@@ -142,7 +141,7 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "weapon_skins",
@@ -156,9 +155,8 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
-        
         # Utility Plugins
         {
             "name": "map_manager",
@@ -172,7 +170,7 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "team_balancer",
@@ -186,7 +184,7 @@ async def populate_sample_plugins():
             "dependencies": json.dumps([3]),  # Depends on player_stats
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "warmup_config",
@@ -200,9 +198,8 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
-        
         # Admin Tools
         {
             "name": "ban_system",
@@ -216,7 +213,7 @@ async def populate_sample_plugins():
             "dependencies": json.dumps([1]),  # Depends on admin_management
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "vote_kick",
@@ -230,9 +227,8 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
-        
         # Other
         {
             "name": "rank_system",
@@ -246,7 +242,7 @@ async def populate_sample_plugins():
             "dependencies": json.dumps([3]),  # Depends on player_stats
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
+            "enabled": True,
         },
         {
             "name": "economy_system",
@@ -260,26 +256,29 @@ async def populate_sample_plugins():
             "dependencies": None,
             "install_path": "addons/counterstrikesharp/plugins",
             "config_required": True,
-            "enabled": True
-        }
+            "enabled": True,
+        },
     ]
-    
+
     async with async_session_maker() as db:
         # Check if plugins already exist
         from sqlmodel import select
+
         result = await db.execute(select(Plugin))
         existing_plugins = result.scalars().all()
-        
+
         if existing_plugins:
-            print(f"Database already contains {len(existing_plugins)} plugins. Skipping population.")
+            print(
+                f"Database already contains {len(existing_plugins)} plugins. Skipping population."
+            )
             return
-        
+
         print("Adding sample plugins to database...")
-        
+
         for plugin_data in sample_plugins:
             plugin = Plugin(**plugin_data)
             db.add(plugin)
-        
+
         await db.commit()
         print(f"✓ Successfully added {len(sample_plugins)} sample plugins to the database!")
 

@@ -1,6 +1,7 @@
 """
 Discord webhook notifications for server update events.
 """
+
 import asyncio
 import logging
 from typing import Any, Dict, Optional, Set, Tuple
@@ -131,9 +132,7 @@ class DiscordNotificationService:
         )
 
         try:
-            task = asyncio.create_task(
-                self._send_payload(webhook_url, payload, server.id, action)
-            )
+            task = asyncio.create_task(self._send_payload(webhook_url, payload, server.id, action))
         except RuntimeError:
             logger.warning(
                 "Discord notification could not be queued for server %s, action %s: no running event loop",
@@ -268,7 +267,11 @@ class DiscordNotificationService:
         }.get(normalized_state, "Success" if success else "Failed")
         event_label = self._event_label(event_type)
         embed_title = title or f"{event_label}: {status_text}"
-        default_color = IN_PROGRESS_COLOR if normalized_state == "in_progress" else (SUCCESS_COLOR if success else ERROR_COLOR)
+        default_color = (
+            IN_PROGRESS_COLOR
+            if normalized_state == "in_progress"
+            else (SUCCESS_COLOR if success else ERROR_COLOR)
+        )
         embed_color = color if color is not None else default_color
 
         fields = [
@@ -281,17 +284,21 @@ class DiscordNotificationService:
             for name, value in details.items():
                 if value is None or value == "":
                     continue
-                fields.append({
-                    "name": self._truncate(str(name), MAX_FIELD_NAME_LENGTH),
-                    "value": self._truncate(str(value), MAX_FIELD_VALUE_LENGTH),
-                    "inline": False,
-                })
+                fields.append(
+                    {
+                        "name": self._truncate(str(name), MAX_FIELD_NAME_LENGTH),
+                        "value": self._truncate(str(value), MAX_FIELD_VALUE_LENGTH),
+                        "inline": False,
+                    }
+                )
 
-        fields.append({
-            "name": "Message",
-            "value": self._truncate(message or "No details provided.", MAX_FIELD_VALUE_LENGTH),
-            "inline": False,
-        })
+        fields.append(
+            {
+                "name": "Message",
+                "value": self._truncate(message or "No details provided.", MAX_FIELD_VALUE_LENGTH),
+                "inline": False,
+            }
+        )
 
         descriptions = {
             "in_progress": f"{server.name} is starting an update-related operation.",
@@ -301,15 +308,15 @@ class DiscordNotificationService:
         embed: Dict[str, Any] = {
             "title": self._truncate(embed_title, MAX_TITLE_LENGTH),
             "description": self._truncate(
-                descriptions.get(normalized_state, f"{server.name} has completed an update-related operation."),
+                descriptions.get(
+                    normalized_state, f"{server.name} has completed an update-related operation."
+                ),
                 MAX_DESCRIPTION_LENGTH,
             ),
             "color": embed_color,
             "fields": fields,
             "timestamp": get_current_time().isoformat(),
-            "footer": {
-                "text": "CS2 Server Manager - Discord notifications"
-            },
+            "footer": {"text": "CS2 Server Manager - Discord notifications"},
         }
 
         return {
@@ -318,7 +325,9 @@ class DiscordNotificationService:
             "embeds": [embed],
         }
 
-    async def _post_payload(self, webhook_url: str, payload: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    async def _post_payload(
+        self, webhook_url: str, payload: Dict[str, Any]
+    ) -> Tuple[bool, Optional[str]]:
         """Post a payload without logging the sensitive webhook URL."""
         try:
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
@@ -374,7 +383,7 @@ class DiscordNotificationService:
             return value
         if limit <= 3:
             return value[:limit]
-        return f"{value[:limit - 3]}..."
+        return f"{value[: limit - 3]}..."
 
 
 discord_notification_service = DiscordNotificationService()
