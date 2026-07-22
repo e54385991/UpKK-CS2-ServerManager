@@ -21,7 +21,7 @@ from modules import (
 )
 from services import redis_manager
 from services.maintenance_lock import OperationBusyError
-from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market, plugin_auto_update, system_settings, gmail_oauth, map_management
+from api.routes import servers, actions, setup, auth, server_status, public, captcha, file_manager, scheduled_tasks, github_plugins, plugin_market, plugin_auto_update, plugin_configs, system_settings, gmail_oauth, map_management
 
 # Initialize logging first (before anything else logs)
 # Get log level from settings
@@ -209,6 +209,7 @@ app.include_router(scheduled_tasks.router)
 app.include_router(github_plugins.router)
 app.include_router(plugin_market.router)
 app.include_router(plugin_auto_update.router)
+app.include_router(plugin_configs.router)
 app.include_router(system_settings.router)
 app.include_router(gmail_oauth.router)
 app.include_router(map_management.router)

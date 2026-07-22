@@ -23,7 +23,8 @@ from modules import (
     CleanupScanResponse, CleanupDeleteRequest, CleanupDeleteResponse,
     DiscordSettingsResponse, DiscordSettingsUpdate, DiscordTestRequest,
     get_db, User, UserResponse, get_current_active_user, get_current_admin_user, generate_api_key,
-    get_current_time, SystemSettings, ServerStatus
+    get_current_time, SystemSettings, ServerStatus, PluginConfigSource,
+    DEFAULT_PLUGIN_CONFIG_SOURCE_PATH
 )
 from modules.config import settings as app_settings
 from services import redis_manager
@@ -379,6 +380,15 @@ async def create_server(
     
     server = Server(**server_dict, user_id=current_user.id, api_key=generate_api_key())
     db.add(server)
+    await db.flush()
+    db.add(PluginConfigSource(
+        server_id=server.id,
+        relative_path=DEFAULT_PLUGIN_CONFIG_SOURCE_PATH,
+        path_hash="8a2ee85b3e0335ec0d294b4a6e110dc46a956a4d2fc045c33265a71812165e49",
+        source_type="directory",
+        is_default=True,
+        is_enabled=True,
+    ))
     await db.commit()
     await db.refresh(server)
     

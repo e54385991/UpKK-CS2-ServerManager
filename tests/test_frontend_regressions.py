@@ -111,3 +111,36 @@ def test_map_management_prompts_for_restart_after_every_config_mutation():
             )
         )["mapManagement"]
         assert "restartRequiredConfirm" in messages
+
+
+def test_plugin_config_tab_is_lazy_loaded_and_localized():
+    server_template = (PROJECT_ROOT / "templates" / "server_detail.html").read_text(
+        encoding="utf-8"
+    )
+    tab_template = (
+        PROJECT_ROOT / "templates" / "server_detail_includes" / "plugin_configs_tab.html"
+    ).read_text(encoding="utf-8")
+    script = (
+        PROJECT_ROOT / "static" / "js" / "plugin-config-manager.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'data-bs-target="#plugin-configs"' in server_template
+    assert "new CustomEvent('plugin-configs-open')" in server_template
+    assert "@plugin-configs-open.window=\"open()\"" in tab_template
+    assert "async open()" in script
+    assert "if (this.initialized) return;" in script
+    assert "/scan`" in script
+    assert "loadSource(source)" in tab_template
+    assert "init()" not in script
+
+    required = {
+        "title", "manualLoadHint", "addSource", "loadConfiguration", "visual",
+        "raw", "conflict", "saved",
+    }
+    for locale in ("en-US", "zh-CN"):
+        messages = json.loads(
+            (PROJECT_ROOT / "static" / "locales" / f"{locale}.json").read_text(
+                encoding="utf-8"
+            )
+        )["pluginConfigs"]
+        assert required <= messages.keys()

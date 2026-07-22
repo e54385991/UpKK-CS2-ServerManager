@@ -2,7 +2,7 @@
 Core modules for CS2 Server Manager
 """
 from .config import settings, Settings
-from .models import Base, Server, DeploymentLog, MonitoringLog, ServerStatus, AuthType, User, InitializedServer, ScheduledTask, CustomCommand, MarketPlugin, ManagedPlugin, PluginCategory, SSHServerSudo, SystemSettings, PasswordResetToken
+from .models import Base, Server, DeploymentLog, MonitoringLog, ServerStatus, AuthType, User, InitializedServer, ScheduledTask, CustomCommand, MarketPlugin, ManagedPlugin, PluginConfigSource, PluginCategory, SSHServerSudo, SystemSettings, PasswordResetToken, DEFAULT_PLUGIN_CONFIG_SOURCE_PATH
 from .schemas import (
     ServerCreate, ServerUpdate, ServerResponse, ServerResponseWithUser,
     ServerAction, ActionResponse, DeploymentLogResponse,
@@ -59,6 +59,8 @@ __all__ = [
     'CustomCommand',
     'MarketPlugin',
     'ManagedPlugin',
+    'PluginConfigSource',
+    'DEFAULT_PLUGIN_CONFIG_SOURCE_PATH',
     'PluginCategory',
     'SSHServerSudo',
     'SystemSettings',

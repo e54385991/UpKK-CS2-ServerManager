@@ -156,4 +156,162 @@
     .map-search-input {
         width: min(100%, 330px);
     }
+
+    .card-header-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    .card-header-tabs .nav-item {
+        min-width: max-content;
+    }
+
+    .plugin-config-layout {
+        display: grid;
+        grid-template-columns: minmax(220px, 0.8fr) minmax(240px, 0.9fr) minmax(360px, 1.6fr);
+        gap: 0.75rem;
+        min-height: 560px;
+    }
+
+    .plugin-config-panel {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.375rem;
+        min-width: 0;
+        overflow: hidden;
+        background: var(--bs-body-bg);
+    }
+
+    .plugin-config-panel-title {
+        min-height: 46px;
+        padding: 0.65rem 0.75rem;
+        background: var(--bs-tertiary-bg);
+        border-bottom: 1px solid var(--bs-border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .plugin-config-source {
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--bs-border-color);
+        cursor: pointer;
+    }
+
+    .plugin-config-source:hover,
+    .plugin-config-source.active {
+        background: var(--bs-primary-bg-subtle);
+    }
+
+    .plugin-config-file-list,
+    .plugin-config-editor-body {
+        max-height: 650px;
+        overflow: auto;
+    }
+
+    .plugin-config-folder-label {
+        padding: 0.45rem 0.65rem;
+        background: var(--bs-secondary-bg);
+        color: var(--bs-secondary-color);
+        font-size: 0.8rem;
+        font-weight: 600;
+        word-break: break-all;
+    }
+
+    .plugin-config-file {
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid var(--bs-border-color);
+        background: transparent;
+        padding: 0.55rem 0.65rem 0.55rem 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        text-align: left;
+    }
+
+    .plugin-config-file:hover,
+    .plugin-config-file.active {
+        background: var(--bs-primary-bg-subtle);
+    }
+
+    .plugin-config-file:disabled {
+        opacity: 0.6;
+    }
+
+    .plugin-config-editor-panel {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .plugin-config-editor-body {
+        padding: 0.75rem;
+        flex: 1;
+    }
+
+    .plugin-config-editor-footer {
+        padding: 0.65rem 0.75rem;
+        border-top: 1px solid var(--bs-border-color);
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+
+    .plugin-config-fieldset {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.375rem;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .plugin-config-fieldset legend {
+        float: none;
+        width: auto;
+        padding: 0 0.35rem;
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    .plugin-config-raw-editor {
+        min-height: 500px;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        white-space: pre;
+        tab-size: 4;
+    }
+
+    .plugin-config-browser {
+        max-height: 330px;
+        overflow: auto;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.375rem;
+        padding: 0.5rem;
+    }
+
+    .min-w-0 { min-width: 0; }
+
+    @media (max-width: 1199.98px) {
+        .plugin-config-layout {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .plugin-config-editor-panel {
+            grid-column: 1 / -1;
+        }
+    }
+
+    @media (max-width: 767.98px) {
+        .plugin-config-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .plugin-config-editor-panel {
+            grid-column: auto;
+        }
+    }
 </style>

@@ -11,6 +11,11 @@ from datetime import datetime
 import enum
 
 
+DEFAULT_PLUGIN_CONFIG_SOURCE_PATH = (
+    "cs2/game/csgo/addons/counterstrikesharp/configs/Advertisement"
+)
+
+
 class AuthType(str, enum.Enum):
     """SSH Authentication types"""
     PASSWORD = "password"
@@ -700,6 +705,42 @@ class ManagedPlugin(SQLModel, table=True):
     last_error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
     updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()})
+
+
+class PluginConfigSource(SQLModel, table=True):
+    """A file or directory exposed by the generic plugin configuration editor."""
+
+    __tablename__ = "plugin_config_sources"
+    __table_args__ = (
+        UniqueConstraint(
+            "server_id", "path_hash", name="uq_plugin_config_source_path"
+        ),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    server_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("servers.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    relative_path: str = Field(max_length=1000)
+    path_hash: str = Field(max_length=64)
+    source_type: str = Field(max_length=16)  # directory or file
+    is_default: bool = Field(default=False)
+    is_enabled: bool = Field(default=True)
+    created_at: Optional[datetime] = Field(
+        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column_kwargs={
+            "server_default": text("CURRENT_TIMESTAMP"),
+            "onupdate": func.now(),
+        },
+    )
 
 
 class SSHServerSudo(SQLModel, table=True):

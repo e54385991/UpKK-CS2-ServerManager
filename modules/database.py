@@ -761,6 +761,68 @@ async def migrate_db():
                 text("ALTER TABLE managed_plugins ADD COLUMN backup_before_update TINYINT(1) NOT NULL DEFAULT 0")
             )
             print("Migration completed: backup_before_update added to managed_plugins")
+
+        # Sources shown by the generic plugin configuration editor. Paths are
+        # relative to the game directory so changing a server root remains safe.
+        result = await conn.execute(
+            text("""
+                SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'plugin_config_sources'
+            """)
+        )
+        if result.fetchone() is None:
+            await conn.execute(
+                text("""
+                    CREATE TABLE plugin_config_sources (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        server_id INT NOT NULL,
+                        relative_path VARCHAR(1000) NOT NULL,
+                        path_hash VARCHAR(64) NOT NULL,
+                        source_type VARCHAR(16) NOT NULL,
+                        is_default TINYINT(1) NOT NULL DEFAULT 0,
+                        is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_plugin_config_sources_server_id (server_id),
+                        UNIQUE KEY uq_plugin_config_source_path (server_id, path_hash),
+                        CONSTRAINT fk_plugin_config_sources_server
+                            FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """)
+            )
+            print("Migration completed: plugin_config_sources table created")
+
+        result = await conn.execute(
+            text("""
+                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'plugin_config_sources'
+                AND COLUMN_NAME = 'is_enabled'
+            """)
+        )
+        if result.fetchone() is None:
+            await conn.execute(
+                text("ALTER TABLE plugin_config_sources ADD COLUMN is_enabled TINYINT(1) NOT NULL DEFAULT 1")
+            )
+
+        await conn.execute(
+            text("""
+                INSERT INTO plugin_config_sources
+                    (server_id, relative_path, path_hash, source_type, is_default, is_enabled)
+                SELECT
+                    servers.id,
+                    'cs2/game/csgo/addons/counterstrikesharp/configs/Advertisement',
+                    '8a2ee85b3e0335ec0d294b4a6e110dc46a956a4d2fc045c33265a71812165e49',
+                    'directory',
+                    1,
+                    1
+                FROM servers
+                LEFT JOIN plugin_config_sources sources
+                    ON sources.server_id = servers.id
+                    AND sources.path_hash = '8a2ee85b3e0335ec0d294b4a6e110dc46a956a4d2fc045c33265a71812165e49'
+                WHERE sources.id IS NULL
+            """)
+        )
         
         # Fix category enum values if needed (lowercase to uppercase migration)
         # Check current enum definition

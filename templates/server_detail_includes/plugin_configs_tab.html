@@ -1,0 +1,225 @@
+<div class="tab-pane fade" id="plugin-configs" role="tabpanel"
+    x-data="pluginConfigManager({{ server.id }})"
+    @plugin-configs-open.window="open()">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h5 class="mb-1"><i class="bi bi-sliders2-vertical"></i>
+                <span data-i18n="pluginConfigs.title">Plugin Configuration</span>
+            </h5>
+            <small class="text-muted" data-i18n="pluginConfigs.manualLoadHint">Sources are not scanned until you click Load configuration.</small>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" @click="restoreDefault()" :disabled="busy">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                <span data-i18n="pluginConfigs.restoreDefault">Restore default</span>
+            </button>
+            <button class="btn btn-sm btn-primary" @click="showAddSource = !showAddSource" :disabled="busy">
+                <i class="bi bi-plus-lg"></i>
+                <span data-i18n="pluginConfigs.addSource">Add source</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="card mb-3" x-show="showAddSource" x-cloak>
+        <div class="card-body">
+            <label class="form-label" data-i18n="pluginConfigs.sourcePath">File or directory path</label>
+            <div class="input-group">
+                <input class="form-control font-monospace" x-model="sourcePath"
+                    :placeholder="gameDirectory + '/cs2/game/csgo/cfg'"
+                    @keydown.enter.prevent="addSource()">
+                <button class="btn btn-outline-secondary" @click="openBrowser()">
+                    <i class="bi bi-folder2-open"></i>
+                    <span data-i18n="pluginConfigs.browse">Browse</span>
+                </button>
+                <button class="btn btn-success" @click="addSource()" :disabled="addingSource || !sourcePath.trim()">
+                    <span class="spinner-border spinner-border-sm" x-show="addingSource"></span>
+                    <span data-i18n="common.add">Add</span>
+                </button>
+            </div>
+            <small class="text-muted" data-i18n="pluginConfigs.pathHint">Absolute paths inside the game directory and relative paths are accepted.</small>
+
+            <div class="plugin-config-browser mt-3" x-show="showBrowser" x-cloak>
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <button class="btn btn-sm btn-outline-secondary" @click="browseUp()" :disabled="browsePath === '.' || browsing">
+                        <i class="bi bi-arrow-up"></i>
+                    </button>
+                    <code class="flex-grow-1 text-break" x-text="browsePath"></code>
+                    <button class="btn btn-sm btn-outline-primary" @click="chooseBrowsePath(browsePath)">
+                        <i class="bi bi-folder-check"></i>
+                        <span data-i18n="pluginConfigs.chooseCurrentFolder">Choose this folder</span>
+                    </button>
+                </div>
+                <div class="text-center py-3" x-show="browsing">
+                    <span class="spinner-border spinner-border-sm"></span>
+                </div>
+                <div class="list-group list-group-flush" x-show="!browsing">
+                    <template x-for="item in browseItems" :key="item.name">
+                        <div class="list-group-item d-flex align-items-center gap-2 py-2">
+                            <i class="bi" :class="item.type === 'directory' ? 'bi-folder-fill text-warning' : item.type === 'file' ? 'bi-file-earmark-text' : 'bi-link-45deg text-muted'"></i>
+                            <button class="btn btn-link text-start text-decoration-none flex-grow-1 p-0"
+                                :disabled="!item.selectable"
+                                @dblclick="item.type === 'directory' && browse(item.path)"
+                                @click="item.type === 'directory' ? browse(item.path) : chooseBrowsePath(item.path)"
+                                x-text="item.name"></button>
+                            <button class="btn btn-sm btn-outline-primary" x-show="item.selectable" @click="chooseBrowsePath(item.path)"
+                                data-i18n="common.select">Select</button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-center py-5" x-show="loadingSources">
+        <div class="spinner-border text-primary"></div>
+    </div>
+
+    <div class="plugin-config-layout" x-show="!loadingSources">
+        <section class="plugin-config-panel">
+            <div class="plugin-config-panel-title">
+                <span data-i18n="pluginConfigs.sources">Configuration sources</span>
+                <span class="badge bg-secondary" x-text="sources.length"></span>
+            </div>
+            <div class="text-center text-muted py-4" x-show="sources.length === 0">
+                <i class="bi bi-folder-x fs-2"></i>
+                <div data-i18n="pluginConfigs.noSources">No configuration sources</div>
+            </div>
+            <template x-for="source in sources" :key="source.id">
+                <article class="plugin-config-source" :class="activeSourceId === source.id ? 'active' : ''" @click="selectSource(source)">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi mt-1" :class="source.type === 'directory' ? 'bi-folder-fill text-warning' : 'bi-file-earmark-code text-primary'"></i>
+                        <div class="min-w-0 flex-grow-1">
+                            <div class="fw-semibold text-truncate" x-text="source.name"></div>
+                            <small class="text-muted font-monospace text-break" x-text="source.path"></small>
+                            <div class="mt-1" x-show="source.is_default">
+                                <span class="badge bg-info" data-i18n="pluginConfigs.defaultSource">Default</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-1 mt-2">
+                        <button class="btn btn-sm btn-outline-primary flex-grow-1" @click.stop="loadSource(source)" :disabled="source.loading">
+                            <span class="spinner-border spinner-border-sm" x-show="source.loading"></span>
+                            <i class="bi bi-arrow-repeat" x-show="!source.loading"></i>
+                            <span data-i18n="pluginConfigs.loadConfiguration">Load configuration</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" @click.stop="removeSource(source)" :title="t('common.delete')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <small class="d-block mt-1" x-show="source.loaded"
+                        :class="source.truncated ? 'text-warning' : 'text-success'">
+                        <span x-text="source.fileCount || 0"></span>
+                        <span data-i18n="pluginConfigs.filesFound">files found</span>
+                        <span x-show="source.truncated" data-i18n="pluginConfigs.truncated">(results truncated)</span>
+                    </small>
+                </article>
+            </template>
+        </section>
+
+        <section class="plugin-config-panel">
+            <div class="plugin-config-panel-title">
+                <span data-i18n="pluginConfigs.files">Files</span>
+                <span class="badge bg-secondary" x-text="activeFiles.length"></span>
+            </div>
+            <div class="p-2 border-bottom">
+                <input class="form-control form-control-sm" x-model="fileSearch" :placeholder="t('pluginConfigs.searchFiles')">
+            </div>
+            <div class="text-center text-muted py-4" x-show="!activeSource || !activeSource.loaded">
+                <i class="bi bi-hand-index fs-2"></i>
+                <div data-i18n="pluginConfigs.clickLoad">Click Load configuration on a source</div>
+            </div>
+            <div class="plugin-config-file-list" x-show="activeSource && activeSource.loaded">
+                <template x-for="group in fileGroups" :key="group.path || '$root'">
+                    <div>
+                        <div class="plugin-config-folder-label" :style="`padding-left: ${0.65 + group.depth * 1.1}rem`">
+                            <i class="bi bi-folder2"></i> <span x-text="group.name"></span>
+                        </div>
+                        <template x-for="file in group.files" :key="file.path">
+                            <button class="plugin-config-file" :class="selectedFile && selectedFile.path === file.path ? 'active' : ''"
+                                :disabled="file.too_large" @click="loadFile(file)">
+                                <span class="text-truncate">
+                                    <span><i class="bi bi-file-earmark-code me-1"></i><span x-text="file.name"></span></span>
+                                    <small class="d-block text-muted ms-4" x-text="formatFileSize(file.size) + ' · ' + formatTimestamp(file.modified)"></small>
+                                </span>
+                                <span class="d-flex gap-1 align-items-center">
+                                    <span class="badge bg-light text-dark" x-text="file.format"></span>
+                                    <small class="text-danger" x-show="file.too_large">&gt;1 MiB</small>
+                                </span>
+                            </button>
+                        </template>
+                    </div>
+                </template>
+                <div class="text-center text-muted py-4" x-show="fileGroups.length === 0" data-i18n="pluginConfigs.noFiles">No matching configuration files</div>
+            </div>
+        </section>
+
+        <section class="plugin-config-panel plugin-config-editor-panel">
+            <div class="plugin-config-panel-title">
+                <div class="min-w-0">
+                    <span data-i18n="pluginConfigs.editor">Editor</span>
+                    <small class="ms-2 font-monospace text-muted text-truncate" x-text="selectedFile ? selectedFile.name : ''"></small>
+                </div>
+                <div class="btn-group btn-group-sm" x-show="fileData">
+                    <button class="btn" :class="editMode === 'visual' ? 'btn-primary' : 'btn-outline-primary'"
+                        :disabled="!fileData || !fileData.visual_supported" @click="switchMode('visual')"
+                        data-i18n="pluginConfigs.visual">Visual</button>
+                    <button class="btn" :class="editMode === 'raw' ? 'btn-primary' : 'btn-outline-primary'"
+                        @click="switchMode('raw')" data-i18n="pluginConfigs.raw">Raw</button>
+                </div>
+            </div>
+            <div class="text-center py-5 text-muted" x-show="!selectedFile && !loadingFile">
+                <i class="bi bi-file-earmark-text fs-1"></i>
+                <div data-i18n="pluginConfigs.chooseFile">Choose a configuration file</div>
+            </div>
+            <div class="text-center py-5" x-show="loadingFile">
+                <div class="spinner-border text-primary"></div>
+            </div>
+            <div class="plugin-config-editor-body" x-show="fileData && !loadingFile" x-cloak>
+                <div class="alert alert-warning py-2" x-show="fileData && fileData.parse_error">
+                    <i class="bi bi-exclamation-triangle"></i> <span x-text="fileData && fileData.parse_error"></span>
+                </div>
+                <div x-show="editMode === 'visual'">
+                    <input class="form-control form-control-sm mb-3" x-model="fieldSearch" :placeholder="t('pluginConfigs.searchFields')">
+                    <template x-for="group in fieldGroups" :key="group.name">
+                        <fieldset class="plugin-config-fieldset">
+                            <legend x-text="group.name"></legend>
+                            <template x-for="field in group.fields" :key="field.id">
+                                <div class="mb-3">
+                                    <label class="form-label mb-1">
+                                        <code x-text="field.key"></code>
+                                        <small class="text-muted ms-1" x-text="t('pluginConfigs.line') + ' ' + field.line"></small>
+                                    </label>
+                                    <div class="form-check form-switch" x-show="field.kind === 'boolean'">
+                                        <input class="form-check-input" type="checkbox" :checked="fieldValues[field.id] === true"
+                                            @change="setFieldValue(field, $event.target.checked)">
+                                    </div>
+                                    <input class="form-control" x-show="field.kind === 'integer' || field.kind === 'number'" type="number"
+                                        :step="field.kind === 'integer' ? '1' : 'any'" :value="fieldValues[field.id]"
+                                        @input="setFieldValue(field, $event.target.value)">
+                                    <textarea class="form-control" rows="2" x-show="field.kind === 'string'"
+                                        :value="fieldValues[field.id]" @input="setFieldValue(field, $event.target.value)"></textarea>
+                                    <small class="form-text text-muted d-block" x-show="field.comment" x-text="field.comment"></small>
+                                </div>
+                            </template>
+                        </fieldset>
+                    </template>
+                </div>
+                <div x-show="editMode === 'raw'">
+                    <textarea class="form-control plugin-config-raw-editor" spellcheck="false" x-model="rawContent"></textarea>
+                </div>
+            </div>
+            <div class="plugin-config-editor-footer" x-show="fileData" x-cloak>
+                <small class="text-warning me-auto" x-show="dirty">
+                    <i class="bi bi-circle-fill"></i> <span data-i18n="pluginConfigs.unsaved">Unsaved changes</span>
+                </small>
+                <button class="btn btn-sm btn-outline-secondary" @click="reloadFile()" :disabled="savingFile">
+                    <i class="bi bi-arrow-clockwise"></i> <span data-i18n="common.reload">Reload</span>
+                </button>
+                <button class="btn btn-sm btn-primary" @click="saveFile()" :disabled="savingFile || !dirty">
+                    <span class="spinner-border spinner-border-sm" x-show="savingFile"></span>
+                    <i class="bi bi-save" x-show="!savingFile"></i> <span data-i18n="common.save">Save</span>
+                </button>
+            </div>
+        </section>
+    </div>
+</div>
