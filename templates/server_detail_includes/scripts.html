@@ -4245,7 +4245,22 @@
         document.addEventListener('DOMContentLoaded', function() {
             const serverId = {{ server.id }};
             const storageKey = `serverDetail_activeTab_${serverId}`;
-            
+
+            // Register listeners before restoring the saved tab so lazy-loaded
+            // panels receive the initial shown event after a page refresh.
+            const tabButtons = document.querySelectorAll('button[data-bs-toggle="tab"]');
+            tabButtons.forEach(button => {
+                button.addEventListener('shown.bs.tab', function(event) {
+                    const tabTarget = event.target.getAttribute('data-bs-target');
+                    localStorage.setItem(storageKey, tabTarget);
+                    if (tabTarget === '#plugin-configs') {
+                        window.dispatchEvent(new CustomEvent('plugin-configs-open'));
+                    } else if (tabTarget === '#map-management') {
+                        window.dispatchEvent(new CustomEvent('map-management-open'));
+                    }
+                });
+            });
+
             // Restore active tab from localStorage
             const savedTab = localStorage.getItem(storageKey);
             if (savedTab) {
@@ -4256,15 +4271,6 @@
                     tab.show();
                 }
             }
-            
-            // Save active tab to localStorage when tab is shown
-            const tabButtons = document.querySelectorAll('button[data-bs-toggle="tab"]');
-            tabButtons.forEach(button => {
-                button.addEventListener('shown.bs.tab', function(event) {
-                    const tabTarget = event.target.getAttribute('data-bs-target');
-                    localStorage.setItem(storageKey, tabTarget);
-                });
-            });
         });
         
         // GitHub Plugin Uninstall Functions

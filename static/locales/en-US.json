@@ -1418,6 +1418,48 @@
     "openPluginCenter": "Open Plugin Center",
     "ready": "Map management is ready",
     "configPath": "Configuration:",
+    "presetTitle": "Map pool presets",
+    "presetDescription": "Replace the current map pool with a maintained preset.",
+    "presetConfirm": "Replace the current map pool with {name}?\n\nThe existing maps.txt content will be overwritten.",
+    "presetFailed": "Failed to switch map preset",
+    "presetApplied": "Switched to {name} ({count} maps)",
+    "kzPresetSettings": "KZ disables UseGameTimeLimit and enables EnforceTimeLimit and ChangeMapUse_host_workshop_map.",
+    "customSyncTitle": "Custom remote map pool",
+    "customSyncDescription": "Pull a complete maps.txt from a public HTTP(S) URL manually or on a schedule.",
+    "customSyncUrl": "Remote maps.txt URL",
+    "customSyncInterval": "Interval (seconds)",
+    "customSyncEnabled": "Automatic sync",
+    "customSyncMinimum": "Minimum interval: 300 seconds",
+    "customSyncLastRun": "Last run:",
+    "customSyncNextRun": "Next run:",
+    "customSyncSave": "Save settings",
+    "customSyncRunNow": "Pull now",
+    "customSyncLoadFailed": "Failed to load remote sync settings",
+    "customSyncSaveFailed": "Failed to save remote sync settings",
+    "customSyncRunFailed": "Failed to pull the remote map pool",
+    "customSyncSaved": "Remote map-pool sync settings saved",
+    "customSyncComplete": "Synchronized {count} maps",
+    "syncNever": "Never",
+    "uninstallTitle": "Uninstall MapChooser",
+    "uninstallWarning": "This deletes the entire MapChooser plugin folder. You must reinstall the plugin before configuring maps again.",
+    "uninstallButton": "Delete MapChooser plugin",
+    "uninstallConfirm": "Delete the entire MapChooser plugin folder?\n\nYou must reinstall the plugin before configuring maps again. The current map-pool configuration files will be kept.",
+    "uninstallFailed": "Failed to uninstall MapChooser",
+    "uninstallComplete": "MapChooser plugin folder removed",
+    "presets": {
+      "official": {
+        "name": "All official maps",
+        "description": "Scan cs2/game/csgo/maps/*.vpk and derive the required fields automatically."
+      },
+      "kz": {
+        "name": "KZ maps",
+        "description": "Pull the maintained KZ pool and apply the required time-limit settings."
+      },
+      "ze": {
+        "name": "ZE maps",
+        "description": "Pull the maintained Zombie Escape map pool."
+      }
+    },
     "quickAdd": "Quick Add Workshop Map",
     "workshopIdOrUrl": "Workshop ID or URL",
     "workshopPlaceholder": "Enter a numeric ID or paste a Steam Workshop URL",
@@ -1510,6 +1552,8 @@
   "pluginConfigs": {
     "title": "Plugin Configuration",
     "manualLoadHint": "Sources are not scanned until you click Load configuration.",
+    "reloadSources": "Reload sources",
+    "sourcesReloaded": "Configuration sources reloaded",
     "restoreDefault": "Restore default",
     "addSource": "Add source",
     "sourcePath": "File or directory path",

@@ -339,6 +339,23 @@ class ScheduledTaskService:
                     return False, f"{message}\n{upload_message}"
 
                 return True, f"{message}\n{upload_message}"
+            elif action == "map_pool_sync":
+                from services.remote_map_pool_service import (
+                    RemoteMapPoolError,
+                    synchronize_remote_map_pool,
+                )
+
+                if not server.map_pool_sync_url:
+                    return False, "No custom MapChooser map-pool URL is configured"
+                try:
+                    _, map_count = await synchronize_remote_map_pool(
+                        ssh_manager,
+                        server,
+                        server.map_pool_sync_url,
+                    )
+                except RemoteMapPoolError as exc:
+                    return False, str(exc)
+                return True, f"Synchronized {map_count} maps from the custom remote map pool"
             else:
                 return False, f"Unknown action: {action}"
 
@@ -398,6 +415,8 @@ class ScheduledTaskService:
                     interval_seconds = int(schedule_value)
                     if interval_seconds <= 0:
                         raise ValueError(f"Interval must be positive, got {interval_seconds}")
+                    if task.action == "map_pool_sync" and interval_seconds < 300:
+                        raise ValueError("Map-pool sync interval must be at least 300 seconds")
                     return now + timedelta(seconds=interval_seconds)
                 except ValueError as e:
                     logger.error(

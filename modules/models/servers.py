@@ -100,6 +100,9 @@ class Server(SQLModel, table=True):
     plugin_update_check_interval_hours: float = Field(default=1.0)
     last_plugin_update_check: Optional[datetime] = Field(default=None)
 
+    # MapChooser custom remote map-pool synchronization
+    map_pool_sync_url: Optional[str] = Field(default=None, max_length=4096)
+
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(default=None, max_length=500)
 

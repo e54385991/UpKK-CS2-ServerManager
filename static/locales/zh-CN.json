@@ -1418,6 +1418,48 @@
     "openPluginCenter": "打开插件中心",
     "ready": "地图管理已就绪",
     "configPath": "配置文件：",
+    "presetTitle": "地图池快捷方案",
+    "presetDescription": "一键使用维护方案替换当前地图池。",
+    "presetConfirm": "确认使用“{name}”替换当前地图池吗？\n\n现有 maps.txt 内容将被覆盖。",
+    "presetFailed": "切换地图池方案失败",
+    "presetApplied": "已切换为{name}（{count} 张地图）",
+    "kzPresetSettings": "KZ 方案会关闭 UseGameTimeLimit，同时开启 EnforceTimeLimit 和 ChangeMapUse_host_workshop_map。",
+    "customSyncTitle": "自定义远程地图池",
+    "customSyncDescription": "从公开 HTTP(S) URL 手动或定时拉取完整的 maps.txt。",
+    "customSyncUrl": "远程 maps.txt URL",
+    "customSyncInterval": "拉取间隔（秒）",
+    "customSyncEnabled": "开启自动拉取",
+    "customSyncMinimum": "最短间隔：300 秒",
+    "customSyncLastRun": "最近拉取：",
+    "customSyncNextRun": "下次拉取：",
+    "customSyncSave": "保存设置",
+    "customSyncRunNow": "立即拉取",
+    "customSyncLoadFailed": "加载远程同步设置失败",
+    "customSyncSaveFailed": "保存远程同步设置失败",
+    "customSyncRunFailed": "拉取远程地图池失败",
+    "customSyncSaved": "远程地图池同步设置已保存",
+    "customSyncComplete": "已拉取 {count} 张地图",
+    "syncNever": "从未",
+    "uninstallTitle": "卸载 MapChooser",
+    "uninstallWarning": "此操作会删除整个 MapChooser 插件目录。删除后必须重新安装插件，才能继续配置地图。",
+    "uninstallButton": "删除 MapChooser 插件",
+    "uninstallConfirm": "确定删除整个 MapChooser 插件目录吗？\n\n删除后您需要重新安装插件才能继续配置地图，当前地图池配置文件会保留。",
+    "uninstallFailed": "卸载 MapChooser 失败",
+    "uninstallComplete": "MapChooser 插件目录已删除",
+    "presets": {
+      "official": {
+        "name": "所有官方图",
+        "description": "扫描 cs2/game/csgo/maps/*.vpk，自动生成配置，无需填写工坊 ID 或 VPK 名称。"
+      },
+      "kz": {
+        "name": "KZ 地图",
+        "description": "在线拉取维护中的 KZ 地图池，并应用所需的时间限制设置。"
+      },
+      "ze": {
+        "name": "ZE 地图",
+        "description": "在线拉取维护中的僵尸逃跑地图池。"
+      }
+    },
     "quickAdd": "快速添加创意工坊地图",
     "workshopIdOrUrl": "创意工坊 ID 或链接",
     "workshopPlaceholder": "输入数字 ID 或粘贴 Steam 创意工坊链接",
@@ -1510,6 +1552,8 @@
   "pluginConfigs": {
     "title": "插件配置管理",
     "manualLoadHint": "只有点击“加载配置”后才会扫描远端配置源。",
+    "reloadSources": "重新加载配置源",
+    "sourcesReloaded": "配置源已重新加载",
     "restoreDefault": "恢复默认目录",
     "addSource": "添加配置源",
     "sourcePath": "文件或目录路径",

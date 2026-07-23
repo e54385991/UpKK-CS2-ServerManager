@@ -101,6 +101,19 @@
                 }
             },
 
+            async refreshSources() {
+                if (this.loadingSources || !this.confirmDiscard()) return;
+                this.loadingSources = true;
+                try {
+                    await this.reloadSources(this.activeSourceId);
+                    showSuccess(translated('pluginConfigs.sourcesReloaded', 'Configuration sources reloaded'));
+                } catch (error) {
+                    showError(`${translated('pluginConfigs.loadSourcesFailed', 'Failed to load configuration sources')}: ${error.message}`);
+                } finally {
+                    this.loadingSources = false;
+                }
+            },
+
             get activeSource() {
                 return this.sources.find(source => source.id === this.activeSourceId) || null;
             },

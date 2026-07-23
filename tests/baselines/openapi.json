@@ -564,7 +564,7 @@
           "content": {
             "anyOf": [
               {
-                "maxLength": 1048576,
+                "maxLength": 10485760,
                 "type": "string"
               },
               {
@@ -781,6 +781,47 @@
           "title"
         ],
         "title": "DependencyInfo",
+        "type": "object"
+      },
+      "CustomMapSyncRunRequest": {
+        "properties": {
+          "expected_revision": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Expected Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "CustomMapSyncRunRequest",
+        "type": "object"
+      },
+      "CustomMapSyncUpdateRequest": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_seconds": {
+            "default": 3600,
+            "minimum": 300.0,
+            "title": "Interval Seconds",
+            "type": "integer"
+          },
+          "url": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "CustomMapSyncUpdateRequest",
         "type": "object"
       },
       "DeploymentLogResponse": {
@@ -2304,10 +2345,25 @@
         "title": "MapAddRequest",
         "type": "object"
       },
+      "MapChooserUninstallRequest": {
+        "properties": {
+          "confirmation": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation"
+        ],
+        "title": "MapChooserUninstallRequest",
+        "type": "object"
+      },
       "MapConfigUpdateRequest": {
         "properties": {
           "content": {
-            "maxLength": 1048576,
+            "maxLength": 15728640,
             "minLength": 1,
             "title": "Content",
             "type": "string"
@@ -2395,6 +2451,44 @@
           "expected_revision"
         ],
         "title": "MapIdentityRequest",
+        "type": "object"
+      },
+      "MapPresetApplyRequest": {
+        "properties": {
+          "expected_revision": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Expected Revision",
+            "type": "string"
+          },
+          "plugin_config_expected_revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Config Expected Revision"
+          },
+          "preset": {
+            "enum": [
+              "official",
+              "kz",
+              "ze"
+            ],
+            "title": "Preset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset",
+          "expected_revision"
+        ],
+        "title": "MapPresetApplyRequest",
         "type": "object"
       },
       "MarketPluginCreate": {
@@ -12846,6 +12940,230 @@
         ]
       }
     },
+    "/servers/{server_id}/maps/custom-sync": {
+      "get": {
+        "operationId": "get_custom_map_sync_servers__server_id__maps_custom_sync_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Custom Map Sync Servers  Server Id  Maps Custom Sync Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Custom Map Sync",
+        "tags": [
+          "map-management"
+        ]
+      },
+      "put": {
+        "operationId": "update_custom_map_sync_servers__server_id__maps_custom_sync_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomMapSyncUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Custom Map Sync Servers  Server Id  Maps Custom Sync Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Custom Map Sync",
+        "tags": [
+          "map-management"
+        ]
+      }
+    },
+    "/servers/{server_id}/maps/custom-sync/run": {
+      "post": {
+        "operationId": "run_custom_map_sync_servers__server_id__maps_custom_sync_run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomMapSyncRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Custom Map Sync Servers  Server Id  Maps Custom Sync Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Run Custom Map Sync",
+        "tags": [
+          "map-management"
+        ]
+      }
+    },
+    "/servers/{server_id}/maps/plugin": {
+      "delete": {
+        "operationId": "uninstall_mapchooser_plugin_servers__server_id__maps_plugin_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapChooserUninstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Uninstall Mapchooser Plugin Servers  Server Id  Maps Plugin Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Uninstall Mapchooser Plugin",
+        "tags": [
+          "map-management"
+        ]
+      }
+    },
     "/servers/{server_id}/maps/plugin-config": {
       "get": {
         "operationId": "get_plugin_config_servers__server_id__maps_plugin_config_get",
@@ -12947,6 +13265,65 @@
           }
         ],
         "summary": "Update Mapchooser Plugin Config",
+        "tags": [
+          "map-management"
+        ]
+      }
+    },
+    "/servers/{server_id}/maps/preset": {
+      "post": {
+        "operationId": "apply_map_preset_servers__server_id__maps_preset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapPresetApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Apply Map Preset Servers  Server Id  Maps Preset Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Apply Map Preset",
         "tags": [
           "map-management"
         ]

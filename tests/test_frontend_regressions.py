@@ -132,7 +132,7 @@ def test_map_management_prompts_for_restart_after_every_config_mutation():
     )
 
     assert "confirmRestartAfterChange()" in map_script
-    assert map_script.count("this.confirmRestartAfterChange();") == 5
+    assert map_script.count("this.confirmRestartAfterChange();") == 8
     assert "new CustomEvent('map-restart-server')" in map_script
     assert "@map-restart-server.window=\"executeAction('restart')\"" in server_template
 
@@ -147,6 +147,9 @@ def test_plugin_config_tab_is_lazy_loaded_and_localized():
     server_template = (PROJECT_ROOT / "templates" / "server_detail.html").read_text(
         encoding="utf-8"
     )
+    server_script = (
+        PROJECT_ROOT / "templates" / "server_detail_includes" / "scripts.html"
+    ).read_text(encoding="utf-8")
     tab_template = (
         PROJECT_ROOT / "templates" / "server_detail_includes" / "plugin_configs_tab.html"
     ).read_text(encoding="utf-8")
@@ -163,13 +166,23 @@ def test_plugin_config_tab_is_lazy_loaded_and_localized():
     assert "response.body.getReader()" in script
     assert "await this.reloadSources(source.id)" in script
     assert "item.id === source.id && item.persisted" in script
+    assert "async refreshSources()" in script
+    assert "await this.reloadSources(this.activeSourceId);" in script
     assert "loadSource(source)" in tab_template
     assert "source.fileCount" in tab_template
+    assert '@click="refreshSources()"' in tab_template
     assert "init()" not in script
+    assert "button.addEventListener('shown.bs.tab'" in server_script
+    assert "new CustomEvent('plugin-configs-open')" in server_script
+    assert server_script.index("tabButtons.forEach") < server_script.index(
+        "const savedTab = localStorage.getItem(storageKey);"
+    )
 
     required = {
         "title",
         "manualLoadHint",
+        "reloadSources",
+        "sourcesReloaded",
         "addSource",
         "loadConfiguration",
         "visual",

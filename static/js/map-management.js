@@ -5,6 +5,11 @@ function mapManagement(serverId) {
         loading: false,
         saving: false,
         adding: false,
+        presetApplying: '',
+        customSyncLoading: false,
+        customSyncSaving: false,
+        customSyncRunning: false,
+        uninstalling: false,
         pluginConfigLoading: false,
         pluginConfigSaving: false,
         mapActionKey: '',
@@ -19,7 +24,8 @@ function mapManagement(serverId) {
             plugin_center_name: 'CS2-Upkk-PanelPLG-Mapchooser',
             plugin_center_url: '/plugin-market?search=CS2-Upkk-PanelPLG-Mapchooser',
             maps_path: '',
-            plugin_config_path: ''
+            plugin_config_path: '',
+            mapchooser_plugin_path: ''
         },
         maps: [],
         searchQuery: '',
@@ -39,6 +45,16 @@ function mapManagement(serverId) {
             min_players: 0,
             only_nominate: false,
             restricted_times: ''
+        },
+        customSync: {
+            url: '',
+            enabled: false,
+            interval_seconds: 3600,
+            last_run: null,
+            next_run: null,
+            last_status: null,
+            last_error: null,
+            run_count: 0
         },
 
         t(key, fallback, params = {}) {
@@ -102,6 +118,20 @@ function mapManagement(serverId) {
             this.pluginConfigError = data.config_error || '';
         },
 
+        applyCustomSync(data) {
+            this.customSync = {
+                ...this.customSync,
+                ...data,
+                interval_seconds: Math.max(300, Number(data.interval_seconds) || 3600)
+            };
+        },
+
+        formatSyncTime(value) {
+            if (!value) return this.t('mapManagement.syncNever', 'Never');
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+        },
+
         pluginConfigGroups() {
             const order = ['vote', 'rtv', 'extend', 'mapPool', 'mapChange', 'display', 'other'];
             return order.map((name) => ({
@@ -128,6 +158,18 @@ function mapManagement(serverId) {
 
         mapKey(map) {
             return `${map.workshop_id}:${map.name}`;
+        },
+
+        presetName(preset) {
+            const fallbackNames = {
+                official: 'All official maps',
+                kz: 'KZ maps',
+                ze: 'ZE maps'
+            };
+            return this.t(
+                `mapManagement.presets.${preset}.name`,
+                fallbackNames[preset] || preset.toUpperCase()
+            );
         },
 
         filteredMaps() {
@@ -180,7 +222,7 @@ function mapManagement(serverId) {
                     ));
                 }
                 this.applyConfig(configData);
-                await this.loadPluginConfig();
+                await Promise.all([this.loadPluginConfig(), this.loadCustomSync()]);
             } catch (error) {
                 this.error = error.message || String(error);
                 this.loaded = true;
@@ -207,6 +249,26 @@ function mapManagement(serverId) {
                 this.pluginConfigError = error.message || String(error);
             } finally {
                 this.pluginConfigLoading = false;
+            }
+        },
+
+        async loadCustomSync() {
+            if (this.customSyncLoading || !this.status.ready) return;
+            this.customSyncLoading = true;
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/maps/custom-sync`);
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(this.errorMessage(
+                        data,
+                        this.t('mapManagement.customSyncLoadFailed', 'Failed to load sync settings')
+                    ));
+                }
+                this.applyCustomSync(data);
+            } catch (error) {
+                this.error = error.message || String(error);
+            } finally {
+                this.customSyncLoading = false;
             }
         },
 
@@ -314,6 +376,176 @@ function mapManagement(serverId) {
                 this.notify(this.error, 'error');
             } finally {
                 this.adding = false;
+            }
+        },
+
+        async applyPreset(preset) {
+            if (this.presetApplying || !this.revision) return;
+            const presetName = this.presetName(preset);
+            const confirmation = this.t(
+                'mapManagement.presetConfirm',
+                'Replace the current map pool with {name}?',
+                { name: presetName }
+            );
+            if (!confirm(confirmation)) return;
+
+            this.presetApplying = preset;
+            this.error = '';
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/maps/preset`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        preset,
+                        expected_revision: this.revision,
+                        plugin_config_expected_revision: this.pluginConfig.revision
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(this.errorMessage(
+                        data,
+                        this.t('mapManagement.presetFailed', 'Failed to switch map preset')
+                    ));
+                }
+                this.applyConfig(data);
+                if (data.plugin_config) this.applyPluginConfig(data.plugin_config);
+                this.notify(
+                    this.t(
+                        'mapManagement.presetApplied',
+                        'Switched to {name} ({count} maps)',
+                        { name: presetName, count: data.map_count ?? this.maps.length }
+                    ),
+                    'success'
+                );
+                this.confirmRestartAfterChange();
+            } catch (error) {
+                this.error = error.message || String(error);
+                this.notify(this.error, 'error');
+            } finally {
+                this.presetApplying = '';
+            }
+        },
+
+        async saveCustomSync(showNotification = true) {
+            if (this.customSyncSaving || !this.customSync.url) return false;
+            this.customSyncSaving = true;
+            this.error = '';
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/maps/custom-sync`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: this.customSync.url,
+                        enabled: Boolean(this.customSync.enabled),
+                        interval_seconds: Math.max(300, Number(this.customSync.interval_seconds) || 300)
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(this.errorMessage(
+                        data,
+                        this.t('mapManagement.customSyncSaveFailed', 'Failed to save sync settings')
+                    ));
+                }
+                this.applyCustomSync(data);
+                if (showNotification) {
+                    this.notify(
+                        this.t('mapManagement.customSyncSaved', 'Sync settings saved'),
+                        'success'
+                    );
+                }
+                return true;
+            } catch (error) {
+                this.error = error.message || String(error);
+                this.notify(this.error, 'error');
+                return false;
+            } finally {
+                this.customSyncSaving = false;
+            }
+        },
+
+        async runCustomSync() {
+            if (this.customSyncRunning || this.customSyncSaving || !this.customSync.url) return;
+            const saved = await this.saveCustomSync(false);
+            if (!saved) return;
+
+            this.customSyncRunning = true;
+            this.error = '';
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/maps/custom-sync/run`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expected_revision: this.revision })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(this.errorMessage(
+                        data,
+                        this.t('mapManagement.customSyncRunFailed', 'Failed to synchronize map pool')
+                    ));
+                }
+                this.applyConfig(data);
+                if (data.custom_sync) this.applyCustomSync(data.custom_sync);
+                this.notify(
+                    this.t(
+                        'mapManagement.customSyncComplete',
+                        'Synchronized {count} maps',
+                        { count: data.map_count ?? this.maps.length }
+                    ),
+                    'success'
+                );
+                this.confirmRestartAfterChange();
+            } catch (error) {
+                this.error = error.message || String(error);
+                this.notify(this.error, 'error');
+                await this.loadCustomSync();
+            } finally {
+                this.customSyncRunning = false;
+            }
+        },
+
+        async uninstallMapChooser() {
+            if (this.uninstalling) return;
+            const warning = this.t(
+                'mapManagement.uninstallConfirm',
+                'Delete the entire MapChooser plugin folder? You must reinstall the plugin before configuring it again.'
+            );
+            if (!confirm(warning)) return;
+
+            this.uninstalling = true;
+            this.error = '';
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/maps/plugin`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ confirmation: 'UNINSTALL MAPCHOOSER' })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(this.errorMessage(
+                        data,
+                        this.t('mapManagement.uninstallFailed', 'Failed to uninstall MapChooser')
+                    ));
+                }
+                this.status = {
+                    ...this.status,
+                    mapchooser_installed: false,
+                    ready: false
+                };
+                this.maps = [];
+                this.content = '';
+                this.revision = null;
+                this.notify(
+                    this.t('mapManagement.uninstallComplete', 'MapChooser was removed'),
+                    'success'
+                );
+                this.confirmRestartAfterChange();
+            } catch (error) {
+                this.error = error.message || String(error);
+                this.notify(this.error, 'error');
+            } finally {
+                this.uninstalling = false;
             }
         },
 

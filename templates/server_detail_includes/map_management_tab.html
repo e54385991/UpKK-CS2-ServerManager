@@ -84,6 +84,150 @@
             </small>
         </div>
 
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-1">
+                    <i class="bi bi-lightning-charge"></i>
+                    <span data-i18n="mapManagement.presetTitle">Map pool presets</span>
+                </h6>
+                <small class="text-muted" data-i18n="mapManagement.presetDescription">
+                    Replace the current map pool with a maintained preset.
+                </small>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <button type="button" class="btn btn-outline-primary w-100 h-100 text-start p-3"
+                            @click="applyPreset('official')"
+                            :disabled="Boolean(presetApplying) || saving || adding">
+                            <span class="d-flex align-items-center gap-2 mb-1">
+                                <span x-show="presetApplying === 'official'"
+                                    class="spinner-border spinner-border-sm"></span>
+                                <i x-show="presetApplying !== 'official'" class="bi bi-shield-check"></i>
+                                <strong data-i18n="mapManagement.presets.official.name">All official maps</strong>
+                            </span>
+                            <small class="d-block text-muted" data-i18n="mapManagement.presets.official.description">
+                                Scan cs2/game/csgo/maps/*.vpk and derive the required fields automatically.
+                            </small>
+                        </button>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="button" class="btn btn-outline-success w-100 h-100 text-start p-3"
+                            @click="applyPreset('kz')"
+                            :disabled="Boolean(presetApplying) || saving || adding">
+                            <span class="d-flex align-items-center gap-2 mb-1">
+                                <span x-show="presetApplying === 'kz'"
+                                    class="spinner-border spinner-border-sm"></span>
+                                <i x-show="presetApplying !== 'kz'" class="bi bi-graph-up-arrow"></i>
+                                <strong data-i18n="mapManagement.presets.kz.name">KZ maps</strong>
+                            </span>
+                            <small class="d-block text-muted" data-i18n="mapManagement.presets.kz.description">
+                                Pull the maintained KZ pool and apply the required time-limit settings.
+                            </small>
+                        </button>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="button" class="btn btn-outline-danger w-100 h-100 text-start p-3"
+                            @click="applyPreset('ze')"
+                            :disabled="Boolean(presetApplying) || saving || adding">
+                            <span class="d-flex align-items-center gap-2 mb-1">
+                                <span x-show="presetApplying === 'ze'"
+                                    class="spinner-border spinner-border-sm"></span>
+                                <i x-show="presetApplying !== 'ze'" class="bi bi-people"></i>
+                                <strong data-i18n="mapManagement.presets.ze.name">ZE maps</strong>
+                            </span>
+                            <small class="d-block text-muted" data-i18n="mapManagement.presets.ze.description">
+                                Pull the maintained Zombie Escape map pool.
+                            </small>
+                        </button>
+                    </div>
+                </div>
+                <div class="alert alert-info py-2 mb-0 mt-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <span data-i18n="mapManagement.kzPresetSettings">
+                        KZ disables UseGameTimeLimit and enables EnforceTimeLimit and ChangeMapUse_host_workshop_map.
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-2">
+                <div>
+                    <h6 class="mb-1">
+                        <i class="bi bi-cloud-arrow-down"></i>
+                        <span data-i18n="mapManagement.customSyncTitle">Custom remote map pool</span>
+                    </h6>
+                    <small class="text-muted" data-i18n="mapManagement.customSyncDescription">
+                        Pull a complete maps.txt from a public HTTP(S) URL manually or on a schedule.
+                    </small>
+                </div>
+                <span x-show="customSyncLoading" class="spinner-border spinner-border-sm"></span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-lg-7">
+                        <label for="customMapPoolUrl" class="form-label"
+                            data-i18n="mapManagement.customSyncUrl">Remote maps.txt URL</label>
+                        <input id="customMapPoolUrl" type="url" class="form-control"
+                            x-model.trim="customSync.url" maxlength="4096"
+                            placeholder="https://example.com/maps.txt">
+                    </div>
+                    <div class="col-sm-6 col-lg-2">
+                        <label for="customMapPoolInterval" class="form-label"
+                            data-i18n="mapManagement.customSyncInterval">Interval (seconds)</label>
+                        <input id="customMapPoolInterval" type="number" class="form-control"
+                            x-model.number="customSync.interval_seconds" min="300" step="1">
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="form-check form-switch mb-2">
+                            <input id="customMapPoolEnabled" class="form-check-input" type="checkbox"
+                                x-model="customSync.enabled">
+                            <label class="form-check-label" for="customMapPoolEnabled"
+                                data-i18n="mapManagement.customSyncEnabled">Automatic sync</label>
+                        </div>
+                        <small class="text-muted" data-i18n="mapManagement.customSyncMinimum">
+                            Minimum interval: 300 seconds
+                        </small>
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3">
+                    <div class="small text-muted">
+                        <span data-i18n="mapManagement.customSyncLastRun">Last run:</span>
+                        <strong class="ms-1" x-text="formatSyncTime(customSync.last_run)"></strong>
+                        <span class="mx-2">·</span>
+                        <span data-i18n="mapManagement.customSyncNextRun">Next run:</span>
+                        <strong class="ms-1" x-text="customSync.enabled ? formatSyncTime(customSync.next_run) : '—'"></strong>
+                        <template x-if="customSync.last_status">
+                            <span class="badge ms-2"
+                                :class="customSync.last_status === 'success' ? 'bg-success' : 'bg-danger'"
+                                x-text="t(`scheduledTasks.statusValues.${customSync.last_status}`, customSync.last_status)"></span>
+                        </template>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-outline-secondary"
+                            @click="saveCustomSync()"
+                            :disabled="customSyncSaving || customSyncRunning || !customSync.url">
+                            <span x-show="customSyncSaving" class="spinner-border spinner-border-sm me-1"></span>
+                            <i x-show="!customSyncSaving" class="bi bi-save me-1"></i>
+                            <span data-i18n="mapManagement.customSyncSave">Save settings</span>
+                        </button>
+                        <button type="button" class="btn btn-primary"
+                            @click="runCustomSync()"
+                            :disabled="customSyncSaving || customSyncRunning || !customSync.url">
+                            <span x-show="customSyncRunning" class="spinner-border spinner-border-sm me-1"></span>
+                            <i x-show="!customSyncRunning" class="bi bi-cloud-download me-1"></i>
+                            <span data-i18n="mapManagement.customSyncRunNow">Pull now</span>
+                        </button>
+                    </div>
+                </div>
+                <div x-show="customSync.last_error" x-cloak class="alert alert-danger py-2 mt-3 mb-0">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <span x-text="customSync.last_error"></span>
+                </div>
+            </div>
+        </div>
+
         <div class="row g-4">
             <div class="col-xl-4">
                 <div class="card h-100">
@@ -195,11 +339,11 @@
                                                 <small x-show="map.filename && map.filename !== map.name" class="text-muted d-block" x-text="map.filename"></small>
                                             </td>
                                             <td>
-                                                <template x-if="map.workshop_id !== '0'">
+                                                <template x-if="map.workshop_id && map.workshop_id !== '0'">
                                                     <a :href="`https://steamcommunity.com/sharedfiles/filedetails/?id=${map.workshop_id}`"
                                                         target="_blank" rel="noopener noreferrer" x-text="map.workshop_id"></a>
                                                 </template>
-                                                <span x-show="map.workshop_id === '0'" class="badge bg-dark"
+                                                <span x-show="!map.workshop_id || map.workshop_id === '0'" class="badge bg-dark"
                                                     data-i18n="mapManagement.officialMap">Official map</span>
                                             </td>
                                             <td>
@@ -414,6 +558,27 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div class="alert alert-danger mt-4 mb-0">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <h6 class="alert-heading mb-1">
+                        <i class="bi bi-exclamation-octagon-fill me-1"></i>
+                        <span data-i18n="mapManagement.uninstallTitle">Uninstall MapChooser</span>
+                    </h6>
+                    <p class="mb-1" data-i18n="mapManagement.uninstallWarning">
+                        This deletes the entire MapChooser plugin folder. You must reinstall the plugin before using map configuration again.
+                    </p>
+                    <code class="text-break" x-text="status.mapchooser_plugin_path"></code>
+                </div>
+                <button type="button" class="btn btn-danger" @click="uninstallMapChooser()"
+                    :disabled="uninstalling">
+                    <span x-show="uninstalling" class="spinner-border spinner-border-sm me-1"></span>
+                    <i x-show="!uninstalling" class="bi bi-trash3 me-1"></i>
+                    <span data-i18n="mapManagement.uninstallButton">Delete MapChooser plugin</span>
+                </button>
             </div>
         </div>
     </div>

@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 from types import SimpleNamespace
+from unittest.mock import ANY, AsyncMock
 
 import pytest
 from pydantic import ValidationError
@@ -11,6 +12,7 @@ from modules.models import AuthType
 from modules.schemas import BatchActionRequest
 from services.a2s_cache_service import A2SCacheService
 from services.maintenance_lock import MaintenanceLockService, OperationBusyError
+from services.map_management_service import DEFAULT_MAPS_CONFIG
 from services.rate_limit import enforce_rate_limit
 from services.redis_manager import redis_manager
 from services.scheduled_task_service import scheduled_task_service
@@ -202,6 +204,33 @@ async def test_scheduled_restart_does_not_start_after_failed_stop():
     assert success is False
     assert "shutdown failed" in message
     assert manager.started is False
+
+
+@pytest.mark.asyncio
+async def test_scheduled_map_pool_sync_uses_configured_url(monkeypatch):
+    synchronize = AsyncMock(return_value=(DEFAULT_MAPS_CONFIG, 12))
+    monkeypatch.setattr(
+        "services.remote_map_pool_service.synchronize_remote_map_pool",
+        synchronize,
+    )
+    server = SimpleNamespace(
+        id=9,
+        map_pool_sync_url="https://maps.example.com/maps.txt",
+    )
+
+    success, message = await scheduled_task_service._execute_action(
+        object(),
+        server,
+        "map_pool_sync",
+    )
+
+    assert success is True
+    assert "12 maps" in message
+    synchronize.assert_awaited_once_with(
+        ANY,
+        server,
+        server.map_pool_sync_url,
+    )
 
 
 @pytest.mark.asyncio

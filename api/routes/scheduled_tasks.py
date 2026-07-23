@@ -21,6 +21,13 @@ from modules import (
 from services.scheduled_task_service import scheduled_task_service
 
 router = APIRouter(prefix="/api/scheduled-tasks", tags=["scheduled-tasks"])
+INTERNAL_TASK_ACTIONS = {"map_pool_sync"}
+
+
+def _require_user_managed_task(task: ScheduledTask) -> ScheduledTask:
+    if task.action in INTERNAL_TASK_ACTIONS:
+        raise HTTPException(status_code=404, detail="Scheduled task not found")
+    return task
 
 
 async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
@@ -82,7 +89,7 @@ async def list_scheduled_tasks(
 
     # Get tasks
     tasks = await ScheduledTask.get_all_by_server(db, server_id)
-    return tasks
+    return [task for task in tasks if task.action not in INTERNAL_TASK_ACTIONS]
 
 
 @router.get("/{server_id}/tasks/{task_id}", response_model=ScheduledTaskResponse)
@@ -101,7 +108,7 @@ async def get_scheduled_task(
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    return task
+    return _require_user_managed_task(task)
 
 
 @router.put("/{server_id}/tasks/{task_id}", response_model=ScheduledTaskResponse)
@@ -120,6 +127,7 @@ async def update_scheduled_task(
     task = await ScheduledTask.get_by_id_and_server(db, task_id, server_id)
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
+    _require_user_managed_task(task)
 
     # Update task fields
     update_data = task_data.model_dump(exclude_unset=True)
@@ -170,6 +178,10 @@ async def delete_scheduled_task(
     await get_server_for_user(server_id, db, current_user)
 
     # Delete task
+    existing_task = await ScheduledTask.get_by_id_and_server(db, task_id, server_id)
+    if not existing_task:
+        raise HTTPException(status_code=404, detail="Scheduled task not found")
+    _require_user_managed_task(existing_task)
     result = await db.execute(
         delete(ScheduledTask).where(
             ScheduledTask.id == task_id, ScheduledTask.server_id == server_id
@@ -199,6 +211,7 @@ async def toggle_scheduled_task(
     task = await ScheduledTask.get_by_id_and_server(db, task_id, server_id)
     if not task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
+    _require_user_managed_task(task)
 
     # Toggle enabled
     task.enabled = not task.enabled

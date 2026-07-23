@@ -17,7 +17,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 DEFAULT_MAPS_CONFIG = '"Maplist"\n{\n}\n'
-MAX_MAPS_CONFIG_BYTES = 1024 * 1024
+MAX_MAPS_CONFIG_BYTES = 15 * 1024 * 1024
 MAX_PLUGIN_CONFIG_BYTES = 256 * 1024
 
 DEFAULT_PLUGIN_CONFIG: dict[str, object] = {
@@ -271,21 +271,28 @@ def _validated_plugin_value(key: str, value: Any, kind: str, spec: dict[str, obj
     return normalized
 
 
-def update_plugin_config(content: str, values: dict[str, Any]) -> str:
+def update_plugin_config(
+    content: str,
+    values: dict[str, Any],
+    *,
+    allow_missing_known_fields: bool = False,
+) -> str:
     config = parse_plugin_config(content)
     fields, _ = build_plugin_config_fields(config)
     fields_by_key = {field["key"]: field for field in fields}
 
     for key in values:
-        if key not in config:
+        if key not in config and not (
+            allow_missing_known_fields and key in PLUGIN_CONFIG_FIELD_SPECS
+        ):
             raise PluginConfigError(f"Unknown config.json setting: {key}")
-        if key not in fields_by_key:
+        if key in config and key not in fields_by_key:
             raise PluginConfigError(f"{key} is a complex setting and cannot be edited visually")
 
     for key, value in values.items():
-        field = fields_by_key[key]
         spec = PLUGIN_CONFIG_FIELD_SPECS.get(key, {})
-        config[key] = _validated_plugin_value(key, value, str(field["kind"]), spec)
+        kind = str(fields_by_key[key]["kind"]) if key in fields_by_key else str(spec["kind"])
+        config[key] = _validated_plugin_value(key, value, kind, spec)
 
     # json.loads/dumps preserves object order in supported Python versions, so
     # saving keeps the plugin author's field order as well as unknown fields.
@@ -455,7 +462,7 @@ def _parse_root(content: str) -> _Node:
     if not isinstance(content, str) or not content.strip():
         raise MapConfigError("maps.txt cannot be empty")
     if len(content.encode("utf-8")) > MAX_MAPS_CONFIG_BYTES:
-        raise MapConfigError("maps.txt exceeds the 1 MiB size limit")
+        raise MapConfigError("maps.txt exceeds the 15 MiB size limit")
 
     parser = _Parser(_tokenize(content))
     root = parser.parse_node()
@@ -481,13 +488,11 @@ def _maps_from_root(root: _Node) -> list[dict[str, object]]:
             if field.children is None
         }
         workshop_id = values.get("workshop_id", "").strip()
-        if not workshop_id:
-            raise MapConfigError(f"Map entry {child.name!r} is missing workshop_id")
-        if not workshop_id.isdigit():
+        if workshop_id and not workshop_id.isdigit():
             raise MapConfigError(f"Map entry {child.name!r} has an invalid workshop_id")
-        if workshop_id != "0" and workshop_id in seen_workshop_ids:
+        if workshop_id and workshop_id != "0" and workshop_id in seen_workshop_ids:
             raise MapConfigError(f"Workshop ID {workshop_id} appears more than once")
-        if workshop_id != "0":
+        if workshop_id and workshop_id != "0":
             seen_workshop_ids.add(workshop_id)
 
         maps.append(
@@ -595,6 +600,36 @@ def render_map_block(
     return "\n".join(lines)
 
 
+def render_official_maps_config(map_names: list[str]) -> str:
+    normalized_names: list[str] = []
+    seen_names: set[str] = set()
+    for name in map_names:
+        safe_name = sanitize_map_name(name)
+        name_key = safe_name.casefold()
+        if name_key in seen_names:
+            continue
+        seen_names.add(name_key)
+        normalized_names.append(safe_name)
+
+    if not normalized_names:
+        raise MapConfigError("No official map VPK files were found")
+
+    lines = ['"Maplist"', "{"]
+    for name in sorted(normalized_names, key=str.casefold):
+        lines.extend(
+            (
+                f"\t{_quoted(name)}",
+                "\t{",
+                '\t\t"enabled"\t"1"',
+                "\t}",
+            )
+        )
+    lines.extend(("}", ""))
+    content = "\n".join(lines)
+    parse_maps_config(content)
+    return content
+
+
 def append_map_to_config(
     content: str,
     *,
@@ -606,7 +641,7 @@ def append_map_to_config(
     restricted_times: str = "",
 ) -> str:
     parsed = parse_maps_config(content)
-    if any(item["workshop_id"] == workshop_id for item in parsed.maps):
+    if workshop_id and any(item["workshop_id"] == workshop_id for item in parsed.maps):
         raise MapConfigError(f"Workshop ID {workshop_id} already exists in maps.txt")
 
     safe_name = sanitize_map_name(name)

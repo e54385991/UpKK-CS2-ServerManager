@@ -19,7 +19,7 @@ import asyncssh
 from modules import Server
 from services.ssh_manager import SSHManager
 
-MAX_CONFIG_BYTES = 1024 * 1024
+MAX_CONFIG_BYTES = 10 * 1024 * 1024
 MAX_SOURCE_FILES = 2000
 SCAN_READ_BYTES = 64 * 1024
 SCAN_MAX_TOKEN_BYTES = 64 * 1024
@@ -573,7 +573,7 @@ def apply_visual_changes(
     for start, end, replacement in sorted(replacements, reverse=True):
         updated = updated[:start] + replacement + updated[end:]
     if len(updated.encode("utf-8")) > MAX_CONFIG_BYTES:
-        raise PluginConfigError("Updated configuration exceeds the 1 MiB size limit")
+        raise PluginConfigError("Updated configuration exceeds the 10 MiB size limit")
     return updated
 
 
@@ -581,7 +581,7 @@ def validate_raw_content(content: str, filename: str) -> None:
     if not isinstance(content, str):
         raise PluginConfigError("Configuration content must be text")
     if len(content.encode("utf-8")) > MAX_CONFIG_BYTES:
-        raise PluginConfigError("Configuration exceeds the 1 MiB size limit")
+        raise PluginConfigError("Configuration exceeds the 10 MiB size limit")
     if format_for_filename(filename, content) in {"json", "jsonc"}:
         parsed = parse_config(content, filename)
         if parsed.parse_error:
@@ -908,11 +908,11 @@ async def read_text_file(
     async with ssh_manager.conn.start_sftp_client() as sftp:
         attrs = await sftp.lstat(target)
         if (attrs.size or 0) > MAX_CONFIG_BYTES:
-            raise PluginConfigError("Configuration exceeds the 1 MiB size limit")
+            raise PluginConfigError("Configuration exceeds the 10 MiB size limit")
         async with sftp.open(target, "rb") as remote_file:
             data = await remote_file.read(MAX_CONFIG_BYTES + 1)
     if len(data) > MAX_CONFIG_BYTES:
-        raise PluginConfigError("Configuration exceeds the 1 MiB size limit")
+        raise PluginConfigError("Configuration exceeds the 10 MiB size limit")
     if b"\x00" in data:
         raise PluginConfigError("Binary files cannot be edited as configuration text")
     try:

@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from api.routes.plugin_configs import _file_for_source
 from services.plugin_config_service import (
+    MAX_CONFIG_BYTES,
     PluginConfigError,
     apply_visual_changes,
     normalize_relative_path,
@@ -110,6 +111,13 @@ def test_unknown_formats_use_raw_mode_and_invalid_json_raw_save_is_rejected():
 
     with pytest.raises(PluginConfigError):
         validate_raw_content('{"broken": }', "plugin.json")
+
+
+def test_raw_configuration_size_limit_is_ten_mib():
+    validate_raw_content(" " * (1024 * 1024 + 1), "plugin.cfg")
+
+    with pytest.raises(PluginConfigError, match="10 MiB"):
+        validate_raw_content(" " * (MAX_CONFIG_BYTES + 1), "plugin.cfg")
 
 
 @pytest.mark.parametrize(

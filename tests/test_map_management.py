@@ -4,7 +4,7 @@ import asyncio
 import json
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import HTTPException
 
@@ -21,6 +21,7 @@ from services.map_management_service import (
     parse_maps_config,
     parse_plugin_config,
     remove_map_from_config,
+    render_official_maps_config,
     sanitize_map_name,
     set_map_enabled,
     update_plugin_config,
@@ -98,10 +99,21 @@ class MapConfigTests(unittest.TestCase):
                 workshop_id="3298427415",
             )
 
-    def test_parser_rejects_invalid_root_missing_id_and_duplicate_id(self):
+    def test_official_map_config_is_derived_without_user_supplied_fields(self):
+        content = render_official_maps_config(["de_dust2", "cs_office", "DE_DUST2"])
+
+        parsed = parse_maps_config(content)
+        self.assertEqual([item["name"] for item in parsed.maps], ["cs_office", "de_dust2"])
+        self.assertTrue(all(item["workshop_id"] == "" for item in parsed.maps))
+        self.assertEqual([item["filename"] for item in parsed.maps], ["cs_office", "de_dust2"])
+        self.assertNotIn('"workshop_id"', content)
+        self.assertNotIn('"filename"', content)
+        self.assertNotIn('"updatedname"', content)
+
+    def test_parser_rejects_invalid_root_invalid_id_and_duplicate_id(self):
         invalid_documents = (
             '"NotMaplist"\n{\n}\n',
-            '"Maplist"\n{\n"No ID" { "enabled" "1" }\n}\n',
+            '"Maplist"\n{\n"Invalid ID" { "workshop_id" "abc" }\n}\n',
             ('"Maplist"\n{\n"A" { "workshop_id" "123456" }\n"B" { "workshop_id" "123456" }\n}\n'),
         )
         for document in invalid_documents:
@@ -282,6 +294,23 @@ class PluginConfigTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(PluginConfigError):
                 update_plugin_config(SAMPLE_PLUGIN_CONFIG, values)
 
+    def test_preset_update_can_add_missing_known_fields(self):
+        updated = update_plugin_config(
+            '{"AllowExtend": true}\n',
+            {
+                "UseGameTimeLimit": False,
+                "EnforceTimeLimit": True,
+                "ChangeMapUse_host_workshop_map": True,
+            },
+            allow_missing_known_fields=True,
+        )
+
+        parsed = json.loads(updated)
+        self.assertTrue(parsed["AllowExtend"])
+        self.assertFalse(parsed["UseGameTimeLimit"])
+        self.assertTrue(parsed["EnforceTimeLimit"])
+        self.assertTrue(parsed["ChangeMapUse_host_workshop_map"])
+
 
 class FakeSSHManager:
     def __init__(self, *, status_output: str, content: str = DEFAULT_MAPS_CONFIG):
@@ -311,11 +340,70 @@ class FakeSSHManager:
         self.disconnected = True
 
 
+class PresetSSHManager(FakeSSHManager):
+    def __init__(
+        self,
+        *,
+        maps_content: str = DEFAULT_MAPS_CONFIG,
+        plugin_content: str = DEFAULT_PLUGIN_CONFIG_CONTENT,
+        official_files: str = "",
+    ):
+        super().__init__(
+            status_output=("counterstrikesharp=1\nmapchooser=1\nmaps_file=1\nconfig_file=1\n"),
+            content=maps_content,
+        )
+        self.maps_content = maps_content
+        self.plugin_content = plugin_content
+        self.official_files = official_files
+
+    async def execute_command(self, command, timeout=30):
+        self.commands.append(command)
+        if "printf 'counterstrikesharp" in command:
+            return True, self.status_output, ""
+        if "-name '*.vpk'" in command:
+            return True, self.official_files, ""
+        return True, "", ""
+
+    async def read_file(self, path, server, max_size):
+        if path.endswith("/config.json"):
+            return True, self.plugin_content, ""
+        return True, self.maps_content, ""
+
+
+class FakeScalarResult:
+    def __init__(self, values):
+        self.values = values
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return list(self.values)
+
+
+class FakeDatabase:
+    def __init__(self, results):
+        self.results = iter(results)
+        self.add = MagicMock()
+        self.commits = 0
+
+    async def execute(self, statement):
+        return FakeScalarResult(next(self.results))
+
+    async def commit(self):
+        self.commits += 1
+
+    async def refresh(self, item):
+        if getattr(item, "id", None) is None:
+            item.id = 99
+
+
 class MapRouteTests(unittest.TestCase):
     def setUp(self):
         self.server = SimpleNamespace(
             id=12,
             game_directory="/home/cs2/server one",
+            map_pool_sync_url=None,
         )
         self.user = SimpleNamespace(id=7, is_admin=False)
         map_management._map_write_locks.clear()
@@ -367,7 +455,7 @@ class MapRouteTests(unittest.TestCase):
         self.assertTrue(ssh.disconnected)
 
     def test_invalid_existing_config_is_returned_for_manual_repair(self):
-        invalid_content = '"Maplist"\n{\n"Broken" { "enabled" "1" }\n}\n'
+        invalid_content = '"Maplist"\n{\n"Broken" { "workshop_id" "invalid" }\n}\n'
         ssh = FakeSSHManager(
             status_output="counterstrikesharp=1\nmapchooser=1\nmaps_file=1\n",
             content=invalid_content,
@@ -387,6 +475,197 @@ class MapRouteTests(unittest.TestCase):
         self.assertEqual(result["content"], invalid_content)
         self.assertEqual(result["maps"], [])
         self.assertIn("Invalid maps.txt", result["config_error"])
+
+    def test_official_preset_scans_vpks_and_derives_plugin_fields(self):
+        ssh = PresetSSHManager(official_files="de_dust2.vpk\ncs_office.vpk\n")
+        request = map_management.MapPresetApplyRequest(
+            preset="official",
+            expected_revision=content_revision(DEFAULT_MAPS_CONFIG),
+        )
+        with (
+            patch.object(map_management, "SSHManager", return_value=ssh),
+            patch.object(
+                map_management,
+                "get_server_with_permission",
+                new=AsyncMock(return_value=self.server),
+            ),
+        ):
+            result = asyncio.run(
+                map_management.apply_map_preset(
+                    12,
+                    request,
+                    db=object(),
+                    current_user=self.user,
+                )
+            )
+
+        self.assertEqual(result["map_count"], 2)
+        self.assertEqual([item["name"] for item in result["maps"]], ["cs_office", "de_dust2"])
+        written_maps = ssh.writes[0][1]
+        self.assertNotIn('"workshop_id"', written_maps)
+        self.assertNotIn('"filename"', written_maps)
+        self.assertNotIn('"updatedname"', written_maps)
+
+    def test_kz_preset_replaces_pool_and_updates_required_plugin_settings(self):
+        kz_content = append_map_to_config(
+            DEFAULT_MAPS_CONFIG,
+            name="kz_example",
+            workshop_id="3070591565",
+        )
+        plugin_content = json.dumps(
+            {
+                "AllowExtend": True,
+                "UseGameTimeLimit": True,
+                "EnforceTimeLimit": False,
+                "ChangeMapUse_host_workshop_map": False,
+            }
+        )
+        ssh = PresetSSHManager(plugin_content=plugin_content)
+        request = map_management.MapPresetApplyRequest(
+            preset="kz",
+            expected_revision=content_revision(DEFAULT_MAPS_CONFIG),
+            plugin_config_expected_revision=content_revision(plugin_content),
+        )
+        fetch_preset = AsyncMock(return_value=kz_content)
+        with (
+            patch.object(map_management, "SSHManager", return_value=ssh),
+            patch.object(
+                map_management,
+                "get_server_with_permission",
+                new=AsyncMock(return_value=self.server),
+            ),
+            patch.object(map_management, "_remote_maps_config", new=fetch_preset),
+        ):
+            result = asyncio.run(
+                map_management.apply_map_preset(
+                    12,
+                    request,
+                    db=object(),
+                    current_user=self.user,
+                )
+            )
+
+        fetch_preset.assert_awaited_once_with("kz")
+        self.assertEqual(result["map_count"], 1)
+        self.assertEqual(len(ssh.writes), 2)
+        written_plugin = json.loads(ssh.writes[0][1])
+        self.assertTrue(written_plugin["AllowExtend"])
+        self.assertFalse(written_plugin["UseGameTimeLimit"])
+        self.assertTrue(written_plugin["EnforceTimeLimit"])
+        self.assertTrue(written_plugin["ChangeMapUse_host_workshop_map"])
+        self.assertEqual(ssh.writes[1][1], kz_content)
+
+    def test_custom_sync_settings_enforce_public_url_and_create_internal_task(self):
+        db = FakeDatabase([[]])
+        request = map_management.CustomMapSyncUpdateRequest(
+            url="https://maps.example.com/maps.txt",
+            interval_seconds=300,
+            enabled=True,
+        )
+        with (
+            patch.object(
+                map_management,
+                "get_server_with_permission",
+                new=AsyncMock(return_value=self.server),
+            ),
+            patch.object(
+                map_management,
+                "validate_remote_map_url",
+                new=AsyncMock(return_value=request.url),
+            ),
+        ):
+            result = asyncio.run(
+                map_management.update_custom_map_sync(
+                    12,
+                    request,
+                    db=db,
+                    current_user=self.user,
+                )
+            )
+
+        self.assertTrue(result["enabled"])
+        self.assertEqual(result["interval_seconds"], 300)
+        self.assertEqual(self.server.map_pool_sync_url, request.url)
+        task = next(
+            call.args[0]
+            for call in db.add.call_args_list
+            if getattr(call.args[0], "action", None) == map_management.MAP_POOL_SYNC_ACTION
+        )
+        self.assertEqual(task.schedule_value, "300")
+        self.assertTrue(task.enabled)
+
+    def test_custom_sync_run_replaces_maps_immediately(self):
+        remote_content = append_map_to_config(
+            DEFAULT_MAPS_CONFIG,
+            name="Remote Map",
+            workshop_id="3298427415",
+        )
+        self.server.map_pool_sync_url = "https://maps.example.com/maps.txt"
+        db = FakeDatabase([[]])
+        ssh = FakeSSHManager(
+            status_output="counterstrikesharp=1\nmapchooser=1\nmaps_file=1\n",
+        )
+        request = map_management.CustomMapSyncRunRequest(
+            expected_revision=content_revision(DEFAULT_MAPS_CONFIG)
+        )
+        with (
+            patch.object(map_management, "SSHManager", return_value=ssh),
+            patch.object(
+                map_management,
+                "get_server_with_permission",
+                new=AsyncMock(return_value=self.server),
+            ),
+            patch.object(
+                map_management,
+                "fetch_remote_map_pool",
+                new=AsyncMock(return_value=remote_content),
+            ),
+        ):
+            result = asyncio.run(
+                map_management.run_custom_map_sync(
+                    12,
+                    request,
+                    db=db,
+                    current_user=self.user,
+                )
+            )
+
+        self.assertEqual(result["map_count"], 1)
+        self.assertEqual(ssh.writes[0][1], remote_content)
+
+    def test_uninstall_removes_only_exact_mapchooser_plugin_directory(self):
+        db = FakeDatabase([[], []])
+        ssh = FakeSSHManager(
+            status_output="counterstrikesharp=1\nmapchooser=1\nmaps_file=1\n",
+        )
+        request = map_management.MapChooserUninstallRequest(
+            confirmation=map_management.MAPCHOOSER_UNINSTALL_CONFIRMATION
+        )
+        with (
+            patch.object(map_management, "SSHManager", return_value=ssh),
+            patch.object(
+                map_management,
+                "get_server_with_permission",
+                new=AsyncMock(return_value=self.server),
+            ),
+        ):
+            result = asyncio.run(
+                map_management.uninstall_mapchooser_plugin(
+                    12,
+                    request,
+                    db=db,
+                    current_user=self.user,
+                )
+            )
+
+        expected_path = (
+            "/home/cs2/server one/cs2/game/csgo/addons/counterstrikesharp/plugins/MapChooser"
+        )
+        self.assertEqual(result["deleted_path"], expected_path)
+        delete_command = next(command for command in ssh.commands if "rm -rf --" in command)
+        self.assertIn("plugins/MapChooser", delete_command)
+        self.assertNotIn("configs/plugins/MapChooser", delete_command)
+        self.assertFalse(result["ready"])
 
     def test_update_rejects_stale_revision_without_writing(self):
         ssh = FakeSSHManager(
