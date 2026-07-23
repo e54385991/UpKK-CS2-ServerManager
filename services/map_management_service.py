@@ -621,6 +621,8 @@ def render_official_maps_config(map_names: list[str]) -> str:
                 f"\t{_quoted(name)}",
                 "\t{",
                 '\t\t"enabled"\t"1"',
+                f'\t\t"filename"\t{_quoted(name)}',
+                f'\t\t"updatedname"\t{_quoted(name)}',
                 "\t}",
             )
         )

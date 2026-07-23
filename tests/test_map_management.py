@@ -100,15 +100,17 @@ class MapConfigTests(unittest.TestCase):
             )
 
     def test_official_map_config_is_derived_without_user_supplied_fields(self):
-        content = render_official_maps_config(["de_dust2", "cs_office", "DE_DUST2"])
+        content = render_official_maps_config(["de_dust2", "KZ_HUB", "DE_DUST2"])
 
         parsed = parse_maps_config(content)
-        self.assertEqual([item["name"] for item in parsed.maps], ["cs_office", "de_dust2"])
+        self.assertEqual([item["name"] for item in parsed.maps], ["de_dust2", "KZ_HUB"])
         self.assertTrue(all(item["workshop_id"] == "" for item in parsed.maps))
-        self.assertEqual([item["filename"] for item in parsed.maps], ["cs_office", "de_dust2"])
+        self.assertEqual([item["filename"] for item in parsed.maps], ["de_dust2", "KZ_HUB"])
+        self.assertEqual([item["updated_name"] for item in parsed.maps], ["de_dust2", "KZ_HUB"])
         self.assertNotIn('"workshop_id"', content)
-        self.assertNotIn('"filename"', content)
-        self.assertNotIn('"updatedname"', content)
+        self.assertIn('"enabled"\t"1"', content)
+        self.assertIn('"filename"\t"KZ_HUB"', content)
+        self.assertIn('"updatedname"\t"KZ_HUB"', content)
 
     def test_parser_rejects_invalid_root_invalid_id_and_duplicate_id(self):
         invalid_documents = (
@@ -503,8 +505,9 @@ class MapRouteTests(unittest.TestCase):
         self.assertEqual([item["name"] for item in result["maps"]], ["cs_office", "de_dust2"])
         written_maps = ssh.writes[0][1]
         self.assertNotIn('"workshop_id"', written_maps)
-        self.assertNotIn('"filename"', written_maps)
-        self.assertNotIn('"updatedname"', written_maps)
+        self.assertIn('"enabled"\t"1"', written_maps)
+        self.assertIn('"filename"\t"de_dust2"', written_maps)
+        self.assertIn('"updatedname"\t"de_dust2"', written_maps)
 
     def test_kz_preset_replaces_pool_and_updates_required_plugin_settings(self):
         kz_content = append_map_to_config(
