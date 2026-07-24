@@ -5,6 +5,7 @@
 from .auth import (
     ApiKeyGenerate,
     ApiKeyResponse,
+    ApiKeyStatusResponse,
     CleanupDeleteRequest,
     CleanupDeleteResponse,
     CleanupFailedItem,
@@ -79,9 +80,15 @@ from .servers import (
     InitializedServerResponse,
     ServerAction,
     ServerCreate,
+    ServerCreatedResponse,
+    ServerDetail,
     ServerResponse,
     ServerResponseWithUser,
+    ServerSummary,
     ServerUpdate,
+    SSHHostKeyConfirmRequest,
+    SSHHostKeyResponse,
+    SSHHostKeyScanRequest,
 )
 from .system import (
     DiscordSettingsResponse,

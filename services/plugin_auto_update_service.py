@@ -19,7 +19,11 @@ from services.discord_notification_service import (
     EVENT_PLUGIN_UPDATE,
     discord_notification_service,
 )
-from services.maintenance_lock import OperationBusyError, maintenance_lock_service
+from services.maintenance_lock import (
+    OperationBusyError,
+    OperationCoordinationUnavailable,
+    maintenance_lock_service,
+)
 from services.plugin_installation import install_github_plugin
 from services.redis_manager import redis_manager
 from services.ssh_manager import SSHManager
@@ -458,6 +462,11 @@ class PluginAutoUpdateService:
             return {
                 "success": False,
                 "message": "Another maintenance operation is already running",
+            }
+        except OperationCoordinationUnavailable:
+            return {
+                "success": False,
+                "message": "Coordination storage is unavailable; update was not started",
             }
         except Exception as exc:
             logger.exception(

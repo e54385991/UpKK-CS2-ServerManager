@@ -26,9 +26,10 @@ class SteamInfService:
     # Periodic refresh interval: 24 hours
     REFRESH_INTERVAL_SECONDS = 24 * 60 * 60
 
-    def __init__(self):
+    def __init__(self, max_refresh_concurrency: int = 4):
         # Cache is long-term - refreshed on server operations or periodic refresh
         self.refresh_interval = self.REFRESH_INTERVAL_SECONDS
+        self.max_refresh_concurrency = max(1, max_refresh_concurrency)
         self.refresh_task: Optional[asyncio.Task] = None
         self.running = False
 
@@ -74,36 +75,42 @@ class SteamInfService:
 
             logger.info(f"Periodic refresh: Updating steam.inf version for {len(servers)} servers")
 
-            # Refresh each server's version with timeout protection
-            # DB session is already closed, so SSH operations won't hold DB connections
-            for server in servers:
-                try:
-                    # Skip servers that are marked as down due to SSH failures
-                    if server.should_skip_background_checks():
-                        logger.info(
-                            f"Skipping steam.inf refresh for server {server.id} - marked as SSH down for 3+ days"
-                        )
-                        continue
+            # DB session is already closed, so SSH operations won't hold DB
+            # connections. Keep SSH fan-out bounded across a large fleet.
+            semaphore = asyncio.Semaphore(self.max_refresh_concurrency)
 
-                    # Wrap each server refresh in a timeout to prevent one slow server from blocking all others
-                    # Use 35 seconds timeout (slightly more than the _read_version_from_file timeout)
-                    async def _refresh_server(server=server):
-                        success, version = await self.get_version_from_steam_inf(
-                            server, force_refresh=True
-                        )
-                        if success:
-                            logger.debug(f"Refreshed version for server {server.id}: {version}")
+            async def refresh_server(server: Server) -> None:
+                async with semaphore:
+                    await self._refresh_server_with_timeout(server)
 
-                    await asyncio.wait_for(_refresh_server(), timeout=35)
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        f"Timeout refreshing version for server {server.id} - skipping to prevent blocking"
-                    )
-                except Exception as e:
-                    logger.error(f"Error refreshing version for server {server.id}: {e}")
+            await asyncio.gather(*(refresh_server(server) for server in servers))
 
         except Exception as e:
             logger.error(f"Error in periodic refresh: {e}")
+
+    async def _refresh_server_with_timeout(self, server: Server) -> None:
+        """Refresh one server without allowing it to stall the fleet sweep."""
+        try:
+            # Skip servers that are marked as down due to SSH failures
+            if server.should_skip_background_checks():
+                logger.info(
+                    f"Skipping steam.inf refresh for server {server.id} - marked as SSH down for 3+ days"
+                )
+                return
+
+            async def refresh() -> None:
+                success, version = await self.get_version_from_steam_inf(server, force_refresh=True)
+                if success:
+                    logger.debug(f"Refreshed version for server {server.id}: {version}")
+
+            # Slightly exceed the lower-level 30 second read deadline.
+            await asyncio.wait_for(refresh(), timeout=35)
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"Timeout refreshing version for server {server.id} - skipping to prevent blocking"
+            )
+        except Exception as e:
+            logger.error(f"Error refreshing version for server {server.id}: {e}")
 
     async def get_version_from_steam_inf(
         self, server: Server, force_refresh: bool = False

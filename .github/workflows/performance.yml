@@ -1,0 +1,91 @@
+name: Nightly performance acceptance
+
+on:
+  schedule:
+    - cron: "23 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-performance
+  cancel-in-progress: true
+
+jobs:
+  performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ENVIRONMENT: test
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_USER: cs2_manager
+      MYSQL_PASSWORD: perf-mysql-password
+      MYSQL_DATABASE: cs2_manager
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      RUN_INTEGRATION_TESTS: "1"
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: perf-root-password
+          MYSQL_DATABASE: cs2_manager
+          MYSQL_USER: cs2_manager
+          MYSQL_PASSWORD: perf-mysql-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -pperf-root-password --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv and Python 3.14
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked --group dev
+
+      - name: Run deterministic performance-path acceptance tests
+        timeout-minutes: 10
+        run: uv run pytest -q tests/test_performance_paths.py
+
+      - name: Run scheduled load scenarios when supplied
+        run: |
+          if [ -d tests/performance ]; then
+            uv run pytest -q -m performance tests/performance
+          else
+            echo "No environment-specific load scenarios are checked in; deterministic gates passed."
+          fi
+
+      - name: Record acceptance scope
+        if: always()
+        run: |
+          {
+            echo "### Performance acceptance scope"
+            echo
+            echo "This workflow enforces deterministic DB/Redis round-trip and bounded-concurrency scenarios."
+            echo "It does not claim the 2 vCPU / 2 GB latency target or the one-hour soak target."
+            echo "Those require a controlled deployment runner and retained measurements."
+          } >> "$GITHUB_STEP_SUMMARY"

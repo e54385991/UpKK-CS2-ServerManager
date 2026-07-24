@@ -6,12 +6,32 @@ and game server login token (GSLT) generation
 
 import logging
 from datetime import datetime
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Protocol, Tuple
 
 from modules.http_helper import http_helper
 from modules.utils import get_current_time
 
 logger = logging.getLogger(__name__)
+
+
+class SteamHTTPAdapter(Protocol):
+    """Minimal outbound HTTP contract required by the Steam integration."""
+
+    async def get(
+        self,
+        url: str,
+        *,
+        params: Dict[str, Any],
+        timeout: int,
+    ) -> tuple[bool, Any, str | None]: ...
+
+    async def post(
+        self,
+        url: str,
+        *,
+        params: Dict[str, Any],
+        timeout: int,
+    ) -> tuple[bool, Any, str | None]: ...
 
 
 class SteamAPIService:
@@ -26,8 +46,23 @@ class SteamAPIService:
     # Steam API endpoint for creating game server account
     CREATE_ACCOUNT_URL = "https://api.steampowered.com/IGameServersService/CreateAccount/v1/"
 
-    @staticmethod
-    async def check_version(current_version: Optional[str] = None) -> Tuple[bool, Optional[Dict]]:
+    def __init__(self, http_adapter: SteamHTTPAdapter | None = None) -> None:
+        """Bind the service to one outbound HTTP adapter.
+
+        The optional compatibility default is intended for non-ASGI callers.
+        FastAPI routes always pass their current application's lifespan-owned
+        adapter explicitly.
+        """
+        self._http = http_helper if http_adapter is None else http_adapter
+
+    @property
+    def http_adapter(self) -> SteamHTTPAdapter:
+        """Expose the bound adapter for diagnostics and isolation tests."""
+        return self._http
+
+    async def check_version(
+        self, current_version: Optional[str] = None
+    ) -> Tuple[bool, Optional[Dict]]:
         """
         Check if a CS2 version is up-to-date using Steam API
 
@@ -50,16 +85,16 @@ class SteamAPIService:
 
             # Prepare request parameters
             params = {
-                "appid": SteamAPIService.CS2_APP_ID,
+                "appid": self.CS2_APP_ID,
                 "version": version_to_check,
                 "format": "json",
             }
 
             logger.debug(f"Checking CS2 version against Steam API: {version_to_check}")
 
-            # Make async HTTP request using http_helper
-            success, data, error_msg = await http_helper.get(
-                url=SteamAPIService.VERSION_CHECK_URL, params=params, timeout=10
+            # Make the request through the adapter selected by the caller.
+            success, data, error_msg = await self._http.get(
+                url=self.VERSION_CHECK_URL, params=params, timeout=10
             )
 
             if not success:
@@ -181,9 +216,8 @@ class SteamAPIService:
         interval_seconds = interval_hours * 3600
         return time_since_check >= interval_seconds
 
-    @staticmethod
     async def create_game_server_account(
-        steam_api_key: str, memo: str = ""
+        self, steam_api_key: str, memo: str = ""
     ) -> Tuple[bool, Optional[Dict]]:
         """
         Create a new game server account (GSLT) using Steam API
@@ -201,20 +235,18 @@ class SteamAPIService:
                 - error: str (error message if failed)
         """
         try:
-            logger.debug(
-                f"Creating game server account for CS2 (appid={SteamAPIService.CS2_APP_ID})"
-            )
+            logger.debug(f"Creating game server account for CS2 (appid={self.CS2_APP_ID})")
 
             # Prepare request parameters
             params = {
                 "key": steam_api_key,
-                "appid": SteamAPIService.CS2_APP_ID,
+                "appid": self.CS2_APP_ID,
                 "memo": memo or "CS2 Server",
             }
 
-            # Make HTTP request using the helper
-            success, response_data, error_msg = await http_helper.post(
-                url=SteamAPIService.CREATE_ACCOUNT_URL, params=params, timeout=15
+            # Make the request through the adapter selected by the caller.
+            success, response_data, error_msg = await self._http.post(
+                url=self.CREATE_ACCOUNT_URL, params=params, timeout=15
             )
 
             if not success:
@@ -233,11 +265,14 @@ class SteamAPIService:
             #   }
             # }
 
-            if "response" not in response_data:
+            if not isinstance(response_data, dict) or "response" not in response_data:
                 logger.error(f"Unexpected Steam API response format: {response_data}")
                 return False, {"success": False, "error": "Unexpected API response format"}
 
             api_response = response_data["response"]
+            if not isinstance(api_response, dict):
+                logger.error(f"Invalid Steam API response structure: {api_response}")
+                return False, {"success": False, "error": "Invalid API response structure"}
 
             # Check if login_token exists in response
             if "login_token" not in api_response:
@@ -264,5 +299,6 @@ class SteamAPIService:
             return False, {"success": False, "error": f"Unexpected error: {str(e)}"}
 
 
-# Global instance
-steam_api_service = SteamAPIService()
+# Global compatibility facade for non-ASGI jobs and legacy imports. Request
+# handlers bind a short-lived facade to their own application's HTTP resource.
+steam_api_service = SteamAPIService(http_adapter=http_helper)

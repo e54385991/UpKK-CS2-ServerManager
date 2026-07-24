@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock
 
@@ -17,6 +18,8 @@ from services.rate_limit import enforce_rate_limit
 from services.redis_manager import redis_manager
 from services.scheduled_task_service import scheduled_task_service
 from services.ssh_connection_pool import SSHConnectionPool
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class _FakeSSHConnection:
@@ -133,7 +136,7 @@ def test_batch_requests_are_deduplicated_and_bounded():
     request = BatchActionRequest(server_ids=[1, 1, 2], action="restart")
     assert request.server_ids == [1, 2]
     with pytest.raises(ValidationError):
-        BatchActionRequest(server_ids=list(range(21)), action="restart")
+        BatchActionRequest(server_ids=list(range(1, 42)), action="restart")
 
 
 @pytest.mark.asyncio
@@ -149,10 +152,14 @@ async def test_public_rate_limit_returns_retry_after(monkeypatch):
     assert caught.value.headers["Retry-After"] == "17"
 
 
-def test_file_editor_uses_sftp_instead_of_shell_command():
+def test_file_editor_loads_content_through_authenticated_json_api():
     source = inspect.getsource(main.file_editor_popup)
-    assert "read_file" in source
+    template = (PROJECT_ROOT / "templates" / "file_editor_popup.html").read_text(encoding="utf-8")
+
+    assert "read_file" not in source
     assert "execute_command" not in source
+    assert "file_content" not in template
+    assert "/files/content?path=" in template
 
 
 def test_pyjwt_session_tokens_remain_compatible():

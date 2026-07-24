@@ -64,7 +64,16 @@ cp .env.example .env
 # Edit .env with your database and Redis settings
 
 # Start dependencies (MySQL + Redis)
-docker-compose up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+# Apply the schema as an explicit deployment step
+uv run python -m cs2_manager.migrate upgrade
+
+# Create the first administrator (replace every placeholder)
+uv run python -m cs2_manager.cli create-admin \
+  --username YOUR_ADMIN_NAME \
+  --email YOUR_ADMIN_EMAIL \
+  --password-prompt
 
 # Run the manager
 uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
@@ -79,8 +88,8 @@ uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ### Step 3: Deploy CS2 Server
 
 1. **Login** to the web interface at http://localhost:8000/login
-   - Default credentials: `admin` / `admin123`
-   - **Change the password immediately!**
+   - Use the administrator explicitly created in Step 2
+   - No default credentials are generated
 
 2. **Add a Server** at http://localhost:8000/servers-ui
    - Click "Add Server"
@@ -208,7 +217,16 @@ cp .env.example .env
 # 编辑 .env 文件，配置数据库和 Redis 设置
 
 # 启动依赖（MySQL + Redis）
-docker-compose up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+# 将数据库迁移到当前版本（应用启动不会自动建表）
+uv run python -m cs2_manager.migrate upgrade
+
+# 创建首个管理员（请替换所有占位值）
+uv run python -m cs2_manager.cli create-admin \
+  --username YOUR_ADMIN_NAME \
+  --email YOUR_ADMIN_EMAIL \
+  --password-prompt
 
 # 运行管理器
 uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
@@ -223,8 +241,8 @@ uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ### 步骤 3: 部署 CS2 服务器
 
 1. **登录** Web 界面 http://localhost:8000/login
-   - 默认凭据：`admin` / `admin123`
-   - **立即更改密码！**
+   - 使用步骤 2 中显式创建的管理员账户
+   - 系统不会生成默认凭据
 
 2. **添加服务器** http://localhost:8000/servers-ui
    - 点击"Add Server"

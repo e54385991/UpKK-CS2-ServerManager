@@ -15,6 +15,8 @@ from jwt import InvalidTokenError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from cs2_manager.core import Principal
+
 from .config import settings
 from .database import async_session_maker, get_db
 from .models import Server, User
@@ -210,6 +212,46 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
+async def get_current_principal(
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+) -> Principal:
+    """Authenticate in a short session and return a detached identity.
+
+    Unlike the legacy ORM-returning dependency, the database context has
+    already exited when the route handler receives this value. This makes the
+    dependency safe for endpoints which immediately perform slow remote I/O.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        user_id = _decode_user_id(token)
+    except InvalidTokenError, ValueError, TypeError:
+        raise credentials_exception from None
+
+    container = getattr(request.app.state, "container", None)
+    database = getattr(container, "database", None)
+    session_factory = getattr(database, "session_factory", None)
+    if not callable(session_factory):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication database is unavailable",
+        )
+
+    async with session_factory() as db:
+        user = await db.get(User, user_id)
+        if user is None:
+            raise credentials_exception
+        if not user.is_active:
+            raise HTTPException(status_code=400, detail="Inactive user")
+        principal = Principal.from_user(user)
+
+    return principal
 
 
 async def get_optional_current_user(

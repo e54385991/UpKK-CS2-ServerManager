@@ -2,6 +2,9 @@
 
 # ruff: noqa: F403,F405
 
+from cs2_manager.infrastructure.credentials import hash_token, register_credential_shadows
+from modules.config import settings
+
 from .common import *
 
 
@@ -16,17 +19,34 @@ class User(SQLModel, table=True):
     hashed_password: str = Field(max_length=255, nullable=False)
     is_active: bool = Field(default=True)
     is_admin: bool = Field(default=False)
+    # ``api_key`` is retained only for the expand/migrate/contract rollout. New
+    # keys are stored as keyed digests and can therefore only be shown once.
     api_key: Optional[str] = Field(default=None, max_length=64, unique=True, index=True)
+    api_key_hash: Optional[str] = Field(
+        default=None,
+        sa_column=Column(CHAR(64), nullable=True, unique=True, index=True),
+    )
+    api_key_prefix: Optional[str] = Field(default=None, max_length=12)
     steam_api_key: Optional[str] = Field(default=None, max_length=64)
-    github_token: Optional[str] = Field(
-        default=None, max_length=255
+    steam_api_key_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
+    github_token: Optional[str] = Field(default=None, max_length=255)
+    github_token_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
     )  # GitHub Fine-grained personal access token
     s3_enabled: bool = Field(default=False)
     s3_endpoint_url: Optional[str] = Field(default=None, max_length=500)
     s3_region: Optional[str] = Field(default=None, max_length=100)
     s3_bucket: Optional[str] = Field(default=None, max_length=255)
     s3_access_key_id: Optional[str] = Field(default=None, max_length=255)
+    s3_access_key_id_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     s3_secret_access_key: Optional[str] = Field(default=None, max_length=255)
+    s3_secret_access_key_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     s3_prefix: Optional[str] = Field(default=None, max_length=255)
     s3_use_ssl: bool = Field(default=True)
     s3_retention_count: Optional[int] = Field(default=10)
@@ -50,7 +70,7 @@ class User(SQLModel, table=True):
     @property
     def has_api_key(self) -> bool:
         """Check if user has an API key configured"""
-        return self.api_key is not None
+        return self.api_key_hash is not None or self.api_key is not None
 
     @property
     def has_steam_api_key(self) -> bool:
@@ -86,9 +106,26 @@ class User(SQLModel, table=True):
 
     @classmethod
     async def get_by_api_key(cls, session: AsyncSession, api_key: str) -> Optional["User"]:
-        """Get user by API key"""
+        """Get a user by a keyed digest, with a temporary plaintext fallback."""
+        digest = hash_token(api_key, settings.TOKEN_HASH_KEY or settings.SECRET_KEY)
+        result = await session.execute(select(cls).where(cls.api_key_hash == digest))
+        user = result.scalar_one_or_none()
+        if user is not None:
+            return user
+
+        # Compatibility for rows not yet processed by the credential backfill.
         result = await session.execute(select(cls).where(cls.api_key == api_key))
         return result.scalar_one_or_none()
+
+    def set_api_key(self, api_key: str | None) -> None:
+        """Replace or revoke the API key without retaining recoverable plaintext."""
+        self.api_key = None
+        self.api_key_hash = (
+            hash_token(api_key, settings.TOKEN_HASH_KEY or settings.SECRET_KEY)
+            if api_key is not None
+            else None
+        )
+        self.api_key_prefix = api_key[:8] if api_key is not None else None
 
     @classmethod
     async def get_by_google_id(cls, session: AsyncSession, google_id: str) -> Optional["User"]:
@@ -104,7 +141,14 @@ class PasswordResetToken(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True, index=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
-    token: str = Field(max_length=64, unique=True, nullable=False, index=True)
+    # ``token`` is the legacy plaintext column and becomes nullable in the
+    # expand migration. All newly-created reset tokens use ``token_hash``.
+    token: Optional[str] = Field(default=None, max_length=64, unique=True, index=True)
+    token_hash: Optional[str] = Field(
+        default=None,
+        sa_column=Column(CHAR(64), nullable=True, unique=True, index=True),
+    )
+    token_prefix: Optional[str] = Field(default=None, max_length=12)
     expires_at: datetime = Field(nullable=False)
     used: bool = Field(default=False)
     created_at: Optional[datetime] = Field(
@@ -138,7 +182,12 @@ class PasswordResetToken(SQLModel, table=True):
     async def get_by_token(
         cls, session: AsyncSession, token: str
     ) -> Optional["PasswordResetToken"]:
-        """Get password reset token by token string"""
+        """Look up a reset token by digest, with a legacy plaintext fallback."""
+        digest = hash_token(token, settings.TOKEN_HASH_KEY or settings.SECRET_KEY)
+        result = await session.execute(select(cls).where(cls.token_hash == digest))
+        reset_token = result.scalar_one_or_none()
+        if reset_token is not None:
+            return reset_token
         result = await session.execute(select(cls).where(cls.token == token))
         return result.scalar_one_or_none()
 
@@ -147,8 +196,25 @@ class PasswordResetToken(SQLModel, table=True):
         cls, session: AsyncSession, user_id: int, token: str, expires_at: datetime
     ) -> "PasswordResetToken":
         """Create a new password reset token"""
-        reset_token = cls(user_id=user_id, token=token, expires_at=expires_at)
+        reset_token = cls(
+            user_id=user_id,
+            token=None,
+            token_hash=hash_token(token, settings.TOKEN_HASH_KEY or settings.SECRET_KEY),
+            token_prefix=token[:8],
+            expires_at=expires_at,
+        )
         session.add(reset_token)
         await session.commit()
         await session.refresh(reset_token)
         return reset_token
+
+
+register_credential_shadows(
+    User,
+    (
+        "steam_api_key",
+        "github_token",
+        "s3_access_key_id",
+        "s3_secret_access_key",
+    ),
+)

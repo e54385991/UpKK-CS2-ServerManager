@@ -37,7 +37,8 @@ from services.game_session import (
     stop_session_command,
 )
 from services.server_monitor import server_monitor
-from services.ssh_connection_pool import ssh_connection_pool
+from services.ssh_connection_pool import ConnectionLease, ssh_connection_pool
+from services.ssh_host_keys import server_pinned_host_key_options
 
 logger = logging.getLogger(__name__)
 

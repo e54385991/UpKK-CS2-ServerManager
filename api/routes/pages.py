@@ -12,6 +12,7 @@ from modules import (
     get_current_web_admin,
     get_current_web_user,
     get_db,
+    settings,
 )
 
 router = APIRouter()
@@ -38,6 +39,9 @@ async def login_page(request: Request):
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     """Registration page"""
+    app_settings = getattr(request.app.state, "settings", settings)
+    if not app_settings.registration_enabled:
+        raise HTTPException(status_code=404, detail="Registration is disabled")
     return templates.TemplateResponse(request, "register.html")
 
 
@@ -69,7 +73,7 @@ async def server_detail_ui(
         "server_detail.html",
         {
             "server": server,
-            "server_json": server_data.model_dump_json(),
+            "server_json": server_data.model_dump(mode="json"),
         },
     )
 
@@ -150,43 +154,8 @@ async def file_editor_popup(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_web_user),
 ):
-    """File editor popup window"""
-    server = await servers.get_server_with_permission(server_id, current_user, db)
-
-    from services.ssh_manager import SSHManager
-
-    ssh_manager = SSHManager()
-    success, message = await ssh_manager.connect(server)
-    if not success:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to connect to server: {message}",
-        )
-
-    try:
-        valid, validation_error = await ssh_manager.validate_path_within_base(
-            server.game_directory,
-            file_path,
-            server,
-            require_regular=True,
-        )
-        if not valid:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Access denied: {validation_error}",
-            )
-
-        success, stdout, stderr = await ssh_manager.read_file(file_path, server)
-        if not success:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to read file: {stderr}",
-            )
-
-        # Escape content for safe JavaScript template-literal embedding.
-        file_content = stdout.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
-    finally:
-        await ssh_manager.disconnect()
+    """Render the editor shell; authenticated JSON APIs load and save content."""
+    await servers.get_server_with_permission(server_id, current_user, db)
 
     return templates.TemplateResponse(
         request,
@@ -195,7 +164,6 @@ async def file_editor_popup(
             "server_id": server_id,
             "file_path": file_path,
             "file_name": file_name,
-            "file_content": file_content,
         },
     )
 

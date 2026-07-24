@@ -68,17 +68,18 @@ __all__ = [
 setup_logging(
     level=_get_log_level(settings.LOG_LEVEL),
     asyncssh_level=settings.ASYNCSSH_LOG_LEVEL,
+    environment=settings.ENVIRONMENT,
 )
 
 
 async def startup_event() -> None:
-    """Compatibility wrapper for application startup."""
-    await start_application()
+    """Compatibility wrapper for explicitly starting the ASGI application."""
+    await start_application(app)
 
 
 async def shutdown_event() -> None:
-    """Compatibility wrapper for application shutdown."""
-    await stop_application()
+    """Compatibility wrapper for explicitly stopping the ASGI application."""
+    await stop_application(app)
 
 
 @asynccontextmanager
@@ -91,7 +92,10 @@ async def lifespan(_app: FastAPI):
         await shutdown_event()
 
 
-app = create_app(lifespan=lifespan)
+# The production ASGI app uses the factory's canonical per-instance lifespan.
+# ``lifespan`` above remains only as a compatibility export for integrations
+# which invoked it directly before the application-factory migration.
+app = create_app()
 
 
 if __name__ == "__main__":

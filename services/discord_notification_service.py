@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from modules.http_helper import HTTPHelper, http_helper
 from modules.models import Server
 from modules.utils import get_current_time
 
@@ -44,7 +45,8 @@ MAX_FIELD_VALUE_LENGTH = 1024
 class DiscordNotificationService:
     """Build and send Discord webhook notifications."""
 
-    def __init__(self) -> None:
+    def __init__(self, http_client: Optional[HTTPHelper] = None) -> None:
+        self._http = http_client or http_helper
         self._background_tasks: Set[asyncio.Task] = set()
         self._rate_limit_last_sent: Dict[Tuple[int, str, str], Any] = {}
 
@@ -330,8 +332,13 @@ class DiscordNotificationService:
     ) -> Tuple[bool, Optional[str]]:
         """Post a payload without logging the sensitive webhook URL."""
         try:
-            async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-                response = await client.post(webhook_url, json=payload)
+            response = await self._http.request(
+                "POST",
+                webhook_url,
+                json=payload,
+                timeout=10.0,
+                follow_redirects=False,
+            )
 
             if 200 <= response.status_code < 300:
                 return True, None

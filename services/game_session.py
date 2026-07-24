@@ -37,6 +37,77 @@ def gslt_startup_parameter(value: Any, *, masked: bool = False) -> str | None:
     return f'+sv_setsteamaccount "{rendered_token}"'
 
 
+def cs2_startup_parameters(
+    *,
+    game_port: int,
+    default_map: Any,
+    max_players: int,
+    server_name: Any,
+    ip_address: Any = None,
+    client_port: int | None = None,
+    steam_account_token: Any = None,
+    server_password: Any = None,
+    rcon_password: Any = None,
+    game_mode: Any = "1",
+    game_type: Any = "0",
+    tv_enable: bool = False,
+    tv_port: int | None = None,
+    additional_parameters: Any = None,
+    masked: bool = False,
+) -> str:
+    """Build shell-safe CS2 arguments while preserving custom argv semantics.
+
+    Values are represented as individual argv entries and shell-quoted only at
+    the final boundary.  Advanced parameters are parsed as arguments instead
+    of being appended as executable shell source, so separators and command
+    substitutions remain literal values.
+    """
+    arguments = [
+        "-dedicated",
+        "-port",
+        str(int(game_port)),
+        "+map",
+        str(default_map or "de_dust2"),
+        "-maxplayers",
+        str(int(max_players)),
+        "+hostname",
+        str(server_name or "CS2 Server"),
+    ]
+
+    if ip_address:
+        arguments.extend(("-ip", str(ip_address)))
+    if client_port:
+        arguments.extend(("+clientport", str(int(client_port))))
+    elif game_port:
+        arguments.extend(("+clientport", str(int(game_port) + 1)))
+
+    token = str(steam_account_token or "").strip()
+    if token:
+        if not re.fullmatch(r"[A-Za-z0-9]+", token):
+            raise ValueError("Steam account token must only contain alphanumeric characters")
+        arguments.extend(("+sv_setsteamaccount", "***STEAM_TOKEN***" if masked else token))
+
+    if server_password:
+        arguments.extend(("+sv_password", "***PASSWORD***" if masked else str(server_password)))
+    if rcon_password:
+        arguments.extend(
+            ("+rcon_password", "***RCON_PASSWORD***" if masked else str(rcon_password))
+        )
+
+    arguments.extend(("+game_mode", str(game_mode), "+game_type", str(game_type)))
+    if tv_enable and tv_port:
+        arguments.extend(("+tv_enable", "1", "+tv_port", str(int(tv_port)), "+tv_name", "GOTV"))
+
+    custom = str(additional_parameters or "").strip()
+    if custom:
+        try:
+            arguments.extend(shlex.split(custom, posix=True))
+        except ValueError as exc:
+            raise ValueError(f"Invalid additional parameters: {exc}") from exc
+
+    return shlex.join(arguments)
+
+
 def session_manager_order(preferred: Any) -> tuple[str, ...]:
     """Check the configured manager first, then the other manager for migrations."""
     manager = normalize_session_manager(preferred)

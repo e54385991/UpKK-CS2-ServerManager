@@ -5,7 +5,11 @@ Periodically queries all servers using A2S protocol and caches results in Redis
 
 import asyncio
 import logging
-from typing import Dict, Optional
+import random
+from collections.abc import Callable
+from typing import Any, Dict, Optional, Protocol
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.utils import get_current_time
 from services.a2s_query import a2s_service
@@ -13,17 +17,63 @@ from services.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
 
+A2S_CACHE_SERVICE_KEY = "a2s_cache"
+SessionFactory = Callable[[], AsyncSession]
+
+
+class A2SRedisAdapter(Protocol):
+    """Minimal cache contract required by the A2S service."""
+
+    async def set(self, key: str, value: Any, expire: int = 300) -> object: ...
+
+    async def get(self, key: str) -> object | None: ...
+
+    async def mget(self, keys: list[str]) -> list[Any | None]: ...
+
 
 class A2SCacheService:
     """Background service to query and cache A2S server information"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        max_query_concurrency: int = 16,
+        *,
+        server_deadline: float = 1.2,
+        sweep_deadline: float = 9.5,
+        redis_adapter: A2SRedisAdapter | None = None,
+        session_factory: SessionFactory | None = None,
+    ):
         self.query_interval = 30  # Query every 30 seconds
         self.cache_ttl = 60  # Cache TTL in seconds
         self.steam_version_cache_ttl = 3600  # Cache Steam version for 1 hour
+        self.max_query_concurrency = max(1, max_query_concurrency)
+        self.server_deadline = max(0.01, server_deadline)
+        self.sweep_deadline = max(self.server_deadline, sweep_deadline)
+        self._redis_adapter = redis_adapter
+        # Resolve the legacy factory lazily. Existing callers can keep
+        # monkeypatching ``modules.database.async_session_maker`` after this
+        # service has been constructed, while application-owned instances bind
+        # their own factory permanently.
+        self._session_factory = session_factory
         self.task: Optional[asyncio.Task] = None
         self.steam_version_task: Optional[asyncio.Task] = None
         self.running = False
+        self._sweep_lock = asyncio.Lock()
+
+    @property
+    def redis_adapter(self) -> A2SRedisAdapter:
+        """Return this service's cache adapter or the legacy global one."""
+        return self._redis_adapter if self._redis_adapter is not None else redis_manager
+
+    @property
+    def session_factory(self) -> SessionFactory:
+        """Return this service's database boundary or the legacy global one."""
+        if self._session_factory is not None:
+            return self._session_factory
+
+        from modules.database import async_session_maker
+
+        return async_session_maker
 
     async def start(self):
         """Start the background A2S query task"""
@@ -58,8 +108,8 @@ class A2SCacheService:
             except Exception as e:
                 logger.error(f"Error in A2S query loop: {e}")
 
-            # Wait for next interval
-            await asyncio.sleep(self.query_interval)
+            # Spread periodic work across instances and avoid synchronized bursts.
+            await asyncio.sleep(self.query_interval * random.uniform(0.9, 1.1))
 
     async def _steam_version_loop(self):
         """Steam version cache loop - updates every hour"""
@@ -69,8 +119,8 @@ class A2SCacheService:
             except Exception as e:
                 logger.error(f"Error in Steam version cache loop: {e}")
 
-            # Wait for next interval (1 hour)
-            await asyncio.sleep(self.steam_version_cache_ttl)
+            # Wait for next interval (1 hour), with bounded jitter.
+            await asyncio.sleep(self.steam_version_cache_ttl * random.uniform(0.9, 1.1))
 
     async def _cache_steam_version(self):
         """Fetch and cache latest CS2 version from Steam API"""
@@ -79,7 +129,7 @@ class A2SCacheService:
 
             success, result = await steam_api_service.check_version("1")
 
-            if success and result.get("success"):
+            if success and result and result.get("success"):
                 steam_version = result.get("required_version")
                 if steam_version:
                     cache_data = {
@@ -88,7 +138,7 @@ class A2SCacheService:
                         "timestamp": get_current_time().isoformat(),
                     }
 
-                    await redis_manager.set(
+                    await self.redis_adapter.set(
                         "steam:latest_version", cache_data, expire=self.steam_version_cache_ttl
                     )
 
@@ -99,7 +149,7 @@ class A2SCacheService:
     async def get_latest_steam_version(self) -> Optional[Dict]:
         """Get cached Steam version info"""
         try:
-            cached = await redis_manager.get("steam:latest_version")
+            cached = await self.redis_adapter.get("steam:latest_version")
             if cached and isinstance(cached, dict):
                 return cached
             return None
@@ -111,31 +161,73 @@ class A2SCacheService:
         """Query all servers and cache results"""
         from sqlmodel import select
 
-        from modules.database import async_session_maker
         from modules.models import Server
 
+        if self._sweep_lock.locked():
+            logger.debug("Skipping overlapping A2S sweep")
+            return
+
+        try:
+            async with self._sweep_lock, asyncio.timeout(self.sweep_deadline):
+                await self._run_server_sweep(select, self.session_factory, Server)
+        except TimeoutError:
+            logger.warning("A2S sweep exceeded %.2fs deadline", self.sweep_deadline)
+        except Exception as e:
+            logger.error(f"Error querying servers: {e}")
+
+    async def _run_server_sweep(self, select, async_session_maker, server_model):
+        """Run one bounded sweep while the single-flight lock is held."""
         try:
             # Fetch server list quickly and close DB connection to avoid pool exhaustion
             async with async_session_maker() as db:
-                result = await db.execute(select(Server))
+                result = await db.execute(select(server_model))
                 servers = result.scalars().all()
 
             logger.debug(f"Querying {len(servers)} servers for A2S info")
 
-            # Query each server
-            # DB session is already closed, so network operations won't hold DB connections
-            for server in servers:
+            # DB session is already closed, so network operations won't hold DB
+            # connections. Bound fan-out to protect UDP sockets and thread workers.
+            semaphore = asyncio.Semaphore(self.max_query_concurrency)
+
+            async def query_server(server):
                 # Skip servers that are marked as down due to SSH failures
                 if server.should_skip_background_checks():
                     logger.debug(
                         f"Skipping A2S query for server {server.id} - marked as SSH down for 3+ days"
                     )
-                    continue
+                    return
 
-                await self._query_and_cache_server(server)
+                async with semaphore:
+                    try:
+                        async with asyncio.timeout(self.server_deadline):
+                            await self._query_and_cache_server(server)
+                    except TimeoutError:
+                        logger.warning(
+                            "A2S query for server %s exceeded %.2fs deadline",
+                            server.id,
+                            self.server_deadline,
+                        )
+                        await self._cache_query_error(server.id, "A2S query deadline exceeded")
+
+            await asyncio.gather(*(query_server(server) for server in servers))
 
         except Exception as e:
             logger.error(f"Error querying servers: {e}")
+
+    async def _cache_query_error(self, server_id: int, error: str) -> None:
+        cache_data = {
+            "success": False,
+            "error": error,
+            "timestamp": get_current_time().isoformat(),
+        }
+        try:
+            await self.redis_adapter.set(
+                f"a2s:server:{server_id}",
+                cache_data,
+                expire=self.cache_ttl,
+            )
+        except Exception:
+            logger.debug("Unable to cache A2S error for server %s", server_id, exc_info=True)
 
     async def _query_and_cache_server(self, server):
         """Query a single server and cache the result"""
@@ -177,7 +269,7 @@ class A2SCacheService:
 
             # Store in Redis with TTL
             cache_key = f"a2s:server:{server.id}"
-            await redis_manager.set(cache_key, cache_data, expire=self.cache_ttl)
+            await self.redis_adapter.set(cache_key, cache_data, expire=self.cache_ttl)
 
             # Update server's current_game_version in database if we got version from A2S
             if info_success and server_info and server_info.get("version"):
@@ -188,10 +280,8 @@ class A2SCacheService:
                 )
                 if parsed_version and parsed_version != server.current_game_version:
                     # Update the server's version in the database
-                    from modules.database import async_session_maker
-
                     try:
-                        async with async_session_maker() as db:
+                        async with self.session_factory() as db:
                             from sqlmodel import update
 
                             from modules.models import Server
@@ -206,7 +296,7 @@ class A2SCacheService:
                     except Exception as e:
                         logger.error(f"Failed to update server version in DB: {e}")
 
-            if info_success:
+            if info_success and server_info:
                 logger.debug(
                     f"Cached A2S info for server {server.id} ({server.name}): "
                     f"{server_info.get('server_name', 'N/A')} - "
@@ -217,42 +307,45 @@ class A2SCacheService:
 
         except Exception as e:
             logger.error(f"Error querying server {server.id}: {e}")
-            # Cache the error state
-            cache_data = {
-                "success": False,
-                "error": str(e),
-                "timestamp": get_current_time().isoformat(),
-            }
-            cache_key = f"a2s:server:{server.id}"
-            try:
-                await redis_manager.set(cache_key, cache_data, expire=self.cache_ttl)
-            except Exception:
-                pass
+            await self._cache_query_error(server.id, str(e))
 
     async def get_cached_info(self, server_id: int) -> Optional[Dict]:
         """Get cached A2S info for a server"""
         cache_key = f"a2s:server:{server_id}"
         try:
-            cached = await redis_manager.get(cache_key)
-            if cached:
-                # Ensure we return a dict, not a string (in case of corrupted data)
-                if isinstance(cached, dict):
-                    return cached
-                elif isinstance(cached, str):
-                    # Try to parse string as JSON (corrupted data from old bug)
-                    import json
-
-                    try:
-                        parsed = json.loads(cached)
-                        if isinstance(parsed, dict):
-                            return parsed
-                    except json.JSONDecodeError, TypeError:
-                        pass
-                logger.warning(f"Invalid cached data type for server {server_id}: {type(cached)}")
-            return None
+            cached = await self.redis_adapter.get(cache_key)
+            return self._normalize_cached_info(server_id, cached)
         except Exception as e:
             logger.error(f"Error getting cached A2S info for server {server_id}: {e}")
             return None
+
+    async def get_cached_info_many(self, server_ids: list[int]) -> Dict[int, Optional[Dict]]:
+        """Fetch cached A2S data for many servers with one Redis MGET."""
+        unique_server_ids = list(dict.fromkeys(server_ids))
+        keys = [f"a2s:server:{server_id}" for server_id in unique_server_ids]
+        cached_values = await self.redis_adapter.mget(keys)
+        return {
+            server_id: self._normalize_cached_info(server_id, cached)
+            for server_id, cached in zip(unique_server_ids, cached_values, strict=True)
+        }
+
+    @staticmethod
+    def _normalize_cached_info(server_id: int, cached: object) -> Optional[Dict]:
+        """Normalize current cache values and values from the old double-JSON bug."""
+        if isinstance(cached, dict):
+            return cached
+        if isinstance(cached, str):
+            import json
+
+            try:
+                parsed = json.loads(cached)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError, TypeError:
+                pass
+        if cached is not None:
+            logger.warning("Invalid cached data type for server %s: %s", server_id, type(cached))
+        return None
 
 
 # Global instance

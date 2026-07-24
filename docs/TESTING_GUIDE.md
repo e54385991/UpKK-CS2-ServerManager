@@ -145,7 +145,7 @@ You should see:
 
 ### Plugins Not Loading
 - Check browser console for errors
-- Verify API endpoints are accessible (`/api/plugins`, `/api/plugins/categories`)
+- Verify registered plugin-market and managed-plugin endpoints are accessible.
 - Check server logs for errors
 
 ### Installation Fails

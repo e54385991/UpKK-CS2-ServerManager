@@ -21,6 +21,7 @@ from typing import Dict, Optional
 import asyncssh
 
 from modules.utils import get_current_time
+from services.ssh_host_keys import server_pinned_host_key_options
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +29,10 @@ logger = logging.getLogger(__name__)
 class SSHHealthMonitor:
     """Background daemon for SSH health monitoring"""
 
-    def __init__(self):
+    def __init__(self, max_health_concurrency: int = 8):
         self.running = False
         self.monitor_task: Optional[asyncio.Task] = None
+        self.max_health_concurrency = max(1, max_health_concurrency)
         # Track last check time per server to avoid duplicate checks
         self.last_check_times: Dict[int, datetime] = {}
 
@@ -85,17 +87,21 @@ class SSHHealthMonitor:
                 )
                 servers = result.scalars().all()
 
-                if not servers:
-                    return
+            if not servers:
+                return
 
-                logger.debug(f"SSH health monitor: checking {len(servers)} server(s)")
+            logger.debug(f"SSH health monitor: checking {len(servers)} server(s)")
+            semaphore = asyncio.Semaphore(self.max_health_concurrency)
 
-                # Check each server
-                for server in servers:
+            async def check_server(server) -> None:
+                async with semaphore:
                     try:
                         await self._check_server_health(server)
                     except Exception as e:
                         logger.error(f"Error checking SSH health for server {server.id}: {e}")
+
+            # The discovery session is closed before any SSH I/O starts.
+            await asyncio.gather(*(check_server(server) for server in servers))
         except Exception as e:
             logger.error(f"Error getting servers for SSH health check: {e}")
 
@@ -249,8 +255,8 @@ class SSHHealthMonitor:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         password=server.ssh_password,
-                        known_hosts=None,
                         connect_timeout=10,
+                        **server_pinned_host_key_options(server),
                     ),
                     timeout=15,
                 )
@@ -261,8 +267,8 @@ class SSHHealthMonitor:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         client_keys=[server.ssh_key_path],
-                        known_hosts=None,
                         connect_timeout=10,
+                        **server_pinned_host_key_options(server),
                     ),
                     timeout=15,
                 )

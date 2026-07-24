@@ -584,13 +584,47 @@ echo "密码: ${this.password}"`;
                         payload.sudo_password = this.autoSetupForm.sudo_password;
                     }
 
-                    const response = await authFetch('/api/setup/auto-setup', {
+                    let response = await authFetch('/api/setup/auto-setup', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify(payload)
                     });
+
+                    if (response.status === 409) {
+                        const conflict = await response.json();
+                        const hostKey = conflict.detail;
+                        if (hostKey?.code === 'ssh_host_key_confirmation_required') {
+                            const prompt = [
+                                hostKey.message,
+                                '',
+                                `Algorithm: ${hostKey.algorithm}`,
+                                `SHA-256: ${hostKey.fingerprint}`,
+                                '',
+                                '请向服务器管理员核对该指纹。是否信任此密钥？'
+                            ].join('\n');
+                            if (!window.confirm(prompt)) {
+                                throw new Error('SSH 主机密钥未确认');
+                            }
+                            payload.ssh_host_key_algorithm = hostKey.algorithm;
+                            payload.ssh_host_key_fingerprint = hostKey.fingerprint;
+                            payload.ssh_host_key_confirmed = true;
+                            addLog('已确认 SSH 主机密钥，正在安全连接...');
+                            response = await authFetch('/api/setup/auto-setup', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(payload)
+                            });
+                        } else {
+                            const message = typeof hostKey === 'string'
+                                ? hostKey
+                                : '服务器设置请求冲突';
+                            throw new Error(message);
+                        }
+                    }
 
                     const result = await response.json();
 

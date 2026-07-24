@@ -2,6 +2,8 @@
 #    uv --cache-dir .uv-cache pip compile pyproject.toml --python-version 3.14 --universal --no-managed-python --no-python-downloads --output-file requirements.txt
 aiomysql==0.3.2
     # via cs2-server-manager (pyproject.toml)
+alembic==1.18.5
+    # via cs2-server-manager (pyproject.toml)
 annotated-doc==0.0.4
     # via fastapi
 annotated-types==0.7.0
@@ -95,8 +97,12 @@ jmespath==1.1.0
     # via
     #   boto3
     #   botocore
+mako==1.3.12
+    # via alembic
 markupsafe==3.0.3
-    # via jinja2
+    # via
+    #   jinja2
+    #   mako
 oauthlib==3.3.1
     # via requests-oauthlib
 pillow==12.3.0
@@ -159,6 +165,7 @@ six==1.17.0
 sqlalchemy==2.0.51
     # via
     #   cs2-server-manager (pyproject.toml)
+    #   alembic
     #   sqlmodel
 sqlmodel==0.0.39
     # via cs2-server-manager (pyproject.toml)
@@ -166,6 +173,7 @@ starlette==1.3.1
     # via fastapi
 typing-extensions==4.16.0
     # via
+    #   alembic
     #   asyncssh
     #   fastapi
     #   pydantic

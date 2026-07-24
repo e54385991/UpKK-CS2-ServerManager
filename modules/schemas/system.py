@@ -95,10 +95,32 @@ class GmailCredentialsUploadRequest(SQLModel):
     )
 
 
+class GmailOAuthActionResponse(SQLModel):
+    """Successful Gmail OAuth configuration mutation."""
+
+    success: Literal[True]
+    message: str
+
+
+class GmailOAuthStatusResponse(SQLModel):
+    """Secret-free Gmail OAuth readiness state."""
+
+    credentials_configured: bool
+    token_configured: bool
+    ready: bool
+
+
 class EmailTestRequest(SQLModel):
     """Schema for email test request"""
 
     test_email: EmailStr = Field(..., description="Email address to send test email to")
+
+
+class EmailTestResponse(SQLModel):
+    """Successful test-email delivery response."""
+
+    success: Literal[True]
+    message: str
 
 
 class DiscordSettingsResponse(SQLModel):

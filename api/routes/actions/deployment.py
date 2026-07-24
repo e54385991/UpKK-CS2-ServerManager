@@ -2,6 +2,13 @@
 
 # ruff: noqa: F403,F405
 
+from api.response_models import (
+    DeploymentLockResponse,
+    DeploymentProgressResponse,
+    OperationMessageResponse,
+    ServerActionResponse,
+)
+
 from .common import *
 
 router = APIRouter(tags=["actions"])
@@ -24,7 +31,13 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
     user, server = await authenticate_websocket(websocket, server_id)
     if user is None or server is None:
         return
-    await deployment_ws.connect(websocket, server_id)
+    app = websocket.scope.get("app")
+    supervisor = getattr(getattr(app, "state", None), "task_supervisor", None)
+    await deployment_ws.connect(
+        websocket,
+        server_id,
+        task_supervisor=supervisor,
+    )
     try:
         # Send accumulated progress on connection (for recovery after disconnect/restart)
         accumulated_progress = await redis_manager.get_deployment_progress(server_id)
@@ -53,10 +66,20 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
                 }
             )
     except WebSocketDisconnect:
+        pass
+    finally:
         deployment_ws.disconnect(websocket, server_id)
 
 
-@router.get("/servers/{server_id}/deployment-lock")
+@router.get(
+    "/servers/{server_id}/deployment-lock",
+    response_model=DeploymentLockResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    },
+)
 async def check_deployment_lock(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -90,7 +113,16 @@ async def check_deployment_lock(
     return JSONResponse(content={"lock_exists": bool(lock_exists), "server_status": server.status})
 
 
-@router.delete("/servers/{server_id}/deployment-lock")
+@router.delete(
+    "/servers/{server_id}/deployment-lock",
+    response_model=OperationMessageResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": OperationMessageResponse},
+    },
+)
 async def cancel_deployment(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -165,13 +197,26 @@ async def cancel_deployment(
         )
 
 
-@router.post("/servers/{server_id}/actions", response_model=ActionResponse)
+@router.post(
+    "/servers/{server_id}/actions",
+    response_model=ServerActionResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+        status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+    },
+)
 async def server_action(
     server_id: int,
     action_data: ServerAction,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     locked_server: Server = Depends(acquire_server_action_lock),
+    s3_service: S3BackupService = Depends(resolve_s3_backup_service),
 ):
     """Execute action on server (deploy, start, stop, restart, status)"""
     server = (
@@ -271,7 +316,11 @@ async def server_action(
                 await redis_manager.delete(deployment_lock_key)
                 # Clear deployment progress after a delay to allow clients to fetch final messages
                 # The progress cache will also auto-expire after 2 hours
-                _store_task(asyncio.create_task(clear_deployment_progress_after_delay(server_id)))
+                _spawn_action_task(
+                    http_request,
+                    clear_deployment_progress_after_delay(server_id),
+                    name=f"deployment-progress-cleanup-{server_id}",
+                )
 
         elif action == "start":
             await send_deployment_update(server_id, "status", "Starting server...")
@@ -592,6 +641,7 @@ async def server_action(
                     current_user,
                     ssh_manager,
                     progress_callback=progress_callback,
+                    s3_service=s3_service,
                 )
                 if s3_success:
                     if s3_message:
@@ -684,7 +734,15 @@ async def server_action(
         ) from e
 
 
-@router.get("/servers/{server_id}/deployment-progress")
+@router.get(
+    "/servers/{server_id}/deployment-progress",
+    response_model=DeploymentProgressResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    },
+)
 async def get_deployment_progress(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -705,7 +763,15 @@ async def get_deployment_progress(
     return {"server_id": server_id, "progress_messages": progress, "total_messages": len(progress)}
 
 
-@router.get("/servers/{server_id}/logs", response_model=List[DeploymentLogResponse])
+@router.get(
+    "/servers/{server_id}/logs",
+    response_model=List[DeploymentLogResponse],
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    },
+)
 async def get_server_logs(
     server_id: int,
     skip: int = 0,

@@ -2,11 +2,15 @@
 
 import asyncio
 import logging
+from typing import Annotated, cast
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from api.dependencies import resolve_maintenance_lock_service
+from cs2_manager.core import ErrorResponse
 from modules import (
     ActionResponse,
     ManagedPlugin,
@@ -21,7 +25,7 @@ from modules import (
     get_current_active_user,
     get_db,
 )
-from services.maintenance_lock import maintenance_lock_service
+from services.maintenance_lock import MaintenanceLockService, maintenance_lock_service
 from services.plugin_auto_update_service import (
     FRAMEWORKS,
     canonical_repo_url,
@@ -34,11 +38,61 @@ router = APIRouter(
 )
 _background_tasks = plugin_update_task_registry.tasks
 logger = logging.getLogger(__name__)
+_DIRECT_MAINTENANCE_LOCK = object()
+_ApplicationMaintenanceLock = Annotated[
+    MaintenanceLockService | object,
+    Depends(resolve_maintenance_lock_service),
+]
+
+
+def _maintenance_locks(resource: MaintenanceLockService | object) -> MaintenanceLockService:
+    """Use the app-owned service, retaining the direct Python facade."""
+    if resource is _DIRECT_MAINTENANCE_LOCK:
+        return maintenance_lock_service
+    return cast(MaintenanceLockService, resource)
+
+
+class PluginUpdateStatusLogResponse(BaseModel):
+    time: str
+    message: str
+
+
+class PluginUpdateStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    state: str
+    phase: str
+    message: str
+    current: int
+    total: int
+    logs: list[PluginUpdateStatusLogResponse]
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+PLUGIN_AUTO_UPDATE_NOT_FOUND: dict[int | str, dict[str, object]] = {
+    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+}
+PLUGIN_AUTO_UPDATE_RUN_ERRORS: dict[int | str, dict[str, object]] = {
+    **PLUGIN_AUTO_UPDATE_NOT_FOUND,
+    status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+}
 
 
 def _task_done(task: asyncio.Task) -> None:
     if not task.cancelled() and task.exception():
         logger.error("Manual plugin update check failed: %s", task.exception())
+
+
+def _spawn_plugin_update_task(request: Request, coroutine, *, name: str) -> asyncio.Task:
+    supervisor = getattr(request.app.state, "task_supervisor", None)
+    if supervisor is not None:
+        return supervisor.create(coroutine, name=name)
+    return plugin_update_task_registry.create(
+        coroutine,
+        on_error=lambda completed, _error: _task_done(completed),
+    )
 
 
 async def shutdown_background_tasks() -> None:
@@ -71,7 +125,12 @@ async def owned_plugin(db: AsyncSession, server_id: int, plugin_id: int) -> Mana
     return plugin
 
 
-@router.get("", response_model=PluginAutoUpdateResponse)
+@router.get(
+    "",
+    response_model=PluginAutoUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    responses=PLUGIN_AUTO_UPDATE_NOT_FOUND,
+)
 async def get_configuration(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -91,7 +150,12 @@ async def get_configuration(
     )
 
 
-@router.put("/settings", response_model=PluginAutoUpdateResponse)
+@router.put(
+    "/settings",
+    response_model=PluginAutoUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    responses=PLUGIN_AUTO_UPDATE_NOT_FOUND,
+)
 async def update_settings(
     server_id: int,
     request: PluginAutoUpdateSettings,
@@ -107,7 +171,16 @@ async def update_settings(
     return await get_configuration(server_id, db, current_user)
 
 
-@router.post("/plugins", response_model=ManagedPluginResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/plugins",
+    response_model=ManagedPluginResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+        status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+    },
+)
 async def register_plugin(
     server_id: int,
     request: ManagedPluginCreate,
@@ -180,7 +253,12 @@ async def register_plugin(
     return ManagedPluginResponse.model_validate(plugin)
 
 
-@router.patch("/plugins/{plugin_id}", response_model=ManagedPluginResponse)
+@router.patch(
+    "/plugins/{plugin_id}",
+    response_model=ManagedPluginResponse,
+    status_code=status.HTTP_200_OK,
+    responses=PLUGIN_AUTO_UPDATE_NOT_FOUND,
+)
 async def update_plugin(
     server_id: int,
     plugin_id: int,
@@ -198,7 +276,12 @@ async def update_plugin(
     return ManagedPluginResponse.model_validate(plugin)
 
 
-@router.delete("/plugins/{plugin_id}", response_model=ActionResponse)
+@router.delete(
+    "/plugins/{plugin_id}",
+    response_model=ActionResponse,
+    status_code=status.HTTP_200_OK,
+    responses=PLUGIN_AUTO_UPDATE_NOT_FOUND,
+)
 async def unmanage_plugin(
     server_id: int,
     plugin_id: int,
@@ -214,22 +297,30 @@ async def unmanage_plugin(
     )
 
 
-@router.post("/run", response_model=ActionResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/run",
+    response_model=ActionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=PLUGIN_AUTO_UPDATE_RUN_ERRORS,
+)
 async def run_now(
     server_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ):
     await owned_server(db, server_id, current_user)
-    if await maintenance_lock_service.is_locked(server_id):
+    await db.commit()
+    if await _maintenance_locks(lock_service).is_locked(server_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Another maintenance operation is already running",
         )
-    task = asyncio.create_task(plugin_auto_update_service.check_server(server_id, force=True))
-    plugin_update_task_registry.add(
-        task,
-        on_error=lambda completed, _error: _task_done(completed),
+    _spawn_plugin_update_task(
+        request,
+        plugin_auto_update_service.check_server(server_id, force=True),
+        name=f"plugin-update-server-{server_id}",
     )
     return ActionResponse(success=True, message="Plugin update check started")
 
@@ -238,30 +329,40 @@ async def run_now(
     "/plugins/{plugin_id}/test-update",
     response_model=ActionResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    responses=PLUGIN_AUTO_UPDATE_RUN_ERRORS,
 )
 async def test_plugin_update(
     server_id: int,
     plugin_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ):
     """Run the normal protected update pipeline for one managed plugin."""
     await owned_server(db, server_id, current_user)
     await owned_plugin(db, server_id, plugin_id)
-    if await maintenance_lock_service.is_locked(server_id):
+    await db.commit()
+    if await _maintenance_locks(lock_service).is_locked(server_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Another maintenance operation is already running",
         )
-    task = asyncio.create_task(plugin_auto_update_service.check_plugin(server_id, plugin_id))
-    plugin_update_task_registry.add(
-        task,
-        on_error=lambda completed, _error: _task_done(completed),
+    _spawn_plugin_update_task(
+        request,
+        plugin_auto_update_service.check_plugin(server_id, plugin_id),
+        name=f"plugin-update-test-{server_id}-{plugin_id}",
     )
     return ActionResponse(success=True, message="Plugin test update started")
 
 
-@router.get("/status")
+@router.get(
+    "/status",
+    response_model=PluginUpdateStatusResponse,
+    response_model_exclude_unset=True,
+    status_code=status.HTTP_200_OK,
+    responses=PLUGIN_AUTO_UPDATE_NOT_FOUND,
+)
 async def get_run_status(
     server_id: int,
     db: AsyncSession = Depends(get_db),

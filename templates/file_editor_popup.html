@@ -80,11 +80,13 @@
     <!-- Monaco Editor -->
     <script src="{{ static_url('vs/loader.js') }}"></script>
     <script>
-        const STATIC_ASSET_VERSION = "{{ static_version }}";
+        const STATIC_ASSET_VERSION = {{ static_version | tojson }};
         const serverId = {{ server_id }};
-        const filePath = '{{ file_path }}';
+        const filePath = {{ file_path | tojson }};
+        const fileName = {{ file_name | tojson }};
         const accessToken = localStorage.getItem('access_token');
         let editor = null;
+        let initialContent = '';
         
         // Configure Monaco Editor loader
         require.config({ 
@@ -95,11 +97,30 @@
         });
         
         // Initialize Monaco Editor
-        require(['vs/editor/editor.main'], () => {
+        require(['vs/editor/editor.main'], async () => {
             const container = document.getElementById('editor-container');
+
+            try {
+                const response = await fetch(`/servers/${serverId}/files/content?path=${encodeURIComponent(filePath)}`, {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+                const data = await response.json();
+                initialContent = data.content;
+            } catch (error) {
+                console.error('Error loading file:', error);
+                container.textContent = 'Error loading file: ' + error.message;
+                container.style.color = '#f48771';
+                container.style.padding = '1rem';
+                return;
+            }
             
             // Determine language from file extension
-            const ext = '{{ file_name }}'.substring('{{ file_name }}'.lastIndexOf('.')).toLowerCase();
+            const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
             const languageMap = {
                 '.txt': 'plaintext',
                 '.log': 'plaintext',
@@ -124,7 +145,7 @@
             const language = languageMap[ext] || 'plaintext';
             
             editor = monaco.editor.create(container, {
-                value: `{{ file_content | safe }}`,
+                value: initialContent,
                 language: language,
                 theme: 'vs-dark',
                 automaticLayout: true,
@@ -220,7 +241,7 @@
         }
         
         function closeWindow() {
-            if (editor && editor.getValue() !== `{{ file_content | safe }}`) {
+            if (editor && editor.getValue() !== initialContent) {
                 const message = window.i18n?.t('confirmMessages.unsavedChanges') || 'You have unsaved changes. Are you sure you want to close?';
                 showConfirm(
                     message,
@@ -236,7 +257,7 @@
         
         // Handle window close
         window.onbeforeunload = (e) => {
-            if (editor && editor.getValue() !== `{{ file_content | safe }}`) {
+            if (editor && editor.getValue() !== initialContent) {
                 e.preventDefault();
                 e.returnValue = '';
                 return '';

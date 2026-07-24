@@ -1466,17 +1466,51 @@ async function submitAddServer() {
         updateProgress('Connecting to server...');
         updateProgress('Verifying credentials...');
         
-        const response = await authFetch('/servers', {
+        let response = await authFetch('/servers', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(data)
         });
+
+        if (response.status === 409) {
+            const conflict = await response.json();
+            const hostKey = conflict.detail;
+            if (hostKey?.code === 'ssh_host_key_confirmation_required') {
+                const prompt = [
+                    hostKey.message,
+                    '',
+                    `Algorithm: ${hostKey.algorithm}`,
+                    `SHA-256: ${hostKey.fingerprint}`,
+                    '',
+                    'Verify this fingerprint with the server operator. Trust this key?'
+                ].join('\n');
+                if (!window.confirm(prompt)) {
+                    throw new Error('SSH host key was not confirmed');
+                }
+                data.ssh_host_key_algorithm = hostKey.algorithm;
+                data.ssh_host_key_fingerprint = hostKey.fingerprint;
+                data.ssh_host_key_confirmed = true;
+                updateProgress('Connecting with the confirmed host key...');
+                response = await authFetch('/servers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+            } else {
+                throw new Error(typeof hostKey === 'string' ? hostKey : 'Request conflict');
+            }
+        }
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Failed to create server');
+            const detail = typeof error.detail === 'string'
+                ? error.detail
+                : error.detail?.message;
+            throw new Error(detail || 'Failed to create server');
         }
         
         updateProgress('Server added successfully!');

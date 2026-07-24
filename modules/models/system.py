@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from cs2_manager.infrastructure.credentials import register_credential_shadows
+
 from .common import *
 
 
@@ -16,6 +18,9 @@ class SSHServerSudo(SQLModel, table=True):
     ssh_port: int = Field(default=22, nullable=False)
     sudo_user: str = Field(max_length=100, nullable=False)
     sudo_password: str = Field(max_length=255, nullable=False)
+    sudo_password_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     created_at: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
     )
@@ -90,6 +95,9 @@ class SystemSettings(SQLModel, table=True):
 
     # Shared GitHub API credential used only when a user has no personal token.
     global_github_token: Optional[str] = Field(default=None, max_length=255)
+    global_github_token_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
 
     # Email configuration
     email_enabled: bool = Field(default=False)
@@ -101,13 +109,22 @@ class SystemSettings(SQLModel, table=True):
     gmail_credentials_json: Optional[str] = Field(
         default=None, sa_column=Column(Text, nullable=True)
     )
+    gmail_credentials_json_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     gmail_token_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    gmail_token_json_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
 
     # SMTP configuration (alternative to Gmail API)
     smtp_host: Optional[str] = Field(default=None, max_length=255)
     smtp_port: Optional[int] = Field(default=587)
     smtp_username: Optional[str] = Field(default=None, max_length=255)
     smtp_password: Optional[str] = Field(default=None, max_length=255)
+    smtp_password_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     smtp_use_tls: bool = Field(default=True)
 
     created_at: Optional[datetime] = Field(
@@ -148,3 +165,15 @@ class SystemSettings(SQLModel, table=True):
             await session.commit()
             await session.refresh(settings)
         return settings
+
+
+register_credential_shadows(SSHServerSudo, ("sudo_password",))
+register_credential_shadows(
+    SystemSettings,
+    (
+        "global_github_token",
+        "gmail_credentials_json",
+        "gmail_token_json",
+        "smtp_password",
+    ),
+)

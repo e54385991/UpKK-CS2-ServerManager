@@ -6,12 +6,15 @@ Executes scheduled tasks based on configured schedules
 import asyncio
 import logging
 import re
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlmodel import update as sql_update
 
+from cs2_manager.features.auth import S3UserConfiguration
 from modules.database import async_session_maker
 from modules.models import ScheduledTask, Server, User
 from modules.utils import get_current_time
@@ -21,8 +24,12 @@ from services.discord_notification_service import (
     EVENT_S3_BACKUP,
     discord_notification_service,
 )
-from services.maintenance_lock import OperationBusyError, maintenance_lock_service
-from services.s3_backup_service import s3_backup_service
+from services.maintenance_lock import (
+    MaintenanceLockService,
+    OperationBusyError,
+    maintenance_lock_service,
+)
+from services.s3_backup_service import S3BackupService, s3_backup_service
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
@@ -33,12 +40,25 @@ DISCORD_SCHEDULED_EVENT_TYPES = {
     "backup_plugins": EVENT_PLUGIN_UPDATE,
 }
 MAX_CONCURRENT_SCHEDULED_TASKS = 4
+SessionFactory = Callable[[], AsyncSession]
+SSHManagerFactory = Callable[[], SSHManager]
 
 
 class ScheduledTaskService:
     """Background service to execute scheduled tasks"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        session_factory: SessionFactory | None = None,
+        lock_service: MaintenanceLockService | None = None,
+        s3_service: S3BackupService | None = None,
+        ssh_manager_factory: SSHManagerFactory | None = None,
+    ) -> None:
+        self._session_factory = session_factory or async_session_maker
+        self._lock_service = lock_service or maintenance_lock_service
+        self._s3_service = s3_service or s3_backup_service
+        self._ssh_manager_factory = ssh_manager_factory or SSHManager
         self.check_interval = 30  # Check every 30 seconds
         self.task: Optional[asyncio.Task] = None
         self.running = False
@@ -87,7 +107,7 @@ class ScheduledTaskService:
     async def _check_and_execute_tasks(self):
         """Check for tasks that need to be executed"""
         try:
-            async with async_session_maker() as db:
+            async with self._session_factory() as db:
                 now = get_current_time()
 
                 # Get all enabled tasks that are due for execution
@@ -122,7 +142,8 @@ class ScheduledTaskService:
                     logger.info(
                         f"Executing scheduled task {task.id}: {task.name} (action: {task.action})"
                     )
-                    execution_task = asyncio.create_task(self._execute_task(task))
+                    detached_task = ScheduledTask.model_validate(task, from_attributes=True)
+                    execution_task = asyncio.create_task(self._execute_task(detached_task))
                     self.running_tasks[task.id] = execution_task
                     self.running_server_ids.add(task.server_id)
                     available_slots -= 1
@@ -132,11 +153,11 @@ class ScheduledTaskService:
 
     async def _execute_task(self, task: ScheduledTask):
         """Execute a single scheduled task"""
-        server = None
+        detached_server: Server | None = None
         operation_lock = None
         try:
             # Get the server
-            async with async_session_maker() as db:
+            async with self._session_factory() as db:
                 server = await db.get(Server, task.server_id)
 
                 if not server:
@@ -145,19 +166,20 @@ class ScheduledTaskService:
                         task.id, "failed", f"Server {task.server_id} not found"
                     )
                     return
+                detached_server = Server.model_validate(server, from_attributes=True)
 
             # Skip task if server is marked as down due to SSH failures
-            if server.should_skip_background_checks():
+            if detached_server.should_skip_background_checks():
                 logger.info(
-                    f"Skipping scheduled task {task.id} for server {server.id} - marked as SSH down for 3+ days"
+                    f"Skipping scheduled task {task.id} for server {detached_server.id} - marked as SSH down for 3+ days"
                 )
                 await self._update_task_status(
                     task.id, "skipped", "Server marked as SSH down for 3+ consecutive days"
                 )
                 return
 
-            operation_lock = maintenance_lock_service.get(
-                server.id,
+            operation_lock = self._lock_service.get(
+                detached_server.id,
                 operation=f"scheduled:{task.action}",
                 wait=False,
                 ttl=3600,
@@ -165,19 +187,19 @@ class ScheduledTaskService:
             await operation_lock.acquire()
 
             # Create SSH manager using the pattern from main.py
-            ssh_manager = SSHManager()
+            ssh_manager = self._ssh_manager_factory()
 
             # Connect to server
-            connect_success, connect_msg = await ssh_manager.connect(server)
+            connect_success, connect_msg = await ssh_manager.connect(detached_server)
             if not connect_success:
                 logger.error(
-                    f"Failed to connect to server {server.id} for task {task.id}: {connect_msg}"
+                    f"Failed to connect to server {detached_server.id} for task {task.id}: {connect_msg}"
                 )
                 await self._update_task_status(
                     task.id, "failed", f"Failed to connect to server: {connect_msg}"
                 )
                 await self._notify_task_result(
-                    server,
+                    detached_server,
                     task,
                     False,
                     f"Failed to connect to server: {connect_msg}",
@@ -186,7 +208,11 @@ class ScheduledTaskService:
 
             try:
                 # Execute the action
-                success, message = await self._execute_action(ssh_manager, server, task.action)
+                success, message = await self._execute_action(
+                    ssh_manager,
+                    detached_server,
+                    task.action,
+                )
 
                 if success:
                     logger.info(f"Task {task.id} completed successfully")
@@ -195,7 +221,7 @@ class ScheduledTaskService:
                     logger.error(f"Task {task.id} failed: {message}")
                     await self._update_task_status(task.id, "failed", message)
 
-                await self._notify_task_result(server, task, success, message)
+                await self._notify_task_result(detached_server, task, success, message)
 
             finally:
                 await ssh_manager.disconnect()
@@ -206,8 +232,8 @@ class ScheduledTaskService:
         except Exception as e:
             logger.error(f"Error executing task {task.id}: {e}")
             await self._update_task_status(task.id, "failed", str(e))
-            if server:
-                await self._notify_task_result(server, task, False, str(e))
+            if detached_server is not None:
+                await self._notify_task_result(detached_server, task, False, str(e))
         finally:
             if operation_lock is not None:
                 await operation_lock.__aexit__(None, None, None)
@@ -286,10 +312,15 @@ class ScheduledTaskService:
                 if not success:
                     return success, message
 
-                async with async_session_maker() as db:
+                async with self._session_factory() as db:
                     owner = await db.get(User, server.user_id)
+                    owner_configuration = (
+                        S3UserConfiguration.from_user(owner) if owner is not None else None
+                    )
 
-                if not owner or not s3_backup_service.is_configured(owner):
+                if owner_configuration is None:
+                    return True, message
+                if not self._s3_service.is_configured(owner_configuration):
                     return True, message
 
                 backup_info = getattr(ssh_manager, "last_plugin_backup", None)
@@ -313,10 +344,10 @@ class ScheduledTaskService:
                     upload_success,
                     upload_message,
                     object_key,
-                ) = await s3_backup_service.upload_remote_backup(
+                ) = await self._s3_service.upload_remote_backup(
                     ssh_manager,
                     server,
-                    owner,
+                    owner_configuration,
                     backup_path,
                     progress_callback=log_progress,
                 )
@@ -365,7 +396,7 @@ class ScheduledTaskService:
     async def _update_task_status(self, task_id: int, status: str, error: Optional[str]):
         """Update task execution status and calculate next run"""
         try:
-            async with async_session_maker() as db:
+            async with self._session_factory() as db:
                 # Get the task
                 task = await db.get(ScheduledTask, task_id)
 
@@ -516,7 +547,7 @@ class ScheduledTaskService:
     async def _calculate_all_next_runs(self):
         """Calculate next run times for all enabled tasks on startup"""
         try:
-            async with async_session_maker() as db:
+            async with self._session_factory() as db:
                 # Get all enabled tasks
                 result = await db.execute(
                     select(ScheduledTask).where(ScheduledTask.enabled.is_(True))
@@ -545,7 +576,7 @@ class ScheduledTaskService:
     async def recalculate_next_run(self, task_id: int):
         """Recalculate next run time for a specific task (used when task is updated)"""
         try:
-            async with async_session_maker() as db:
+            async with self._session_factory() as db:
                 task = await db.get(ScheduledTask, task_id)
 
                 if not task:

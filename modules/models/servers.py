@@ -2,6 +2,9 @@
 
 # ruff: noqa: F403,F405
 
+from cs2_manager.infrastructure.credentials import hash_token, register_credential_shadows
+from modules.config import settings
+
 from .common import *
 
 
@@ -36,8 +39,17 @@ class Server(SQLModel, table=True):
     ssh_user: str = Field(max_length=100, nullable=False)
     auth_type: AuthType = Field(sa_column=Column(SQLEnum(AuthType), nullable=False))
     ssh_password: Optional[str] = Field(default=None, max_length=255)
+    ssh_password_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     ssh_key_path: Optional[str] = Field(default=None, max_length=500)
     sudo_password: Optional[str] = Field(default=None, max_length=255)
+    sudo_password_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
+    credential_revision: int = Field(default=0, nullable=False)
+    ssh_host_key_algorithm: Optional[str] = Field(default=None, max_length=64)
+    ssh_host_key_fingerprint: Optional[str] = Field(default=None, max_length=128)
 
     # Server configuration
     game_port: int = Field(default=27015)
@@ -50,8 +62,17 @@ class Server(SQLModel, table=True):
     # LGSM-style server start parameters
     server_name: str = Field(default="CS2 Server", max_length=255)
     server_password: Optional[str] = Field(default=None, max_length=255)
+    server_password_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     rcon_password: Optional[str] = Field(default=None, max_length=255)
+    rcon_password_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     steam_account_token: Optional[str] = Field(default=None, max_length=255)
+    steam_account_token_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     default_map: str = Field(default="de_dust2", max_length=100)
     max_players: int = Field(default=32)
     game_mode: str = Field(default="competitive", max_length=50)
@@ -68,6 +89,13 @@ class Server(SQLModel, table=True):
 
     # Server-to-backend communication
     api_key: Optional[str] = Field(default=None, max_length=64, unique=True, index=True)
+    api_key_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
+    api_key_hash: Optional[str] = Field(
+        default=None,
+        sa_column=Column(CHAR(64), nullable=True, unique=True, index=True),
+    )
     backend_url: Optional[str] = Field(default=None, max_length=500)
 
     # Auto-cleanup configuration
@@ -118,6 +146,9 @@ class Server(SQLModel, table=True):
     # Discord notification configuration
     discord_notifications_enabled: bool = Field(default=False)
     discord_webhook_url: Optional[str] = Field(default=None, max_length=1000)
+    discord_webhook_url_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     discord_channel_name: Optional[str] = Field(default=None, max_length=255)
     discord_notify_auto_updates: bool = Field(default=True)
     discord_notify_manual_updates: bool = Field(default=True)
@@ -167,6 +198,34 @@ class Server(SQLModel, table=True):
     def is_key_auth(self) -> bool:
         """Check if server uses key file authentication"""
         return self.auth_type == AuthType.KEY_FILE
+
+    @property
+    def server_password_configured(self) -> bool:
+        """Report whether a game password exists without exposing it."""
+        return bool(self.server_password)
+
+    @property
+    def rcon_password_configured(self) -> bool:
+        """Report whether an RCON password exists without exposing it."""
+        return bool(self.rcon_password)
+
+    @property
+    def steam_account_token_configured(self) -> bool:
+        """Report whether a Steam GSLT exists without exposing it."""
+        return bool(self.steam_account_token)
+
+    @property
+    def api_key_configured(self) -> bool:
+        """Report whether the server agent API key exists without exposing it."""
+        return bool(self.api_key or self.api_key_hash)
+
+    def set_api_key(self, api_key: str) -> None:
+        """Store the recoverable agent key encrypted and index only its HMAC."""
+        self.api_key = api_key
+        self.api_key_hash = hash_token(
+            api_key,
+            settings.TOKEN_HASH_KEY or settings.SECRET_KEY,
+        )
 
     @property
     def is_running(self) -> bool:
@@ -298,8 +357,18 @@ class Server(SQLModel, table=True):
 
     @classmethod
     async def get_by_api_key(cls, session: AsyncSession, api_key: str) -> Optional["Server"]:
-        """Get server by API key"""
-        result = await session.execute(select(cls).where(cls.api_key == api_key))
+        """Look up the keyed digest, retaining a raw legacy-column fallback."""
+        digest = hash_token(api_key, settings.TOKEN_HASH_KEY or settings.SECRET_KEY)
+        result = await session.execute(select(cls).where(cls.api_key_hash == digest))
+        server = result.scalar_one_or_none()
+        if server is not None:
+            return server
+
+        # Bypass EncryptedText parameter binding for pre-backfill plaintext rows.
+        result = await session.execute(
+            select(cls).where(text("servers.api_key = :legacy_api_key")),
+            {"legacy_api_key": api_key},
+        )
         return result.scalar_one_or_none()
 
     @classmethod
@@ -370,6 +439,7 @@ class ScheduledTask(SQLModel, table=True):
     """Scheduled task model for automated server operations"""
 
     __tablename__ = "scheduled_tasks"
+    __table_args__ = (Index("ix_scheduled_tasks_enabled_next_run", "enabled", "next_run"),)
 
     id: Optional[int] = Field(default=None, primary_key=True, index=True)
     server_id: int = Field(
@@ -506,6 +576,9 @@ class InitializedServer(SQLModel, table=True):
     ssh_port: int = Field(default=22)
     ssh_user: str = Field(max_length=100, nullable=False)
     ssh_password: str = Field(max_length=255, nullable=False)
+    ssh_password_encrypted: Optional[str] = Field(
+        default=None, sa_column=Column(Text, nullable=True), exclude=True
+    )
     game_directory: str = Field(default="/home/cs2server/cs2", max_length=500)
     created_at: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
@@ -527,3 +600,18 @@ class InitializedServer(SQLModel, table=True):
             select(cls).where(cls.user_id == user_id).order_by(cls.created_at.desc())
         )
         return result.scalars().all()
+
+
+register_credential_shadows(
+    Server,
+    (
+        "api_key",
+        "ssh_password",
+        "sudo_password",
+        "server_password",
+        "rcon_password",
+        "steam_account_token",
+        "discord_webhook_url",
+    ),
+)
+register_credential_shadows(InitializedServer, ("ssh_password",))

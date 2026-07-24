@@ -4,10 +4,11 @@ API routes for scheduled tasks
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import delete
 
+from cs2_manager.core import ErrorResponse
 from modules import (
     ScheduledTask,
     ScheduledTaskCreate,
@@ -18,6 +19,7 @@ from modules import (
     get_current_user,
     get_db,
 )
+from modules.schemas.scheduled_tasks import ScheduledTaskDeleteResponse
 from services.scheduled_task_service import scheduled_task_service
 
 router = APIRouter(prefix="/api/scheduled-tasks", tags=["scheduled-tasks"])
@@ -166,7 +168,12 @@ async def update_scheduled_task(
     return task
 
 
-@router.delete("/{server_id}/tasks/{task_id}")
+@router.delete(
+    "/{server_id}/tasks/{task_id}",
+    response_model=ScheduledTaskDeleteResponse,
+    status_code=status.HTTP_200_OK,
+    responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse}},
+)
 async def delete_scheduled_task(
     server_id: int,
     task_id: int,

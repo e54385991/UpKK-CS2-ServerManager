@@ -96,14 +96,37 @@ class SSHManager(
         "no connection",
     ]
 
-    def __init__(self, use_pool: bool = True):
+    def __init__(
+        self,
+        use_pool: bool = True,
+        *,
+        connection_pool: Optional[Any] = None,
+        http_resource: Optional[Any] = None,
+    ):
         """
         Initialize SSH Manager
 
         Args:
             use_pool: Whether to use connection pooling (default: True)
+            connection_pool: Pool owned by the current application.  Omitting
+                it preserves the legacy process-global facade for non-request
+                callers while FastAPI dependencies always pass an explicit
+                application resource.
+            http_resource: Outbound HTTP adapter owned by the current
+                application. Omitting it preserves the legacy process-global
+                facade for non-request callers; FastAPI dependencies always
+                pass an explicit application resource.
         """
+        if http_resource is None:
+            from modules.http_helper import http_helper
+
+            http_resource = http_helper
         self.conn: Optional[asyncssh.SSHClientConnection] = None
+        self.connection_lease: Optional[ConnectionLease] = None
+        self.connection_pool = (
+            connection_pool if connection_pool is not None else ssh_connection_pool
+        )
+        self.http_resource = http_resource
         self.use_pool = use_pool
         self.current_server: Optional[Server] = None
         self.last_plugin_backup: Optional[Dict[str, Any]] = None

@@ -165,3 +165,10 @@ class ScheduledTaskResponse(SQLModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ScheduledTaskDeleteResponse(SQLModel):
+    """Successful scheduled-task deletion response."""
+
+    success: Literal[True]
+    message: str

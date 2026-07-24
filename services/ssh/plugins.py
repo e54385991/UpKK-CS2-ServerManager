@@ -80,9 +80,6 @@ class PluginOperationsMixin:
 
                     panel_archive_path = os.path.join(download_dir, "metamod.tar.gz")
 
-                    # Download to panel server
-                    from modules.http_helper import http_helper
-
                     last_progress = 0
 
                     async def download_progress_callback(bytes_downloaded, total_bytes):
@@ -103,7 +100,7 @@ class PluginOperationsMixin:
                     if actual_download_url != metamod_url:
                         await send_progress("Using GitHub proxy for download")
 
-                    success_download, error = await http_helper.download_file(
+                    success_download, error = await self.http_resource.download_file(
                         actual_download_url,
                         panel_archive_path,
                         timeout=180,
@@ -405,9 +402,6 @@ class PluginOperationsMixin:
 
                     panel_archive_path = os.path.join(download_dir, "counterstrikesharp.zip")
 
-                    # Download to panel server
-                    from modules.http_helper import http_helper
-
                     last_progress = 0
 
                     async def download_progress_callback(bytes_downloaded, total_bytes):
@@ -422,7 +416,7 @@ class PluginOperationsMixin:
                                     f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
                                 )
 
-                    success_download, error = await http_helper.download_file(
+                    success_download, error = await self.http_resource.download_file(
                         css_url,
                         panel_archive_path,
                         timeout=300,
@@ -539,9 +533,11 @@ class PluginOperationsMixin:
                         # Try with sudo if available
                         if server.sudo_password:
                             await send_progress("Trying to install unzip with sudo...")
-                            install_cmd = f"echo '{server.sudo_password}' | sudo -S apt-get update && echo '{server.sudo_password}' | sudo -S apt-get install -y unzip"
-                            success, stdout, stderr = await self.execute_command(
-                                install_cmd, timeout=120
+                            install_cmd = "apt-get update && apt-get install -y unzip"
+                            success, stdout, stderr = await self.execute_sudo_command(
+                                install_cmd,
+                                server.sudo_password,
+                                timeout=120,
                             )
 
                             if success:
@@ -771,9 +767,6 @@ class PluginOperationsMixin:
 
                     panel_archive_path = os.path.join(download_dir, "cs2fixes.tar.gz")
 
-                    # Download to panel server
-                    from modules.http_helper import http_helper
-
                     last_progress = 0
 
                     async def download_progress_callback(bytes_downloaded, total_bytes):
@@ -795,7 +788,7 @@ class PluginOperationsMixin:
                         actual_download_url = f"{proxy_base}/{cs2fixes_url}"
                         await send_progress("Using GitHub proxy for download")
 
-                    success_download, error = await http_helper.download_file(
+                    success_download, error = await self.http_resource.download_file(
                         actual_download_url,
                         panel_archive_path,
                         timeout=300,
@@ -1047,9 +1040,6 @@ class PluginOperationsMixin:
 
                     panel_archive_path = os.path.join(download_dir, "swiftly.zip")
 
-                    # Download to panel server
-                    from modules.http_helper import http_helper
-
                     last_progress = 0
 
                     async def download_progress_callback(bytes_downloaded, total_bytes):
@@ -1064,7 +1054,7 @@ class PluginOperationsMixin:
                                     f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
                                 )
 
-                    success_download, error = await http_helper.download_file(
+                    success_download, error = await self.http_resource.download_file(
                         swiftly_url,
                         panel_archive_path,
                         timeout=300,
@@ -1177,9 +1167,11 @@ class PluginOperationsMixin:
                     if not success:
                         if server.sudo_password:
                             await send_progress("Trying to install unzip with sudo...")
-                            install_cmd = f"echo '{server.sudo_password}' | sudo -S apt-get update && echo '{server.sudo_password}' | sudo -S apt-get install -y unzip"
-                            success, stdout, stderr = await self.execute_command(
-                                install_cmd, timeout=120
+                            install_cmd = "apt-get update && apt-get install -y unzip"
+                            success, stdout, stderr = await self.execute_sudo_command(
+                                install_cmd,
+                                server.sudo_password,
+                                timeout=120,
                             )
 
                             if success:

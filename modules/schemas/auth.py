@@ -55,6 +55,25 @@ class TokenData(SQLModel):
     username: Optional[str] = None
 
 
+class GoogleConfigResponse(SQLModel):
+    """Public Google OAuth configuration."""
+
+    client_id: Optional[str] = None
+    enabled: bool
+
+
+class AuthSuccessResponse(SQLModel):
+    """Successful authentication action without an additional payload."""
+
+    success: Literal[True]
+
+
+class AuthMessageResponse(AuthSuccessResponse):
+    """Successful authentication action with a human-readable message."""
+
+    message: str
+
+
 class PasswordReset(SQLModel):
     """Schema for password reset"""
 
@@ -196,6 +215,22 @@ class S3SettingsUpdate(SQLModel):
         return v.strip("/")
 
 
+class S3ConnectionTestStep(SQLModel):
+    """One stage of the saved S3 configuration probe."""
+
+    name: str
+    status: Literal["success", "failed"]
+    message: str
+
+
+class S3ConnectionTestResponse(SQLModel):
+    """Result of probing the saved S3-compatible storage configuration."""
+
+    success: bool
+    message: str
+    steps: List[S3ConnectionTestStep]
+
+
 class S3BackupItem(SQLModel):
     """Schema for a listed S3 backup object"""
 
@@ -319,12 +354,20 @@ class GenerateServerTokenResponse(SQLModel):
 
 
 class ApiKeyResponse(SQLModel):
-    """Schema for API key response"""
+    """One-time response returned when an API key is created."""
 
     api_key: str
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ApiKeyStatusResponse(SQLModel):
+    """Non-secret API key configuration status."""
+
+    configured: bool
+    prefix: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class ApiKeyGenerate(SQLModel):

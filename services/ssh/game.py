@@ -70,8 +70,11 @@ class GameLifecycleMixin:
                     # Try to fix permissions if we have sudo password
                     if server.sudo_password:
                         await send_progress("Attempting to fix permissions...")
-                        fix_perms_cmd = f"echo '{server.sudo_password}' | sudo -S chown -R cs2server:cs2server /home/cs2server && echo '{server.sudo_password}' | sudo -S chmod 755 /home/cs2server"
-                        fix_success, _, fix_stderr = await self.execute_command(fix_perms_cmd)
+                        fix_success, _, fix_stderr = await self.execute_sudo_command(
+                            "chown -R cs2server:cs2server /home/cs2server && "
+                            "chmod 755 /home/cs2server",
+                            server.sudo_password,
+                        )
 
                         if fix_success:
                             await send_progress("✓ Permissions fixed for /home/cs2server")
@@ -123,9 +126,13 @@ class GameLifecycleMixin:
                         # Try with sudo
                         if server.sudo_password:
                             await send_progress("Trying to install with sudo...")
-                            install_cmd = f"echo '{server.sudo_password}' | sudo -S apt-get update && echo '{server.sudo_password}' | sudo -S apt-get install -y {' '.join(missing_tools)}"
-                            success, stdout, stderr = await self.execute_command(
-                                install_cmd, timeout=120
+                            install_cmd = "apt-get update && apt-get install -y " + " ".join(
+                                shlex.quote(tool) for tool in missing_tools
+                            )
+                            success, stdout, stderr = await self.execute_sudo_command(
+                                install_cmd,
+                                server.sudo_password,
+                                timeout=120,
                             )
 
                             if success:
@@ -148,7 +155,7 @@ class GameLifecycleMixin:
             # Create directory
             await send_progress(f"Creating game directory: {server.game_directory}")
             success, stdout, stderr = await self.execute_command(
-                f"mkdir -p {server.game_directory}"
+                f"mkdir -p {shlex.quote(server.game_directory)}"
             )
             if not success:
                 return False, f"Directory creation failed: {stderr}"
@@ -160,7 +167,9 @@ class GameLifecycleMixin:
 
             # Create SteamCMD directory
             await send_progress("Creating SteamCMD directory...")
-            success, stdout, stderr = await self.execute_command(f"mkdir -p {steamcmd_dir}")
+            success, stdout, stderr = await self.execute_command(
+                f"mkdir -p {shlex.quote(steamcmd_dir)}"
+            )
             if not success:
                 return False, f"SteamCMD directory creation failed: {stderr}"
             await send_progress("✓ SteamCMD directory created")
@@ -192,9 +201,6 @@ class GameLifecycleMixin:
 
                     steamcmd_local_path = os.path.join(download_dir, "steamcmd_linux.tar.gz")
 
-                    # Download to panel server
-                    from modules.http_helper import http_helper
-
                     last_progress = 0
 
                     async def download_progress_callback(bytes_downloaded, total_bytes):
@@ -209,7 +215,7 @@ class GameLifecycleMixin:
                                     f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
                                 )
 
-                    success_download, error = await http_helper.download_file(
+                    success_download, error = await self.http_resource.download_file(
                         steamcmd_url,
                         steamcmd_local_path,
                         timeout=600,
@@ -263,13 +269,18 @@ class GameLifecycleMixin:
                         await _cleanup_local_download_dir(download_dir, panel_temp_dir)
             else:
                 # Original Mode: Download directly on remote server
-                download_cmd = f"wget --progress=dot:mega https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -O {steamcmd_dir}/steamcmd_linux.tar.gz"
+                steamcmd_archive = f"{steamcmd_dir}/steamcmd_linux.tar.gz"
+                download_cmd = (
+                    "wget --progress=dot:mega "
+                    "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz "
+                    f"-O {shlex.quote(steamcmd_archive)}"
+                )
                 success, stdout, stderr = await self.execute_command_streaming(
                     download_cmd, output_callback=send_progress, timeout=300
                 )
                 if not success:
                     # Check if file was downloaded successfully despite non-zero exit code
-                    check_cmd = f"test -f {steamcmd_dir}/steamcmd_linux.tar.gz && echo 'exists'"
+                    check_cmd = f"test -f {shlex.quote(steamcmd_archive)} && echo 'exists'"
                     check_success, check_stdout, _ = await self.execute_command(check_cmd)
                     if not check_success or "exists" not in check_stdout:
                         return (
@@ -283,8 +294,10 @@ class GameLifecycleMixin:
 
             # Extract SteamCMD
             await send_progress("Extracting SteamCMD...")
+            steamcmd_archive = f"{steamcmd_dir}/steamcmd_linux.tar.gz"
             success, stdout, stderr = await self.execute_command(
-                f"tar -xzf {steamcmd_dir}/steamcmd_linux.tar.gz -C {steamcmd_dir}", timeout=120
+                f"tar -xzf {shlex.quote(steamcmd_archive)} -C {shlex.quote(steamcmd_dir)}",
+                timeout=120,
             )
             if not success:
                 return False, f"SteamCMD extraction failed: {stderr}"
@@ -302,9 +315,9 @@ class GameLifecycleMixin:
             await send_progress("=" * 60)
 
             install_cs2 = (
-                f"cd {steamcmd_dir} && "
+                f"cd {shlex.quote(steamcmd_dir)} && "
                 f"./steamcmd.sh "
-                f"+force_install_dir {server.game_directory}/cs2 "
+                f"+force_install_dir {shlex.quote(server.game_directory + '/cs2')} "
                 f"+login anonymous "
                 f"+app_update 730 validate "
                 f"+quit"
@@ -367,14 +380,16 @@ class GameLifecycleMixin:
 
             # Create ~/.steam/sdk64 directory if it doesn't exist
             steam_sdk_dir = f"/home/{server.ssh_user}/.steam/sdk64"
-            mkdir_cmd = f"mkdir -p {steam_sdk_dir}"
+            mkdir_cmd = f"mkdir -p {shlex.quote(steam_sdk_dir)}"
             await self.execute_command(mkdir_cmd)
 
             # Create symlink to steamclient.so
             # This fixes: "Failed to load module '/home/user/.steam/sdk64/steamclient.so'"
             steamclient_source = f"{steamcmd_dir}/linux64/steamclient.so"
             steamclient_target = f"{steam_sdk_dir}/steamclient.so"
-            symlink_cmd = f"ln -sf {steamclient_source} {steamclient_target}"
+            symlink_cmd = (
+                f"ln -sf {shlex.quote(steamclient_source)} {shlex.quote(steamclient_target)}"
+            )
             symlink_success, _, _ = await self.execute_command(symlink_cmd)
 
             if symlink_success:
@@ -411,7 +426,8 @@ class GameLifecycleMixin:
 
                 # Create the script on remote server
                 create_script_cmd = (
-                    f"cat > {autorestart_script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
+                    f"cat > {shlex.quote(autorestart_script_path)} "
+                    f"<< 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
                 )
                 success, stdout, stderr = await self.execute_command(create_script_cmd, timeout=10)
 
@@ -419,7 +435,7 @@ class GameLifecycleMixin:
                     await send_progress(f"⚠ Warning: Could not deploy autorestart script: {stderr}")
                 else:
                     # Make script executable
-                    chmod_script_cmd = f"chmod +x {autorestart_script_path}"
+                    chmod_script_cmd = f"chmod +x {shlex.quote(autorestart_script_path)}"
                     await self.execute_command(chmod_script_cmd)
                     await send_progress("✓ Auto-restart wrapper script deployed successfully")
             except Exception as e:
@@ -800,24 +816,6 @@ class GameLifecycleMixin:
             if progress_callback:
                 await progress_callback(message)
 
-        def sanitize_sensitive_value(cmd: str, value: str, replacement: str) -> str:
-            """
-            Helper to sanitize a sensitive value from a command string.
-            Handles single quotes, double quotes, and unquoted occurrences.
-            Processes quoted occurrences first, then unquoted to avoid partial exposure.
-            Uses regex escaping to handle special characters safely.
-            """
-            if value is None or value.strip() == "":
-                return cmd
-            # Escape the value for safe string replacement (handles special characters)
-            escaped_value = re.escape(value)
-            # Replace quoted occurrences first (more specific matches)
-            cmd = re.sub(f'"{escaped_value}"', f'"{replacement}"', cmd)
-            cmd = re.sub(f"'{escaped_value}'", f"'{replacement}'", cmd)
-            # Replace unquoted occurrences last (more general match)
-            cmd = re.sub(escaped_value, replacement, cmd)
-            return cmd
-
         try:
             executable_exists, executable_path = await self._cs2_executable_exists_connected(server)
             if not executable_exists:
@@ -923,59 +921,26 @@ class GameLifecycleMixin:
                 game_mode = "1"  # Default to competitive
                 game_type = server.game_type or "0"
 
-            # Core parameters
-            # Note: -tickrate is no longer supported in CS2
-            params = [
-                "-dedicated",
-                f"-port {server.game_port}",
-                f"+map {default_map}",
-                f"-maxplayers {max_players}",
-                f'+hostname "{server_name}"',
-            ]
-
-            # Optional IP binding
-            if server.ip_address:
-                params.append(f"-ip {server.ip_address}")
-
-            # Client port (usually game_port + 1)
-            if server.client_port:
-                params.append(f"+clientport {server.client_port}")
-            elif server.game_port:
-                params.append(f"+clientport {server.game_port + 1}")
-
-            # Steam account token (GSLT) - required only for public servers
-            gslt_parameter = gslt_startup_parameter(server.steam_account_token)
-            if gslt_parameter:
-                params.append(gslt_parameter)
-
-            # Server password
-            if server.server_password:
-                params.append(f'+sv_password "{server.server_password}"')
-
-            # RCON password
-            if server.rcon_password:
-                params.append(f'+rcon_password "{server.rcon_password}"')
-
-            # Game mode and type
-            params.append(f"+game_mode {game_mode}")
-            params.append(f"+game_type {game_type}")
-
-            # SourceTV configuration
-            if server.tv_enable and server.tv_port:
-                params.extend(
-                    [
-                        "+tv_enable 1",
-                        f"+tv_port {server.tv_port}",
-                        '+tv_name "GOTV"',
-                    ]
-                )
-
-            # Additional custom parameters
-            if server.additional_parameters:
-                params.append(server.additional_parameters.strip())
-
-            # Combine all parameters
-            params_str = " ".join(params)
+            # Build real and display-only arguments from the same safe argv
+            # representation.  No database value is evaluated as shell source.
+            parameter_options = {
+                "game_port": server.game_port,
+                "default_map": default_map,
+                "max_players": max_players,
+                "server_name": server_name,
+                "ip_address": server.ip_address,
+                "client_port": server.client_port,
+                "steam_account_token": server.steam_account_token,
+                "server_password": server.server_password,
+                "rcon_password": server.rcon_password,
+                "game_mode": game_mode,
+                "game_type": game_type,
+                "tv_enable": server.tv_enable,
+                "tv_port": server.tv_port,
+                "additional_parameters": server.additional_parameters,
+            }
+            params_str = cs2_startup_parameters(**parameter_options)
+            masked_params_str = cs2_startup_parameters(**parameter_options, masked=True)
 
             # Get backend URL and API key for status reporting
             # Use server's backend_url if set, otherwise use global setting
@@ -986,7 +951,7 @@ class GameLifecycleMixin:
 
             # Check if autorestart script exists (should have been deployed during deployment)
             autorestart_script_path = f"{server.game_directory}/cs2_autorestart.sh"
-            check_script_cmd = f"test -f {autorestart_script_path} && echo 'exists'"
+            check_script_cmd = f"test -f {shlex.quote(autorestart_script_path)} && echo 'exists'"
             script_exists_success, script_exists_stdout, _ = await self.execute_command(
                 check_script_cmd
             )
@@ -1004,7 +969,10 @@ class GameLifecycleMixin:
                         script_content = await script_file.read()
 
                     # Create the script on remote server
-                    create_script_cmd = f"cat > {autorestart_script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
+                    create_script_cmd = (
+                        f"cat > {shlex.quote(autorestart_script_path)} "
+                        f"<< 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT"
+                    )
                     success, stdout, stderr = await self.execute_command(
                         create_script_cmd, timeout=10
                     )
@@ -1017,7 +985,7 @@ class GameLifecycleMixin:
                         use_autorestart = False
                     else:
                         # Make script executable
-                        chmod_script_cmd = f"chmod +x {autorestart_script_path}"
+                        chmod_script_cmd = f"chmod +x {shlex.quote(autorestart_script_path)}"
                         await self.execute_command(chmod_script_cmd)
                         await send_progress("✓ Auto-restart wrapper script deployed")
                         use_autorestart = True
@@ -1040,6 +1008,12 @@ class GameLifecycleMixin:
                 f'"${{LD_LIBRARY_PATH:-}}" && '
                 f"{cs2_executable} {params_str}"
             )
+            masked_cs2_start_cmd = (
+                f"cd {shlex.quote(game_bin_dir)} && "
+                f"export LD_LIBRARY_PATH={shlex.quote(game_bin_dir)}:"
+                f'"${{LD_LIBRARY_PATH:-}}" && '
+                f"{cs2_executable} {masked_params_str}"
+            )
 
             # CPU affinity belongs to the payload, not the tmux client.  A
             # long-lived tmux daemon would otherwise retain its old affinity.
@@ -1061,10 +1035,22 @@ class GameLifecycleMixin:
                     f"{shlex.quote(backend_url)} {shlex.quote(server.game_directory)} "
                     f"{shlex.quote(cs2_start_cmd)}"
                 )
+                masked_payload = (
+                    f"bash {shlex.quote(autorestart_script_path)} "
+                    f"{server.id} {shlex.quote('***API_KEY***')} "
+                    f"{shlex.quote(backend_url)} {shlex.quote(server.game_directory)} "
+                    f"{shlex.quote(masked_cs2_start_cmd)}"
+                )
                 start_cmd = start_session_command(
                     manager,
                     name,
                     payload,
+                    cpu_affinity,
+                )
+                masked_start_cmd = start_session_command(
+                    manager,
+                    name,
+                    masked_payload,
                     cpu_affinity,
                 )
                 await send_progress("✓ Starting with auto-restart protection enabled")
@@ -1078,10 +1064,24 @@ class GameLifecycleMixin:
                     f"tee {shlex.quote(console_log)}"
                 )
                 payload = f"bash -c {shlex.quote(shell_payload)}"
+                masked_shell_payload = (
+                    f"cd {shlex.quote(game_bin_dir)} && "
+                    f"export LD_LIBRARY_PATH={shlex.quote(game_bin_dir)}:"
+                    f'"${{LD_LIBRARY_PATH:-}}" && '
+                    f"{cs2_executable} {masked_params_str} 2>&1 | "
+                    f"tee {shlex.quote(console_log)}"
+                )
+                masked_payload = f"bash -c {shlex.quote(masked_shell_payload)}"
                 start_cmd = start_session_command(
                     manager,
                     name,
                     payload,
+                    cpu_affinity,
+                )
+                masked_start_cmd = start_session_command(
+                    manager,
+                    name,
+                    masked_payload,
                     cpu_affinity,
                 )
                 if not api_key:
@@ -1102,22 +1102,7 @@ class GameLifecycleMixin:
             )
             await send_progress("=" * 60)
             await send_progress("Startup Command:")
-            # Sanitize sensitive information before displaying
-            sanitized_cmd = start_cmd
-            sanitized_cmd = sanitize_sensitive_value(sanitized_cmd, api_key, "***API_KEY***")
-            sanitized_cmd = sanitize_sensitive_value(
-                sanitized_cmd, server.server_password, "***PASSWORD***"
-            )
-            sanitized_cmd = sanitize_sensitive_value(
-                sanitized_cmd, server.rcon_password, "***RCON_PASSWORD***"
-            )
-            normalized_gslt = (server.steam_account_token or "").strip()
-            sanitized_cmd = sanitize_sensitive_value(
-                sanitized_cmd,
-                normalized_gslt,
-                "***STEAM_TOKEN***",
-            )
-            await send_progress(sanitized_cmd)
+            await send_progress(masked_start_cmd)
             await send_progress("=" * 60)
 
             success, stdout, stderr = await self.execute_command(start_cmd, timeout=10)
@@ -1137,7 +1122,7 @@ class GameLifecycleMixin:
 
             # Stream console output using tail -f with timeout
             # This will show the actual server startup messages (like srcds)
-            stream_cmd = f"timeout 4 tail -f {console_log_path} 2>/dev/null || true"
+            stream_cmd = f"timeout 4 tail -f {shlex.quote(console_log_path)} 2>/dev/null || true"
 
             # Use execute_command_streaming to show real-time output
             try:
@@ -1159,7 +1144,12 @@ class GameLifecycleMixin:
 
             if manager not in running_managers:
                 # The selected session never started or exited during initialization.
-                log_check = f"test -f {server.game_directory}/cs2/game/csgo/console.log && tail -150 {server.game_directory}/cs2/game/csgo/console.log || echo 'No log file'"
+                console_log = f"{server.game_directory}/cs2/game/csgo/console.log"
+                quoted_console_log = shlex.quote(console_log)
+                log_check = (
+                    f"test -f {quoted_console_log} && "
+                    f"tail -150 {quoted_console_log} || echo 'No log file'"
+                )
                 _, immediate_log, _ = await self.execute_command(log_check, timeout=10)
 
                 # Check if auto-restart is available

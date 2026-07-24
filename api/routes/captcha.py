@@ -2,10 +2,11 @@
 CAPTCHA API routes
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from cs2_manager.core import ErrorResponse
 from services.captcha_service import captcha_service
 from services.rate_limit import enforce_rate_limit
 
@@ -24,7 +25,12 @@ class CaptchaRefreshRequest(BaseModel):
     old_token: str
 
 
-@router.get("/generate")
+@router.get(
+    "/generate",
+    response_model=CaptchaResponse,
+    status_code=status.HTTP_200_OK,
+    responses={status.HTTP_429_TOO_MANY_REQUESTS: {"model": ErrorResponse}},
+)
 async def generate_captcha(request: Request):
     """
     Generate a new CAPTCHA
@@ -35,7 +41,21 @@ async def generate_captcha(request: Request):
     return CaptchaResponse(token=token)
 
 
-@router.get("/image/{token}")
+@router.get(
+    "/image/{token}",
+    response_class=Response,
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_200_OK: {
+            "content": {
+                "image/png": {
+                    "schema": {"type": "string", "format": "binary"},
+                }
+            }
+        },
+        status.HTTP_429_TOO_MANY_REQUESTS: {"model": ErrorResponse},
+    },
+)
 async def get_captcha_image(token: str, request: Request):
     """
     Get CAPTCHA image for a specific token
@@ -60,7 +80,12 @@ async def get_captcha_image(token: str, request: Request):
     )
 
 
-@router.post("/refresh")
+@router.post(
+    "/refresh",
+    response_model=CaptchaResponse,
+    status_code=status.HTTP_200_OK,
+    responses={status.HTTP_429_TOO_MANY_REQUESTS: {"model": ErrorResponse}},
+)
 async def refresh_captcha(refresh_request: CaptchaRefreshRequest, request: Request):
     """
     Refresh a CAPTCHA (invalidate old one and get new token)

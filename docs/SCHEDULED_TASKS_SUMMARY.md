@@ -168,7 +168,7 @@ POST /api/scheduled-tasks/{server_id}/tasks/{task_id}/toggle
 ## 部署说明 (Deployment Notes)
 
 ### 数据库迁移
-应用启动时会自动创建 `scheduled_tasks` 表。如果服务器已在运行，表将在下次启动时自动创建。
+部署新版本前必须先运行 `uv run python -m cs2_manager.migrate upgrade`。应用启动只校验 Alembic 版本，不会自动创建或修改 `scheduled_tasks` 表。
 
 ### 服务启动
 计划任务服务会：

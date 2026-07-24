@@ -4,20 +4,28 @@
 
 ### Step 1: Database Migration
 
-The new features require database tables. When you start the application, the tables will be created automatically:
+Database schema changes are an explicit deployment step. Configure the credential keyring in `.env`, then run Alembic before starting the application:
 
 ```bash
 pip install uv
+uv run python -m cs2_manager.migrate upgrade
+uv run python -m cs2_manager.migrate check
 uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-The following tables will be created:
+Application startup fails closed when the database is not at the repository head; it never calls `create_all`. The migration creates or upgrades, among others:
 - `system_settings` - Stores global configuration
 - `password_reset_tokens` - Stores password reset tokens
 
 ### Step 2: Access System Settings (Admin Only)
 
-1. Log in with an admin account (default: `admin` / `admin123`)
+1. Create an administrator explicitly, then log in with that account:
+   ```bash
+   uv run python -m cs2_manager.cli create-admin \
+     --username YOUR_ADMIN_NAME \
+     --email YOUR_ADMIN_EMAIL \
+     --password-prompt
+   ```
 2. Click on "System Settings" in the navigation bar
 3. The system settings page will load with current configuration
 
@@ -152,10 +160,9 @@ If your servers need to download from GitHub through a proxy:
 
 ## Security Best Practices
 
-1. **Change Default Admin Password**:
-   ```
-   After first login, change the default admin password
-   ```
+1. **Provision Administrators Explicitly**:
+   - The application has no default administrator or preset password
+   - Use a unique, randomly generated password when running `create-admin`
 
 2. **Use Strong SMTP Password**:
    - Use app-specific passwords
