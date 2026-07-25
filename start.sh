@@ -3,10 +3,7 @@
 # CS2 Server Manager - Startup Script
 # This script installs uv when needed and starts the application with uv run.
 
-set -euo pipefail
-
-PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-cd "$PROJECT_ROOT"
+set -e
 
 echo "=========================================="
 echo "CS2 Server Manager - Starting Application"
@@ -40,7 +37,7 @@ install_uv() {
 
     if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)'; then
         echo "Error: uv is not installed and Python 3.14+ is required to install it."
-        echo "Current interpreter: $("$PYTHON_BIN" --version 2>&1)"
+        echo "Current interpreter: $($PYTHON_BIN --version 2>&1)"
         exit 1
     fi
 

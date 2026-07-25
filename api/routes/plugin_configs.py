@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import posixpath
 from typing import Annotated, Any, Literal, Optional, cast
 
@@ -15,22 +14,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import SSHManagerProvider, resolve_maintenance_lock_service
+from api.dependencies import resolve_maintenance_lock_service
 from api.routes.servers import get_server_with_permission
 from cs2_manager.core import ErrorResponse
 from modules import (
     DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS,
     PluginConfigSource,
-    Server,
     User,
     get_current_active_user,
     get_db,
 )
-from services.maintenance_lock import (
-    MaintenanceLockService,
-    OperationCoordinationUnavailable,
-    maintenance_lock_service,
-)
+from services.maintenance_lock import MaintenanceLockService, maintenance_lock_service
 from services.plugin_config_service import (
     MAX_CONFIG_BYTES,
     SUPPORTED_DIRECTORY_EXTENSIONS,
@@ -53,43 +47,18 @@ router = APIRouter(
     prefix="/servers/{server_id}/plugin-configs",
     tags=["plugin-configs"],
 )
-logger = logging.getLogger(__name__)
 _DIRECT_MAINTENANCE_LOCK = object()
 _ApplicationMaintenanceLock = Annotated[
     MaintenanceLockService | object,
     Depends(resolve_maintenance_lock_service),
 ]
-_DIRECT_SSH_MANAGER = cast(SSHManager, object())
 
 
 def _maintenance_locks(resource: MaintenanceLockService | object) -> MaintenanceLockService:
     """Use the app-owned service, retaining the direct Python facade."""
     if resource is _DIRECT_MAINTENANCE_LOCK:
         return maintenance_lock_service
-    if callable(getattr(resource, "get", None)):
-        return cast(MaintenanceLockService, resource)
-    raise OperationCoordinationUnavailable(
-        "Operation coordination is unavailable; refusing destructive operation"
-    )
-
-
-def _coerce_ssh_manager(candidate: object) -> SSHManager:
-    """Use request-owned SSH; only an omitted direct-call argument may fall back."""
-    if callable(getattr(candidate, "disconnect", None)):
-        return cast(SSHManager, candidate)
-    if candidate is _DIRECT_SSH_MANAGER:
-        return SSHManager()
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="SSH connection pool is unavailable",
-    )
-
-
-def _detached_server(server: Any) -> Any:
-    """Detach real ORM records while preserving lightweight direct-call facades."""
-    if isinstance(server, Server):
-        return Server.model_validate(server, from_attributes=True)
-    return server
+    return cast(MaintenanceLockService, resource)
 
 
 class SourceCreateRequest(BaseModel):
@@ -170,81 +139,6 @@ class PluginConfigFileSaveResponse(PluginConfigFileResponse):
     message: str
 
 
-class PluginConfigScanStartEvent(BaseModel):
-    type: Literal["start"]
-
-
-class PluginConfigScanProgressEvent(BaseModel):
-    type: Literal["progress"]
-    directory: str
-    count: int
-
-
-class PluginConfigScanFileItem(BaseModel):
-    name: str
-    path: str
-    tree_path: str
-    size: int
-    modified: float
-    format: str
-    too_large: bool
-
-
-class PluginConfigScanFileEvent(BaseModel):
-    type: Literal["file"]
-    file: PluginConfigScanFileItem
-
-
-class PluginConfigScanCompleteEvent(BaseModel):
-    type: Literal["complete"]
-    truncated: bool
-    count: int
-
-
-class PluginConfigScanErrorEvent(BaseModel):
-    type: Literal["error"]
-    detail: str
-
-
-def _inline_model_schema(model: type[BaseModel]) -> dict[str, Any]:
-    """Inline local Pydantic definitions for an OpenAPI vendor extension."""
-    schema = model.model_json_schema()
-    definitions = schema.pop("$defs", {})
-
-    def expand(value: Any) -> Any:
-        if isinstance(value, list):
-            return [expand(item) for item in value]
-        if not isinstance(value, dict):
-            return value
-        reference = value.get("$ref")
-        if isinstance(reference, str) and reference.startswith("#/$defs/"):
-            definition_name = reference.removeprefix("#/$defs/")
-            expanded = dict(definitions[definition_name])
-            expanded.update({key: item for key, item in value.items() if key != "$ref"})
-            return expand(expanded)
-        return {key: expand(item) for key, item in value.items()}
-
-    return cast(dict[str, Any], expand(schema))
-
-
-PLUGIN_CONFIG_SCAN_LINE_SCHEMA: dict[str, Any] = {
-    "oneOf": [
-        _inline_model_schema(PluginConfigScanStartEvent),
-        _inline_model_schema(PluginConfigScanProgressEvent),
-        _inline_model_schema(PluginConfigScanFileEvent),
-        _inline_model_schema(PluginConfigScanCompleteEvent),
-        _inline_model_schema(PluginConfigScanErrorEvent),
-    ],
-    "discriminator": {"propertyName": "type"},
-}
-
-
-class PluginConfigScanStreamingResponse(StreamingResponse):
-    """OpenAPI-aware response class for an NDJSON event stream."""
-
-    media_type = "application/x-ndjson"
-
-
 PLUGIN_CONFIG_SOURCE_ERRORS: dict[int | str, dict[str, Any]] = {
     status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
 }
@@ -323,20 +217,10 @@ def _file_for_source(server, source: PluginConfigSource, requested_path: str) ->
     return relative
 
 
-async def _connect(server, manager: SSHManager) -> SSHManager:
-    try:
-        success, message = await manager.connect(server)
-    except BaseException:
-        try:
-            await manager.disconnect()
-        except Exception:
-            logger.warning("Failed to release SSH manager after connection error", exc_info=True)
-        raise
+async def _connect(server) -> SSHManager:
+    manager = SSHManager()
+    success, message = await manager.connect(server)
     if not success:
-        try:
-            await manager.disconnect()
-        except Exception:
-            logger.warning("Failed to release SSH manager after rejected connection", exc_info=True)
         raise HTTPException(status_code=502, detail=f"SSH connection failed: {message}")
     return manager
 
@@ -376,7 +260,7 @@ async def list_sources(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, Any]:
-    server = _detached_server(await get_server_with_permission(server_id, current_user, db))
+    server = await get_server_with_permission(server_id, current_user, db)
     result = await db.execute(
         select(PluginConfigSource)
         .where(
@@ -407,15 +291,14 @@ async def create_source(
     request: SourceCreateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, Any]:
-    server = _detached_server(await get_server_with_permission(server_id, current_user, db))
+    server = await get_server_with_permission(server_id, current_user, db)
     try:
         relative = normalize_relative_path(server.game_directory, request.path)
     except PluginConfigError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+    manager = await _connect(server)
     try:
         source_type = await inspect_source(manager, server, relative)
     except Exception as exc:
@@ -537,14 +420,13 @@ async def browse_source_path(
     path: str = Query("."),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, Any]:
-    server = _detached_server(await get_server_with_permission(server_id, current_user, db))
+    server = await get_server_with_permission(server_id, current_user, db)
     try:
         relative = normalize_relative_path(server.game_directory, path)
     except PluginConfigError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+    manager = await _connect(server)
     try:
         items = await browse_directory(manager, server, relative)
         return {"path": relative, "items": items}
@@ -554,67 +436,23 @@ async def browse_source_path(
         await manager.disconnect()
 
 
-@router.post(
-    "/sources/{source_id}/scan",
-    response_class=PluginConfigScanStreamingResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_200_OK: {
-            "description": (
-                "Streaming UTF-8 NDJSON. Each non-empty line is one "
-                "start, progress, file, complete, or error event."
-            ),
-            "content": {
-                "application/x-ndjson": {
-                    "schema": {
-                        "type": "string",
-                        "format": "ndjson",
-                        "description": (
-                            "A newline-delimited stream; each non-empty line "
-                            "conforms to x-ndjson-line-schema."
-                        ),
-                        "x-ndjson-line-schema": PLUGIN_CONFIG_SCAN_LINE_SCHEMA,
-                    }
-                }
-            },
-        },
-        status.HTTP_401_UNAUTHORIZED: {
-            "description": "Unauthorized",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}
-            },
-        },
-        status.HTTP_404_NOT_FOUND: {
-            "description": "Configuration source not found",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}
-            },
-        },
-    },
-)
+@router.post("/sources/{source_id}/scan")
 async def load_source_files(
     server_id: int,
     source_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> StreamingResponse:
-    server = _detached_server(await get_server_with_permission(server_id, current_user, db))
+    server = await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)
-    source_relative_path = source.relative_path
-    source_type = source.source_type
-    await db.commit()
 
     async def stream_events():
         manager: Optional[SSHManager] = None
         try:
             yield json.dumps({"type": "start"}) + "\n"
-            manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+            manager = await _connect(server)
             async for event in iter_source_scan(
-                manager,
-                server,
-                source_relative_path,
-                source_type,
+                manager, server, source.relative_path, source.source_type
             ):
                 yield json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
         except HTTPException as exc:
@@ -660,13 +498,11 @@ async def get_config_file(
     path: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, Any]:
-    server = _detached_server(await get_server_with_permission(server_id, current_user, db))
+    server = await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)
     relative = _file_for_source(server, source, path)
-    await db.commit()
-    manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+    manager = await _connect(server)
     try:
         content = await read_text_file(manager, server, relative)
         return _file_payload(relative, content)
@@ -689,18 +525,16 @@ async def save_config_file(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, Any]:
-    server = _detached_server(await get_server_with_permission(server_id, current_user, db))
+    server = await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)
     relative = _file_for_source(server, source, request.path)
-    await db.commit()
     async with _maintenance_locks(lock_service).get(
         server_id,
         operation="plugin_config_save",
         wait=False,
     ):
-        manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+        manager = await _connect(server)
         try:
             current_content = await read_text_file(manager, server, relative)
             if content_revision(current_content) != request.expected_revision:

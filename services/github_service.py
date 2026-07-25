@@ -5,7 +5,7 @@ Provides functionality to fetch repository metadata from GitHub API
 
 import logging
 import re
-from typing import Any, Protocol, Tuple
+from typing import Tuple
 
 from modules.http_helper import http_helper
 
@@ -15,14 +15,6 @@ logger = logging.getLogger(__name__)
 GITHUB_REPO_PATTERN = re.compile(
     r"^https://github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?:/.*)?$"
 )
-
-
-class GitHubHTTPAdapter(Protocol):
-    async def get(
-        self,
-        url: str,
-        **kwargs: Any,
-    ) -> tuple[bool, Any, str | None]: ...
 
 
 def parse_github_url(url: str) -> Tuple[str, str]:
@@ -44,11 +36,7 @@ def parse_github_url(url: str) -> Tuple[str, str]:
     return match.group(1), match.group(2)
 
 
-async def fetch_github_repo_info(
-    github_url: str,
-    *,
-    http_resource: GitHubHTTPAdapter | None = None,
-) -> dict:
+async def fetch_github_repo_info(github_url: str) -> dict:
     """
     Fetch repository information from GitHub API.
 
@@ -77,8 +65,7 @@ async def fetch_github_repo_info(
         logger.info(f"Fetching repository info from GitHub API: {api_url}")
 
         # Make request to GitHub API
-        outbound_http = http_helper if http_resource is None else http_resource
-        success, data, error = await outbound_http.get(
+        success, data, error = await http_helper.get(
             url=api_url,
             headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"},
             timeout=30,

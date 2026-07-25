@@ -2,58 +2,16 @@
 
 # ruff: noqa: F403,F405
 
-from collections.abc import Callable
-from typing import cast
-
-from api.dependencies import SSHManagerProvider
 from api.response_models import (
     DeploymentLockResponse,
     DeploymentProgressResponse,
     OperationMessageResponse,
     ServerActionResponse,
 )
-from services.ssh_manager import SSHManager
 
 from .common import *
 
 router = APIRouter(tags=["actions"])
-_DIRECT_SSH_MANAGER = cast(SSHManager, object())
-
-
-def _coerce_ssh_manager(candidate: object) -> SSHManager:
-    """Use request-owned SSH; only an omitted direct-call argument may fall back."""
-    if callable(getattr(candidate, "disconnect", None)):
-        return cast(SSHManager, candidate)
-    if candidate is _DIRECT_SSH_MANAGER:
-        return SSHManager()
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="SSH connection pool is unavailable",
-    )
-
-
-async def _release_ssh_manager(ssh_manager: SSHManager, operation: str) -> None:
-    """Release an operation manager without hiding the primary route result."""
-    try:
-        await ssh_manager.disconnect()
-    except Exception:
-        logger.warning("Failed to release SSH connection after %s", operation, exc_info=True)
-
-
-def _resource_bound_ssh_manager_factory(
-    prototype: SSHManager,
-) -> Callable[[], SSHManager]:
-    """Freeze app-owned adapters without retaining a request or database state."""
-    connection_pool = prototype.connection_pool
-    http_resource = prototype.http_resource
-
-    def create_manager() -> SSHManager:
-        return SSHManager(
-            connection_pool=connection_pool,
-            http_resource=http_resource,
-        )
-
-    return create_manager
 
 
 @router.websocket("/servers/{server_id}/deployment-status")
@@ -169,7 +127,6 @@ async def cancel_deployment(
     server_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ):
     """
     Cancel an in-progress or stuck deployment by clearing the deployment lock
@@ -192,7 +149,7 @@ async def cancel_deployment(
             )
 
         # Kill any running SteamCMD processes
-        ssh_manager = _coerce_ssh_manager(ssh_manager)
+        ssh_manager = SSHManager()
         killed_processes = False
         try:
             success, msg = await ssh_manager.connect(server)
@@ -207,7 +164,10 @@ async def cancel_deployment(
         except Exception as e:
             logger.warning(f"Failed to kill SteamCMD processes for server {server_id}: {e}")
         finally:
-            await _release_ssh_manager(ssh_manager, "deployment cancellation")
+            try:
+                await ssh_manager.disconnect()
+            except Exception as e:
+                logger.debug(f"Error disconnecting SSH for server {server_id}: {e}")
 
         # Clear the deployment lock
         await redis_manager.delete(deployment_lock_key)
@@ -257,7 +217,6 @@ async def server_action(
     current_user: User = Depends(get_current_active_user),
     locked_server: Server = Depends(acquire_server_action_lock),
     s3_service: S3BackupService = Depends(resolve_s3_backup_service),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ):
     """Execute action on server (deploy, start, stop, restart, status)"""
     server = (
@@ -282,7 +241,7 @@ async def server_action(
     if action == "deploy":
         await redis_manager.set(deployment_lock_key, "1", expire=7200)
 
-    ssh_manager = _coerce_ssh_manager(ssh_manager)
+    ssh_manager = SSHManager()
 
     # Create deployment log
     log = DeploymentLog(server_id=server_id, action=action, status="in_progress")
@@ -729,7 +688,6 @@ async def server_action(
                     record_known_github_installation,
                 )
 
-                tracking_ssh_factory = _resource_bound_ssh_manager_factory(ssh_manager)
                 if "cs2fixes" in action:
                     await record_known_github_installation(
                         server,
@@ -737,32 +695,13 @@ async def server_action(
                         "https://github.com/Source2ZE/CS2Fixes",
                         "CS2Fixes",
                         "CS2Fixes-*-linux.tar.gz",
-                        http_resource=ssh_manager.http_resource,
                     )
-                    await record_framework_installation(
-                        server,
-                        current_user,
-                        "metamod",
-                        http_resource=ssh_manager.http_resource,
-                        ssh_manager_factory=tracking_ssh_factory,
-                    )
+                    await record_framework_installation(server, current_user, "metamod")
                 else:
                     framework_key = "metamod" if "metamod" in action else "counterstrikesharp"
-                    await record_framework_installation(
-                        server,
-                        current_user,
-                        framework_key,
-                        http_resource=ssh_manager.http_resource,
-                        ssh_manager_factory=tracking_ssh_factory,
-                    )
+                    await record_framework_installation(server, current_user, framework_key)
                     if framework_key == "counterstrikesharp":
-                        await record_framework_installation(
-                            server,
-                            current_user,
-                            "metamod",
-                            http_resource=ssh_manager.http_resource,
-                            ssh_manager_factory=tracking_ssh_factory,
-                        )
+                        await record_framework_installation(server, current_user, "metamod")
             except Exception as tracking_error:
                 logger.warning(
                     "Framework installed but tracking metadata failed: %s", tracking_error
@@ -793,8 +732,6 @@ async def server_action(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Action failed: {str(e)}"
         ) from e
-    finally:
-        await _release_ssh_manager(ssh_manager, f"server action {action}")
 
 
 @router.get(

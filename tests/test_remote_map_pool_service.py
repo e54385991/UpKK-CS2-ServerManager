@@ -61,33 +61,6 @@ async def test_remote_map_pool_downloads_and_validates_keyvalues():
 
 
 @pytest.mark.asyncio
-async def test_remote_map_pool_prefers_explicit_http_resource():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, text=DEFAULT_MAPS_CONFIG, request=request)
-
-    class ApplicationHTTP:
-        def borrow_client(self):
-            return _borrowed_client(handler)
-
-    with (
-        patch(
-            "services.remote_map_pool_service._resolve_hostname",
-            return_value={"93.184.216.34"},
-        ),
-        patch(
-            "services.remote_map_pool_service.http_helper.borrow_client",
-            side_effect=AssertionError("global HTTP facade must not be used"),
-        ),
-    ):
-        content = await fetch_remote_map_pool(
-            "https://maps.example.com/maps.txt",
-            http_resource=ApplicationHTTP(),
-        )
-
-    assert content == DEFAULT_MAPS_CONFIG
-
-
-@pytest.mark.asyncio
 async def test_remote_map_pool_accepts_valid_response_above_previous_one_mib_limit():
     content = '"Maplist"\n{\n' + (" " * (1024 * 1024)) + "}\n"
 

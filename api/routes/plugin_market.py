@@ -5,19 +5,19 @@ Provides endpoints for browsing, searching, and installing plugins from the mark
 
 import logging
 import re
-from typing import Annotated, Any, List, Optional, cast
+from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import SSHManagerProvider, locked_server_operation
+from api.dependencies import get_ssh_manager, locked_server_operation
 from api.http_resource import (
     ApplicationHTTP,
     as_application_http,
     resolve_application_http,
 )
-from cs2_manager.core import ErrorResponse, Principal
+from cs2_manager.core import ErrorResponse
 from modules import (
     ActionResponse,
     ArchiveAnalysisResponse,
@@ -33,23 +33,16 @@ from modules import (
     MarketPluginUpdate,
     PluginCategory,
     PluginUninstallRequest,
-    PluginUninstallResponse,
     Server,
     User,
     get_current_active_user,
     get_current_admin_user,
     get_db,
 )
-from modules.auth import get_current_principal
 from modules.http_helper import http_helper
-from modules.schemas.plugins import (
-    PluginCategoriesResponse,
-    PluginCategoryOption,
-    PluginDependencyOptionsResponse,
-)
 from services import SSHManager
 from services.github_credentials import get_effective_github_token
-from services.plugin_installation import PluginDownloadHTTP, install_github_plugin
+from services.plugin_installation import install_github_plugin
 
 router = APIRouter(prefix="/api/plugin-market", tags=["plugin-market"])
 
@@ -66,43 +59,16 @@ GITHUB_REPO_PATTERN = re.compile(
     r"^(?:https://github\.com/|git@github\.com:)([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:/.*)?$"
 )
 
-_DIRECT_SSH_MANAGER = cast(SSHManager, object())
-_DIRECT_APPLICATION_HTTP = cast(ApplicationHTTP, object())
-_ApplicationHTTPProvider = Annotated[
-    ApplicationHTTP,
-    Depends(resolve_application_http),
-]
-
 
 def _coerce_ssh_manager(candidate: object) -> SSHManager:
     """Preserve direct-call compatibility while ASGI requests inject a manager."""
     if callable(getattr(candidate, "disconnect", None)):
         return candidate  # type: ignore[return-value]
-    if candidate is _DIRECT_SSH_MANAGER:
-        return SSHManager()
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="SSH connection pool is unavailable",
-    )
-
-
-def _coerce_application_http(candidate: object) -> ApplicationHTTP:
-    """Return request-owned HTTP; only direct calls may use the compatibility facade."""
-    resource = as_application_http(candidate)
-    if resource is not None:
-        return resource
-    if candidate is _DIRECT_APPLICATION_HTTP:
-        return cast(ApplicationHTTP, http_helper)
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Outbound HTTP client is unavailable",
-    )
+    return SSHManager()
 
 
 async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
     """Helper to get server and verify ownership - admins can access any server"""
-    if current_user.id is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
     if current_user.is_admin:
         server = await Server.get_by_id(db, server_id)
     else:
@@ -210,7 +176,7 @@ async def fetch_github_repo_info(
     api_url = f"https://api.github.com/repos/{owner}/{repo}"
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"}
 
-    outbound_http = http_resource or cast(ApplicationHTTP, http_helper)
+    outbound_http: ApplicationHTTP = http_resource or http_helper
     success, data, error = await outbound_http.get(
         api_url, headers=headers, timeout=30, proxy=github_proxy, github_token=github_token
     )
@@ -285,8 +251,7 @@ async def populate_dependency_details(
 
     dependencies_by_id: dict[int, MarketPlugin] = {}
     if dependency_ids:
-        plugin_id_column = cast(Any, MarketPlugin.id)
-        result = await db.execute(select(MarketPlugin).where(plugin_id_column.in_(dependency_ids)))
+        result = await db.execute(select(MarketPlugin).where(MarketPlugin.id.in_(dependency_ids)))
         dependencies_by_id = {
             dependency.id: dependency
             for dependency in result.scalars().all()
@@ -300,7 +265,7 @@ async def populate_dependency_details(
 
         # Populate dependency details if plugin has dependencies
         dependency_details = [
-            DependencyInfo(id=dependency_id, title=dependency.title)
+            DependencyInfo(id=dependency.id, title=dependency.title)
             for dependency_id in parsed_dependencies.get(index, ())
             if (dependency := dependencies_by_id.get(dependency_id)) is not None
         ]
@@ -404,7 +369,7 @@ async def create_plugin(
     request: MarketPluginCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
-    http_resource: _ApplicationHTTPProvider = _DIRECT_APPLICATION_HTTP,
+    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
 ) -> MarketPluginResponse:
     """
     Add a new plugin to the market (admin only).
@@ -436,7 +401,7 @@ async def create_plugin(
         repo_info = await fetch_github_repo_info(
             request.github_url,
             github_token=github_token,
-            http_resource=_coerce_application_http(http_resource),
+            http_resource=cast(ApplicationHTTP, http_resource),
         )
         if repo_info.success:
             if not title and repo_info.repo_name:
@@ -592,7 +557,7 @@ async def get_plugin_releases(
     count: int = Query(5, ge=1, le=10, description="Number of releases to fetch"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    http_resource: _ApplicationHTTPProvider = _DIRECT_APPLICATION_HTTP,
+    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
 ) -> GitHubReleasesResponse:
     """
     Fetch available releases for a market plugin.
@@ -619,7 +584,7 @@ async def get_plugin_releases(
         server_id=server_id,
         db=db,
         current_user=current_user,
-        http_resource=_coerce_application_http(http_resource),
+        http_resource=cast(ApplicationHTTP, http_resource),
     )
 
 
@@ -704,8 +669,8 @@ async def install_plugin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     _operation_server: Server = Depends(locked_server_operation),
-    http_resource: _ApplicationHTTPProvider = _DIRECT_APPLICATION_HTTP,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
+    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
+    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from the market to a server.
@@ -732,7 +697,7 @@ async def install_plugin(
     selected_release_id = None
     selected_release_tag = None
     selected_asset_name = None
-    outbound_http = _coerce_application_http(http_resource)
+    outbound_http = as_application_http(http_resource) or http_helper
 
     # Validate download_url if provided
     if download_url:
@@ -901,7 +866,7 @@ async def install_plugin(
             db,
             current_user,
             ssh_manager=ssh_manager,
-            http_resource=cast(PluginDownloadHTTP, outbound_http),
+            http_resource=outbound_http,
         )
 
         # Increment install count if successful (separate transaction)
@@ -918,7 +883,7 @@ async def install_plugin(
             from services.plugin_auto_update_service import derive_asset_glob, upsert_managed_plugin
 
             await upsert_managed_plugin(
-                server_id=server_id,
+                server_id=server.id,
                 source_type="market",
                 source_key=str(plugin.id),
                 display_name=plugin.title,
@@ -946,14 +911,8 @@ async def install_plugin(
         return GitHubPluginInstallResponse(success=False, message=message)
 
 
-@router.get(
-    "/categories",
-    response_model=PluginCategoriesResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def list_categories(
-    current_user: Principal = Depends(get_current_principal),
-) -> PluginCategoriesResponse:
+@router.get("/categories")
+async def list_categories(current_user: User = Depends(get_current_active_user)) -> dict:
     """
     Get list of available plugin categories.
 
@@ -961,24 +920,19 @@ async def list_categories(
         List of category values and names
     """
     categories = [
-        PluginCategoryOption(value=c.value, name=c.value.replace("_", " ").title())
-        for c in PluginCategory
+        {"value": c.value, "name": c.value.replace("_", " ").title()} for c in PluginCategory
     ]
 
-    return PluginCategoriesResponse(success=True, categories=categories)
+    return {"success": True, "categories": categories}
 
 
-@router.get(
-    "/plugins-for-dependencies",
-    response_model=PluginDependencyOptionsResponse,
-    status_code=status.HTTP_200_OK,
-)
+@router.get("/plugins-for-dependencies")
 async def list_plugins_for_dependencies(
     exclude_id: Optional[int] = Query(None, description="Plugin ID to exclude (for editing)"),
     search: Optional[str] = Query(None, description="Search query for filtering plugins"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
-) -> PluginDependencyOptionsResponse:
+) -> dict:
     """
     Get list of plugins for dependency selection (admin only).
     Returns only essential fields for efficiency.
@@ -1001,12 +955,10 @@ async def list_plugins_for_dependencies(
 
     # Filter and map to minimal format
     plugin_list = [
-        DependencyInfo(id=p.id, title=p.title)
-        for p in plugins
-        if p.id is not None and (exclude_id is None or p.id != exclude_id)
+        {"id": p.id, "title": p.title} for p in plugins if exclude_id is None or p.id != exclude_id
     ]
 
-    return PluginDependencyOptionsResponse(success=True, plugins=plugin_list)
+    return {"success": True, "plugins": plugin_list}
 
 
 @router.get(
@@ -1026,8 +978,7 @@ async def analyze_plugin_archive(
     ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    http_resource: _ApplicationHTTPProvider = _DIRECT_APPLICATION_HTTP,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
+    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
 ) -> ArchiveAnalysisResponse:
     """
     Analyze a plugin archive to show its directory structure.
@@ -1063,7 +1014,7 @@ async def analyze_plugin_archive(
             github_token = await get_effective_github_token(db, current_user)
             await db.commit()
 
-            success, data, error = await _coerce_application_http(http_resource).get(
+            success, data, error = await cast(ApplicationHTTP, http_resource).get(
                 api_url,
                 headers=headers,
                 timeout=30,
@@ -1107,11 +1058,7 @@ async def analyze_plugin_archive(
 
     # Use the existing analyze_archive function
     return await analyze_github_archive(
-        server_id=server_id,
-        download_url=download_url,
-        db=db,
-        current_user=current_user,
-        ssh_manager=_coerce_ssh_manager(ssh_manager),
+        server_id=server_id, download_url=download_url, db=db, current_user=current_user
     )
 
 
@@ -1125,7 +1072,7 @@ async def fetch_repo_info(
     github_url: str = Query(..., description="GitHub repository URL"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
-    http_resource: _ApplicationHTTPProvider = _DIRECT_APPLICATION_HTTP,
+    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
 ) -> GitHubRepoInfo:
     """
     Fetch repository information from GitHub (admin only).
@@ -1142,15 +1089,11 @@ async def fetch_repo_info(
     return await fetch_github_repo_info(
         github_url,
         github_token=github_token,
-        http_resource=_coerce_application_http(http_resource),
+        http_resource=cast(ApplicationHTTP, http_resource),
     )
 
 
-@router.post(
-    "/plugins/{plugin_id}/uninstall",
-    response_model=PluginUninstallResponse,
-    status_code=status.HTTP_200_OK,
-)
+@router.post("/plugins/{plugin_id}/uninstall")
 async def uninstall_market_plugin(
     plugin_id: int,
     server_id: int,
@@ -1158,8 +1101,8 @@ async def uninstall_market_plugin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     _operation_server: Server = Depends(locked_server_operation),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
-) -> PluginUninstallResponse:
+    ssh_manager: SSHManager = Depends(get_ssh_manager),
+):
     """
     Uninstall a market plugin from a server.
 
@@ -1190,7 +1133,7 @@ async def uninstall_market_plugin(
         request,
         db,
         current_user,
-        ssh_manager=_coerce_ssh_manager(ssh_manager),
+        ssh_manager=ssh_manager,
     )
     if result.success:
         from modules.models import ManagedPlugin

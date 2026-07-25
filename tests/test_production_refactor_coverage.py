@@ -522,11 +522,10 @@ async def test_endpoint_change_clears_old_pin_and_increments_revision(monkeypatc
     monkeypatch.setattr(crud.redis_manager, "clear_server_cache", AsyncMock())
 
     await crud.update_server(
-        server_id=server.id,
-        server_data=ServerUpdate(host="new.example"),
-        ssh_manager=SimpleNamespace(),
-        db=_CrudDatabase(),
-        current_user=SimpleNamespace(id=7),
+        server.id,
+        ServerUpdate(host="new.example"),
+        _CrudDatabase(),
+        SimpleNamespace(id=7),
     )
 
     assert server.host == "new.example"

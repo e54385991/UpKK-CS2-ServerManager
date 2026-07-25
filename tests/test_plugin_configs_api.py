@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 
 from api.routes import plugin_configs
 from modules import DEFAULT_PLUGIN_CONFIG_SOURCE_PATH, DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS
@@ -79,23 +79,6 @@ async def test_cross_server_source_id_is_not_returned():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("connect_result", [(False, "denied"), RuntimeError("broken")])
-async def test_connect_releases_manager_when_connection_does_not_succeed(connect_result):
-    manager = SimpleNamespace(connect=AsyncMock(), disconnect=AsyncMock())
-    if isinstance(connect_result, Exception):
-        manager.connect.side_effect = connect_result
-        expected_exception = RuntimeError
-    else:
-        manager.connect.return_value = connect_result
-        expected_exception = HTTPException
-
-    with pytest.raises(expected_exception):
-        await plugin_configs._connect(SimpleNamespace(), manager)
-
-    manager.disconnect.assert_awaited_once()
-
-
-@pytest.mark.asyncio
 async def test_removing_default_source_soft_disables_it(monkeypatch):
     source = SimpleNamespace(is_default=True, is_enabled=True)
     db = SimpleNamespace(add=Mock(), delete=AsyncMock(), commit=AsyncMock())
@@ -157,7 +140,6 @@ async def test_scan_route_streams_files_and_disconnects(monkeypatch):
     server = SimpleNamespace(game_directory="/home/cs2")
     source = SimpleNamespace(relative_path="configs", source_type="directory")
     manager = SimpleNamespace(disconnect=AsyncMock())
-    db = SimpleNamespace(commit=AsyncMock())
 
     async def stream_scan(*_args):
         yield {"type": "progress", "directory": ".", "count": 0}
@@ -168,18 +150,13 @@ async def test_scan_route_streams_files_and_disconnects(monkeypatch):
         plugin_configs, "get_server_with_permission", AsyncMock(return_value=server)
     )
     monkeypatch.setattr(plugin_configs, "_source_for_server", AsyncMock(return_value=source))
-
-    async def connect(*_args):
-        db.commit.assert_awaited_once()
-        return manager
-
-    monkeypatch.setattr(plugin_configs, "_connect", connect)
+    monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
     monkeypatch.setattr(plugin_configs, "iter_source_scan", stream_scan)
 
     response = await plugin_configs.load_source_files(
         server_id=1,
         source_id=2,
-        db=db,
+        db=SimpleNamespace(),
         current_user=SimpleNamespace(),
     )
     chunks = [chunk async for chunk in response.body_iterator]
@@ -192,119 +169,16 @@ async def test_scan_route_streams_files_and_disconnects(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_scan_route_documents_and_preserves_the_ndjson_event_contract(monkeypatch):
-    server = SimpleNamespace(game_directory="/home/cs2")
-    source = SimpleNamespace(relative_path="configs", source_type="directory")
-    manager = SimpleNamespace(disconnect=AsyncMock())
-    db = SimpleNamespace(commit=AsyncMock())
-    streamed_events = [
-        {"type": "progress", "directory": ".", "count": 0},
-        {
-            "type": "file",
-            "file": {
-                "name": "plugin.cfg",
-                "path": "configs/plugin.cfg",
-                "tree_path": "plugin.cfg",
-                "size": 128,
-                "modified": 1_700_000_000.5,
-                "format": "keyvalues",
-                "too_large": False,
-            },
-        },
-        {"type": "complete", "count": 1, "truncated": False},
-    ]
-
-    async def stream_scan(*_args):
-        for event in streamed_events:
-            yield event
-
-    monkeypatch.setattr(
-        plugin_configs,
-        "get_server_with_permission",
-        AsyncMock(return_value=server),
-    )
-    monkeypatch.setattr(
-        plugin_configs,
-        "_source_for_server",
-        AsyncMock(return_value=source),
-    )
-
-    async def connect(*_args):
-        db.commit.assert_awaited_once()
-        return manager
-
-    monkeypatch.setattr(plugin_configs, "_connect", connect)
-    monkeypatch.setattr(plugin_configs, "iter_source_scan", stream_scan)
-
-    response = await plugin_configs.load_source_files(
-        server_id=1,
-        source_id=2,
-        db=db,
-        current_user=SimpleNamespace(),
-    )
-    raw_body = "".join([chunk async for chunk in response.body_iterator])
-    events = [json.loads(line) for line in raw_body.splitlines()]
-
-    assert response.media_type == "application/x-ndjson"
-    assert response.headers["cache-control"] == "no-cache, no-transform"
-    assert events == [{"type": "start"}, *streamed_events]
-    assert raw_body.endswith("\n")
-    manager.disconnect.assert_awaited_once()
-
-    app = FastAPI()
-    app.include_router(plugin_configs.router)
-    operation = app.openapi()["paths"][
-        "/servers/{server_id}/plugin-configs/sources/{source_id}/scan"
-    ]["post"]
-    success_content = operation["responses"]["200"]["content"]
-
-    assert set(success_content) == {"application/x-ndjson"}
-    stream_schema = success_content["application/x-ndjson"]["schema"]
-    assert stream_schema["type"] == "string"
-    assert stream_schema["format"] == "ndjson"
-    line_schema = stream_schema["x-ndjson-line-schema"]
-    assert {event_schema["title"] for event_schema in line_schema["oneOf"]} == {
-        "PluginConfigScanStartEvent",
-        "PluginConfigScanProgressEvent",
-        "PluginConfigScanFileEvent",
-        "PluginConfigScanCompleteEvent",
-        "PluginConfigScanErrorEvent",
-    }
-    file_schema = next(
-        item for item in line_schema["oneOf"] if item["title"] == "PluginConfigScanFileEvent"
-    )
-    assert set(file_schema["properties"]["file"]["properties"]) == {
-        "name",
-        "path",
-        "tree_path",
-        "size",
-        "modified",
-        "format",
-        "too_large",
-    }
-    for status_code in ("401", "404"):
-        assert operation["responses"][status_code]["content"]["application/json"]["schema"] == {
-            "$ref": "#/components/schemas/ErrorResponse"
-        }
-
-
-@pytest.mark.asyncio
 async def test_save_rejects_stale_revision_without_writing(monkeypatch):
     server = SimpleNamespace(game_directory="/home/cs2")
     source = SimpleNamespace(source_type="file", relative_path="cs2/game/csgo/cfg/plugin.cfg")
     manager = SimpleNamespace(disconnect=AsyncMock())
-    db = SimpleNamespace(commit=AsyncMock())
     atomic_write = AsyncMock()
     monkeypatch.setattr(
         plugin_configs, "get_server_with_permission", AsyncMock(return_value=server)
     )
     monkeypatch.setattr(plugin_configs, "_source_for_server", AsyncMock(return_value=source))
-
-    async def connect(*_args):
-        db.commit.assert_awaited_once()
-        return manager
-
-    monkeypatch.setattr(plugin_configs, "_connect", connect)
+    monkeypatch.setattr(plugin_configs, "_connect", AsyncMock(return_value=manager))
     monkeypatch.setattr(plugin_configs, "read_text_file", AsyncMock(return_value="setting 1\n"))
     monkeypatch.setattr(plugin_configs, "atomic_write_text_file", atomic_write)
     monkeypatch.setattr(plugin_configs, "maintenance_lock_service", _LockService())
@@ -320,7 +194,7 @@ async def test_save_rejects_stale_revision_without_writing(monkeypatch):
             server_id=1,
             source_id=2,
             request=request,
-            db=db,
+            db=SimpleNamespace(),
             current_user=SimpleNamespace(),
         )
 

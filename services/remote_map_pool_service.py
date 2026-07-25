@@ -97,7 +97,7 @@ async def fetch_remote_map_pool(
 ) -> str:
     current_url = await validate_remote_map_url(url)
     timeout = httpx.Timeout(REMOTE_MAP_TIMEOUT_SECONDS)
-    outbound_http = http_helper if http_resource is None else http_resource
+    outbound_http = http_resource or http_helper
 
     try:
         async with outbound_http.borrow_client() as client:
@@ -190,13 +190,7 @@ async def replace_remote_map_pool(ssh_manager, server, content: str) -> None:
         raise RemoteMapPoolError(f"Unable to replace maps.txt: {detail}")
 
 
-async def synchronize_remote_map_pool(
-    ssh_manager,
-    server,
-    url: str,
-    *,
-    http_resource: _HTTPBorrower | None = None,
-) -> tuple[str, int]:
+async def synchronize_remote_map_pool(ssh_manager, server, url: str) -> tuple[str, int]:
     plugin_dll = shlex.quote(mapchooser_remote_paths(server)["plugin_dll"])
     success, _, _ = await ssh_manager.execute_command(f"test -f {plugin_dll}", timeout=10)
     if not success:
@@ -204,9 +198,6 @@ async def synchronize_remote_map_pool(
             "MapChooser is not installed. Reinstall the plugin before synchronizing maps."
         )
 
-    content = await fetch_remote_map_pool(
-        url,
-        http_resource=http_resource,
-    )
+    content = await fetch_remote_map_pool(url)
     await replace_remote_map_pool(ssh_manager, server, content)
     return content, len(parse_maps_config(content).maps)

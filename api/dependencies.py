@@ -5,9 +5,8 @@ from typing import Annotated, cast
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.requests import HTTPConnection
 
-from api.http_resource import as_application_http
+from api.http_resource import resolve_application_http
 from cs2_manager.core import Principal
 from cs2_manager.infrastructure import UnitOfWork
 from modules import (
@@ -32,21 +31,16 @@ WebUser = Annotated[User, Depends(get_current_web_user)]
 WebAdmin = Annotated[User, Depends(get_current_web_admin)]
 
 
-def get_ssh_manager(connection: HTTPConnection) -> SSHManager:
+def get_ssh_manager(request: Request) -> SSHManager:
     """Create an operation-scoped SSH facade from this application's resources."""
-    container = getattr(connection.app.state, "container", None)
+    container = getattr(request.app.state, "container", None)
     connection_pool = getattr(container, "ssh_pool", None)
     if connection_pool is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SSH connection pool is unavailable",
         )
-    http_resource = as_application_http(getattr(container, "http", None))
-    if http_resource is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Outbound HTTP client is unavailable",
-        )
+    http_resource = resolve_application_http(request)
     if not callable(getattr(http_resource, "download_file", None)):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

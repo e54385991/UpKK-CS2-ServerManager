@@ -8,7 +8,6 @@ import asyncio
 import logging
 import re
 import shlex
-from collections.abc import Callable
 from typing import Optional, Tuple
 
 from modules.models import Server
@@ -16,7 +15,6 @@ from services.redis_manager import redis_manager
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
-SSHManagerFactory = Callable[[], SSHManager]
 
 
 class SteamInfService:
@@ -28,47 +26,18 @@ class SteamInfService:
     # Periodic refresh interval: 24 hours
     REFRESH_INTERVAL_SECONDS = 24 * 60 * 60
 
-    def __init__(
-        self,
-        max_refresh_concurrency: int = 4,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-    ):
+    def __init__(self, max_refresh_concurrency: int = 4):
         # Cache is long-term - refreshed on server operations or periodic refresh
         self.refresh_interval = self.REFRESH_INTERVAL_SECONDS
         self.max_refresh_concurrency = max(1, max_refresh_concurrency)
-        self._ssh_manager_factory = ssh_manager_factory
         self.refresh_task: Optional[asyncio.Task] = None
         self.running = False
 
-    def _configured_ssh_manager_factory(
-        self,
-        ssh_manager_factory: SSHManagerFactory | None,
-    ) -> SSHManagerFactory | None:
-        if ssh_manager_factory is not None:
-            return ssh_manager_factory
-        return self._ssh_manager_factory
-
-    def _runtime_ssh_manager_factory(
-        self,
-        ssh_manager_factory: SSHManagerFactory | None,
-    ) -> SSHManagerFactory:
-        return self._configured_ssh_manager_factory(ssh_manager_factory) or SSHManager
-
-    async def start(
-        self,
-        *,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-    ):
+    async def start(self):
         """Start periodic refresh task"""
         if self.refresh_task is None or self.refresh_task.done():
-            manager_factory = self._configured_ssh_manager_factory(ssh_manager_factory)
             self.running = True
-            if manager_factory is None:
-                self.refresh_task = asyncio.create_task(self._refresh_loop())
-            else:
-                self.refresh_task = asyncio.create_task(
-                    self._refresh_loop(ssh_manager_factory=manager_factory)
-                )
+            self.refresh_task = asyncio.create_task(self._refresh_loop())
             logger.info("Steam.inf periodic refresh started (every 24 hours)")
 
     async def stop(self):
@@ -81,36 +50,23 @@ class SteamInfService:
         self.refresh_task = None
         logger.info("Steam.inf periodic refresh stopped")
 
-    async def _refresh_loop(
-        self,
-        *,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-    ):
+    async def _refresh_loop(self):
         """Periodic refresh loop"""
-        manager_factory = self._configured_ssh_manager_factory(ssh_manager_factory)
         while self.running:
             try:
-                if manager_factory is None:
-                    await self._periodic_refresh_all()
-                else:
-                    await self._periodic_refresh_all(ssh_manager_factory=manager_factory)
+                await self._periodic_refresh_all()
             except Exception as e:
                 logger.error(f"Error in steam.inf periodic refresh: {e}")
 
             # Wait for next interval
             await asyncio.sleep(self.refresh_interval)
 
-    async def _periodic_refresh_all(
-        self,
-        *,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-    ):
+    async def _periodic_refresh_all(self):
         """Periodically refresh all servers' version cache"""
         from sqlmodel import select
 
         from modules.database import async_session_maker
 
-        manager_factory = self._configured_ssh_manager_factory(ssh_manager_factory)
         try:
             # Fetch server list quickly and close DB connection to avoid pool exhaustion
             async with async_session_maker() as db:
@@ -125,27 +81,15 @@ class SteamInfService:
 
             async def refresh_server(server: Server) -> None:
                 async with semaphore:
-                    if manager_factory is None:
-                        await self._refresh_server_with_timeout(server)
-                    else:
-                        await self._refresh_server_with_timeout(
-                            server,
-                            ssh_manager_factory=manager_factory,
-                        )
+                    await self._refresh_server_with_timeout(server)
 
             await asyncio.gather(*(refresh_server(server) for server in servers))
 
         except Exception as e:
             logger.error(f"Error in periodic refresh: {e}")
 
-    async def _refresh_server_with_timeout(
-        self,
-        server: Server,
-        *,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-    ) -> None:
+    async def _refresh_server_with_timeout(self, server: Server) -> None:
         """Refresh one server without allowing it to stall the fleet sweep."""
-        manager_factory = self._configured_ssh_manager_factory(ssh_manager_factory)
         try:
             # Skip servers that are marked as down due to SSH failures
             if server.should_skip_background_checks():
@@ -155,17 +99,7 @@ class SteamInfService:
                 return
 
             async def refresh() -> None:
-                if manager_factory is None:
-                    success, version = await self.get_version_from_steam_inf(
-                        server,
-                        force_refresh=True,
-                    )
-                else:
-                    success, version = await self.get_version_from_steam_inf(
-                        server,
-                        force_refresh=True,
-                        ssh_manager_factory=manager_factory,
-                    )
+                success, version = await self.get_version_from_steam_inf(server, force_refresh=True)
                 if success:
                     logger.debug(f"Refreshed version for server {server.id}: {version}")
 
@@ -179,11 +113,7 @@ class SteamInfService:
             logger.error(f"Error refreshing version for server {server.id}: {e}")
 
     async def get_version_from_steam_inf(
-        self,
-        server: Server,
-        force_refresh: bool = False,
-        *,
-        ssh_manager_factory: SSHManagerFactory | None = None,
+        self, server: Server, force_refresh: bool = False
     ) -> Tuple[bool, Optional[str]]:
         """
         Get CS2 version from steam.inf file
@@ -213,14 +143,7 @@ class SteamInfService:
 
         # Read from file (either forced or cache was missing)
         if force_refresh:
-            manager_factory = self._configured_ssh_manager_factory(ssh_manager_factory)
-            if manager_factory is None:
-                success, version = await self._read_version_from_file(server)
-            else:
-                success, version = await self._read_version_from_file(
-                    server,
-                    ssh_manager_factory=manager_factory,
-                )
+            success, version = await self._read_version_from_file(server)
 
             if success and version:
                 # Cache the version with 365-day TTL (effectively unlimited)
@@ -232,12 +155,7 @@ class SteamInfService:
 
         return False, None
 
-    async def _read_version_from_file(
-        self,
-        server: Server,
-        *,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-    ) -> Tuple[bool, Optional[str]]:
+    async def _read_version_from_file(self, server: Server) -> Tuple[bool, Optional[str]]:
         """
         Read PatchVersion from steam.inf file via SSH
 
@@ -247,7 +165,7 @@ class SteamInfService:
         Returns:
             Tuple[bool, Optional[str]]: (success, version_string)
         """
-        ssh_manager = self._runtime_ssh_manager_factory(ssh_manager_factory)()
+        ssh_manager = SSHManager()
 
         try:
             # Wrap the entire operation in a timeout to prevent blocking
@@ -331,12 +249,7 @@ class SteamInfService:
             return match.group(1)
         return None
 
-    async def refresh_version_cache(
-        self,
-        server: Server,
-        *,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-    ) -> Tuple[bool, Optional[str]]:
+    async def refresh_version_cache(self, server: Server) -> Tuple[bool, Optional[str]]:
         """
         Force refresh version cache by reading from file
         Should be called after server start/restart/update/verify operations
@@ -349,18 +262,7 @@ class SteamInfService:
             Tuple[bool, Optional[str]]: (success, version_string)
         """
         logger.info(f"Refreshing steam.inf version cache for server {server.id}")
-        manager_factory = self._configured_ssh_manager_factory(ssh_manager_factory)
-        if manager_factory is None:
-            success, version = await self.get_version_from_steam_inf(
-                server,
-                force_refresh=True,
-            )
-        else:
-            success, version = await self.get_version_from_steam_inf(
-                server,
-                force_refresh=True,
-                ssh_manager_factory=manager_factory,
-            )
+        success, version = await self.get_version_from_steam_inf(server, force_refresh=True)
 
         # Update database current_game_version if we successfully got the version
         if success and version:

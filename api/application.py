@@ -177,22 +177,26 @@ def _create_container(
     from services.a2s_cache_service import (
         A2S_CACHE_SERVICE_KEY,
         A2SCacheService,
+        a2s_cache_service,
     )
     from services.s3_backup_service import (
         S3_BACKUP_SERVICE_KEY,
         S3BackupService,
+        s3_backup_service,
     )
-    from services.steam_api_service import SteamAPIService
 
     if A2S_CACHE_SERVICE_KEY not in named_services:
-        named_services[A2S_CACHE_SERVICE_KEY] = A2SCacheService(
-            redis_adapter=redis,  # type: ignore[arg-type]
-            # Lightweight test/extension overrides historically only
-            # supplied an opaque database marker. A real database resource
-            # binds its factory here; incomplete compatibility doubles
-            # retain the service's lazy legacy fallback.
-            session_factory=getattr(database, "session_factory", None),
-            steam_service=SteamAPIService(http_adapter=http),  # type: ignore[arg-type]
+        named_services[A2S_CACHE_SERVICE_KEY] = (
+            a2s_cache_service
+            if legacy_runtime
+            else A2SCacheService(
+                redis_adapter=redis,  # type: ignore[arg-type]
+                # Lightweight test/extension overrides historically only
+                # supplied an opaque database marker. A real database resource
+                # binds its factory here; incomplete compatibility doubles
+                # retain the service's lazy legacy fallback.
+                session_factory=getattr(database, "session_factory", None),
+            )
         )
     if MAINTENANCE_LOCK_SERVICE_KEY not in named_services:
         named_services[MAINTENANCE_LOCK_SERVICE_KEY] = (
@@ -201,7 +205,9 @@ def _create_container(
             else MaintenanceLockService(redis_adapter=redis)  # type: ignore[arg-type]
         )
     if S3_BACKUP_SERVICE_KEY not in named_services:
-        named_services[S3_BACKUP_SERVICE_KEY] = S3BackupService()
+        named_services[S3_BACKUP_SERVICE_KEY] = (
+            s3_backup_service if legacy_runtime else S3BackupService()
+        )
     return AppContainer(
         settings=app_settings,
         database=database,  # type: ignore[arg-type]

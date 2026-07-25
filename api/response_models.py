@@ -159,30 +159,3 @@ class StartupCommandResponse(BaseModel):
     cs2_command: str
     session_manager: str
     game_mode_resolved: str
-
-
-class BatchServerStatusResponse(BaseModel):
-    """One server's progress within a Redis-backed batch operation."""
-
-    status: str
-    message: str
-    timestamp: float
-
-
-class BatchActionSummaryResponse(BaseModel):
-    """Aggregated counts for a batch operation."""
-
-    total: int
-    completed: int
-    succeeded: int
-    failed: int
-    in_progress: int
-    is_complete: bool
-
-
-class BatchActionStatusResponse(BaseModel):
-    """Current progress for all servers in one authorized batch."""
-
-    batch_id: str
-    servers: dict[str, BatchServerStatusResponse]
-    summary: BatchActionSummaryResponse

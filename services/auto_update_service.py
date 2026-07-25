@@ -6,18 +6,16 @@ Periodically checks server versions against Steam API and triggers updates when 
 import asyncio
 import logging
 import math
-from collections.abc import Callable
 from typing import Optional, Set, Tuple
 
 from modules.utils import get_current_time
 from services.discord_notification_service import EVENT_AUTO_UPDATE, discord_notification_service
-from services.maintenance_lock import MaintenanceLockService, maintenance_lock_service
+from services.maintenance_lock import maintenance_lock_service
 from services.ssh_manager import SSHManager
-from services.steam_api_service import SteamAPIService, steam_api_service
+from services.steam_api_service import steam_api_service
 from services.steam_inf_service import steam_inf_service
 
 logger = logging.getLogger(__name__)
-SSHManagerFactory = Callable[[], SSHManager]
 
 
 class AutoUpdateService:
@@ -26,71 +24,17 @@ class AutoUpdateService:
     VERSION_VERIFICATION_TIMEOUT_SECONDS = 5 * 60
     VERSION_VERIFICATION_POLL_INTERVAL_SECONDS = 30
 
-    def __init__(
-        self,
-        steam_service: SteamAPIService | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
-    ):
-        self._steam_service = steam_api_service if steam_service is None else steam_service
-        self._ssh_manager_factory = ssh_manager_factory
-        self._lock_service = lock_service
+    def __init__(self):
         self.check_interval = 60  # Check every minute (configurable, supports debugging)
         self.task: Optional[asyncio.Task] = None
         self.running = False
         self.updating_servers: Set[int] = set()  # Track servers currently being updated
 
-    def _runtime_steam_service(
-        self,
-        steam_service: SteamAPIService | None,
-    ) -> SteamAPIService:
-        return self._steam_service if steam_service is None else steam_service
-
-    def _runtime_ssh_manager_factory(
-        self,
-        ssh_manager_factory: SSHManagerFactory | None,
-    ) -> SSHManagerFactory:
-        return self._configured_ssh_manager_factory(ssh_manager_factory) or SSHManager
-
-    def _configured_ssh_manager_factory(
-        self,
-        ssh_manager_factory: SSHManagerFactory | None,
-    ) -> SSHManagerFactory | None:
-        if ssh_manager_factory is not None:
-            return ssh_manager_factory
-        return self._ssh_manager_factory
-
-    def _runtime_lock_service(
-        self,
-        lock_service: MaintenanceLockService | None,
-    ) -> MaintenanceLockService:
-        if lock_service is not None:
-            return lock_service
-        if self._lock_service is not None:
-            return self._lock_service
-        return maintenance_lock_service
-
-    async def start(
-        self,
-        *,
-        steam_service: SteamAPIService | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
-    ):
+    async def start(self):
         """Start the background auto-update task"""
         if self.task is None or self.task.done():
-            runtime_steam_service = self._runtime_steam_service(steam_service)
-            configured_ssh_manager_factory = self._configured_ssh_manager_factory(
-                ssh_manager_factory
-            )
             self.running = True
-            self.task = asyncio.create_task(
-                self._update_loop(
-                    runtime_steam_service,
-                    configured_ssh_manager_factory,
-                    self._runtime_lock_service(lock_service),
-                )
-            )
+            self.task = asyncio.create_task(self._update_loop())
             logger.info("Auto-update service started")
 
     async def stop(self):
@@ -103,33 +47,18 @@ class AutoUpdateService:
         self.task = None
         logger.info("Auto-update service stopped")
 
-    async def _update_loop(
-        self,
-        steam_service: SteamAPIService,
-        ssh_manager_factory: SSHManagerFactory | None,
-        lock_service: MaintenanceLockService,
-    ):
+    async def _update_loop(self):
         """Main update check loop"""
         while self.running:
             try:
-                await self._check_and_update_servers(
-                    steam_service=steam_service,
-                    ssh_manager_factory=ssh_manager_factory,
-                    lock_service=lock_service,
-                )
+                await self._check_and_update_servers()
             except Exception as e:
                 logger.error(f"Error in auto-update loop: {e}")
 
             # Wait for next interval
             await asyncio.sleep(self.check_interval)
 
-    async def _check_and_update_servers(
-        self,
-        *,
-        steam_service: SteamAPIService | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
-    ):
+    async def _check_and_update_servers(self):
         """Check all servers with auto-update enabled and update if needed"""
         from modules.database import async_session_maker
         from modules.models import Server
@@ -160,8 +89,7 @@ class AutoUpdateService:
 
                 # Check if we should check this server based on its configured interval
                 interval_hours = server.update_check_interval_hours or 1
-                runtime_steam_service = self._runtime_steam_service(steam_service)
-                if not runtime_steam_service.should_check_version(
+                if not steam_api_service.should_check_version(
                     server.last_update_check, interval_hours
                 ):
                     logger.debug(
@@ -170,27 +98,13 @@ class AutoUpdateService:
                     )
                     continue
 
-                await self._check_and_update_server(
-                    server,
-                    steam_service=runtime_steam_service,
-                    ssh_manager_factory=self._configured_ssh_manager_factory(ssh_manager_factory),
-                    lock_service=self._runtime_lock_service(lock_service),
-                )
+                await self._check_and_update_server(server)
 
         except Exception as e:
             logger.error(f"Error checking servers for updates: {e}")
 
-    async def _check_and_update_server(
-        self,
-        server,
-        *,
-        steam_service: SteamAPIService | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
-    ):
+    async def _check_and_update_server(self, server):
         """Check a single server and run a long update outside the check timeout."""
-        runtime_steam_service = self._runtime_steam_service(steam_service)
-        manager_factory = self._configured_ssh_manager_factory(ssh_manager_factory)
         try:
 
             async def _do_check():
@@ -207,19 +121,13 @@ class AutoUpdateService:
                     )
                     await db.commit()
 
-                if manager_factory is None:
-                    success, version = await steam_inf_service.get_version_from_steam_inf(server)
-                else:
-                    success, version = await steam_inf_service.get_version_from_steam_inf(
-                        server,
-                        ssh_manager_factory=manager_factory,
-                    )
+                success, version = await steam_inf_service.get_version_from_steam_inf(server)
                 current_version = version if success and version else server.current_game_version
                 version_source = "steam.inf" if success and version else "database/A2S"
                 if not current_version:
                     logger.warning("No version available for server %s", server.id)
                     return None
-                success, result = await runtime_steam_service.check_version(current_version)
+                success, result = await steam_api_service.check_version(current_version)
                 if not success:
                     logger.warning(
                         "Steam version check failed for server %s: %s",
@@ -238,9 +146,6 @@ class AutoUpdateService:
                     current_version=update_info[0],
                     required_version=update_info[1],
                     version_source=update_info[2],
-                    steam_service=runtime_steam_service,
-                    ssh_manager_factory=manager_factory,
-                    lock_service=self._runtime_lock_service(lock_service),
                 )
         except asyncio.TimeoutError:
             logger.warning("Timeout checking server %s; update was not started", server.id)
@@ -252,13 +157,8 @@ class AutoUpdateService:
         server,
         required_version: Optional[str],
         log_progress,
-        *,
-        steam_service: SteamAPIService | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Poll fresh steam.inf reads until the target version is observed."""
-        runtime_steam_service = self._runtime_steam_service(steam_service)
-        manager_factory = self._configured_ssh_manager_factory(ssh_manager_factory)
         timeout = max(0, self.VERSION_VERIFICATION_TIMEOUT_SECONDS)
         interval = max(0, self.VERSION_VERIFICATION_POLL_INTERVAL_SECONDS)
         max_attempts = math.ceil(timeout / interval) + 1 if timeout and interval else 1
@@ -273,28 +173,13 @@ class AutoUpdateService:
         for attempt in range(1, max_attempts + 1):
             try:
                 if deadline is None:
-                    if manager_factory is None:
-                        verified_read, observed = await steam_inf_service.refresh_version_cache(
-                            server
-                        )
-                    else:
-                        verified_read, observed = await steam_inf_service.refresh_version_cache(
-                            server,
-                            ssh_manager_factory=manager_factory,
-                        )
+                    verified_read, observed = await steam_inf_service.refresh_version_cache(server)
                 else:
                     remaining = deadline - loop.time()
                     if remaining <= 0:
                         break
-                    if manager_factory is None:
-                        refresh = steam_inf_service.refresh_version_cache(server)
-                    else:
-                        refresh = steam_inf_service.refresh_version_cache(
-                            server,
-                            ssh_manager_factory=manager_factory,
-                        )
                     verified_read, observed = await asyncio.wait_for(
-                        refresh,
+                        steam_inf_service.refresh_version_cache(server),
                         timeout=remaining,
                     )
             except asyncio.TimeoutError:
@@ -314,7 +199,7 @@ class AutoUpdateService:
                 if final_check is None:
                     try:
                         if deadline is None:
-                            check_success, candidate = await runtime_steam_service.check_version(
+                            check_success, candidate = await steam_api_service.check_version(
                                 observed_version
                             )
                         else:
@@ -322,7 +207,7 @@ class AutoUpdateService:
                             if remaining <= 0:
                                 break
                             check_success, candidate = await asyncio.wait_for(
-                                runtime_steam_service.check_version(observed_version),
+                                steam_api_service.check_version(observed_version),
                                 timeout=remaining,
                             )
                     except asyncio.TimeoutError:
@@ -381,18 +266,12 @@ class AutoUpdateService:
         current_version: Optional[str] = None,
         required_version: Optional[str] = None,
         version_source: Optional[str] = None,
-        *,
-        steam_service: SteamAPIService | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
     ):
         """Trigger update for a server and restart it"""
-        runtime_lock_service = self._runtime_lock_service(lock_service)
-        manager_factory = self._configured_ssh_manager_factory(ssh_manager_factory)
-        lock = runtime_lock_service.get(server.id)
+        lock = maintenance_lock_service.get(server.id)
 
         # Try to acquire lock without blocking - if already locked, skip this update
-        if await runtime_lock_service.is_locked(server.id):
+        if await maintenance_lock_service.is_locked(server.id):
             logger.warning(
                 f"Server {server.id} ({server.name}) update already in progress, "
                 f"skipping duplicate update request"
@@ -438,7 +317,7 @@ class AutoUpdateService:
                 )
 
                 # Create SSH manager
-                ssh_manager = self._runtime_ssh_manager_factory(manager_factory)()
+                ssh_manager = SSHManager()
 
                 # Define progress callback
                 async def log_progress(msg: str):
@@ -507,29 +386,15 @@ class AutoUpdateService:
                 # remote steam.inf for the required version. A readable but
                 # stale file must keep polling rather than fail immediately.
                 notification_details["Verification Window"] = "Up to 5 minutes"
-                if manager_factory is None:
-                    (
-                        version_verified,
-                        observed_version,
-                        latest_required_version,
-                    ) = await self._wait_for_updated_version(
-                        server,
-                        required_version,
-                        log_progress,
-                        steam_service=steam_service,
-                    )
-                else:
-                    (
-                        version_verified,
-                        observed_version,
-                        latest_required_version,
-                    ) = await self._wait_for_updated_version(
-                        server,
-                        required_version,
-                        log_progress,
-                        steam_service=steam_service,
-                        ssh_manager_factory=manager_factory,
-                    )
+                (
+                    version_verified,
+                    observed_version,
+                    latest_required_version,
+                ) = await self._wait_for_updated_version(
+                    server,
+                    required_version,
+                    log_progress,
+                )
 
                 notification_details["Observed Version"] = observed_version or "Unavailable"
                 notification_details["Operation Result"] = update_message

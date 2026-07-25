@@ -171,27 +171,6 @@ class DependencyInfo(SQLModel):
     title: str
 
 
-class PluginCategoryOption(SQLModel):
-    """One selectable plugin-market category."""
-
-    value: str
-    name: str
-
-
-class PluginCategoriesResponse(SQLModel):
-    """Plugin categories exposed to the market UI."""
-
-    success: bool
-    categories: List[PluginCategoryOption]
-
-
-class PluginDependencyOptionsResponse(SQLModel):
-    """Minimal plugins available for dependency selection."""
-
-    success: bool
-    plugins: List[DependencyInfo]
-
-
 class MarketPluginResponse(SQLModel):
     """Schema for market plugin response"""
 

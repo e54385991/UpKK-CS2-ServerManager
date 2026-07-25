@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from modules.utils import get_current_time
 from services.a2s_query import a2s_service
 from services.redis_manager import redis_manager
-from services.steam_api_service import SteamAPIService, steam_api_service
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,6 @@ class A2SCacheService:
         sweep_deadline: float = 9.5,
         redis_adapter: A2SRedisAdapter | None = None,
         session_factory: SessionFactory | None = None,
-        steam_service: SteamAPIService | None = None,
     ):
         self.query_interval = 30  # Query every 30 seconds
         self.cache_ttl = 60  # Cache TTL in seconds
@@ -57,7 +55,6 @@ class A2SCacheService:
         # service has been constructed, while application-owned instances bind
         # their own factory permanently.
         self._session_factory = session_factory
-        self._steam_service = steam_api_service if steam_service is None else steam_service
         self.task: Optional[asyncio.Task] = None
         self.steam_version_task: Optional[asyncio.Task] = None
         self.running = False
@@ -77,11 +74,6 @@ class A2SCacheService:
         from modules.database import async_session_maker
 
         return async_session_maker
-
-    @property
-    def steam_service(self) -> SteamAPIService:
-        """Return this service's explicitly bound Steam integration."""
-        return self._steam_service
 
     async def start(self):
         """Start the background A2S query task"""
@@ -133,7 +125,9 @@ class A2SCacheService:
     async def _cache_steam_version(self):
         """Fetch and cache latest CS2 version from Steam API"""
         try:
-            success, result = await self._steam_service.check_version("1")
+            from services.steam_api_service import steam_api_service
+
+            success, result = await steam_api_service.check_version("1")
 
             if success and result and result.get("success"):
                 steam_version = result.get("required_version")
@@ -279,7 +273,9 @@ class A2SCacheService:
 
             # Update server's current_game_version in database if we got version from A2S
             if info_success and server_info and server_info.get("version"):
-                parsed_version = self._steam_service.parse_version_from_a2s(
+                from services.steam_api_service import steam_api_service
+
+                parsed_version = steam_api_service.parse_version_from_a2s(
                     server_info.get("version")
                 )
                 if parsed_version and parsed_version != server.current_game_version:

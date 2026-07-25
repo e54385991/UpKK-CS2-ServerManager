@@ -283,11 +283,7 @@ async def test_public_a2s_cache_returns_compatibility_error_when_resources_are_m
     principal = SimpleNamespace(id=7, is_admin=False)
     request = _request_state(container=SimpleNamespace())
 
-    response = await public.get_user_servers_a2s_cache(
-        request=request,
-        uow=SimpleNamespace(session=object()),
-        current_user=principal,
-    )
+    response = await public.get_user_servers_a2s_cache(request, principal)
 
     assert response["servers"] == {}
     assert response["error"] == "Cache unavailable"

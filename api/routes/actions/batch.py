@@ -4,9 +4,6 @@
 
 from sqlmodel import select
 
-from api.response_models import BatchActionStatusResponse
-from cs2_manager.core import ErrorResponse
-
 from .common import *
 
 router = APIRouter(tags=["actions"])
@@ -65,8 +62,6 @@ async def batch_server_actions(
         )
 
     await db.commit()
-    session_factory = _request_session_factory(http_request)
-    ssh_manager_factory = _request_ssh_manager_factory(http_request)
     await redis_manager.initialize_batch_action(
         batch_id,
         current_user.id,
@@ -75,6 +70,7 @@ async def batch_server_actions(
         "Queued for processing",
     )
     await _reserve_batch_capacity(current_user.id, len(valid_server_ids))
+    session_factory = _request_session_factory(http_request)
     # Spawn background tasks for each server - these run in parallel
     # Tasks are stored to prevent garbage collection
     for server_id in valid_server_ids:
@@ -93,7 +89,6 @@ async def batch_server_actions(
                         current_user.is_admin,
                         batch_id,
                         session_factory=session_factory,
-                        ssh_manager_factory=ssh_manager_factory,
                     ),
                     lock_service,
                 ),
@@ -109,15 +104,7 @@ async def batch_server_actions(
     )
 
 
-@router.get(
-    "/servers/batch-actions/{batch_id}",
-    response_model=BatchActionStatusResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
-)
+@router.get("/servers/batch-actions/{batch_id}")
 async def get_batch_action_status(
     batch_id: str,
     db: AsyncSession = Depends(get_db),
@@ -209,8 +196,6 @@ async def batch_install_plugins(
         )
 
     await db.commit()
-    session_factory = _request_session_factory(http_request)
-    ssh_manager_factory = _request_ssh_manager_factory(http_request)
     await redis_manager.initialize_batch_action(
         batch_id,
         current_user.id,
@@ -219,6 +204,7 @@ async def batch_install_plugins(
         "Queued for plugin installation",
     )
     await _reserve_batch_capacity(current_user.id, len(valid_server_ids))
+    session_factory = _request_session_factory(http_request)
     # Spawn background tasks for each server - these run in parallel
     # Tasks are stored to prevent garbage collection
     for server_id in valid_server_ids:
@@ -237,7 +223,6 @@ async def batch_install_plugins(
                         current_user.is_admin,
                         batch_id,
                         session_factory=session_factory,
-                        ssh_manager_factory=ssh_manager_factory,
                     ),
                     lock_service,
                 ),
@@ -288,8 +273,6 @@ async def batch_send_command(
         )
 
     await db.commit()
-    session_factory = _request_session_factory(http_request)
-    ssh_manager_factory = _request_ssh_manager_factory(http_request)
     await redis_manager.initialize_batch_action(
         batch_id,
         current_user.id,
@@ -298,6 +281,7 @@ async def batch_send_command(
         "Queued for command execution",
     )
     await _reserve_batch_capacity(current_user.id, len(valid_server_ids))
+    session_factory = _request_session_factory(http_request)
     # Spawn background tasks for each server - these run in parallel
     # Tasks are stored to prevent garbage collection
     for server_id in valid_server_ids:
@@ -316,7 +300,6 @@ async def batch_send_command(
                         current_user.is_admin,
                         batch_id,
                         session_factory=session_factory,
-                        ssh_manager_factory=ssh_manager_factory,
                     ),
                     lock_service,
                 ),

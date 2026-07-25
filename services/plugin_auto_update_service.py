@@ -4,7 +4,6 @@ import asyncio
 import fnmatch
 import logging
 import re
-from collections.abc import Callable
 from datetime import timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -21,7 +20,6 @@ from services.discord_notification_service import (
     discord_notification_service,
 )
 from services.maintenance_lock import (
-    MaintenanceLockService,
     OperationBusyError,
     OperationCoordinationUnavailable,
     maintenance_lock_service,
@@ -46,7 +44,6 @@ FRAMEWORKS = {
     },
 }
 ARCHIVE_EXTENSIONS = (".tar.gz", ".zip", ".tgz", ".tar", ".7z")
-SSHManagerFactory = Callable[[], SSHManager]
 
 
 def canonical_repo_url(repo_url: str) -> str:
@@ -130,46 +127,11 @@ async def upsert_managed_plugin(
 class PluginAutoUpdateService:
     CHECK_LOOP_SECONDS = 60
 
-    def __init__(
-        self,
-        *,
-        http_resource: Any | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
-    ) -> None:
-        # These defaults are the direct-Python compatibility facade. FastAPI
-        # and lifespan callers pass their application's resources explicitly.
-        self._http_resource = http_helper if http_resource is None else http_resource
-        self._ssh_manager_factory = ssh_manager_factory
-        self._lock_service = lock_service
+    def __init__(self) -> None:
         self.task: Optional[asyncio.Task] = None
         self.running = False
         self._status_cache: Dict[int, Dict[str, Any]] = {}
         self._redis_status_retry_after = 0.0
-
-    @property
-    def http_resource(self) -> Any:
-        return self._http_resource
-
-    def _runtime_resources(
-        self,
-        http_resource: Any | None,
-        ssh_manager_factory: SSHManagerFactory | None,
-    ) -> tuple[Any, SSHManagerFactory]:
-        return (
-            self._http_resource if http_resource is None else http_resource,
-            ssh_manager_factory or self._ssh_manager_factory or SSHManager,
-        )
-
-    def _runtime_lock(
-        self,
-        lock_service: MaintenanceLockService | None,
-    ) -> MaintenanceLockService:
-        if lock_service is not None:
-            return lock_service
-        if self._lock_service is not None:
-            return self._lock_service
-        return maintenance_lock_service
 
     async def _publish_status(
         self,
@@ -256,27 +218,11 @@ class PluginAutoUpdateService:
             "finished_at": None,
         }
 
-    async def start(
-        self,
-        *,
-        http_resource: Any | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
-    ) -> None:
+    async def start(self) -> None:
         if self.running:
             return
-        outbound_http, manager_factory = self._runtime_resources(
-            http_resource,
-            ssh_manager_factory,
-        )
         self.running = True
-        self.task = asyncio.create_task(
-            self._loop(
-                http_resource=outbound_http,
-                ssh_manager_factory=manager_factory,
-                lock_service=self._runtime_lock(lock_service),
-            )
-        )
+        self.task = asyncio.create_task(self._loop())
         logger.info("Plugin auto-update service started")
 
     async def stop(self) -> None:
@@ -286,20 +232,10 @@ class PluginAutoUpdateService:
             await asyncio.gather(self.task, return_exceptions=True)
         self.task = None
 
-    async def _loop(
-        self,
-        *,
-        http_resource: Any,
-        ssh_manager_factory: SSHManagerFactory,
-        lock_service: MaintenanceLockService,
-    ) -> None:
+    async def _loop(self) -> None:
         while self.running:
             try:
-                await self.check_all_servers(
-                    http_resource=http_resource,
-                    ssh_manager_factory=ssh_manager_factory,
-                    lock_service=lock_service,
-                )
+                await self.check_all_servers()
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -315,17 +251,7 @@ class PluginAutoUpdateService:
             last_check = last_check.replace(tzinfo=timezone.utc)
         return (now - last_check).total_seconds() >= interval_hours * 3600
 
-    async def check_all_servers(
-        self,
-        *,
-        http_resource: Any | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
-    ) -> None:
-        outbound_http, manager_factory = self._runtime_resources(
-            http_resource,
-            ssh_manager_factory,
-        )
+    async def check_all_servers(self) -> None:
         async with async_session_maker() as db:
             result = await db.execute(
                 select(Server).where(Server.enable_plugin_auto_update.is_(True))
@@ -337,12 +263,7 @@ class PluginAutoUpdateService:
             if self._due(
                 server.last_plugin_update_check, server.plugin_update_check_interval_hours or 1.0
             ):
-                await self.check_server(
-                    server.id,
-                    http_resource=outbound_http,
-                    ssh_manager_factory=manager_factory,
-                    lock_service=self._runtime_lock(lock_service),
-                )
+                await self.check_server(server.id)
 
     @staticmethod
     def _is_windows_asset(asset_name: str) -> bool:
@@ -427,16 +348,11 @@ class PluginAutoUpdateService:
         return []
 
     async def _latest_github_release(
-        self,
-        item: ManagedPlugin,
-        user: User,
-        *,
-        http_resource: Any | None = None,
+        self, item: ManagedPlugin, user: User
     ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
         if not item.repo_url:
             return False, None, "GitHub repository is not configured"
-        outbound_http = self._http_resource if http_resource is None else http_resource
-        success, data, error = await outbound_http.get(
+        success, data, error = await http_helper.get(
             repo_api_url(item.repo_url),
             headers={"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"},
             timeout=30,
@@ -487,13 +403,8 @@ class PluginAutoUpdateService:
             "",
         )
 
-    async def _latest_metamod(
-        self,
-        server: Server,
-        *,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-    ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
-        manager = (ssh_manager_factory or self._ssh_manager_factory or SSHManager)()
+    async def _latest_metamod(self, server: Server) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+        manager = SSHManager()
         connected, message = await manager.connect(server)
         if not connected:
             return False, None, message
@@ -516,23 +427,12 @@ class PluginAutoUpdateService:
             await manager.disconnect()
 
     async def _install_item(
-        self,
-        server: Server,
-        user: User,
-        item: ManagedPlugin,
-        latest: Dict[str, Any],
-        *,
-        http_resource: Any | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
+        self, server: Server, user: User, item: ManagedPlugin, latest: Dict[str, Any]
     ) -> Tuple[bool, str]:
-        outbound_http, manager_factory = self._runtime_resources(
-            http_resource,
-            ssh_manager_factory,
-        )
         if item.framework_key == "metamod":
-            return await manager_factory().update_metamod(server)
+            return await SSHManager().update_metamod(server)
         if item.framework_key == "counterstrikesharp":
-            return await manager_factory().update_counterstrikesharp(server)
+            return await SSHManager().update_counterstrikesharp(server)
 
         # Automatic updates operate on the selected managed item only.  Do not
         # recurse through a market dependency graph; CONFIG_EXCLUSIONS plus the
@@ -550,48 +450,14 @@ class PluginAutoUpdateService:
             suppress_notification=True,
         )
         async with async_session_maker() as db:
-            result = await install_github_plugin(
-                server.id,
-                request,
-                db,
-                user,
-                ssh_manager=manager_factory(),
-                http_resource=outbound_http,
-            )
+            result = await install_github_plugin(server.id, request, db, user)
         return result.success, result.message
 
     async def check_server(
-        self,
-        server_id: int,
-        force: bool = False,
-        plugin_id: Optional[int] = None,
-        *,
-        http_resource: Any | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
+        self, server_id: int, force: bool = False, plugin_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        explicit_resources = (
-            http_resource is not None or ssh_manager_factory is not None or lock_service is not None
-        )
-        outbound_http, manager_factory = self._runtime_resources(
-            http_resource,
-            ssh_manager_factory,
-        )
         try:
-            if not explicit_resources:
-                return await self._check_server(
-                    server_id,
-                    force=force,
-                    plugin_id=plugin_id,
-                )
-            return await self._check_server(
-                server_id,
-                force=force,
-                plugin_id=plugin_id,
-                http_resource=outbound_http,
-                ssh_manager_factory=manager_factory,
-                lock_service=self._runtime_lock(lock_service),
-            )
+            return await self._check_server(server_id, force=force, plugin_id=plugin_id)
         except OperationBusyError:
             return {
                 "success": False,
@@ -617,15 +483,7 @@ class PluginAutoUpdateService:
             )
             raise
 
-    async def check_plugin(
-        self,
-        server_id: int,
-        plugin_id: int,
-        *,
-        http_resource: Any | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
-    ) -> Dict[str, Any]:
+    async def check_plugin(self, server_id: int, plugin_id: int) -> Dict[str, Any]:
         """Run the normal update pipeline for one managed plugin.
 
         This is intentionally not a dry-run: it verifies the release and then
@@ -633,34 +491,12 @@ class PluginAutoUpdateService:
         policy as a scheduled update, while ignoring the item's auto-update
         switch so it can be tested before enabling it.
         """
-        return await self.check_server(
-            server_id,
-            force=True,
-            plugin_id=plugin_id,
-            http_resource=http_resource,
-            ssh_manager_factory=ssh_manager_factory,
-            lock_service=lock_service,
-        )
+        return await self.check_server(server_id, force=True, plugin_id=plugin_id)
 
     async def _check_server(
-        self,
-        server_id: int,
-        force: bool = False,
-        plugin_id: Optional[int] = None,
-        *,
-        http_resource: Any | None = None,
-        ssh_manager_factory: SSHManagerFactory | None = None,
-        lock_service: MaintenanceLockService | None = None,
+        self, server_id: int, force: bool = False, plugin_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        explicit_resources = (
-            http_resource is not None or ssh_manager_factory is not None or lock_service is not None
-        )
-        outbound_http, manager_factory = self._runtime_resources(
-            http_resource,
-            ssh_manager_factory,
-        )
-        runtime_lock_service = self._runtime_lock(lock_service)
-        lock = runtime_lock_service.get(
+        lock = maintenance_lock_service.get(
             server_id,
             operation="plugin_auto_update",
             wait=False,
@@ -754,22 +590,9 @@ class PluginAutoUpdateService:
                 )
                 try:
                     if item.framework_key == "metamod":
-                        if explicit_resources:
-                            ok, latest, error = await self._latest_metamod(
-                                server,
-                                ssh_manager_factory=manager_factory,
-                            )
-                        else:
-                            ok, latest, error = await self._latest_metamod(server)
+                        ok, latest, error = await self._latest_metamod(server)
                     else:
-                        if explicit_resources:
-                            ok, latest, error = await self._latest_github_release(
-                                item,
-                                user,
-                                http_resource=outbound_http,
-                            )
-                        else:
-                            ok, latest, error = await self._latest_github_release(item, user)
+                        ok, latest, error = await self._latest_github_release(item, user)
                 except Exception as exc:
                     logger.exception(
                         "Failed to resolve latest release for managed plugin %s", item.id
@@ -874,7 +697,7 @@ class PluginAutoUpdateService:
                     total=len(candidates),
                     log="Checking whether the server is currently running",
                 )
-                status_check_ok, server_state = await manager_factory().get_server_status(server)
+                status_check_ok, server_state = await SSHManager().get_server_status(server)
                 was_running = status_check_ok and server_state == "running"
                 status_check_message = (
                     server_state if status_check_ok else "Could not determine server state"
@@ -919,7 +742,7 @@ class PluginAutoUpdateService:
                     log="Backup requested by: "
                     + ", ".join(item.display_name for item, _ in backup_items),
                 )
-                backup_success, backup_message = await manager_factory().backup_plugins(server)
+                backup_success, backup_message = await SSHManager().backup_plugins(server)
             if backup_items and not backup_success:
                 message = (
                     f"Plugin backup failed; plugins requiring backup were skipped: {backup_message}"
@@ -986,22 +809,7 @@ class PluginAutoUpdateService:
                     log=f"Updating {item.display_name} to {latest['version']}",
                 )
                 try:
-                    if explicit_resources:
-                        success, message = await self._install_item(
-                            server,
-                            user,
-                            item,
-                            latest,
-                            http_resource=outbound_http,
-                            ssh_manager_factory=manager_factory,
-                        )
-                    else:
-                        success, message = await self._install_item(
-                            server,
-                            user,
-                            item,
-                            latest,
-                        )
+                    success, message = await self._install_item(server, user, item, latest)
                 except Exception as exc:
                     logger.exception("Managed plugin update failed for item %s", item.id)
                     success, message = False, str(exc)
@@ -1052,7 +860,7 @@ class PluginAutoUpdateService:
                         total=len(candidates),
                         log="Batch restart policy triggered one server restart",
                     )
-                    restart_manager = manager_factory()
+                    restart_manager = SSHManager()
                     (
                         manager_ready,
                         preflight_message,
@@ -1149,14 +957,7 @@ class PluginAutoUpdateService:
 plugin_auto_update_service = PluginAutoUpdateService()
 
 
-async def record_framework_installation(
-    server: Server,
-    user: User,
-    framework_key: str,
-    *,
-    http_resource: Any | None = None,
-    ssh_manager_factory: SSHManagerFactory | None = None,
-) -> None:
+async def record_framework_installation(server: Server, user: User, framework_key: str) -> None:
     config = FRAMEWORKS[framework_key]
     probe = ManagedPlugin(
         server_id=server.id,
@@ -1168,16 +969,9 @@ async def record_framework_installation(
         asset_glob=config["asset_glob"],
     )
     if framework_key == "metamod":
-        ok, latest, _ = await plugin_auto_update_service._latest_metamod(
-            server,
-            ssh_manager_factory=ssh_manager_factory,
-        )
+        ok, latest, _ = await plugin_auto_update_service._latest_metamod(server)
     else:
-        ok, latest, _ = await plugin_auto_update_service._latest_github_release(
-            probe,
-            user,
-            http_resource=http_resource,
-        )
+        ok, latest, _ = await plugin_auto_update_service._latest_github_release(probe, user)
     await upsert_managed_plugin(
         server_id=server.id,
         source_type="framework",
@@ -1192,13 +986,7 @@ async def record_framework_installation(
 
 
 async def record_known_github_installation(
-    server: Server,
-    user: User,
-    repo_url: str,
-    display_name: str,
-    asset_glob: str,
-    *,
-    http_resource: Any | None = None,
+    server: Server, user: User, repo_url: str, display_name: str, asset_glob: str
 ) -> None:
     canonical = canonical_repo_url(repo_url)
     probe = ManagedPlugin(
@@ -1209,11 +997,7 @@ async def record_known_github_installation(
         repo_url=canonical,
         asset_glob=asset_glob,
     )
-    ok, latest, _ = await plugin_auto_update_service._latest_github_release(
-        probe,
-        user,
-        http_resource=http_resource,
-    )
+    ok, latest, _ = await plugin_auto_update_service._latest_github_release(probe, user)
     await upsert_managed_plugin(
         server_id=server.id,
         source_type="github",

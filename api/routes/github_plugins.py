@@ -6,12 +6,12 @@ Provides endpoints for fetching GitHub releases and installing plugins from them
 import logging
 import re
 import shlex
-from typing import Annotated, Any, Optional, cast
+from typing import Any, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import SSHManagerProvider, locked_server_operation
+from api.dependencies import get_ssh_manager, locked_server_operation
 from api.http_resource import (
     ApplicationHTTP,
     as_application_http,
@@ -26,8 +26,6 @@ from modules import (
     GitHubRelease,
     GitHubReleaseAsset,
     GitHubReleasesResponse,
-    InstalledPluginAnalysisResponse,
-    InstalledPluginFile,
     PluginUninstallRequest,
     PluginUninstallResponse,
     Server,
@@ -37,12 +35,7 @@ from modules import (
 )
 from services import SSHManager
 from services.github_credentials import get_effective_github_token
-from services.plugin_installation import (
-    PluginDownloadHTTP,
-)
-from services.plugin_installation import (
-    install_github_plugin as install_github_plugin_service,
-)
+from services.plugin_installation import install_github_plugin as install_github_plugin_service
 
 router = APIRouter(prefix="/api/github-plugins", tags=["github-plugins"])
 
@@ -61,37 +54,12 @@ GITHUB_REPO_PATTERN = re.compile(
 # Progress update interval (percent) for panel proxy downloads/uploads
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every 10%
 
-_DIRECT_SSH_MANAGER = cast(SSHManager, object())
-_DIRECT_APPLICATION_HTTP = cast(ApplicationHTTP, object())
-_ApplicationHTTPProvider = Annotated[
-    ApplicationHTTP,
-    Depends(resolve_application_http),
-]
-
 
 def _coerce_ssh_manager(candidate: object) -> SSHManager:
     """Preserve direct-call compatibility while ASGI requests inject a manager."""
     if callable(getattr(candidate, "disconnect", None)):
         return candidate  # type: ignore[return-value]
-    if candidate is _DIRECT_SSH_MANAGER:
-        return SSHManager()
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="SSH connection pool is unavailable",
-    )
-
-
-def _coerce_application_http(candidate: object) -> ApplicationHTTP | None:
-    """Return request-owned HTTP; only direct calls may select the service default."""
-    resource = as_application_http(candidate)
-    if resource is not None:
-        return resource
-    if candidate is _DIRECT_APPLICATION_HTTP:
-        return None
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Outbound HTTP client is unavailable",
-    )
+    return SSHManager()
 
 
 def _build_plugin_copy_command(
@@ -166,8 +134,6 @@ async def get_server_and_verify_ownership(db: AsyncSession, server_id: int, user
     Admins can access any server, regular users can only access their own.
     Raises HTTPException if server not found or user doesn't have access.
     """
-    if user.id is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
     if user.is_admin:
         server = await Server.get_by_id(db, server_id)
     else:
@@ -192,7 +158,7 @@ async def get_github_releases(
     server_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    http_resource: _ApplicationHTTPProvider = _DIRECT_APPLICATION_HTTP,
+    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
 ) -> GitHubReleasesResponse:
     """
     Fetch recent releases from a GitHub repository.
@@ -227,11 +193,7 @@ async def get_github_releases(
     github_token = await get_effective_github_token(db, current_user)
     # Release the transaction before the potentially slow GitHub request.
     await db.commit()
-    outbound_http = _coerce_application_http(http_resource)
-    if outbound_http is None:
-        from modules.http_helper import http_helper
-
-        outbound_http = cast(ApplicationHTTP, http_helper)
+    outbound_http = cast(ApplicationHTTP, http_resource)
 
     success, data, error = await outbound_http.get(
         api_url,
@@ -310,18 +272,13 @@ async def get_github_releases(
     return GitHubReleasesResponse(success=True, releases=releases, repo_owner=owner, repo_name=repo)
 
 
-@router.get(
-    "/servers/{server_id}/analyze-archive",
-    response_model=ArchiveAnalysisResponse,
-    status_code=status.HTTP_200_OK,
-    responses=OUTBOUND_HTTP_ERROR_RESPONSES,
-)
+@router.get("/servers/{server_id}/analyze-archive")
 async def analyze_archive(
     server_id: int,
     download_url: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
+    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ) -> ArchiveAnalysisResponse:
     """
     Download and analyze archive contents to detect structure.
@@ -568,23 +525,15 @@ async def analyze_archive(
         await ssh_manager.disconnect()
 
 
-@router.post(
-    "/servers/{server_id}/install",
-    response_model=GitHubPluginInstallResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        **OUTBOUND_HTTP_ERROR_RESPONSES,
-        status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-    },
-)
+@router.post("/servers/{server_id}/install")
 async def install_github_plugin(
     server_id: int,
     request: GitHubPluginInstallRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     _operation_server: Server = Depends(locked_server_operation),
-    http_resource: _ApplicationHTTPProvider = _DIRECT_APPLICATION_HTTP,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
+    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
+    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from a GitHub release asset with WebSocket progress updates.
@@ -608,26 +557,18 @@ async def install_github_plugin(
         db,
         current_user,
         ssh_manager=_coerce_ssh_manager(ssh_manager),
-        http_resource=cast(
-            PluginDownloadHTTP | None,
-            _coerce_application_http(http_resource),
-        ),
+        http_resource=as_application_http(http_resource),
     )
 
 
-@router.get(
-    "/servers/{server_id}/analyze-installed-plugins",
-    response_model=InstalledPluginAnalysisResponse,
-    status_code=status.HTTP_200_OK,
-    responses=OUTBOUND_HTTP_ERROR_RESPONSES,
-)
+@router.get("/servers/{server_id}/analyze-installed-plugins")
 async def analyze_installed_plugins(
     server_id: int,
     directory: str = "addons",
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
-) -> InstalledPluginAnalysisResponse:
+    ssh_manager: SSHManager = Depends(get_ssh_manager),
+):
     """
     Analyze installed plugin files to help users select which files to uninstall.
 
@@ -638,6 +579,8 @@ async def analyze_installed_plugins(
     Returns:
         List of installed files and directories
     """
+    from modules import InstalledPluginAnalysisResponse, InstalledPluginFile
+
     server = await get_server_and_verify_ownership(db, server_id, current_user)
 
     ssh_manager = _coerce_ssh_manager(ssh_manager)
@@ -723,22 +666,14 @@ async def analyze_installed_plugins(
         await ssh_manager.disconnect()
 
 
-@router.post(
-    "/servers/{server_id}/uninstall",
-    response_model=PluginUninstallResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        **OUTBOUND_HTTP_ERROR_RESPONSES,
-        status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-    },
-)
+@router.post("/servers/{server_id}/uninstall", response_model=PluginUninstallResponse)
 async def uninstall_plugin(
     server_id: int,
     request: PluginUninstallRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     _operation_server: Server = Depends(locked_server_operation),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
+    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ) -> PluginUninstallResponse:
     """
     Uninstall a plugin by deleting selected files.

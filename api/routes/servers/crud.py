@@ -393,19 +393,10 @@ async def get_server(
     return server
 
 
-@router.put(
-    "/{server_id}",
-    response_model=ServerDetail,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-    },
-)
+@router.put("/{server_id}", response_model=ServerDetail)
 async def update_server(
     server_id: int,
     server_data: ServerUpdate,
-    ssh_manager: SSHManagerProvider,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -486,11 +477,13 @@ async def update_server(
 
     # Handle monitoring status change
     from services.server_monitor import server_monitor
+    from services.ssh_manager import SSHManager
 
     new_monitoring_enabled = server.enable_panel_monitoring
 
     if new_monitoring_enabled and not old_monitoring_enabled:
         # Monitoring was enabled - start monitoring
+        ssh_manager = SSHManager()
         server_monitor.start_monitoring(server_id, ssh_manager)
     elif not new_monitoring_enabled and old_monitoring_enabled:
         # Monitoring was disabled - stop monitoring

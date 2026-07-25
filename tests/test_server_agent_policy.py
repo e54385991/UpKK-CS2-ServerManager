@@ -4,14 +4,11 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from fastapi import FastAPI, Header, status
+from fastapi import FastAPI, Header, HTTPException, status
 
-from api.dependencies import get_admin_principal
 from api.routes import server_status
-from cs2_manager.core import Principal
 from cs2_manager.infrastructure.credentials import hash_token
-from modules import ServerStatus, get_db
-from modules.auth import get_current_principal
+from modules import ServerStatus, get_current_admin_user, get_db
 
 AGENT_API_KEY = "A" * 64
 TOKEN_HASH_KEY = "server-agent-test-hmac-key-with-more-than-32-bytes"
@@ -259,11 +256,21 @@ async def test_server_agent_auth_matrix_and_responses_never_echo_secrets(monkeyp
     assert len(write_session.statements) == 1
 
 
-class _Pool:
+class _PoolStatsSession:
     def __init__(self):
+        self.committed = False
+
+    async def commit(self):
+        self.committed = True
+
+
+class _Pool:
+    def __init__(self, db):
+        self.db = db
         self.called = False
 
     async def get_pool_stats(self):
+        assert self.db.committed is True
         self.called = True
         return {
             "total_connections": 2,
@@ -278,26 +285,24 @@ class _Pool:
 
 
 @pytest.mark.asyncio
-async def test_pool_stats_remains_admin_only_without_request_db_checkout():
-    pool = _Pool()
+async def test_pool_stats_remains_admin_only_and_releases_db_before_pool_io():
+    db = _PoolStatsSession()
+    pool = _Pool(db)
     app = FastAPI()
     app.state.container = SimpleNamespace(ssh_pool=pool)
-    db_checkouts = 0
 
-    async def current_principal(x_role: str | None = Header(default=None)):
-        return Principal(
-            id=1,
-            username="operator",
-            email="operator@example.com",
-            is_admin=x_role == "admin",
-        )
+    async def current_admin(x_role: str | None = Header(default=None)):
+        if x_role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+            )
+        return SimpleNamespace(id=1, is_admin=True)
 
     async def request_db():
-        nonlocal db_checkouts
-        db_checkouts += 1
-        yield object()
+        yield db
 
-    app.dependency_overrides[get_current_principal] = current_principal
+    app.dependency_overrides[get_current_admin_user] = current_admin
     app.dependency_overrides[get_db] = request_db
     app.include_router(server_status.router)
 
@@ -318,7 +323,6 @@ async def test_pool_stats_remains_admin_only_without_request_db_checkout():
     assert pool.called is True
     assert admin.status_code == status.HTTP_200_OK
     assert admin.json()["pool_stats"]["total_connections"] == 2
-    assert db_checkouts == 0
 
 
 def test_server_agent_routes_declare_separate_security_policies():
@@ -338,7 +342,6 @@ def test_server_agent_routes_declare_separate_security_policies():
 
     assert server_status.verify_server_api_key in report_dependencies
     assert server_status.verify_server_api_key in config_dependencies
-    assert get_admin_principal not in report_dependencies | config_dependencies
-    assert get_admin_principal in pool_dependencies
-    assert get_db not in pool_dependencies
+    assert get_current_admin_user not in report_dependencies | config_dependencies
+    assert get_current_admin_user in pool_dependencies
     assert server_status.verify_server_api_key not in pool_dependencies

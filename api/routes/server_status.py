@@ -16,13 +16,14 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import Field, SQLModel, select
 
-from api.dependencies import get_admin_principal
-from cs2_manager.core import ErrorResponse, Principal
+from cs2_manager.core import ErrorResponse
 from cs2_manager.infrastructure.credentials import hash_token
 from modules import (
     DeploymentLog,
     Server,
     ServerStatus,
+    User,
+    get_current_admin_user,
     get_db,
 )
 from modules.config import settings as default_settings
@@ -86,10 +87,6 @@ class SSHConnectionPoolStats(SQLModel):
 class SSHConnectionPoolStatsResponse(SQLModel):
     success: bool
     pool_stats: SSHConnectionPoolStats
-
-
-async def _pool_stats_legacy_db_compatibility() -> None:
-    """Keep the legacy direct-call slot without opening a request DB session."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,18 +368,17 @@ async def get_server_config(
 )
 async def get_ssh_pool_stats(
     request: Request,
-    _: Principal = Depends(get_admin_principal),
-    db: AsyncSession | None = Depends(_pool_stats_legacy_db_compatibility),
+    _: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get SSH connection pool statistics (admin endpoint for monitoring)
 
     Returns connection pool health and usage metrics.
     """
-    # Older direct Python callers may still pass the legacy authentication
-    # session positionally. ASGI requests resolve this slot to ``None``.
-    if db is not None:
-        await db.commit()
+    # The admin dependency shares this request session. End its read
+    # transaction before waiting on the SSH pool lock.
+    await db.commit()
 
     pool = cast(Any, request.app.state.container.ssh_pool)
     if pool is None or not callable(getattr(pool, "get_pool_stats", None)):

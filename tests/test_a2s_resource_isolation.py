@@ -71,11 +71,11 @@ class _RecordingRedis:
         return [{"source": self.name} for _key in keys]
 
 
-def _resources(database, redis, http=None):
+def _resources(database, redis):
     return {
         "database": database,
         "redis": redis,
-        "http": http or SimpleNamespace(close=AsyncMock()),
+        "http": SimpleNamespace(close=AsyncMock()),
         "ssh_pool": SimpleNamespace(),
     }
 
@@ -86,18 +86,16 @@ async def test_create_app_a2s_services_do_not_share_redis_or_database() -> None:
     second_database = _RecordingDatabase("second")
     first_redis = _RecordingRedis("first")
     second_redis = _RecordingRedis("second")
-    first_http = SimpleNamespace(name="first", close=AsyncMock())
-    second_http = SimpleNamespace(name="second", close=AsyncMock())
     isolated_settings = default_settings.model_copy()
 
     first_app = create_app(
         settings=isolated_settings,
-        resource_overrides=_resources(first_database, first_redis, first_http),
+        resource_overrides=_resources(first_database, first_redis),
         lifespan=None,
     )
     second_app = create_app(
         settings=isolated_settings,
-        resource_overrides=_resources(second_database, second_redis, second_http),
+        resource_overrides=_resources(second_database, second_redis),
         lifespan=None,
     )
 
@@ -111,8 +109,6 @@ async def test_create_app_a2s_services_do_not_share_redis_or_database() -> None:
     assert second_service.redis_adapter is second_redis
     assert first_service.session_factory == first_database.session_factory
     assert second_service.session_factory == second_database.session_factory
-    assert first_service.steam_service.http_adapter is first_http
-    assert second_service.steam_service.http_adapter is second_http
 
     first_cached = await first_service.get_cached_info_many([11])
     second_cached = await second_service.get_cached_info_many([22])

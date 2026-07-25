@@ -4,22 +4,13 @@
 
 ### Step 1: Database Migration
 
-For a single-instance source checkout, configure database and Redis connectivity in `.env`, then run the idempotent upgrade helper before the separate startup script:
+Database schema changes are an explicit deployment step. Configure the credential keyring in `.env`, then run Alembic before starting the application:
 
 ```bash
-cp .env.example .env  # optional; upgrade.sh creates it when absent
-# Edit database and Redis connection values.
-./upgrade.sh
-./start.sh
-```
-
-`upgrade.sh` can be called from any working directory. It prepares locked dependencies, appends only missing `.env` keys without overwriting existing values/comments, restricts `.env` to owner read/write permissions (`0600`), generates cryptographically secure replacements for empty/example application secrets and the AES keyring, then runs legacy normalization plus Alembic upgrade/check under the MySQL advisory lock. If initial database settings are not usable, it stops; edit `.env` and rerun it.
-
-This convenience flow is only for a single source instance. Production Docker, 1Panel, and multi-process deployments must keep migration as an independent release step:
-
-```bash
-uv run --locked python -m cs2_manager.migrate upgrade
-uv run --locked python -m cs2_manager.migrate check
+pip install uv
+uv run python -m cs2_manager.migrate upgrade
+uv run python -m cs2_manager.migrate check
+uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 Application startup fails closed when the database is not at the repository head; it never calls `create_all`. The migration creates or upgrades, among others:

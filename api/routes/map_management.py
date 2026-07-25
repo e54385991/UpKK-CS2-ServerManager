@@ -15,7 +15,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import SSHManagerProvider, resolve_maintenance_lock_service
+from api.dependencies import resolve_maintenance_lock_service
 from api.http_resource import ApplicationHTTP, as_application_http, resolve_application_http
 from api.routes.servers import get_server_with_permission
 from cs2_manager.core import ErrorResponse
@@ -81,7 +81,6 @@ _ApplicationMaintenanceLock = Annotated[
     MaintenanceLockService | object,
     Depends(resolve_maintenance_lock_service),
 ]
-_DIRECT_SSH_MANAGER = cast(SSHManager, object())
 
 
 def _maintenance_locks(resource: MaintenanceLockService | object) -> MaintenanceLockService:
@@ -89,25 +88,6 @@ def _maintenance_locks(resource: MaintenanceLockService | object) -> Maintenance
     if resource is _DIRECT_MAINTENANCE_LOCK:
         return maintenance_lock_service
     return cast(MaintenanceLockService, resource)
-
-
-def _coerce_ssh_manager(candidate: object) -> SSHManager:
-    """Use request-owned SSH; only an omitted direct-call argument may fall back."""
-    if callable(getattr(candidate, "disconnect", None)):
-        return cast(SSHManager, candidate)
-    if candidate is _DIRECT_SSH_MANAGER:
-        return SSHManager()
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="SSH connection pool is unavailable",
-    )
-
-
-async def _release_db_before_remote_io(db: AsyncSession | object) -> None:
-    """End an ASGI session transaction while preserving direct-call facades."""
-    commit = getattr(db, "commit", None)
-    if callable(commit):
-        await commit()
 
 
 class MapConfigUpdateRequest(BaseModel):
@@ -262,7 +242,6 @@ class MapChooserUninstallResponse(BaseModel):
 MAP_REMOTE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
     status.HTTP_502_BAD_GATEWAY: {"model": ErrorResponse},
-    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
 }
 MAP_READ_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     **MAP_REMOTE_ERROR_RESPONSES,
@@ -271,11 +250,13 @@ MAP_READ_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 MAP_WRITE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     **MAP_READ_ERROR_RESPONSES,
     status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
 }
 MAP_UNINSTALL_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     **MAP_REMOTE_ERROR_RESPONSES,
     status.HTTP_409_CONFLICT: {"model": ErrorResponse},
     status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
 }
 MAP_OUTBOUND_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     **MAP_WRITE_ERROR_RESPONSES,
@@ -296,20 +277,10 @@ def _remote_paths(server: Server) -> dict[str, str]:
     }
 
 
-async def _connect(server: Server, ssh_manager: SSHManager) -> SSHManager:
-    try:
-        success, message = await ssh_manager.connect(server)
-    except BaseException:
-        try:
-            await ssh_manager.disconnect()
-        except Exception:
-            logger.warning("Failed to release SSH manager after connection error", exc_info=True)
-        raise
+async def _connect(server: Server) -> SSHManager:
+    ssh_manager = SSHManager()
+    success, message = await ssh_manager.connect(server)
     if not success:
-        try:
-            await ssh_manager.disconnect()
-        except Exception:
-            logger.warning("Failed to release SSH manager after rejected connection", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"SSH connection failed: {message}",
@@ -681,11 +652,9 @@ async def get_map_management_status(
     server_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    await _release_db_before_remote_io(db)
-    ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+    ssh_manager = await _connect(server)
     try:
         return await _inspect_prerequisites(ssh_manager, server)
     finally:
@@ -787,7 +756,6 @@ async def run_custom_map_sync(
     current_user: User = Depends(get_current_active_user),
     http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     tasks = await _get_map_sync_tasks(db, server_id)
@@ -799,7 +767,7 @@ async def run_custom_map_sync(
         )
     # The task query starts a new transaction after server authorization.
     # Release it before coordination, SSH, DNS, and outbound HTTP.
-    await _release_db_before_remote_io(db)
+    await db.commit()
     outbound_http = as_application_http(http_resource)
 
     async with _maintenance_locks(lock_service).get(
@@ -807,7 +775,7 @@ async def run_custom_map_sync(
         operation=MAP_POOL_SYNC_ACTION,
         wait=False,
     ):
-        ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+        ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
             _require_prerequisites(prerequisites)
@@ -870,7 +838,6 @@ async def uninstall_mapchooser_plugin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     if request.confirmation != MAPCHOOSER_UNINSTALL_CONFIRMATION:
         raise HTTPException(
@@ -891,13 +858,12 @@ async def uninstall_mapchooser_plugin(
             detail="Refusing to remove an unexpected plugin path",
         )
 
-    await _release_db_before_remote_io(db)
     async with _maintenance_locks(lock_service).get(
         server_id,
         operation="mapchooser_uninstall",
         wait=False,
     ):
-        ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+        ssh_manager = await _connect(server)
         try:
             quoted_plugin_directory = shlex.quote(plugin_directory)
             command = (
@@ -956,11 +922,9 @@ async def get_plugin_config(
     server_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    await _release_db_before_remote_io(db)
-    ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+    ssh_manager = await _connect(server)
     try:
         prerequisites = await _inspect_prerequisites(ssh_manager, server)
         _require_prerequisites(prerequisites)
@@ -990,16 +954,14 @@ async def update_mapchooser_plugin_config(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    await _release_db_before_remote_io(db)
     async with _maintenance_locks(lock_service).get(
         server_id,
         operation="map_config",
         wait=False,
     ):
-        ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+        ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
             _require_prerequisites(prerequisites)
@@ -1047,11 +1009,9 @@ async def get_maps_config(
     server_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    await _release_db_before_remote_io(db)
-    ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+    ssh_manager = await _connect(server)
     try:
         prerequisites = await _inspect_prerequisites(ssh_manager, server)
         _require_prerequisites(prerequisites)
@@ -1081,16 +1041,14 @@ async def update_maps_config(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    await _release_db_before_remote_io(db)
     async with _maintenance_locks(lock_service).get(
         server_id,
         operation="map_add",
         wait=False,
     ):
-        ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+        ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
             _require_prerequisites(prerequisites)
@@ -1140,17 +1098,15 @@ async def apply_map_preset(
     current_user: User = Depends(get_current_active_user),
     http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    await _release_db_before_remote_io(db)
     outbound_http = as_application_http(http_resource)
     async with _maintenance_locks(lock_service).get(
         server_id,
         operation="map_preset",
         wait=False,
     ):
-        ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+        ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
             _require_prerequisites(prerequisites)
@@ -1249,17 +1205,15 @@ async def add_map(
     current_user: User = Depends(get_current_active_user),
     http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    await _release_db_before_remote_io(db)
     outbound_http = as_application_http(http_resource)
     async with _maintenance_locks(lock_service).get(
         server_id,
         operation="map_update",
         wait=False,
     ):
-        ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+        ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
             _require_prerequisites(prerequisites)
@@ -1340,16 +1294,14 @@ async def update_map_enabled(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    await _release_db_before_remote_io(db)
     async with _maintenance_locks(lock_service).get(
         server_id,
         operation="map_delete",
         wait=False,
     ):
-        ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+        ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
             _require_prerequisites(prerequisites)
@@ -1404,16 +1356,14 @@ async def delete_map(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    await _release_db_before_remote_io(db)
     async with _maintenance_locks(lock_service).get(
         server_id,
         operation="map_batch",
         wait=False,
     ):
-        ssh_manager = await _connect(server, _coerce_ssh_manager(ssh_manager))
+        ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
             _require_prerequisites(prerequisites)

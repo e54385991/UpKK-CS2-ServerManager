@@ -173,64 +173,29 @@ class ApplicationLifecycle:
 
             if legacy_runtime:
                 from services.auto_update_service import auto_update_service
-                from services.maintenance_lock import (
-                    MAINTENANCE_LOCK_SERVICE_KEY,
-                    maintenance_lock_service,
-                )
                 from services.plugin_auto_update_service import plugin_auto_update_service
                 from services.scheduled_task_service import scheduled_task_service
                 from services.ssh_health_monitor import ssh_health_monitor
-                from services.ssh_manager import SSHManager
-                from services.steam_api_service import SteamAPIService
                 from services.steam_inf_service import steam_inf_service
-
-                steam_api_service = SteamAPIService(http_adapter=http)
-                runtime_lock_service = container_services.get(
-                    MAINTENANCE_LOCK_SERVICE_KEY,
-                    maintenance_lock_service,
-                )
-
-                def create_ssh_manager() -> SSHManager:
-                    if pool is None:
-                        raise RuntimeError("SSH connection pool is unavailable")
-                    return SSHManager(
-                        connection_pool=pool,
-                        http_resource=http,
-                    )
 
                 await self._start_service(
                     "steam.inf cache service",
-                    lambda: steam_inf_service.start(
-                        ssh_manager_factory=create_ssh_manager,
-                    ),
+                    steam_inf_service.start,
                     steam_inf_service.stop,
                 )
                 await self._start_service(
                     "auto-update service",
-                    lambda: auto_update_service.start(
-                        steam_service=steam_api_service,
-                        ssh_manager_factory=create_ssh_manager,
-                        lock_service=runtime_lock_service,
-                    ),
+                    auto_update_service.start,
                     auto_update_service.stop,
                 )
                 await self._start_service(
                     "plugin auto-update service",
-                    lambda: plugin_auto_update_service.start(
-                        http_resource=http,
-                        ssh_manager_factory=create_ssh_manager,
-                        lock_service=runtime_lock_service,
-                    ),
+                    plugin_auto_update_service.start,
                     plugin_auto_update_service.stop,
                 )
                 await self._start_service(
                     "scheduled task service",
-                    lambda: scheduled_task_service.start(
-                        http_resource=http,
-                        ssh_manager_factory=create_ssh_manager,
-                        lock_service=runtime_lock_service,
-                        s3_service=s3_service,
-                    ),
+                    scheduled_task_service.start,
                     scheduled_task_service.stop,
                 )
                 await self._start_service(
@@ -240,6 +205,7 @@ class ApplicationLifecycle:
                 )
 
                 from services.server_monitor import server_monitor
+                from services.ssh_manager import SSHManager
 
                 self._add_cleanup("server monitor", server_monitor.stop_all)
                 session_factory = (
@@ -250,7 +216,7 @@ class ApplicationLifecycle:
                 async with session_factory() as db:
                     monitored_servers = await Server.get_all_with_panel_monitoring(db)
                     for server in monitored_servers:
-                        server_monitor.start_monitoring(server.id, create_ssh_manager())
+                        server_monitor.start_monitoring(server.id, SSHManager())
                         logger.info(
                             "Started panel monitoring for server %s (%s)",
                             server.id,

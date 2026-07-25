@@ -9,11 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import (
-    get_ssh_manager,
-    resolve_maintenance_lock_service,
-)
-from api.http_resource import as_application_http
+from api.dependencies import resolve_maintenance_lock_service
 from cs2_manager.core import ErrorResponse
 from modules import (
     ActionResponse,
@@ -32,11 +28,9 @@ from modules import (
 from services.maintenance_lock import MaintenanceLockService, maintenance_lock_service
 from services.plugin_auto_update_service import (
     FRAMEWORKS,
-    SSHManagerFactory,
     canonical_repo_url,
     plugin_auto_update_service,
 )
-from services.ssh_manager import SSHManager
 from services.task_registry import plugin_update_task_registry
 
 router = APIRouter(
@@ -45,14 +39,9 @@ router = APIRouter(
 _background_tasks = plugin_update_task_registry.tasks
 logger = logging.getLogger(__name__)
 _DIRECT_MAINTENANCE_LOCK = object()
-_DIRECT_SSH_MANAGER = object()
 _ApplicationMaintenanceLock = Annotated[
     MaintenanceLockService | object,
     Depends(resolve_maintenance_lock_service),
-]
-_ApplicationSSHManager = Annotated[
-    SSHManager | object,
-    Depends(get_ssh_manager),
 ]
 
 
@@ -61,34 +50,6 @@ def _maintenance_locks(resource: MaintenanceLockService | object) -> Maintenance
     if resource is _DIRECT_MAINTENANCE_LOCK:
         return maintenance_lock_service
     return cast(MaintenanceLockService, resource)
-
-
-def _plugin_update_resources(
-    candidate: SSHManager | object,
-) -> tuple[object | None, SSHManagerFactory | None]:
-    """Detach app-owned transports before a plugin update enters the background."""
-    if candidate is _DIRECT_SSH_MANAGER:
-        return None, None
-    connection_pool = getattr(candidate, "connection_pool", None)
-    if connection_pool is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="SSH connection pool is unavailable",
-        )
-    http_resource = as_application_http(getattr(candidate, "http_resource", None))
-    if http_resource is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Outbound HTTP client is unavailable",
-        )
-
-    def create_manager() -> SSHManager:
-        return SSHManager(
-            connection_pool=connection_pool,
-            http_resource=http_resource,
-        )
-
-    return http_resource, create_manager
 
 
 class PluginUpdateStatusLogResponse(BaseModel):
@@ -348,7 +309,6 @@ async def run_now(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: _ApplicationSSHManager = _DIRECT_SSH_MANAGER,
 ):
     await owned_server(db, server_id, current_user)
     await db.commit()
@@ -357,16 +317,9 @@ async def run_now(
             status_code=status.HTTP_409_CONFLICT,
             detail="Another maintenance operation is already running",
         )
-    http_resource, ssh_manager_factory = _plugin_update_resources(ssh_manager)
     _spawn_plugin_update_task(
         request,
-        plugin_auto_update_service.check_server(
-            server_id,
-            force=True,
-            http_resource=http_resource,
-            ssh_manager_factory=ssh_manager_factory,
-            lock_service=_maintenance_locks(lock_service),
-        ),
+        plugin_auto_update_service.check_server(server_id, force=True),
         name=f"plugin-update-server-{server_id}",
     )
     return ActionResponse(success=True, message="Plugin update check started")
@@ -385,7 +338,6 @@ async def test_plugin_update(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
-    ssh_manager: _ApplicationSSHManager = _DIRECT_SSH_MANAGER,
 ):
     """Run the normal protected update pipeline for one managed plugin."""
     await owned_server(db, server_id, current_user)
@@ -396,16 +348,9 @@ async def test_plugin_update(
             status_code=status.HTTP_409_CONFLICT,
             detail="Another maintenance operation is already running",
         )
-    http_resource, ssh_manager_factory = _plugin_update_resources(ssh_manager)
     _spawn_plugin_update_task(
         request,
-        plugin_auto_update_service.check_plugin(
-            server_id,
-            plugin_id,
-            http_resource=http_resource,
-            ssh_manager_factory=ssh_manager_factory,
-            lock_service=_maintenance_locks(lock_service),
-        ),
+        plugin_auto_update_service.check_plugin(server_id, plugin_id),
         name=f"plugin-update-test-{server_id}-{plugin_id}",
     )
     return ActionResponse(success=True, message="Plugin test update started")

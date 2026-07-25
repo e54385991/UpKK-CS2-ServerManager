@@ -192,14 +192,10 @@ async def test_two_file_manager_apps_use_only_their_ssh_and_http_resources(
         )
 
     assert first_response.status_code == second_response.status_code == 200
-    assert (
-        first_response.json()
-        == second_response.json()
-        == {
-            "path": "/srv/game",
-            "files": [],
-        }
-    )
+    assert first_response.json() == second_response.json() == {
+        "path": "/srv/game",
+        "files": [],
+    }
     assert sorted(observed) == [
         ("first-pool", "first-http", True),
         ("second-pool", "second-http", True),
