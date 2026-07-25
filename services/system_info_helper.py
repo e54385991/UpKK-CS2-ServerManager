@@ -4,7 +4,6 @@ Provides cached system-level information for servers (disk space, CPU, memory, e
 Separate from A2S protocol which is for game server queries
 """
 
-import asyncio
 import logging
 from typing import Dict, Optional
 
@@ -17,8 +16,8 @@ logger = logging.getLogger(__name__)
 class SystemInfoHelper:
     """Helper service to get system-level information for servers"""
 
-    def __init__(self, max_disk_concurrency: int = 4):
-        self.max_disk_concurrency = max(1, max_disk_concurrency)
+    def __init__(self):
+        pass
 
     async def get_system_info(self, server: Server, force_refresh: bool = False) -> Dict:
         """
@@ -68,14 +67,13 @@ class SystemInfoHelper:
         Returns:
             Dict mapping server ID to disk space info
         """
-        semaphore = asyncio.Semaphore(self.max_disk_concurrency)
+        result = {}
 
-        async def get_one(server: Server) -> tuple[int, Optional[Dict]]:
-            async with semaphore:
-                return server.id, await self.get_disk_space(server, force_refresh)
+        for server in servers:
+            disk_data = await self.get_disk_space(server, force_refresh)
+            result[server.id] = disk_data
 
-        pairs = await asyncio.gather(*(get_one(server) for server in servers))
-        return dict(pairs)
+        return result
 
 
 # Global instance

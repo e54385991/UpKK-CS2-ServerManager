@@ -340,13 +340,9 @@ class ConnectionMixin:
             )
             # Try to reconnect - use server parameter for consistency
             if self.use_pool:
-                success, lease, reconnect_msg = await self.connection_pool.reconnect_lease(
-                    server,
-                    self.connection_lease,
-                )
+                success, conn, reconnect_msg = await ssh_connection_pool.reconnect(server)
                 if success:
-                    self.connection_lease = lease
-                    self.conn = lease.connection if lease is not None else None
+                    self.conn = conn
                     logger.info(f"[SSH Manager] Reconnection successful, retrying {operation_name}")
                     # Retry the operation once after reconnection
                     try:
@@ -526,9 +522,8 @@ class ConnectionMixin:
 
         if self.use_pool:
             # Use connection pool
-            success, lease, msg = await self.connection_pool.acquire_lease(server)
-            self.connection_lease = lease
-            self.conn = lease.connection if lease is not None else None
+            success, conn, msg = await ssh_connection_pool.get_connection(server)
+            self.conn = conn
 
             # Track SSH connection status in background (don't block on DB update)
             _schedule_status_update(server.id, success)
@@ -544,8 +539,8 @@ class ConnectionMixin:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         password=server.ssh_password,
+                        known_hosts=None,
                         connect_timeout=15,
-                        **server_pinned_host_key_options(server),
                     )
                 elif server.is_key_auth:
                     # Key file authentication
@@ -554,8 +549,8 @@ class ConnectionMixin:
                         port=server.ssh_port,
                         username=server.ssh_user,
                         client_keys=[server.ssh_key_path],
+                        known_hosts=None,
                         connect_timeout=15,
-                        **server_pinned_host_key_options(server),
                     )
                 else:
                     return False, f"Unsupported auth type: {server.auth_type}"
@@ -607,13 +602,11 @@ class ConnectionMixin:
             logger.warning(f"[SSH Manager] SSH connection error in execute_command: {error_msg}")
             if self.use_pool and self.current_server:
                 try:
-                    success, lease, reconnect_msg = await self.connection_pool.reconnect_lease(
-                        self.current_server,
-                        self.connection_lease,
+                    success, conn, reconnect_msg = await ssh_connection_pool.reconnect(
+                        self.current_server
                     )
                     if success:
-                        self.connection_lease = lease
-                        self.conn = lease.connection if lease is not None else None
+                        self.conn = conn
                         logger.info(
                             "[SSH Manager] Reconnection successful, retrying execute_command"
                         )
@@ -708,13 +701,11 @@ class ConnectionMixin:
             )
             if self.use_pool and self.current_server:
                 try:
-                    success, lease, reconnect_msg = await self.connection_pool.reconnect_lease(
-                        self.current_server,
-                        self.connection_lease,
+                    success, conn, reconnect_msg = await ssh_connection_pool.reconnect(
+                        self.current_server
                     )
                     if success:
-                        self.connection_lease = lease
-                        self.conn = lease.connection if lease is not None else None
+                        self.conn = conn
                         logger.info(
                             "[SSH Manager] Reconnection successful, retrying execute_command_streaming"
                         )
@@ -753,19 +744,15 @@ class ConnectionMixin:
             return False, "", "Not connected"
 
         try:
-            process_input = None
             if sudo_password:
-                # Keep credentials out of the shell command, process list, and
-                # logs. The command itself is one quoted sh -c argument so
-                # paths and metacharacters cannot alter the sudo wrapper.
-                full_command = f"sudo -S -- sh -c {shlex.quote(command)}"
-                process_input = f"{sudo_password}\n"
+                # Use -S option to read password from stdin
+                full_command = f"echo '{sudo_password}' | sudo -S {command}"
             else:
-                full_command = f"sudo -- sh -c {shlex.quote(command)}"
+                # Try passwordless sudo
+                full_command = f"sudo {command}"
 
             result = await asyncio.wait_for(
-                self.conn.run(full_command, check=False, input=process_input),
-                timeout=timeout,
+                self.conn.run(full_command, check=False), timeout=timeout
             )
 
             stdout_text = result.stdout
@@ -783,15 +770,11 @@ class ConnectionMixin:
         if self.conn:
             if self.use_pool and self.current_server:
                 # Release connection back to pool
-                if self.connection_lease is not None:
-                    await self.connection_lease.release()
-                else:
-                    await self.connection_pool.release_connection(self.current_server, self.conn)
+                await ssh_connection_pool.release_connection(self.current_server)
             else:
                 # Direct connection - close it
                 self.conn.close()
                 await self.conn.wait_closed()
 
             self.conn = None
-            self.connection_lease = None
             self.current_server = None

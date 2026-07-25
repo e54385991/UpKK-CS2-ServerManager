@@ -7,24 +7,12 @@ from .common import *
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 
 
-@router.post(
-    "/archive/inspect",
-    response_model=ArchiveInspectionResponse,
-    status_code=status.HTTP_200_OK,
-    responses=file_error_responses(
-        status.HTTP_400_BAD_REQUEST,
-        status.HTTP_401_UNAUTHORIZED,
-        status.HTTP_403_FORBIDDEN,
-        status.HTTP_404_NOT_FOUND,
-        status.HTTP_503_SERVICE_UNAVAILABLE,
-    ),
-)
+@router.post("/archive/inspect")
 async def inspect_archive(
     server_id: int,
     request: InspectArchiveRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ):
     """Inspect a remote archive and return its safe directory entries."""
     server = await get_server_for_user(server_id, db, current_user)
@@ -35,7 +23,7 @@ async def inspect_archive(
             detail="Access denied: archive path is outside server directory",
         )
 
-    ssh_manager = _coerce_ssh_manager(ssh_manager, SSHManager)
+    ssh_manager = SSHManager()
     try:
         success, archive_info, error = await ssh_manager.inspect_archive(archive_path, server)
     finally:
@@ -53,25 +41,12 @@ async def inspect_archive(
     }
 
 
-@router.post(
-    "/extract",
-    response_model=ExtractionStartedResponse,
-    status_code=status.HTTP_200_OK,
-    responses=file_error_responses(
-        status.HTTP_401_UNAUTHORIZED,
-        status.HTTP_403_FORBIDDEN,
-        status.HTTP_404_NOT_FOUND,
-        status.HTTP_503_SERVICE_UNAVAILABLE,
-    ),
-)
+@router.post("/extract")
 async def extract_archive(
     server_id: int,
     request: ExtractArchiveRequest,
-    http_request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: MaintenanceLockService = Depends(resolve_maintenance_lock_service),
-    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ):
     """
     Extract archive file (zip, tar, tar.gz, etc.) asynchronously.
@@ -80,9 +55,6 @@ async def extract_archive(
     The extraction runs in the background so the web UI doesn't block.
     """
     server = await get_server_for_user(server_id, db, current_user)
-    lock_service = _coerce_maintenance_lock_service(lock_service)
-    ssh_manager = _coerce_ssh_manager(ssh_manager, SSHManager)
-    ssh_manager_factory = _bound_ssh_manager_factory(ssh_manager, SSHManager)
 
     archive_path = posixpath.normpath(request.archive_path)
     source_folder = _normalize_source_folder(request.source_folder)
@@ -128,34 +100,22 @@ async def extract_archive(
             "error": None,
         }
 
-    session_factory, _supervisor = _background_resources(http_request)
-    coroutine = _run_bounded_file_task(
-        current_user.id,
-        _run_extraction_task,
-        task_id,
-        archive_path,
-        destination_path,
-        server_id,
-        current_user.id,
-        current_user.is_admin,
-        request.overwrite,
-        source_folder,
-        bool(request.strip_source_folder and source_folder),
-        session_factory,
-        lock_service,
-        ssh_manager_factory,
-    )
-    try:
-        task = _spawn_file_task(
-            http_request,
-            coroutine,
-            name=f"file-extract-{task_id}",
+    # Start extraction task in background and store reference
+    task = asyncio.create_task(
+        _run_bounded_file_task(
+            current_user.id,
+            lambda: _run_extraction_task(
+                task_id,
+                archive_path,
+                destination_path,
+                server,
+                request.overwrite,
+                source_folder,
+                bool(request.strip_source_folder and source_folder),
+            ),
         )
-    except Exception:
-        coroutine.close()
-        async with extraction_tasks_lock:
-            extraction_tasks.pop(task_id, None)
-        raise
+    )
+    file_task_registry.add(task)
 
     # Store task reference for proper cleanup/tracking
     async with extraction_tasks_lock:
@@ -172,16 +132,7 @@ async def extract_archive(
     }
 
 
-@router.get(
-    "/extract/status/{task_id}",
-    response_model=ExtractionStatusResponse,
-    status_code=status.HTTP_200_OK,
-    responses=file_error_responses(
-        status.HTTP_401_UNAUTHORIZED,
-        status.HTTP_403_FORBIDDEN,
-        status.HTTP_404_NOT_FOUND,
-    ),
-)
+@router.get("/extract/status/{task_id}")
 async def get_extraction_status(
     server_id: int,
     task_id: str,

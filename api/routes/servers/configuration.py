@@ -2,27 +2,12 @@
 
 # ruff: noqa: F403,F405
 
-from api.response_models import (
-    CustomCommandDeleteResponse,
-    CustomCommandExecutionResponse,
-    OperationMessageResponse,
-    StartupCommandResponse,
-)
-
 from .common import *
 
 router = APIRouter(prefix="/servers", tags=["servers"])
 
 
-@router.get(
-    "/{server_id}/discord-settings",
-    response_model=DiscordSettingsResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
-)
+@router.get("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
 async def get_discord_settings(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -33,16 +18,7 @@ async def get_discord_settings(
     return build_discord_settings_response(server)
 
 
-@router.put(
-    "/{server_id}/discord-settings",
-    response_model=DiscordSettingsResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
-)
+@router.put("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
 async def update_discord_settings(
     server_id: int,
     settings_data: DiscordSettingsUpdate,
@@ -106,16 +82,7 @@ async def update_discord_settings(
     return build_discord_settings_response(server)
 
 
-@router.post(
-    "/{server_id}/discord-settings/test",
-    response_model=OperationMessageResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
-)
+@router.post("/{server_id}/discord-settings/test")
 async def test_discord_settings(
     server_id: int,
     request: DiscordTestRequest,
@@ -130,15 +97,7 @@ async def test_discord_settings(
     return {"success": True, "message": message}
 
 
-@router.get(
-    "/{server_id}/custom-commands",
-    response_model=List[CustomCommandResponse],
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
-)
+@router.get("/{server_id}/custom-commands", response_model=List[CustomCommandResponse])
 async def list_custom_commands(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -153,10 +112,6 @@ async def list_custom_commands(
     "/{server_id}/custom-commands",
     response_model=CustomCommandResponse,
     status_code=status.HTTP_201_CREATED,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
 )
 async def create_custom_command(
     server_id: int,
@@ -179,15 +134,7 @@ async def create_custom_command(
     return custom_command
 
 
-@router.put(
-    "/{server_id}/custom-commands/{command_id}",
-    response_model=CustomCommandResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
-)
+@router.put("/{server_id}/custom-commands/{command_id}", response_model=CustomCommandResponse)
 async def update_custom_command(
     server_id: int,
     command_id: int,
@@ -209,15 +156,7 @@ async def update_custom_command(
     return custom_command
 
 
-@router.delete(
-    "/{server_id}/custom-commands/{command_id}",
-    response_model=CustomCommandDeleteResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
-)
+@router.delete("/{server_id}/custom-commands/{command_id}", response_model=ActionResponse)
 async def delete_custom_command(
     server_id: int,
     command_id: int,
@@ -232,21 +171,10 @@ async def delete_custom_command(
     return ActionResponse(success=True, message="Custom command deleted successfully")
 
 
-@router.post(
-    "/{server_id}/custom-commands/execute",
-    response_model=CustomCommandExecutionResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-    },
-)
+@router.post("/{server_id}/custom-commands/execute", response_model=ActionResponse)
 async def execute_one_time_custom_command(
     server_id: int,
     command_data: CustomCommandExecuteRequest,
-    ssh_manager: SSHManagerProvider,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -257,53 +185,31 @@ async def execute_one_time_custom_command(
         server,
         command_data.target,
         command_data.commands,
-        ssh_manager=ssh_manager,
     )
     return ActionResponse(success=result["success"], message=result["message"], data=result)
 
 
-@router.post(
-    "/{server_id}/custom-commands/{command_id}/execute",
-    response_model=CustomCommandExecutionResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-    },
-)
+@router.post("/{server_id}/custom-commands/{command_id}/execute", response_model=ActionResponse)
 async def execute_saved_custom_command(
     server_id: int,
     command_id: int,
-    ssh_manager: SSHManagerProvider,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """Execute a saved quick command"""
     server = await get_server_with_permission(server_id, current_user, db)
     custom_command = await get_custom_command_or_404(db, server.id, command_id, current_user)
-    await db.commit()
     result = await execute_and_log_custom_commands(
         db,
         server,
         custom_command.target,
         custom_command.commands,
         name=custom_command.name,
-        ssh_manager=ssh_manager,
     )
     return ActionResponse(success=result["success"], message=result["message"], data=result)
 
 
-@router.get(
-    "/{server_id}/startup-command",
-    response_model=StartupCommandResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
-)
+@router.get("/{server_id}/startup-command")
 async def get_startup_command(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -350,35 +256,60 @@ async def get_startup_command(
         game_mode = "1"
         game_type = server.game_type or "0"
 
-    # Build a masked preview from individually quoted argv entries.  Custom
-    # parameters cannot inject shell control operators into the preview or the
-    # real startup path.
-    params_str = cs2_startup_parameters(
-        game_port=server.game_port,
-        default_map=default_map,
-        max_players=max_players,
-        server_name=server_name,
-        ip_address=server.ip_address,
-        client_port=server.client_port,
-        steam_account_token=server.steam_account_token,
-        server_password=server.server_password,
-        rcon_password=server.rcon_password,
-        game_mode=game_mode,
-        game_type=game_type,
-        tv_enable=server.tv_enable,
-        tv_port=server.tv_port,
-        additional_parameters=server.additional_parameters,
+    # Build parameters (same as start_server)
+    params = [
+        "-dedicated",
+        f"-port {server.game_port}",
+        f"+map {default_map}",
+        f"-maxplayers {max_players}",
+        f'+hostname "{server_name}"',
+    ]
+
+    if server.ip_address:
+        params.append(f"-ip {server.ip_address}")
+
+    if server.client_port:
+        params.append(f"+clientport {server.client_port}")
+    elif server.game_port:
+        params.append(f"+clientport {server.game_port + 1}")
+
+    gslt_parameter = gslt_startup_parameter(
+        server.steam_account_token,
         masked=True,
     )
+    if gslt_parameter:
+        params.append(gslt_parameter)
+
+    if server.server_password:
+        params.append('+sv_password "***PASSWORD***"')
+
+    if server.rcon_password:
+        params.append('+rcon_password "***RCON_PASSWORD***"')
+
+    params.append(f"+game_mode {game_mode}")
+    params.append(f"+game_type {game_type}")
+
+    if server.tv_enable and server.tv_port:
+        params.extend(
+            [
+                "+tv_enable 1",
+                f"+tv_port {server.tv_port}",
+                '+tv_name "GOTV"',
+            ]
+        )
+
+    if server.additional_parameters:
+        params.append(server.additional_parameters.strip())
+
+    params_str = " ".join(params)
 
     # Build paths
     game_bin_dir = f"{server.game_directory}/cs2/game/bin/linuxsteamrt64"
     cs2_executable = "./cs2"
 
     cs2_start_cmd = (
-        f"cd {shlex.quote(game_bin_dir)} && "
-        f"export LD_LIBRARY_PATH={shlex.quote(game_bin_dir)}:"
-        f'"${{LD_LIBRARY_PATH:-}}" && '
+        f"cd {game_bin_dir} && "
+        f"export LD_LIBRARY_PATH='{game_bin_dir}:${{LD_LIBRARY_PATH}}' && "
         f"{cs2_executable} {params_str}"
     )
 

@@ -1,39 +1,19 @@
-"""Top-level health and authenticated A2S cache routes."""
+"""
+Routes for a2s-cache - requires authentication to filter by user
+Separate router to avoid /servers prefix issues
+"""
 
-from fastapi import APIRouter, Depends, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends
 
-from api.dependencies import (
-    get_admin_principal,
-    get_unit_of_work,
-    resolve_a2s_cache_service,
-)
-from cs2_manager.core import ErrorResponse, Principal
-from cs2_manager.features.servers import (
-    A2SCacheEnvelope,
-    A2STestResponse,
-    PublicPingResponse,
-    ServerMonitoringRepository,
-)
-from cs2_manager.infrastructure import UnitOfWork
-from modules.auth import get_current_principal
+from modules.auth import get_current_active_user
+from modules.models import User
 from modules.utils import get_current_time
 
 # Create a router with NO prefix
 router = APIRouter(tags=["cache"])
 
 
-def _uow_session(uow: UnitOfWork) -> AsyncSession:
-    if uow.session is None:
-        raise RuntimeError("Unit of work is not active")
-    return uow.session
-
-
-@router.get(
-    "/ping",
-    response_model=PublicPingResponse,
-    status_code=status.HTTP_200_OK,
-)
+@router.get("/ping")
 async def ping():
     """
     Ultra-simple ping endpoint - completely public, no auth.
@@ -42,41 +22,21 @@ async def ping():
     return {"status": "ok", "message": "pong", "public": True}
 
 
-@router.get(
-    "/a2s-cache-test",
-    response_model=A2STestResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-    },
-)
-async def test_a2s_cache(_: Principal = Depends(get_admin_principal)):
-    """Admin-only routing diagnostic for the A2S cache endpoint."""
+@router.get("/a2s-cache-test")
+async def test_a2s_cache():
+    """
+    Test endpoint for a2s-cache - completely public, no auth.
+    """
     return {
         "status": "ok",
-        "message": "A2S cache test endpoint working",
+        "message": "Public test endpoint working",
         "timestamp": get_current_time().isoformat(),
-        "admin": True,
+        "public": True,
     }
 
 
-@router.get(
-    "/a2s-cache",
-    response_model=A2SCacheEnvelope,
-    response_model_exclude_none=True,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-    },
-)
-async def get_user_servers_a2s_cache(
-    request: Request,
-    uow: UnitOfWork = Depends(get_unit_of_work),
-    current_user: Principal = Depends(get_current_principal),
-):
+@router.get("/a2s-cache")
+async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_active_user)):
     """
     Get cached A2S information for current user's servers.
 
@@ -84,6 +44,12 @@ async def get_user_servers_a2s_cache(
     Returns only the servers belonging to the authenticated user.
     """
     import logging
+
+    from modules.database import async_session_maker
+
+    # Import dependencies inside function
+    from modules.models import Server
+    from services.a2s_cache_service import a2s_cache_service
 
     logger = logging.getLogger(__name__)
     logger.info(f"=== A2S-CACHE ENDPOINT CALLED for user {current_user.id} ===")
@@ -102,18 +68,26 @@ async def get_user_servers_a2s_cache(
     }
 
     try:
-        a2s_cache_service = resolve_a2s_cache_service(request)
-        repository = ServerMonitoringRepository(_uow_session(uow))
-        server_ids = await repository.visible_server_ids(current_user)
-        await uow.commit()
+        # Use a separate session
+        async with async_session_maker() as session:
+            # Get servers for current user only
+            servers = await Server.get_all_by_user(session, current_user.id)
 
-        logger.info("Found %s visible servers for user %s", len(server_ids), current_user.id)
-        cached_by_server = await a2s_cache_service.get_cached_info_many(server_ids)
-        response["servers"] = {
-            str(server_id): cached
-            for server_id, cached in cached_by_server.items()
-            if cached is not None
-        }
+            logger.info(f"Found {len(servers)} servers for user {current_user.id}")
+
+            # Get cached data for each server
+            for server in servers:
+                try:
+                    cached_info = await a2s_cache_service.get_cached_info(server.id)
+                    if cached_info:
+                        response["servers"][str(server.id)] = cached_info
+                        logger.debug(f"Retrieved cache for server {server.id}")
+                except Exception as e:
+                    logger.error(f"Error getting cache for server {server.id}: {e}")
+                    response["servers"][str(server.id)] = {
+                        "success": False,
+                        "error": "Cache unavailable",
+                    }
 
         # Add Steam latest version to response
         try:
@@ -126,7 +100,7 @@ async def get_user_servers_a2s_cache(
         logger.info(f"Successfully returning data for {len(response['servers'])} servers")
     except Exception as e:
         logger.error(f"Error in a2s-cache endpoint: {e}", exc_info=True)
-        response["error"] = "Cache unavailable"
+        response["error"] = str(e)
 
     logger.info("=== A2S-CACHE ENDPOINT COMPLETE ===")
     return response

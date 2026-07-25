@@ -6,18 +6,12 @@ Provides endpoints for fetching GitHub releases and installing plugins from them
 import logging
 import re
 import shlex
-from typing import Any, Optional, cast
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import get_ssh_manager, locked_server_operation
-from api.http_resource import (
-    ApplicationHTTP,
-    as_application_http,
-    resolve_application_http,
-)
-from cs2_manager.core import ErrorResponse
+from api.dependencies import locked_server_operation
 from modules import (
     ArchiveAnalysisResponse,
     ArchiveContentItem,
@@ -33,6 +27,7 @@ from modules import (
     get_current_active_user,
     get_db,
 )
+from modules.http_helper import http_helper
 from services import SSHManager
 from services.github_credentials import get_effective_github_token
 from services.plugin_installation import install_github_plugin as install_github_plugin_service
@@ -41,11 +36,6 @@ router = APIRouter(prefix="/api/github-plugins", tags=["github-plugins"])
 
 logger = logging.getLogger(__name__)
 
-OUTBOUND_HTTP_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-}
-
 # Regex to validate GitHub repository URL
 GITHUB_REPO_PATTERN = re.compile(
     r"^https://github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?:/.*)?$"
@@ -53,13 +43,6 @@ GITHUB_REPO_PATTERN = re.compile(
 
 # Progress update interval (percent) for panel proxy downloads/uploads
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every 10%
-
-
-def _coerce_ssh_manager(candidate: object) -> SSHManager:
-    """Preserve direct-call compatibility while ASGI requests inject a manager."""
-    if callable(getattr(candidate, "disconnect", None)):
-        return candidate  # type: ignore[return-value]
-    return SSHManager()
 
 
 def _build_plugin_copy_command(
@@ -141,24 +124,17 @@ async def get_server_and_verify_ownership(db: AsyncSession, server_id: int, user
 
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
-    snapshot = Server.model_validate(server, from_attributes=True)
     await db.commit()
-    return snapshot
+    return server
 
 
-@router.get(
-    "/releases",
-    response_model=GitHubReleasesResponse,
-    status_code=status.HTTP_200_OK,
-    responses=OUTBOUND_HTTP_ERROR_RESPONSES,
-)
+@router.get("/releases")
 async def get_github_releases(
     repo_url: str,
     count: int = 5,
     server_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
 ) -> GitHubReleasesResponse:
     """
     Fetch recent releases from a GitHub repository.
@@ -191,11 +167,8 @@ async def get_github_releases(
 
     # Prefer the user's token and use the system credential only as a fallback.
     github_token = await get_effective_github_token(db, current_user)
-    # Release the transaction before the potentially slow GitHub request.
-    await db.commit()
-    outbound_http = cast(ApplicationHTTP, http_resource)
 
-    success, data, error = await outbound_http.get(
+    success, data, error = await http_helper.get(
         api_url,
         headers=headers,
         params={"per_page": count},
@@ -278,7 +251,6 @@ async def analyze_archive(
     download_url: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ) -> ArchiveAnalysisResponse:
     """
     Download and analyze archive contents to detect structure.
@@ -305,10 +277,9 @@ async def analyze_archive(
     # Get server
     server = await get_server_and_verify_ownership(db, server_id, current_user)
 
-    ssh_manager = _coerce_ssh_manager(ssh_manager)
+    ssh_manager = SSHManager()
     success, msg = await ssh_manager.connect(server)
     if not success:
-        await ssh_manager.disconnect()
         return ArchiveAnalysisResponse(success=False, error=f"SSH connection failed: {msg}")
 
     try:
@@ -532,8 +503,6 @@ async def install_github_plugin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     _operation_server: Server = Depends(locked_server_operation),
-    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
-    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from a GitHub release asset with WebSocket progress updates.
@@ -556,8 +525,6 @@ async def install_github_plugin(
         request,
         db,
         current_user,
-        ssh_manager=_coerce_ssh_manager(ssh_manager),
-        http_resource=as_application_http(http_resource),
     )
 
 
@@ -567,7 +534,6 @@ async def analyze_installed_plugins(
     directory: str = "addons",
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ):
     """
     Analyze installed plugin files to help users select which files to uninstall.
@@ -583,10 +549,9 @@ async def analyze_installed_plugins(
 
     server = await get_server_and_verify_ownership(db, server_id, current_user)
 
-    ssh_manager = _coerce_ssh_manager(ssh_manager)
+    ssh_manager = SSHManager()
     success, msg = await ssh_manager.connect(server)
     if not success:
-        await ssh_manager.disconnect()
         return InstalledPluginAnalysisResponse(success=False, error=f"SSH connection failed: {msg}")
 
     try:
@@ -673,7 +638,6 @@ async def uninstall_plugin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
     _operation_server: Server = Depends(locked_server_operation),
-    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ) -> PluginUninstallResponse:
     """
     Uninstall a plugin by deleting selected files.
@@ -693,10 +657,9 @@ async def uninstall_plugin(
         """Send progress update via WebSocket"""
         await send_deployment_update(server_id, msg_type, msg)
 
-    ssh_manager = _coerce_ssh_manager(ssh_manager)
+    ssh_manager = SSHManager()
     success, msg = await ssh_manager.connect(server)
     if not success:
-        await ssh_manager.disconnect()
         await progress(f"SSH connection failed: {msg}", "error")
         return PluginUninstallResponse(success=False, message=f"SSH connection failed: {msg}")
 

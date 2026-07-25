@@ -6,8 +6,6 @@ Provides a centralized utility for making HTTP requests with error handling
 import asyncio
 import logging
 import os
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional, Tuple
 
 import anyio
@@ -57,22 +55,6 @@ class HTTPHelper:
             client, self._client = self._client, None
         if client is not None and not client.is_closed:
             await client.aclose()
-
-    async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        """Send a raw request through the lifespan-owned connection pool.
-
-        This deliberately leaves response parsing, retries, and safe logging to
-        the caller.  It is used by integrations such as Discord webhooks and
-        GitHub artifact resolution that need the original status, headers, or
-        redirect response without constructing a client per request.
-        """
-        client = await self._get_client()
-        return await client.request(method, url, **kwargs)
-
-    @asynccontextmanager
-    async def borrow_client(self) -> AsyncIterator[httpx.AsyncClient]:
-        """Borrow the shared client without transferring close ownership."""
-        yield await self._get_client()
 
     async def make_request(
         self,

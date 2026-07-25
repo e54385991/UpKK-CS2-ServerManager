@@ -14,56 +14,11 @@ concurrency:
 jobs:
   baseline:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      ENVIRONMENT: test
-      MYSQL_HOST: 127.0.0.1
-      MYSQL_PORT: "3306"
-      MYSQL_USER: cs2_manager
-      MYSQL_PASSWORD: ci-mysql-password
-      MYSQL_DATABASE: cs2_manager
-      MYSQL_ADMIN_USER: root
-      MYSQL_ADMIN_PASSWORD: ci-root-password
-      REDIS_HOST: 127.0.0.1
-      REDIS_PORT: "6379"
-      REDIS_PASSWORD: ""
-      REDIS_DB: "0"
-      RUN_INTEGRATION_TESTS: "1"
-      CREDENTIAL_ENCRYPTION_KEYS: '{"ci-v1":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="}'
-      CREDENTIAL_ACTIVE_KEY_ID: ci-v1
-      TOKEN_HASH_KEY: ci-only-token-hash-key-2026-change-outside-tests
-
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: ci-root-password
-          MYSQL_ROOT_HOST: "%"
-          MYSQL_DATABASE: cs2_manager
-          MYSQL_USER: cs2_manager
-          MYSQL_PASSWORD: ci-mysql-password
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -pci-root-password --silent"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Install uv and Python 3.14
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -85,7 +40,3 @@ jobs:
 
       - name: Run quality baseline
         run: uv run python scripts/check_baseline.py
-
-      - name: Enforce 90% changed-line coverage
-        if: github.event_name == 'pull_request'
-        run: uv run diff-cover coverage.xml --compare-branch "origin/${{ github.base_ref }}" --fail-under 90

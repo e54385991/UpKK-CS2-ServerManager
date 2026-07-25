@@ -10,24 +10,11 @@ import secrets
 from contextlib import suppress
 from typing import List, Optional
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Request,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
-)
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import (
-    require_server_access,
-    resolve_maintenance_lock_service,
-    resolve_s3_backup_service,
-)
-from cs2_manager.core import ErrorResponse
+from api.dependencies import require_server_access
 from modules import (
     ActionResponse,
     BatchActionRequest,
@@ -45,6 +32,7 @@ from modules import (
     get_current_time,
     get_db,
 )
+from modules.database import async_session_maker
 from services import SSHManager, redis_manager
 from services.deployment_progress import (
     DeploymentWebSocket,
@@ -63,12 +51,8 @@ from services.game_session import (
     send_keys_command,
     session_name,
 )
-from services.maintenance_lock import (
-    MaintenanceLockService,
-    OperationBusyError,
-    maintenance_lock_service,
-)
-from services.s3_backup_service import S3BackupService, s3_backup_service
+from services.maintenance_lock import OperationBusyError, maintenance_lock_service
+from services.s3_backup_service import s3_backup_service
 from services.server_monitor import server_monitor
 from services.task_registry import action_task_registry
 
@@ -119,16 +103,11 @@ async def acquire_server_action_lock(
     server_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: MaintenanceLockService = Depends(resolve_maintenance_lock_service),
 ):
     """Verify ownership and hold the cross-process lock for one mutating action."""
-    if not callable(getattr(lock_service, "get", None)):
-        # Direct Python callers retain the legacy facade; HTTP requests always
-        # receive an application-owned service from the dependency above.
-        lock_service = maintenance_lock_service
     server = await get_server_and_verify_ownership(db, server_id, current_user)
     await db.commit()
-    async with lock_service.get(
+    async with maintenance_lock_service.get(
         server_id,
         operation="server_action",
         wait=False,
@@ -155,14 +134,10 @@ async def upload_latest_plugin_backup_to_s3(
     current_user: User,
     ssh_manager: SSHManager,
     progress_callback=None,
-    s3_service: S3BackupService = s3_backup_service,
 ) -> tuple[bool, str]:
     """Upload the most recent plugin backup produced by SSHManager, if S3 is configured."""
     owner = await get_server_owner(db, server, current_user)
-    detached_owner = User.model_validate(owner, from_attributes=True)
-    detached_server = Server.model_validate(server, from_attributes=True)
-    await db.commit()
-    if not s3_service.is_configured(detached_owner):
+    if not s3_backup_service.is_configured(owner):
         return True, ""
 
     backup_info = getattr(ssh_manager, "last_plugin_backup", None)
@@ -172,7 +147,7 @@ async def upload_latest_plugin_backup_to_s3(
             "Plugin backup completed locally, but the archive path was not captured for S3 upload."
         )
         discord_notification_service.queue_notify(
-            detached_server,
+            server,
             EVENT_S3_BACKUP,
             "s3_backup_upload",
             False,
@@ -181,10 +156,10 @@ async def upload_latest_plugin_backup_to_s3(
         )
         return False, message
 
-    upload_success, upload_message, object_key = await s3_service.upload_remote_backup(
+    upload_success, upload_message, object_key = await s3_backup_service.upload_remote_backup(
         ssh_manager,
-        detached_server,
-        detached_owner,
+        server,
+        owner,
         backup_path,
         progress_callback=progress_callback,
     )
@@ -192,7 +167,7 @@ async def upload_latest_plugin_backup_to_s3(
     if object_key:
         details["Object Key"] = object_key
     discord_notification_service.queue_notify(
-        detached_server,
+        server,
         EVENT_S3_BACKUP,
         "s3_backup_upload",
         upload_success,
@@ -208,14 +183,6 @@ def _store_task(task: asyncio.Task) -> None:
     action_task_registry.add(task)
 
 
-def _spawn_action_task(request: Request, coroutine, *, name: str) -> asyncio.Task:
-    """Attach request-created work to the owning application supervisor."""
-    supervisor = getattr(request.app.state, "task_supervisor", None)
-    if supervisor is not None:
-        return supervisor.create(coroutine, name=name)
-    return action_task_registry.create(coroutine)
-
-
 async def shutdown_background_tasks() -> None:
     """Compatibility wrapper for lifecycle-owned task cleanup."""
     await action_task_registry.shutdown()
@@ -229,13 +196,12 @@ async def _run_bounded_batch_operation(
     callback,
 ) -> None:
     """Bound global fan-out and serialize destructive work per server."""
-    lock_service = getattr(callback, "maintenance_lock_service", maintenance_lock_service)
     user_semaphore = _user_batch_semaphores.setdefault(user_id, asyncio.Semaphore(2))
     try:
         async with user_semaphore:
             async with _batch_operation_semaphore:
                 try:
-                    async with lock_service.get(
+                    async with maintenance_lock_service.get(
                         server_id,
                         operation=operation,
                         wait=True,
@@ -254,23 +220,6 @@ async def _run_bounded_batch_operation(
                 _pending_batch_counts[user_id] = remaining
             else:
                 _pending_batch_counts.pop(user_id, None)
-
-
-class _LockBoundCallback:
-    """Carry an application lock service into background work without Request."""
-
-    def __init__(self, callback, lock_service: MaintenanceLockService) -> None:
-        self._callback = callback
-        self.maintenance_lock_service = lock_service
-
-    async def __call__(self):
-        return await self._callback()
-
-
-def _bind_maintenance_lock(callback, lock_service: MaintenanceLockService):
-    if not callable(getattr(lock_service, "get", None)):
-        lock_service = maintenance_lock_service
-    return _LockBoundCallback(callback, lock_service)
 
 
 async def _reserve_batch_capacity(user_id: int, operation_count: int) -> None:
@@ -330,30 +279,8 @@ async def clear_deployment_progress_after_delay(
     await redis_manager.clear_deployment_progress(server_id)
 
 
-def _resolve_background_session_factory(session_factory=None):
-    """Resolve an injected app database while preserving legacy direct calls."""
-    if session_factory is not None:
-        return session_factory
-    from modules.database import async_session_maker
-
-    return async_session_maker
-
-
-def _request_session_factory(request: Request):
-    """Return the database factory owned by the request's application."""
-    container = getattr(request.app.state, "container", None)
-    database = getattr(container, "database", None)
-    return _resolve_background_session_factory(getattr(database, "session_factory", None))
-
-
 async def execute_single_server_action(
-    server_id: int,
-    action: str,
-    user_id: int,
-    is_admin: bool,
-    batch_id: str,
-    *,
-    session_factory=None,
+    server_id: int, action: str, user_id: int, is_admin: bool, batch_id: str
 ):
     """
     Execute an action on a single server in the background.
@@ -370,7 +297,6 @@ async def execute_single_server_action(
 
     logger = logging.getLogger(__name__)
     server = None
-    session_factory = _resolve_background_session_factory(session_factory)
 
     try:
         # Update status to in_progress
@@ -379,7 +305,7 @@ async def execute_single_server_action(
         )
 
         # Get server and verify ownership - close DB session quickly to avoid pool exhaustion
-        async with session_factory() as db:
+        async with async_session_maker() as db:
             if is_admin:
                 server = await Server.get_by_id(db, server_id)
             else:
@@ -443,7 +369,7 @@ async def execute_single_server_action(
                     new_status = ServerStatus.ERROR
 
             # Update server status and create deployment log in a separate quick session
-            async with session_factory() as db:
+            async with async_session_maker() as db:
                 if new_status:
                     server_to_update = await db.get(Server, server_id)
                     if server_to_update:
@@ -492,13 +418,7 @@ async def execute_single_server_action(
 
 
 async def execute_single_server_plugins(
-    server_id: int,
-    plugins: List[str],
-    user_id: int,
-    is_admin: bool,
-    batch_id: str,
-    *,
-    session_factory=None,
+    server_id: int, plugins: List[str], user_id: int, is_admin: bool, batch_id: str
 ):
     """
     Install plugins on a single server in the background.
@@ -516,7 +436,6 @@ async def execute_single_server_plugins(
     logger = logging.getLogger(__name__)
     server = None
     owner = None
-    session_factory = _resolve_background_session_factory(session_factory)
 
     try:
         # Update status to in_progress
@@ -525,7 +444,7 @@ async def execute_single_server_plugins(
         )
 
         # Get server and verify ownership - close DB session quickly to avoid pool exhaustion
-        async with session_factory() as db:
+        async with async_session_maker() as db:
             if is_admin:
                 server = await Server.get_by_id(db, server_id)
             else:
@@ -587,7 +506,7 @@ async def execute_single_server_plugins(
                         )
 
                 # Create deployment log in a separate quick session
-                async with session_factory() as db:
+                async with async_session_maker() as db:
                     log = DeploymentLog(
                         server_id=server_id,
                         action=f"install_{plugin}",
@@ -643,13 +562,7 @@ async def execute_single_server_plugins(
 
 
 async def execute_single_server_command(
-    server_id: int,
-    command: str,
-    user_id: int,
-    is_admin: bool,
-    batch_id: str,
-    *,
-    session_factory=None,
+    server_id: int, command: str, user_id: int, is_admin: bool, batch_id: str
 ):
     """
     Send a command to a single game server in the background.
@@ -662,14 +575,14 @@ async def execute_single_server_command(
         is_admin: Whether the user is an admin
         batch_id: Batch ID for tracking progress
     """
-    session_factory = _resolve_background_session_factory(session_factory)
+    from modules.database import async_session_maker
 
     try:
         await redis_manager.set_batch_action_status(
             batch_id, server_id, "in_progress", "Sending command to server..."
         )
 
-        async with session_factory() as db:
+        async with async_session_maker() as db:
             server = await db.get(Server, server_id)
 
             if not server:
@@ -685,58 +598,56 @@ async def execute_single_server_command(
                 )
                 return
 
-        # The discovery session must be returned to the pool before any slow
-        # SSH work starts. Batch commands can fan out to 40 servers, so holding
-        # one checkout per target here would exhaust a normally sized DB pool.
-        ssh_manager = SSHManager()
-        success, msg = await ssh_manager.connect(server)
+            # Connect to server via SSH
+            ssh_manager = SSHManager()
+            success, msg = await ssh_manager.connect(server)
 
-        if not success:
-            await redis_manager.set_batch_action_status(
-                batch_id, server_id, "failed", f"SSH connection failed: {msg}"
-            )
-            return
-
-        try:
-            # Detect the configured manager first and the legacy manager
-            # second, so switching settings cannot orphan a running session.
-            name = session_name(server_id)
-            active_manager = await find_running_session_manager(
-                ssh_manager.execute_command,
-                server.session_manager,
-                name,
-            )
-
-            if not active_manager:
+            if not success:
                 await redis_manager.set_batch_action_status(
-                    batch_id,
-                    server_id,
-                    "failed",
-                    "Game server is not running. Please start the server first.",
+                    batch_id, server_id, "failed", f"SSH connection failed: {msg}"
                 )
                 return
 
-            await redis_manager.set_batch_action_status(
-                batch_id, server_id, "in_progress", f"Executing command: {command}"
-            )
-
-            input_cmd = send_keys_command(active_manager, name, command)
-            success, stdout, stderr = await ssh_manager.execute_command(input_cmd, timeout=10)
-
-            if success:
-                await redis_manager.set_batch_action_status(
-                    batch_id, server_id, "success", f"Command sent successfully: {command}"
-                )
-            else:
-                await redis_manager.set_batch_action_status(
-                    batch_id,
-                    server_id,
-                    "failed",
-                    f"Failed to send command: {stderr or 'Unknown error'}",
+            try:
+                # Detect the configured manager first and the legacy manager
+                # second, so switching settings cannot orphan a running session.
+                name = session_name(server_id)
+                active_manager = await find_running_session_manager(
+                    ssh_manager.execute_command,
+                    server.session_manager,
+                    name,
                 )
 
-        finally:
-            await ssh_manager.disconnect()
+                if not active_manager:
+                    await redis_manager.set_batch_action_status(
+                        batch_id,
+                        server_id,
+                        "failed",
+                        "Game server is not running. Please start the server first.",
+                    )
+                    return
+
+                await redis_manager.set_batch_action_status(
+                    batch_id, server_id, "in_progress", f"Executing command: {command}"
+                )
+
+                input_cmd = send_keys_command(active_manager, name, command)
+                success, stdout, stderr = await ssh_manager.execute_command(input_cmd, timeout=10)
+
+                if success:
+                    await redis_manager.set_batch_action_status(
+                        batch_id, server_id, "success", f"Command sent successfully: {command}"
+                    )
+                else:
+                    await redis_manager.set_batch_action_status(
+                        batch_id,
+                        server_id,
+                        "failed",
+                        f"Failed to send command: {stderr or 'Unknown error'}",
+                    )
+
+            finally:
+                await ssh_manager.disconnect()
 
     except Exception as e:
         logger.error(f"Error sending command to server {server_id}: {e}")

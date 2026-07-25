@@ -9,23 +9,22 @@ from .common import *
 router = APIRouter(prefix="/servers", tags=["servers"])
 
 
-@router.post(
-    "",
-    response_model=ServerCreatedResponse,
-    status_code=status.HTTP_201_CREATED,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-        status.HTTP_504_GATEWAY_TIMEOUT: {"model": ErrorResponse},
-    },
-)
+@router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
 async def create_server(
     server_data: ServerCreate,
-    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """Create a new CS2 server"""
+    # Validate CAPTCHA first
+    is_valid = await captcha_service.validate_captcha(
+        server_data.captcha_token, server_data.captcha_code
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
+        )
+
     # Check if server name already exists for this user
     existing = await Server.get_by_name_and_user(db, server_data.name, current_user.id)
     if existing:
@@ -46,52 +45,6 @@ async def create_server(
         )
 
     await db.commit()
-
-    # Discover the public host identity without sending credentials. Creation
-    # proceeds only when the user submits this exact, freshly-scanned key.
-    try:
-        scanned_host_key = await scan_ssh_host_key(server_data.host, server_data.ssh_port)
-    except TimeoutError:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="SSH host-key scan timed out",
-        ) from None
-    except (OSError, asyncssh.Error, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to scan SSH host key: {exc}",
-        ) from exc
-
-    confirmed_host_key = (
-        server_data.ssh_host_key_confirmed
-        and server_data.ssh_host_key_algorithm == scanned_host_key.algorithm
-        and server_data.ssh_host_key_fingerprint == scanned_host_key.fingerprint
-    )
-    if not confirmed_host_key:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "ssh_host_key_confirmation_required",
-                "message": "Confirm the SSH host key before credentials are sent",
-                "algorithm": scanned_host_key.algorithm,
-                "fingerprint": scanned_host_key.fingerprint,
-            },
-        )
-    host_key_options = pinned_host_key_options(
-        scanned_host_key.algorithm,
-        scanned_host_key.fingerprint,
-    )
-
-    # Consume the one-time CAPTCHA only after host-key confirmation, allowing
-    # the scan/confirm round trip to reuse the original form submission.
-    is_valid = await captcha_service.validate_captcha(
-        server_data.captcha_token, server_data.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
-
     # Validate SSH connection before creating server (password authentication only)
     conn = None
     try:
@@ -107,8 +60,8 @@ async def create_server(
                 port=server_data.ssh_port,
                 username=server_data.ssh_user,
                 password=server_data.ssh_password,
+                known_hosts=None,
                 connect_timeout=15,
-                **host_key_options,
             )
         except asyncssh.PermissionDenied:
             raise HTTPException(
@@ -174,10 +127,8 @@ async def create_server(
             conn.close()
 
     # Create server with user_id, auto-generated API key, and password auth
-    # Exclude protocol-only confirmation fields from persistence.
-    server_dict = server_data.model_dump(
-        exclude={"captcha_token", "captcha_code", "ssh_host_key_confirmed"}
-    )
+    # Exclude captcha fields from server creation
+    server_dict = server_data.model_dump(exclude={"captcha_token", "captcha_code"})
     server_dict["auth_type"] = AuthType.PASSWORD  # Always use password authentication
 
     # Apply system default proxy settings if not explicitly set by user
@@ -194,9 +145,7 @@ async def create_server(
             server_dict["github_proxy"] = system_settings.github_proxy_url
         # else: default_proxy_mode is 'direct', keep both as None/False
 
-    one_time_api_key = generate_api_key()
-    server = Server(**server_dict, user_id=current_user.id)
-    server.set_api_key(one_time_api_key)
+    server = Server(**server_dict, user_id=current_user.id, api_key=generate_api_key())
     db.add(server)
     await db.flush()
     for default_path in DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS:
@@ -213,134 +162,10 @@ async def create_server(
     await db.commit()
     await db.refresh(server)
 
-    response.headers["Cache-Control"] = "no-store"
-    server_response = ServerResponse.model_validate(server).model_dump()
-    return ServerCreatedResponse(**server_response, api_key=one_time_api_key)
-
-
-@router.post(
-    "/ssh-host-key/scan",
-    response_model=SSHHostKeyResponse,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_504_GATEWAY_TIMEOUT: {"model": ErrorResponse},
-    },
-)
-async def scan_new_server_host_key(
-    request_data: SSHHostKeyScanRequest,
-    _current_user: User = Depends(get_current_active_user),
-):
-    """Scan a prospective server without sending authentication credentials."""
-    try:
-        identity = await scan_ssh_host_key(request_data.host, request_data.ssh_port)
-    except TimeoutError:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="SSH host-key scan timed out",
-        ) from None
-    except (OSError, asyncssh.Error, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to scan SSH host key: {exc}",
-        ) from exc
-    return SSHHostKeyResponse(
-        algorithm=identity.algorithm,
-        fingerprint=identity.fingerprint,
-        configured=False,
-    )
-
-
-@router.post(
-    "/{server_id}/ssh-host-key/scan",
-    response_model=SSHHostKeyResponse,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-        status.HTTP_504_GATEWAY_TIMEOUT: {"model": ErrorResponse},
-    },
-)
-async def scan_existing_server_host_key(
-    server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """Show the live key of an existing server for an explicit trust decision."""
-    server = await get_server_with_permission(server_id, current_user, db)
-    await db.commit()
-    try:
-        identity = await scan_ssh_host_key(server.host, server.ssh_port)
-    except TimeoutError:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="SSH host-key scan timed out",
-        ) from None
-    except (OSError, asyncssh.Error, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to scan SSH host key: {exc}",
-        ) from exc
-    configured = bool(server.ssh_host_key_algorithm and server.ssh_host_key_fingerprint)
-    return SSHHostKeyResponse(
-        algorithm=identity.algorithm,
-        fingerprint=identity.fingerprint,
-        configured=configured,
-        matches_configured=(
-            identity.algorithm == server.ssh_host_key_algorithm
-            and identity.fingerprint == server.ssh_host_key_fingerprint
-            if configured
-            else None
-        ),
-    )
-
-
-@router.post(
-    "/{server_id}/ssh-host-key/confirm",
-    response_model=ServerDetail,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-        status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-        status.HTTP_504_GATEWAY_TIMEOUT: {"model": ErrorResponse},
-    },
-)
-async def confirm_existing_server_host_key(
-    server_id: int,
-    confirmation: SSHHostKeyConfirmRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """Re-scan and atomically pin the exact key confirmed by the user."""
-    server = await get_server_with_permission(server_id, current_user, db)
-    await db.commit()
-    try:
-        identity = await scan_ssh_host_key(server.host, server.ssh_port)
-    except TimeoutError:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="SSH host-key scan timed out",
-        ) from None
-    except (OSError, asyncssh.Error, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to scan SSH host key: {exc}",
-        ) from exc
-    if (
-        confirmation.algorithm != identity.algorithm
-        or confirmation.fingerprint != identity.fingerprint
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="SSH host key changed after it was scanned; review the new fingerprint",
-        )
-    server.ssh_host_key_algorithm = identity.algorithm
-    server.ssh_host_key_fingerprint = identity.fingerprint
-    server.credential_revision = (server.credential_revision or 0) + 1
-    await db.commit()
-    await db.refresh(server)
     return server
 
 
-@router.get("", response_model=List[ServerSummary])
+@router.get("", response_model=List[ServerResponse])
 async def list_servers(
     skip: int = 0,
     limit: int = 100,
@@ -382,7 +207,7 @@ async def list_all_servers_admin(
     return result
 
 
-@router.get("/{server_id}", response_model=ServerDetail)
+@router.get("/{server_id}", response_model=ServerResponse)
 async def get_server(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -393,7 +218,7 @@ async def get_server(
     return server
 
 
-@router.put("/{server_id}", response_model=ServerDetail)
+@router.put("/{server_id}", response_model=ServerResponse)
 async def update_server(
     server_id: int,
     server_data: ServerUpdate,
@@ -435,34 +260,8 @@ async def update_server(
 
     # Update fields using SQLModel's sqlmodel_update method
     update_data = server_data.model_dump(exclude_unset=True)
-    endpoint_changed = any(
-        field in update_data and getattr(server, field) != update_data[field]
-        for field in ("host", "ssh_port")
-    )
-    connection_credential_fields = {
-        "host",
-        "ssh_port",
-        "ssh_user",
-        "auth_type",
-        "ssh_password",
-        "ssh_key_path",
-        "sudo_password",
-        "ssh_host_key_algorithm",
-        "ssh_host_key_fingerprint",
-    }
-    credentials_changed = any(
-        field in update_data and getattr(server, field, None) != update_data[field]
-        for field in connection_credential_fields
-    )
     for key, value in update_data.items():
         setattr(server, key, value)
-    if endpoint_changed:
-        # A pin belongs to one network endpoint. Moving the record requires a
-        # fresh confirmation before any credentials can be sent.
-        server.ssh_host_key_algorithm = None
-        server.ssh_host_key_fingerprint = None
-    if credentials_changed:
-        server.credential_revision = (server.credential_revision or 0) + 1
 
     # Check if any startup-affecting fields changed while server is running
     restart_required = False
@@ -498,7 +297,7 @@ async def update_server(
     return response
 
 
-@router.post("/{server_id}/apply-system-defaults", response_model=ServerDetail)
+@router.post("/{server_id}/apply-system-defaults", response_model=ServerResponse)
 async def apply_system_defaults_to_server(
     server_id: int,
     db: AsyncSession = Depends(get_db),

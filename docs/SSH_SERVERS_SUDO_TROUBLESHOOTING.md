@@ -22,42 +22,60 @@ SHOW TABLES LIKE 'ssh_servers_sudo';
 
 如果表不存在，请继续下一步。
 
-### 2. 在启动应用前运行 Alembic 迁移
+### 2. 重启应用以运行迁移
 
-应用启动只检查数据库版本，**不会**创建表或执行迁移。先配置
-`CREDENTIAL_ENCRYPTION_KEYS`、`CREDENTIAL_ACTIVE_KEY_ID` 和
-`TOKEN_HASH_KEY`，再通过独立部署步骤升级数据库：
+应用程序在启动时会自动运行数据库迁移（`migrate_db()`），这会创建 `ssh_servers_sudo` 表。
 
 ```bash
-uv run python -m cs2_manager.cli migrate
+# 重启应用
+docker-compose restart  # 如果使用 Docker
+# 或
+systemctl restart cs2-manager  # 如果使用 systemd
 ```
 
-容器生产部署可使用迁移 profile：
+### 3. 手动创建表（如果重启后仍不存在）
 
-```console
-docker compose -f docker-compose.production.yml --profile migrate run --rm migrate
-```
-
-迁移失败时应停止发布并检查日志、数据库权限和加密密钥。不要手工创建表：
-手写结构无法获得正确的 Alembic 版本、索引和凭据 shadow 列，会导致应用拒绝启动或凭据无法解密。
-
-### 3. 验证迁移版本和表结构
-
-先确认迁移已到当前版本：
+运行提供的 SQL 脚本：
 
 ```bash
-uv run alembic current
-uv run alembic heads
+mysql -u your_user -p your_database < db/create_ssh_servers_sudo.sql
 ```
+
+或直接在 MySQL 中执行：
+
+```sql
+CREATE TABLE IF NOT EXISTS ssh_servers_sudo (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    host VARCHAR(255) NOT NULL,
+    ssh_port INT NOT NULL DEFAULT 22,
+    sudo_user VARCHAR(100) NOT NULL,
+    sudo_password VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_ssh_sudo_config (user_id, host, ssh_port, sudo_user),
+    INDEX idx_ssh_servers_sudo_user_id (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+### 4. 验证表结构
 
 ```sql
 DESCRIBE ssh_servers_sudo;
 ```
 
-具体字段以当前 Alembic revision 为准；凭据会使用带 key version 的 AES-256-GCM
-密文列，旧明文列只可能在分阶段迁移兼容窗口内存在。
+应该显示以下字段：
+- id
+- user_id
+- host
+- ssh_port
+- sudo_user
+- sudo_password
+- created_at
+- updated_at
 
-### 4. 测试保存功能
+### 5. 测试保存功能
 
 使用**非 root 用户**进行服务器初始化测试：
 
@@ -69,7 +87,7 @@ DESCRIBE ssh_servers_sudo;
    - `保存 sudo 配置到数据库...`
    - `✓ sudo 配置已保存 (用户: xxx, 类型: 无密码 sudo/带密码 sudo)`
 
-### 5. 查询数据
+### 6. 查询数据
 
 初始化完成后，查询数据：
 
@@ -92,7 +110,7 @@ SELECT * FROM ssh_servers_sudo;
 - ✅ **使用普通用户测试**（带 sudo 权限）
 - ❌ **不要使用 root 用户测试**（root 不会保存 sudo 信息）
 - ✅ **检查 WebSocket/日志输出**中的调试信息
-- ✅ **启动应用前独立运行迁移**，并确认 Alembic revision 为 current
+- ✅ **重启应用**以确保数据库迁移运行
 
 ## 数据保存条件
 
@@ -112,7 +130,7 @@ SELECT * FROM ssh_servers_sudo;
 ## 检查清单
 
 - [ ] 表 `ssh_servers_sudo` 已创建
-- [ ] 已独立运行 Alembic 迁移且版本为 current
+- [ ] 应用已重启（运行迁移）
 - [ ] 使用**普通用户**（非 root）测试
 - [ ] 用户有 sudo 权限
 - [ ] 检查日志中的调试信息

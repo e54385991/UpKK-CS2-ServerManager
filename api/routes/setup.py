@@ -24,7 +24,6 @@ from modules import (
 )
 from services.captcha_service import captcha_service
 from services.redis_manager import redis_manager
-from services.ssh_host_keys import pinned_host_key_options, scan_ssh_host_key
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
@@ -100,9 +99,6 @@ class ServerSetupRequest(BaseModel):
     ssh_user: str  # Can be root or regular user with sudo access
     ssh_password: str  # SSH password (required, key-based auth not supported)
     sudo_password: Optional[str] = None  # Required if ssh_user is not root and sudo needs password
-    ssh_host_key_algorithm: Optional[str] = Field(default=None, max_length=64)
-    ssh_host_key_fingerprint: Optional[str] = Field(default=None, max_length=128)
-    ssh_host_key_confirmed: bool = False
     cs2_username: str = Field(
         default="cs2server", pattern=r"^[a-z_][a-z0-9_-]*$"
     )  # User to create for CS2 (alphanumeric + _ - only)
@@ -166,13 +162,14 @@ async def run_sudo_command(
     Run command with sudo, handling both passwordless and password-required sudo
     Returns: (stdout, stderr, exit_code)
     """
-    full_command = f"sudo -S -- sh -c {shlex.quote(command)}"
-    input_data = None
     if sudo_password:
-        # Keep credentials out of the remote command line and process list.
-        input_data = f"{sudo_password}\n"
+        # Quote the password so credentials containing shell metacharacters stay data.
+        full_command = f"printf '%s\\n' {shlex.quote(sudo_password)} | sudo -S -- {command}"
+    else:
+        # Try passwordless sudo
+        full_command = f"sudo {command}"
 
-    result = await conn.run(full_command, input=input_data, check=False)
+    result = await conn.run(full_command, check=False)
     return result.stdout, result.stderr, result.exit_status
 
 
@@ -265,36 +262,7 @@ async def auto_setup_server(
 
     **Authentication Required**: User must be logged in to use this endpoint.
     """
-    # Scan without credentials and require an explicit trust decision before
-    # any password is sent to the remote endpoint.
-    try:
-        scanned_host_key = await scan_ssh_host_key(setup_req.host, setup_req.ssh_port)
-    except TimeoutError:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="SSH host-key scan timed out",
-        ) from None
-    except (OSError, asyncssh.Error, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to scan SSH host key: {exc}",
-        ) from exc
-    if not (
-        setup_req.ssh_host_key_confirmed
-        and setup_req.ssh_host_key_algorithm == scanned_host_key.algorithm
-        and setup_req.ssh_host_key_fingerprint == scanned_host_key.fingerprint
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "ssh_host_key_confirmation_required",
-                "message": "Confirm the SSH host key before credentials are sent",
-                "algorithm": scanned_host_key.algorithm,
-                "fingerprint": scanned_host_key.fingerprint,
-            },
-        )
-
-    # Consume CAPTCHA only after the scan/confirm round trip.
+    # Validate CAPTCHA first
     is_valid = await captcha_service.validate_captcha(
         setup_req.captcha_token, setup_req.captcha_code
     )
@@ -327,11 +295,8 @@ async def auto_setup_server(
             port=setup_req.ssh_port,
             username=setup_req.ssh_user,
             password=setup_req.ssh_password,
+            known_hosts=None,
             connect_timeout=15,
-            **pinned_host_key_options(
-                scanned_host_key.algorithm,
-                scanned_host_key.fingerprint,
-            ),
         )
 
         await add_log("✓ SSH 连接成功")
@@ -728,8 +693,6 @@ async def auto_setup_server(
                     "ssh_port": setup_req.ssh_port,
                     "ssh_user": setup_req.cs2_username,  # CS2 user (e.g., cs2server)
                     "ssh_password": cs2_password,  # CS2 user's password (auto-generated)
-                    "ssh_host_key_algorithm": scanned_host_key.algorithm,
-                    "ssh_host_key_fingerprint": scanned_host_key.fingerprint,
                     "game_directory": game_dir,
                     "created_at": time.time(),
                 }

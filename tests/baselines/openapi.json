@@ -1,163 +1,6 @@
 {
   "components": {
     "schemas": {
-      "A2SCacheDebug": {
-        "properties": {
-          "authenticated": {
-            "title": "Authenticated",
-            "type": "boolean"
-          },
-          "endpoint": {
-            "title": "Endpoint",
-            "type": "string"
-          },
-          "user_id": {
-            "title": "User Id",
-            "type": "integer"
-          },
-          "version": {
-            "title": "Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "endpoint",
-          "version",
-          "user_id",
-          "authenticated"
-        ],
-        "title": "A2SCacheDebug",
-        "type": "object"
-      },
-      "A2SCacheEnvelope": {
-        "description": "Owner-filtered A2S cache data with compatibility diagnostics.",
-        "properties": {
-          "debug": {
-            "$ref": "#/components/schemas/A2SCacheDebug"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "servers": {
-            "additionalProperties": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Servers",
-            "type": "object"
-          },
-          "steam_latest_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Steam Latest Version"
-          },
-          "timestamp": {
-            "title": "Timestamp",
-            "type": "string"
-          }
-        },
-        "required": [
-          "servers",
-          "timestamp",
-          "debug"
-        ],
-        "title": "A2SCacheEnvelope",
-        "type": "object"
-      },
-      "A2SQueryResponse": {
-        "description": "Live A2S response after the database target has been detached.",
-        "properties": {
-          "players": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Players",
-            "type": "array"
-          },
-          "query_host": {
-            "title": "Query Host",
-            "type": "string"
-          },
-          "query_port": {
-            "maximum": 65535.0,
-            "minimum": 1.0,
-            "title": "Query Port",
-            "type": "integer"
-          },
-          "server_info": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Server Info"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          },
-          "timestamp": {
-            "title": "Timestamp",
-            "type": "string"
-          }
-        },
-        "required": [
-          "query_host",
-          "query_port",
-          "success",
-          "players",
-          "timestamp"
-        ],
-        "title": "A2SQueryResponse",
-        "type": "object"
-      },
-      "A2STestResponse": {
-        "properties": {
-          "admin": {
-            "title": "Admin",
-            "type": "boolean"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "timestamp": {
-            "title": "Timestamp",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "message",
-          "timestamp",
-          "admin"
-        ],
-        "title": "A2STestResponse",
-        "type": "object"
-      },
       "ActionResponse": {
         "description": "Schema for action response",
         "properties": {
@@ -187,24 +30,6 @@
           "message"
         ],
         "title": "ActionResponse",
-        "type": "object"
-      },
-      "AddedMapResponse": {
-        "properties": {
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "workshop_id": {
-            "title": "Workshop Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "workshop_id"
-        ],
-        "title": "AddedMapResponse",
         "type": "object"
       },
       "ApiKeyGenerate": {
@@ -241,7 +66,7 @@
         "type": "object"
       },
       "ApiKeyResponse": {
-        "description": "One-time response returned when an API key is created.",
+        "description": "Schema for API key response",
         "properties": {
           "api_key": {
             "title": "Api Key",
@@ -258,43 +83,6 @@
           "created_at"
         ],
         "title": "ApiKeyResponse",
-        "type": "object"
-      },
-      "ApiKeyStatusResponse": {
-        "description": "Non-secret API key configuration status.",
-        "properties": {
-          "configured": {
-            "title": "Configured",
-            "type": "boolean"
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "prefix": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prefix"
-          }
-        },
-        "required": [
-          "configured"
-        ],
-        "title": "ApiKeyStatusResponse",
         "type": "object"
       },
       "ArchiveAnalysisResponse": {
@@ -394,68 +182,6 @@
         "title": "ArchiveContentItem",
         "type": "object"
       },
-      "ArchiveInspectionResponse": {
-        "description": "Safe, selectable metadata discovered in a remote archive.",
-        "properties": {
-          "archive_type": {
-            "title": "Archive Type",
-            "type": "string"
-          },
-          "entry_count": {
-            "title": "Entry Count",
-            "type": "integer"
-          },
-          "folders": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Folders",
-            "type": "array"
-          }
-        },
-        "required": [
-          "archive_type",
-          "folders",
-          "entry_count"
-        ],
-        "title": "ArchiveInspectionResponse",
-        "type": "object"
-      },
-      "AuthMessageResponse": {
-        "description": "Successful authentication action with a human-readable message.",
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message"
-        ],
-        "title": "AuthMessageResponse",
-        "type": "object"
-      },
-      "AuthSuccessResponse": {
-        "description": "Successful authentication action without an additional payload.",
-        "properties": {
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success"
-        ],
-        "title": "AuthSuccessResponse",
-        "type": "object"
-      },
       "BatchActionRequest": {
         "description": "Schema for batch server actions",
         "properties": {
@@ -469,7 +195,7 @@
             "items": {
               "type": "integer"
             },
-            "maxItems": 40,
+            "maxItems": 20,
             "minItems": 1,
             "title": "Server Ids",
             "type": "array"
@@ -531,7 +257,7 @@
             "items": {
               "type": "integer"
             },
-            "maxItems": 40,
+            "maxItems": 20,
             "minItems": 1,
             "title": "Server Ids",
             "type": "array"
@@ -559,7 +285,7 @@
             "items": {
               "type": "integer"
             },
-            "maxItems": 40,
+            "maxItems": 20,
             "minItems": 1,
             "title": "Server Ids",
             "type": "array"
@@ -584,29 +310,6 @@
           "file"
         ],
         "title": "Body_upload_file_servers__server_id__files_upload_post",
-        "type": "object"
-      },
-      "CPUCountResponse": {
-        "properties": {
-          "cpu_count": {
-            "title": "Cpu Count",
-            "type": "integer"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "cpu_count",
-          "message"
-        ],
-        "title": "CPUCountResponse",
         "type": "object"
       },
       "CaptchaRefreshRequest": {
@@ -1061,78 +764,23 @@
         "title": "CustomCommandUpdate",
         "type": "object"
       },
-      "CustomMapSyncResponse": {
+      "DependencyInfo": {
+        "description": "Schema for dependency information",
         "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "interval_seconds": {
-            "title": "Interval Seconds",
+          "id": {
+            "title": "Id",
             "type": "integer"
           },
-          "last_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Error"
-          },
-          "last_run": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Run"
-          },
-          "last_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Status"
-          },
-          "next_run": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Run"
-          },
-          "run_count": {
-            "title": "Run Count",
-            "type": "integer"
-          },
-          "url": {
-            "title": "Url",
+          "title": {
+            "title": "Title",
             "type": "string"
           }
         },
         "required": [
-          "url",
-          "enabled",
-          "interval_seconds",
-          "run_count"
+          "id",
+          "title"
         ],
-        "title": "CustomMapSyncResponse",
+        "title": "DependencyInfo",
         "type": "object"
       },
       "CustomMapSyncRunRequest": {
@@ -1148,112 +796,6 @@
           "expected_revision"
         ],
         "title": "CustomMapSyncRunRequest",
-        "type": "object"
-      },
-      "CustomMapSyncRunResponse": {
-        "properties": {
-          "config_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Config Error"
-          },
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "counterstrikesharp_install_action": {
-            "title": "Counterstrikesharp Install Action",
-            "type": "string"
-          },
-          "counterstrikesharp_installed": {
-            "title": "Counterstrikesharp Installed",
-            "type": "boolean"
-          },
-          "custom_sync": {
-            "$ref": "#/components/schemas/CustomMapSyncResponse"
-          },
-          "map_count": {
-            "title": "Map Count",
-            "type": "integer"
-          },
-          "mapchooser_installed": {
-            "title": "Mapchooser Installed",
-            "type": "boolean"
-          },
-          "mapchooser_plugin_path": {
-            "title": "Mapchooser Plugin Path",
-            "type": "string"
-          },
-          "maps": {
-            "items": {
-              "$ref": "#/components/schemas/MapEntryResponse"
-            },
-            "title": "Maps",
-            "type": "array"
-          },
-          "maps_file_exists": {
-            "title": "Maps File Exists",
-            "type": "boolean"
-          },
-          "maps_path": {
-            "title": "Maps Path",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "plugin_center_name": {
-            "title": "Plugin Center Name",
-            "type": "string"
-          },
-          "plugin_center_url": {
-            "title": "Plugin Center Url",
-            "type": "string"
-          },
-          "plugin_config_file_exists": {
-            "title": "Plugin Config File Exists",
-            "type": "boolean"
-          },
-          "plugin_config_path": {
-            "title": "Plugin Config Path",
-            "type": "string"
-          },
-          "ready": {
-            "title": "Ready",
-            "type": "boolean"
-          },
-          "revision": {
-            "title": "Revision",
-            "type": "string"
-          }
-        },
-        "required": [
-          "counterstrikesharp_installed",
-          "mapchooser_installed",
-          "maps_file_exists",
-          "plugin_config_file_exists",
-          "ready",
-          "plugin_center_name",
-          "plugin_center_url",
-          "counterstrikesharp_install_action",
-          "maps_path",
-          "plugin_config_path",
-          "mapchooser_plugin_path",
-          "content",
-          "revision",
-          "maps",
-          "map_count",
-          "custom_sync",
-          "message"
-        ],
-        "title": "CustomMapSyncRunResponse",
         "type": "object"
       },
       "CustomMapSyncUpdateRequest": {
@@ -1280,53 +822,6 @@
           "url"
         ],
         "title": "CustomMapSyncUpdateRequest",
-        "type": "object"
-      },
-      "DependencyInfo": {
-        "description": "Schema for dependency information",
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title"
-        ],
-        "title": "DependencyInfo",
-        "type": "object"
-      },
-      "DeploymentCheckResponse": {
-        "properties": {
-          "binary_path": {
-            "title": "Binary Path",
-            "type": "string"
-          },
-          "error": {
-            "title": "Error",
-            "type": "boolean"
-          },
-          "is_deployed": {
-            "title": "Is Deployed",
-            "type": "boolean"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "is_deployed",
-          "binary_path",
-          "message",
-          "error"
-        ],
-        "title": "DeploymentCheckResponse",
         "type": "object"
       },
       "DeploymentLogResponse": {
@@ -1384,30 +879,6 @@
           "created_at"
         ],
         "title": "DeploymentLogResponse",
-        "type": "object"
-      },
-      "DirectoryCreatedResponse": {
-        "description": "Successful directory creation response.",
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message",
-          "path"
-        ],
-        "title": "DirectoryCreatedResponse",
         "type": "object"
       },
       "DirectoryListResponse": {
@@ -1626,82 +1097,6 @@
         "title": "DiscordTestRequest",
         "type": "object"
       },
-      "DiskSpaceFailureResponse": {
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "server_directory": {
-            "title": "Server Directory",
-            "type": "string"
-          },
-          "success": {
-            "const": false,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message",
-          "server_directory"
-        ],
-        "title": "DiskSpaceFailureResponse",
-        "type": "object"
-      },
-      "DiskSpaceInfo": {
-        "description": "Stable disk-space payload returned by the legacy endpoints.",
-        "properties": {
-          "available_gb": {
-            "title": "Available Gb",
-            "type": "number"
-          },
-          "total_gb": {
-            "title": "Total Gb",
-            "type": "number"
-          },
-          "used_gb": {
-            "title": "Used Gb",
-            "type": "number"
-          },
-          "used_percent": {
-            "title": "Used Percent",
-            "type": "number"
-          }
-        },
-        "required": [
-          "used_gb",
-          "total_gb",
-          "available_gb",
-          "used_percent"
-        ],
-        "title": "DiskSpaceInfo",
-        "type": "object"
-      },
-      "DiskSpaceSuccessResponse": {
-        "properties": {
-          "disk_space": {
-            "$ref": "#/components/schemas/DiskSpaceInfo"
-          },
-          "server_directory": {
-            "title": "Server Directory",
-            "type": "string"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "disk_space",
-          "server_directory"
-        ],
-        "title": "DiskSpaceSuccessResponse",
-        "type": "object"
-      },
       "DownloadTicketRequest": {
         "description": "Create a short-lived browser download ticket",
         "properties": {
@@ -1714,25 +1109,6 @@
           "path"
         ],
         "title": "DownloadTicketRequest",
-        "type": "object"
-      },
-      "DownloadTicketResponse": {
-        "description": "Short-lived one-time download credential.",
-        "properties": {
-          "expires_in": {
-            "title": "Expires In",
-            "type": "integer"
-          },
-          "ticket": {
-            "title": "Ticket",
-            "type": "string"
-          }
-        },
-        "required": [
-          "ticket",
-          "expires_in"
-        ],
-        "title": "DownloadTicketResponse",
         "type": "object"
       },
       "DownloadUrlRequest": {
@@ -1770,104 +1146,6 @@
         "title": "DownloadUrlRequest",
         "type": "object"
       },
-      "DownloadUrlStartedResponse": {
-        "description": "Accepted remote URL download task response.",
-        "properties": {
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          },
-          "target_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Path"
-          },
-          "task_id": {
-            "title": "Task Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "success",
-          "task_id",
-          "status"
-        ],
-        "title": "DownloadUrlStartedResponse",
-        "type": "object"
-      },
-      "DownloadUrlStatusResponse": {
-        "description": "Current state of a remote URL download task.",
-        "properties": {
-          "elapsed_seconds": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Elapsed Seconds"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "target_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Path"
-          },
-          "task_id": {
-            "title": "Task Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "status"
-        ],
-        "title": "DownloadUrlStatusResponse",
-        "type": "object"
-      },
       "EmailTestRequest": {
         "description": "Schema for email test request",
         "properties": {
@@ -1882,48 +1160,6 @@
           "test_email"
         ],
         "title": "EmailTestRequest",
-        "type": "object"
-      },
-      "EmailTestResponse": {
-        "description": "Successful test-email delivery response.",
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message"
-        ],
-        "title": "EmailTestResponse",
-        "type": "object"
-      },
-      "ErrorResponse": {
-        "description": "Compatibility error body used by existing JSON endpoints.",
-        "properties": {
-          "detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "additionalProperties": true,
-                "type": "object"
-              }
-            ],
-            "title": "Detail"
-          }
-        },
-        "required": [
-          "detail"
-        ],
-        "title": "ErrorResponse",
         "type": "object"
       },
       "ExtractArchiveRequest": {
@@ -1972,137 +1208,6 @@
         "title": "ExtractArchiveRequest",
         "type": "object"
       },
-      "ExtractionStartedResponse": {
-        "description": "Accepted extraction task response.",
-        "properties": {
-          "destination": {
-            "title": "Destination",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          },
-          "task_id": {
-            "title": "Task Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "success",
-          "message",
-          "task_id",
-          "status",
-          "destination"
-        ],
-        "title": "ExtractionStartedResponse",
-        "type": "object"
-      },
-      "ExtractionStatusResponse": {
-        "description": "Current state of an extraction task.",
-        "properties": {
-          "archive_path": {
-            "title": "Archive Path",
-            "type": "string"
-          },
-          "destination_path": {
-            "title": "Destination Path",
-            "type": "string"
-          },
-          "elapsed_seconds": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Elapsed Seconds"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message"
-          },
-          "source_folder": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Folder"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "strip_source_folder": {
-            "title": "Strip Source Folder",
-            "type": "boolean"
-          },
-          "task_id": {
-            "title": "Task Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "status",
-          "archive_path",
-          "destination_path",
-          "strip_source_folder"
-        ],
-        "title": "ExtractionStatusResponse",
-        "type": "object"
-      },
-      "FileActionResponse": {
-        "description": "Success envelope for file operations without additional data.",
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message"
-        ],
-        "title": "FileActionResponse",
-        "type": "object"
-      },
       "FileContentRequest": {
         "description": "File content update request",
         "properties": {
@@ -2115,25 +1220,6 @@
           "content"
         ],
         "title": "FileContentRequest",
-        "type": "object"
-      },
-      "FileContentResponse": {
-        "description": "Editable text-file content response.",
-        "properties": {
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "path": {
-            "title": "Path",
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "content"
-        ],
-        "title": "FileContentResponse",
         "type": "object"
       },
       "FileInfo": {
@@ -2178,59 +1264,6 @@
           "is_symlink"
         ],
         "title": "FileInfo",
-        "type": "object"
-      },
-      "FileRenamedResponse": {
-        "description": "Successful rename response.",
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "new_path": {
-            "title": "New Path",
-            "type": "string"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message",
-          "new_path"
-        ],
-        "title": "FileRenamedResponse",
-        "type": "object"
-      },
-      "FileUploadResponse": {
-        "description": "Successful upload response.",
-        "properties": {
-          "filename": {
-            "title": "Filename",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message",
-          "path",
-          "filename"
-        ],
-        "title": "FileUploadResponse",
         "type": "object"
       },
       "ForgotPasswordRequest": {
@@ -2734,31 +1767,6 @@
         "title": "GmailCredentialsUploadRequest",
         "type": "object"
       },
-      "GoogleConfigResponse": {
-        "description": "Public Google OAuth configuration.",
-        "properties": {
-          "client_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Id"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "GoogleConfigResponse",
-        "type": "object"
-      },
       "GoogleOAuthRequest": {
         "description": "Schema for Google OAuth login/register",
         "properties": {
@@ -2816,46 +1824,6 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
-      "HealthResponse": {
-        "properties": {
-          "database": {
-            "enum": [
-              "connected",
-              "disconnected"
-            ],
-            "title": "Database",
-            "type": "string"
-          },
-          "redis": {
-            "enum": [
-              "connected",
-              "disconnected"
-            ],
-            "title": "Redis",
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "healthy",
-              "degraded"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "database",
-          "redis",
-          "version"
-        ],
-        "title": "HealthResponse",
-        "type": "object"
-      },
       "InspectArchiveRequest": {
         "description": "Inspect folders contained in a remote archive.",
         "properties": {
@@ -2868,25 +1836,6 @@
           "archive_path"
         ],
         "title": "InspectArchiveRequest",
-        "type": "object"
-      },
-      "LivenessResponse": {
-        "properties": {
-          "status": {
-            "const": "alive",
-            "title": "Status",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "version"
-        ],
-        "title": "LivenessResponse",
         "type": "object"
       },
       "ManagedPluginCreate": {
@@ -3396,107 +2345,6 @@
         "title": "MapAddRequest",
         "type": "object"
       },
-      "MapAddResponse": {
-        "properties": {
-          "added_map": {
-            "$ref": "#/components/schemas/AddedMapResponse"
-          },
-          "config_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Config Error"
-          },
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "counterstrikesharp_install_action": {
-            "title": "Counterstrikesharp Install Action",
-            "type": "string"
-          },
-          "counterstrikesharp_installed": {
-            "title": "Counterstrikesharp Installed",
-            "type": "boolean"
-          },
-          "mapchooser_installed": {
-            "title": "Mapchooser Installed",
-            "type": "boolean"
-          },
-          "mapchooser_plugin_path": {
-            "title": "Mapchooser Plugin Path",
-            "type": "string"
-          },
-          "maps": {
-            "items": {
-              "$ref": "#/components/schemas/MapEntryResponse"
-            },
-            "title": "Maps",
-            "type": "array"
-          },
-          "maps_file_exists": {
-            "title": "Maps File Exists",
-            "type": "boolean"
-          },
-          "maps_path": {
-            "title": "Maps Path",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "plugin_center_name": {
-            "title": "Plugin Center Name",
-            "type": "string"
-          },
-          "plugin_center_url": {
-            "title": "Plugin Center Url",
-            "type": "string"
-          },
-          "plugin_config_file_exists": {
-            "title": "Plugin Config File Exists",
-            "type": "boolean"
-          },
-          "plugin_config_path": {
-            "title": "Plugin Config Path",
-            "type": "string"
-          },
-          "ready": {
-            "title": "Ready",
-            "type": "boolean"
-          },
-          "revision": {
-            "title": "Revision",
-            "type": "string"
-          }
-        },
-        "required": [
-          "counterstrikesharp_installed",
-          "mapchooser_installed",
-          "maps_file_exists",
-          "plugin_config_file_exists",
-          "ready",
-          "plugin_center_name",
-          "plugin_center_url",
-          "counterstrikesharp_install_action",
-          "maps_path",
-          "plugin_config_path",
-          "mapchooser_plugin_path",
-          "content",
-          "revision",
-          "maps",
-          "added_map",
-          "message"
-        ],
-        "title": "MapAddResponse",
-        "type": "object"
-      },
       "MapChooserUninstallRequest": {
         "properties": {
           "confirmation": {
@@ -3575,54 +2423,6 @@
         "title": "MapEnabledUpdateRequest",
         "type": "object"
       },
-      "MapEntryResponse": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "filename": {
-            "title": "Filename",
-            "type": "string"
-          },
-          "min_players": {
-            "title": "Min Players",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "only_nominate": {
-            "title": "Only Nominate",
-            "type": "boolean"
-          },
-          "restricted_times": {
-            "title": "Restricted Times",
-            "type": "string"
-          },
-          "updated_name": {
-            "title": "Updated Name",
-            "type": "string"
-          },
-          "workshop_id": {
-            "title": "Workshop Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "workshop_id",
-          "enabled",
-          "filename",
-          "updated_name",
-          "min_players",
-          "only_nominate",
-          "restricted_times"
-        ],
-        "title": "MapEntryResponse",
-        "type": "object"
-      },
       "MapIdentityRequest": {
         "properties": {
           "expected_revision": {
@@ -3689,128 +2489,6 @@
           "expected_revision"
         ],
         "title": "MapPresetApplyRequest",
-        "type": "object"
-      },
-      "MapPresetResponse": {
-        "properties": {
-          "config_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Config Error"
-          },
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "counterstrikesharp_install_action": {
-            "title": "Counterstrikesharp Install Action",
-            "type": "string"
-          },
-          "counterstrikesharp_installed": {
-            "title": "Counterstrikesharp Installed",
-            "type": "boolean"
-          },
-          "map_count": {
-            "title": "Map Count",
-            "type": "integer"
-          },
-          "mapchooser_installed": {
-            "title": "Mapchooser Installed",
-            "type": "boolean"
-          },
-          "mapchooser_plugin_path": {
-            "title": "Mapchooser Plugin Path",
-            "type": "string"
-          },
-          "maps": {
-            "items": {
-              "$ref": "#/components/schemas/MapEntryResponse"
-            },
-            "title": "Maps",
-            "type": "array"
-          },
-          "maps_file_exists": {
-            "title": "Maps File Exists",
-            "type": "boolean"
-          },
-          "maps_path": {
-            "title": "Maps Path",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "plugin_center_name": {
-            "title": "Plugin Center Name",
-            "type": "string"
-          },
-          "plugin_center_url": {
-            "title": "Plugin Center Url",
-            "type": "string"
-          },
-          "plugin_config": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PluginConfigResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "plugin_config_file_exists": {
-            "title": "Plugin Config File Exists",
-            "type": "boolean"
-          },
-          "plugin_config_path": {
-            "title": "Plugin Config Path",
-            "type": "string"
-          },
-          "preset": {
-            "enum": [
-              "official",
-              "kz",
-              "ze"
-            ],
-            "title": "Preset",
-            "type": "string"
-          },
-          "ready": {
-            "title": "Ready",
-            "type": "boolean"
-          },
-          "revision": {
-            "title": "Revision",
-            "type": "string"
-          }
-        },
-        "required": [
-          "counterstrikesharp_installed",
-          "mapchooser_installed",
-          "maps_file_exists",
-          "plugin_config_file_exists",
-          "ready",
-          "plugin_center_name",
-          "plugin_center_url",
-          "counterstrikesharp_install_action",
-          "maps_path",
-          "plugin_config_path",
-          "mapchooser_plugin_path",
-          "content",
-          "revision",
-          "maps",
-          "preset",
-          "map_count",
-          "message"
-        ],
-        "title": "MapPresetResponse",
         "type": "object"
       },
       "MarketPluginCreate": {
@@ -4253,97 +2931,6 @@
         "title": "MarketPluginUpdate",
         "type": "object"
       },
-      "MetamodStatusResponse": {
-        "description": "Schema for metamod installation status",
-        "properties": {
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "installed": {
-            "title": "Installed",
-            "type": "boolean"
-          },
-          "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message"
-          },
-          "path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Path"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "installed"
-        ],
-        "title": "MetamodStatusResponse",
-        "type": "object"
-      },
-      "MonitoringLogResponse": {
-        "description": "One Redis-backed monitoring event.",
-        "properties": {
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "event_type": {
-            "title": "Event Type",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "server_id": {
-            "title": "Server Id",
-            "type": "integer"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "server_id",
-          "event_type",
-          "status",
-          "message",
-          "created_at"
-        ],
-        "title": "MonitoringLogResponse",
-        "type": "object"
-      },
       "PasswordReset": {
         "description": "Schema for password reset",
         "properties": {
@@ -4386,24 +2973,6 @@
           "captcha_code"
         ],
         "title": "PasswordReset",
-        "type": "object"
-      },
-      "PingResponse": {
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "message"
-        ],
-        "title": "PingResponse",
         "type": "object"
       },
       "PluginAutoUpdateResponse": {
@@ -4461,102 +3030,6 @@
           "plugin_update_check_interval_hours"
         ],
         "title": "PluginAutoUpdateSettings",
-        "type": "object"
-      },
-      "PluginConfigResponse": {
-        "properties": {
-          "config_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Config Error"
-          },
-          "counterstrikesharp_install_action": {
-            "title": "Counterstrikesharp Install Action",
-            "type": "string"
-          },
-          "counterstrikesharp_installed": {
-            "title": "Counterstrikesharp Installed",
-            "type": "boolean"
-          },
-          "fields": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Fields",
-            "type": "array"
-          },
-          "mapchooser_installed": {
-            "title": "Mapchooser Installed",
-            "type": "boolean"
-          },
-          "mapchooser_plugin_path": {
-            "title": "Mapchooser Plugin Path",
-            "type": "string"
-          },
-          "maps_file_exists": {
-            "title": "Maps File Exists",
-            "type": "boolean"
-          },
-          "maps_path": {
-            "title": "Maps Path",
-            "type": "string"
-          },
-          "plugin_center_name": {
-            "title": "Plugin Center Name",
-            "type": "string"
-          },
-          "plugin_center_url": {
-            "title": "Plugin Center Url",
-            "type": "string"
-          },
-          "plugin_config_file_exists": {
-            "title": "Plugin Config File Exists",
-            "type": "boolean"
-          },
-          "plugin_config_path": {
-            "title": "Plugin Config Path",
-            "type": "string"
-          },
-          "ready": {
-            "title": "Ready",
-            "type": "boolean"
-          },
-          "revision": {
-            "title": "Revision",
-            "type": "string"
-          },
-          "unsupported_fields": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Unsupported Fields",
-            "type": "array"
-          }
-        },
-        "required": [
-          "counterstrikesharp_installed",
-          "mapchooser_installed",
-          "maps_file_exists",
-          "plugin_config_file_exists",
-          "ready",
-          "plugin_center_name",
-          "plugin_center_url",
-          "counterstrikesharp_install_action",
-          "maps_path",
-          "plugin_config_path",
-          "mapchooser_plugin_path",
-          "revision",
-          "fields",
-          "unsupported_fields"
-        ],
-        "title": "PluginConfigResponse",
         "type": "object"
       },
       "PluginConfigUpdateRequest": {
@@ -4634,64 +3107,6 @@
           "message"
         ],
         "title": "PluginUninstallResponse",
-        "type": "object"
-      },
-      "ReadinessResponse": {
-        "properties": {
-          "database": {
-            "enum": [
-              "connected",
-              "disconnected"
-            ],
-            "title": "Database",
-            "type": "string"
-          },
-          "migrations": {
-            "enum": [
-              "current",
-              "outdated"
-            ],
-            "title": "Migrations",
-            "type": "string"
-          },
-          "redis": {
-            "enum": [
-              "connected",
-              "disconnected"
-            ],
-            "title": "Redis",
-            "type": "string"
-          },
-          "runtime": {
-            "enum": [
-              "ready",
-              "not_ready"
-            ],
-            "title": "Runtime",
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "ready",
-              "not_ready"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "database",
-          "redis",
-          "migrations",
-          "runtime",
-          "version"
-        ],
-        "title": "ReadinessResponse",
         "type": "object"
       },
       "RedisServerDetail": {
@@ -4878,61 +3293,6 @@
         "title": "S3BackupItem",
         "type": "object"
       },
-      "S3ConnectionTestResponse": {
-        "description": "Result of probing the saved S3-compatible storage configuration.",
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "steps": {
-            "items": {
-              "$ref": "#/components/schemas/S3ConnectionTestStep"
-            },
-            "title": "Steps",
-            "type": "array"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message",
-          "steps"
-        ],
-        "title": "S3ConnectionTestResponse",
-        "type": "object"
-      },
-      "S3ConnectionTestStep": {
-        "description": "One stage of the saved S3 configuration probe.",
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "success",
-              "failed"
-            ],
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "status",
-          "message"
-        ],
-        "title": "S3ConnectionTestStep",
-        "type": "object"
-      },
       "S3RestoreRequest": {
         "description": "Schema for restoring a selected S3 backup",
         "properties": {
@@ -4947,47 +3307,6 @@
           "object_key"
         ],
         "title": "S3RestoreRequest",
-        "type": "object"
-      },
-      "S3RestoreResponse": {
-        "description": "Result of restoring one validated backup object to a game server.",
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "remote_archive_path": {
-            "title": "Remote Archive Path",
-            "type": "string"
-          },
-          "restored_from": {
-            "title": "Restored From",
-            "type": "string"
-          },
-          "safety_backup": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Safety Backup"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message",
-          "restored_from",
-          "remote_archive_path"
-        ],
-        "title": "S3RestoreResponse",
         "type": "object"
       },
       "S3SettingsResponse": {
@@ -5214,153 +3533,6 @@
         "title": "S3SettingsUpdate",
         "type": "object"
       },
-      "SSHConnectionPoolStats": {
-        "description": "Non-sensitive aggregate connection-pool statistics.",
-        "properties": {
-          "alive_connections": {
-            "title": "Alive Connections",
-            "type": "integer"
-          },
-          "available_capacity": {
-            "title": "Available Capacity",
-            "type": "integer"
-          },
-          "idle_connections": {
-            "title": "Idle Connections",
-            "type": "integer"
-          },
-          "idle_timeout": {
-            "title": "Idle Timeout",
-            "type": "integer"
-          },
-          "in_use_connections": {
-            "title": "In Use Connections",
-            "type": "integer"
-          },
-          "max_connections": {
-            "title": "Max Connections",
-            "type": "integer"
-          },
-          "max_lifetime": {
-            "title": "Max Lifetime",
-            "type": "integer"
-          },
-          "total_connections": {
-            "title": "Total Connections",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "total_connections",
-          "alive_connections",
-          "in_use_connections",
-          "idle_connections",
-          "idle_timeout",
-          "max_lifetime",
-          "max_connections",
-          "available_capacity"
-        ],
-        "title": "SSHConnectionPoolStats",
-        "type": "object"
-      },
-      "SSHConnectionPoolStatsResponse": {
-        "properties": {
-          "pool_stats": {
-            "$ref": "#/components/schemas/SSHConnectionPoolStats"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "pool_stats"
-        ],
-        "title": "SSHConnectionPoolStatsResponse",
-        "type": "object"
-      },
-      "SSHHostKeyConfirmRequest": {
-        "description": "Host key identity a user has explicitly chosen to trust.",
-        "properties": {
-          "algorithm": {
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Algorithm",
-            "type": "string"
-          },
-          "fingerprint": {
-            "maxLength": 128,
-            "minLength": 16,
-            "title": "Fingerprint",
-            "type": "string"
-          }
-        },
-        "required": [
-          "algorithm",
-          "fingerprint"
-        ],
-        "title": "SSHHostKeyConfirmRequest",
-        "type": "object"
-      },
-      "SSHHostKeyResponse": {
-        "description": "Public SSH host-key metadata and pin state.",
-        "properties": {
-          "algorithm": {
-            "title": "Algorithm",
-            "type": "string"
-          },
-          "configured": {
-            "default": false,
-            "title": "Configured",
-            "type": "boolean"
-          },
-          "fingerprint": {
-            "title": "Fingerprint",
-            "type": "string"
-          },
-          "matches_configured": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Matches Configured"
-          }
-        },
-        "required": [
-          "algorithm",
-          "fingerprint"
-        ],
-        "title": "SSHHostKeyResponse",
-        "type": "object"
-      },
-      "SSHHostKeyScanRequest": {
-        "description": "Inspect a host key without sending SSH credentials.",
-        "properties": {
-          "host": {
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Host",
-            "type": "string"
-          },
-          "ssh_port": {
-            "default": 22,
-            "maximum": 65535.0,
-            "minimum": 1.0,
-            "title": "Ssh Port",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "host"
-        ],
-        "title": "SSHHostKeyScanRequest",
-        "type": "object"
-      },
       "ScheduledTaskCreate": {
         "description": "Schema for creating a scheduled task",
         "properties": {
@@ -5402,26 +3574,6 @@
           "schedule_value"
         ],
         "title": "ScheduledTaskCreate",
-        "type": "object"
-      },
-      "ScheduledTaskDeleteResponse": {
-        "description": "Successful scheduled-task deletion response.",
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message"
-        ],
-        "title": "ScheduledTaskDeleteResponse",
         "type": "object"
       },
       "ScheduledTaskResponse": {
@@ -5615,50 +3767,6 @@
           "action"
         ],
         "title": "ServerAction",
-        "type": "object"
-      },
-      "ServerAgentConfigResponse": {
-        "description": "Configuration fields which a server agent may read.",
-        "properties": {
-          "default_map": {
-            "title": "Default Map",
-            "type": "string"
-          },
-          "game_mode": {
-            "title": "Game Mode",
-            "type": "string"
-          },
-          "game_port": {
-            "title": "Game Port",
-            "type": "integer"
-          },
-          "game_type": {
-            "title": "Game Type",
-            "type": "string"
-          },
-          "max_players": {
-            "title": "Max Players",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "server_id": {
-            "title": "Server Id",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "server_id",
-          "name",
-          "game_port",
-          "default_map",
-          "max_players",
-          "game_mode",
-          "game_type"
-        ],
-        "title": "ServerAgentConfigResponse",
         "type": "object"
       },
       "ServerCreate": {
@@ -5961,38 +4069,6 @@
             "title": "Session Manager",
             "type": "string"
           },
-          "ssh_host_key_algorithm": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Algorithm"
-          },
-          "ssh_host_key_confirmed": {
-            "default": false,
-            "description": "User explicitly confirmed the freshly scanned SSH host key",
-            "title": "Ssh Host Key Confirmed",
-            "type": "boolean"
-          },
-          "ssh_host_key_fingerprint": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 16,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Fingerprint"
-          },
           "ssh_password": {
             "description": "SSH password (required)",
             "minLength": 1,
@@ -6056,7 +4132,7 @@
           },
           "update_check_interval_hours": {
             "default": 1.0,
-            "description": "Hours between version checks (0.0167-24, where 0.0167\u22481 minute)",
+            "description": "Hours between version checks (0.0167-24, where 0.0167≈1 minute)",
             "maximum": 24.0,
             "minimum": 0.0167,
             "title": "Update Check Interval Hours",
@@ -6080,8 +4156,8 @@
         "title": "ServerCreate",
         "type": "object"
       },
-      "ServerCreatedResponse": {
-        "description": "Server response which reveals its agent API key exactly once at creation.",
+      "ServerResponse": {
+        "description": "Schema for server response (password authentication only)",
         "properties": {
           "a2s_check_interval_seconds": {
             "title": "A2S Check Interval Seconds",
@@ -6125,12 +4201,15 @@
             "title": "Additional Parameters"
           },
           "api_key": {
-            "title": "Api Key",
-            "type": "string"
-          },
-          "api_key_configured": {
-            "title": "Api Key Configured",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
           },
           "auto_clear_crash_hours": {
             "anyOf": [
@@ -6351,9 +4430,16 @@
             "title": "Plugin Update Check Interval Hours",
             "type": "number"
           },
-          "rcon_password_configured": {
-            "title": "Rcon Password Configured",
-            "type": "boolean"
+          "rcon_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rcon Password"
           },
           "restart_required": {
             "default": false,
@@ -6364,9 +4450,16 @@
             "title": "Server Name",
             "type": "string"
           },
-          "server_password_configured": {
-            "title": "Server Password Configured",
-            "type": "boolean"
+          "server_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Password"
           },
           "session_manager": {
             "default": "tmux",
@@ -6376,28 +4469,6 @@
             ],
             "title": "Session Manager",
             "type": "string"
-          },
-          "ssh_host_key_algorithm": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Algorithm"
-          },
-          "ssh_host_key_fingerprint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Fingerprint"
           },
           "ssh_port": {
             "title": "Ssh Port",
@@ -6410,9 +4481,16 @@
           "status": {
             "$ref": "#/components/schemas/ServerStatus"
           },
-          "steam_account_token_configured": {
-            "title": "Steam Account Token Configured",
-            "type": "boolean"
+          "steam_account_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steam Account Token"
           },
           "tv_enable": {
             "title": "Tv Enable",
@@ -6460,414 +4538,11 @@
           "created_at",
           "updated_at",
           "server_name",
-          "server_password_configured",
-          "rcon_password_configured",
-          "steam_account_token_configured",
           "default_map",
           "max_players",
           "game_mode",
           "game_type",
           "tv_enable",
-          "api_key_configured",
-          "enable_panel_monitoring",
-          "monitor_interval_seconds",
-          "auto_restart_on_crash",
-          "enable_a2s_monitoring",
-          "a2s_failure_threshold",
-          "a2s_check_interval_seconds",
-          "enable_auto_update",
-          "update_check_interval_hours",
-          "use_panel_proxy",
-          "api_key"
-        ],
-        "title": "ServerCreatedResponse",
-        "type": "object"
-      },
-      "ServerDetail": {
-        "description": "Secret-free detailed server representation.",
-        "properties": {
-          "a2s_check_interval_seconds": {
-            "title": "A2S Check Interval Seconds",
-            "type": "integer"
-          },
-          "a2s_failure_threshold": {
-            "title": "A2S Failure Threshold",
-            "type": "integer"
-          },
-          "a2s_query_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "A2S Query Host"
-          },
-          "a2s_query_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "A2S Query Port"
-          },
-          "additional_parameters": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Additional Parameters"
-          },
-          "api_key_configured": {
-            "title": "Api Key Configured",
-            "type": "boolean"
-          },
-          "auto_clear_crash_hours": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Auto Clear Crash Hours"
-          },
-          "auto_restart_on_crash": {
-            "title": "Auto Restart On Crash",
-            "type": "boolean"
-          },
-          "backend_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Backend Url"
-          },
-          "client_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Port"
-          },
-          "cpu_affinity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cpu Affinity"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "current_game_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Current Game Version"
-          },
-          "default_map": {
-            "title": "Default Map",
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "enable_a2s_monitoring": {
-            "title": "Enable A2S Monitoring",
-            "type": "boolean"
-          },
-          "enable_auto_update": {
-            "title": "Enable Auto Update",
-            "type": "boolean"
-          },
-          "enable_panel_monitoring": {
-            "title": "Enable Panel Monitoring",
-            "type": "boolean"
-          },
-          "enable_plugin_auto_update": {
-            "default": false,
-            "title": "Enable Plugin Auto Update",
-            "type": "boolean"
-          },
-          "game_directory": {
-            "title": "Game Directory",
-            "type": "string"
-          },
-          "game_mode": {
-            "title": "Game Mode",
-            "type": "string"
-          },
-          "game_port": {
-            "title": "Game Port",
-            "type": "integer"
-          },
-          "game_type": {
-            "title": "Game Type",
-            "type": "string"
-          },
-          "github_proxy": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Github Proxy"
-          },
-          "host": {
-            "title": "Host",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "ip_address": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ip Address"
-          },
-          "last_deployed": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Deployed"
-          },
-          "last_plugin_update_check": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Plugin Update Check"
-          },
-          "last_status_check": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Status Check"
-          },
-          "last_update_check": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Update Check"
-          },
-          "last_update_time": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Update Time"
-          },
-          "max_players": {
-            "title": "Max Players",
-            "type": "integer"
-          },
-          "monitor_interval_seconds": {
-            "title": "Monitor Interval Seconds",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "plugin_update_check_interval_hours": {
-            "default": 1.0,
-            "title": "Plugin Update Check Interval Hours",
-            "type": "number"
-          },
-          "rcon_password_configured": {
-            "title": "Rcon Password Configured",
-            "type": "boolean"
-          },
-          "restart_required": {
-            "default": false,
-            "title": "Restart Required",
-            "type": "boolean"
-          },
-          "server_name": {
-            "title": "Server Name",
-            "type": "string"
-          },
-          "server_password_configured": {
-            "title": "Server Password Configured",
-            "type": "boolean"
-          },
-          "session_manager": {
-            "default": "tmux",
-            "enum": [
-              "screen",
-              "tmux"
-            ],
-            "title": "Session Manager",
-            "type": "string"
-          },
-          "ssh_host_key_algorithm": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Algorithm"
-          },
-          "ssh_host_key_fingerprint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Fingerprint"
-          },
-          "ssh_port": {
-            "title": "Ssh Port",
-            "type": "integer"
-          },
-          "ssh_user": {
-            "title": "Ssh User",
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ServerStatus"
-          },
-          "steam_account_token_configured": {
-            "title": "Steam Account Token Configured",
-            "type": "boolean"
-          },
-          "tv_enable": {
-            "title": "Tv Enable",
-            "type": "boolean"
-          },
-          "tv_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tv Port"
-          },
-          "update_check_interval_hours": {
-            "title": "Update Check Interval Hours",
-            "type": "number"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "use_panel_proxy": {
-            "title": "Use Panel Proxy",
-            "type": "boolean"
-          },
-          "user_id": {
-            "title": "User Id",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "user_id",
-          "name",
-          "host",
-          "ssh_port",
-          "ssh_user",
-          "game_port",
-          "game_directory",
-          "status",
-          "created_at",
-          "updated_at",
-          "server_name",
-          "server_password_configured",
-          "rcon_password_configured",
-          "steam_account_token_configured",
-          "default_map",
-          "max_players",
-          "game_mode",
-          "game_type",
-          "tv_enable",
-          "api_key_configured",
           "enable_panel_monitoring",
           "monitor_interval_seconds",
           "auto_restart_on_crash",
@@ -6878,7 +4553,7 @@
           "update_check_interval_hours",
           "use_panel_proxy"
         ],
-        "title": "ServerDetail",
+        "title": "ServerResponse",
         "type": "object"
       },
       "ServerResponseWithUser": {
@@ -6925,9 +4600,16 @@
             ],
             "title": "Additional Parameters"
           },
-          "api_key_configured": {
-            "title": "Api Key Configured",
-            "type": "boolean"
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
           },
           "auto_clear_crash_hours": {
             "anyOf": [
@@ -7148,9 +4830,16 @@
             "title": "Plugin Update Check Interval Hours",
             "type": "number"
           },
-          "rcon_password_configured": {
-            "title": "Rcon Password Configured",
-            "type": "boolean"
+          "rcon_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rcon Password"
           },
           "restart_required": {
             "default": false,
@@ -7161,9 +4850,16 @@
             "title": "Server Name",
             "type": "string"
           },
-          "server_password_configured": {
-            "title": "Server Password Configured",
-            "type": "boolean"
+          "server_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Password"
           },
           "session_manager": {
             "default": "tmux",
@@ -7173,28 +4869,6 @@
             ],
             "title": "Session Manager",
             "type": "string"
-          },
-          "ssh_host_key_algorithm": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Algorithm"
-          },
-          "ssh_host_key_fingerprint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Fingerprint"
           },
           "ssh_port": {
             "title": "Ssh Port",
@@ -7207,9 +4881,16 @@
           "status": {
             "$ref": "#/components/schemas/ServerStatus"
           },
-          "steam_account_token_configured": {
-            "title": "Steam Account Token Configured",
-            "type": "boolean"
+          "steam_account_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steam Account Token"
           },
           "tv_enable": {
             "title": "Tv Enable",
@@ -7267,15 +4948,11 @@
           "created_at",
           "updated_at",
           "server_name",
-          "server_password_configured",
-          "rcon_password_configured",
-          "steam_account_token_configured",
           "default_map",
           "max_players",
           "game_mode",
           "game_type",
           "tv_enable",
-          "api_key_configured",
           "enable_panel_monitoring",
           "monitor_interval_seconds",
           "auto_restart_on_crash",
@@ -7350,35 +5027,6 @@
               }
             ],
             "title": "Session Id"
-          },
-          "ssh_host_key_algorithm": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Algorithm"
-          },
-          "ssh_host_key_confirmed": {
-            "default": false,
-            "title": "Ssh Host Key Confirmed",
-            "type": "boolean"
-          },
-          "ssh_host_key_fingerprint": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Fingerprint"
           },
           "ssh_password": {
             "title": "Ssh Password",
@@ -7499,7 +5147,6 @@
           "crash_details": {
             "anyOf": [
               {
-                "maxLength": 32768,
                 "type": "string"
               },
               {
@@ -7509,8 +5156,6 @@
             "title": "Crash Details"
           },
           "event_type": {
-            "maxLength": 45,
-            "minLength": 1,
             "title": "Event Type",
             "type": "string"
           },
@@ -7528,7 +5173,6 @@
           "message": {
             "anyOf": [
               {
-                "maxLength": 16384,
                 "type": "string"
               },
               {
@@ -7540,7 +5184,6 @@
           "restart_count": {
             "anyOf": [
               {
-                "minimum": 0.0,
                 "type": "integer"
               },
               {
@@ -7554,437 +5197,6 @@
           "event_type"
         ],
         "title": "ServerStatusReport",
-        "type": "object"
-      },
-      "ServerStatusReportResponse": {
-        "description": "Stable, secret-free acknowledgement returned to a server agent.",
-        "properties": {
-          "current_status": {
-            "$ref": "#/components/schemas/ServerStatus"
-          },
-          "event_type": {
-            "title": "Event Type",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "server_id": {
-            "title": "Server Id",
-            "type": "integer"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message",
-          "server_id",
-          "event_type",
-          "current_status"
-        ],
-        "title": "ServerStatusReportResponse",
-        "type": "object"
-      },
-      "ServerSummary": {
-        "description": "Secret-free list representation.\n\nDuring the compatibility phase this intentionally retains the legacy list\nfields.  Giving the representation a dedicated public type lets a later\nversion reduce list payloads without conflating list and detail contracts.",
-        "properties": {
-          "a2s_check_interval_seconds": {
-            "title": "A2S Check Interval Seconds",
-            "type": "integer"
-          },
-          "a2s_failure_threshold": {
-            "title": "A2S Failure Threshold",
-            "type": "integer"
-          },
-          "a2s_query_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "A2S Query Host"
-          },
-          "a2s_query_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "A2S Query Port"
-          },
-          "additional_parameters": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Additional Parameters"
-          },
-          "api_key_configured": {
-            "title": "Api Key Configured",
-            "type": "boolean"
-          },
-          "auto_clear_crash_hours": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Auto Clear Crash Hours"
-          },
-          "auto_restart_on_crash": {
-            "title": "Auto Restart On Crash",
-            "type": "boolean"
-          },
-          "backend_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Backend Url"
-          },
-          "client_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Port"
-          },
-          "cpu_affinity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cpu Affinity"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "current_game_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Current Game Version"
-          },
-          "default_map": {
-            "title": "Default Map",
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "enable_a2s_monitoring": {
-            "title": "Enable A2S Monitoring",
-            "type": "boolean"
-          },
-          "enable_auto_update": {
-            "title": "Enable Auto Update",
-            "type": "boolean"
-          },
-          "enable_panel_monitoring": {
-            "title": "Enable Panel Monitoring",
-            "type": "boolean"
-          },
-          "enable_plugin_auto_update": {
-            "default": false,
-            "title": "Enable Plugin Auto Update",
-            "type": "boolean"
-          },
-          "game_directory": {
-            "title": "Game Directory",
-            "type": "string"
-          },
-          "game_mode": {
-            "title": "Game Mode",
-            "type": "string"
-          },
-          "game_port": {
-            "title": "Game Port",
-            "type": "integer"
-          },
-          "game_type": {
-            "title": "Game Type",
-            "type": "string"
-          },
-          "github_proxy": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Github Proxy"
-          },
-          "host": {
-            "title": "Host",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "ip_address": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ip Address"
-          },
-          "last_deployed": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Deployed"
-          },
-          "last_plugin_update_check": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Plugin Update Check"
-          },
-          "last_status_check": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Status Check"
-          },
-          "last_update_check": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Update Check"
-          },
-          "last_update_time": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Update Time"
-          },
-          "max_players": {
-            "title": "Max Players",
-            "type": "integer"
-          },
-          "monitor_interval_seconds": {
-            "title": "Monitor Interval Seconds",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "plugin_update_check_interval_hours": {
-            "default": 1.0,
-            "title": "Plugin Update Check Interval Hours",
-            "type": "number"
-          },
-          "rcon_password_configured": {
-            "title": "Rcon Password Configured",
-            "type": "boolean"
-          },
-          "restart_required": {
-            "default": false,
-            "title": "Restart Required",
-            "type": "boolean"
-          },
-          "server_name": {
-            "title": "Server Name",
-            "type": "string"
-          },
-          "server_password_configured": {
-            "title": "Server Password Configured",
-            "type": "boolean"
-          },
-          "session_manager": {
-            "default": "tmux",
-            "enum": [
-              "screen",
-              "tmux"
-            ],
-            "title": "Session Manager",
-            "type": "string"
-          },
-          "ssh_host_key_algorithm": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Algorithm"
-          },
-          "ssh_host_key_fingerprint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ssh Host Key Fingerprint"
-          },
-          "ssh_port": {
-            "title": "Ssh Port",
-            "type": "integer"
-          },
-          "ssh_user": {
-            "title": "Ssh User",
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ServerStatus"
-          },
-          "steam_account_token_configured": {
-            "title": "Steam Account Token Configured",
-            "type": "boolean"
-          },
-          "tv_enable": {
-            "title": "Tv Enable",
-            "type": "boolean"
-          },
-          "tv_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tv Port"
-          },
-          "update_check_interval_hours": {
-            "title": "Update Check Interval Hours",
-            "type": "number"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "use_panel_proxy": {
-            "title": "Use Panel Proxy",
-            "type": "boolean"
-          },
-          "user_id": {
-            "title": "User Id",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "user_id",
-          "name",
-          "host",
-          "ssh_port",
-          "ssh_user",
-          "game_port",
-          "game_directory",
-          "status",
-          "created_at",
-          "updated_at",
-          "server_name",
-          "server_password_configured",
-          "rcon_password_configured",
-          "steam_account_token_configured",
-          "default_map",
-          "max_players",
-          "game_mode",
-          "game_type",
-          "tv_enable",
-          "api_key_configured",
-          "enable_panel_monitoring",
-          "monitor_interval_seconds",
-          "auto_restart_on_crash",
-          "enable_a2s_monitoring",
-          "a2s_failure_threshold",
-          "a2s_check_interval_seconds",
-          "enable_auto_update",
-          "update_check_interval_hours",
-          "use_panel_proxy"
-        ],
-        "title": "ServerSummary",
         "type": "object"
       },
       "ServerUpdate": {
@@ -8480,7 +5692,7 @@
                 "type": "null"
               }
             ],
-            "description": "Hours between version checks (0.0167-24, where 0.0167\u22481 minute)",
+            "description": "Hours between version checks (0.0167-24, where 0.0167≈1 minute)",
             "title": "Update Check Interval Hours"
           },
           "use_panel_proxy": {
@@ -9083,12 +6295,6 @@
           }
         },
         "type": "oauth2"
-      },
-      "ServerAgentApiKey": {
-        "description": "Server API key for authentication",
-        "in": "header",
-        "name": "X-API-Key",
-        "type": "apiKey"
       }
     }
   },
@@ -9145,8 +6351,28 @@
     },
     "/a2s-cache-test": {
       "get": {
-        "description": "Admin-only routing diagnostic for the A2S cache endpoint.",
+        "description": "Test endpoint for a2s-cache - completely public, no auth.",
         "operationId": "test_a2s_cache_a2s_cache_test_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Test A2S Cache",
+        "tags": [
+          "cache"
+        ]
+      }
+    },
+    "/api/auth/api-key": {
+      "delete": {
+        "description": "Revoke (delete) the current user's API key",
+        "operationId": "revoke_api_key_api_auth_api_key_delete",
         "responses": {
           "200": {
             "content": {
@@ -9162,57 +6388,20 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Test A2S Cache",
-        "tags": [
-          "cache"
-        ]
-      }
-    },
-    "/api/auth/api-key": {
-      "delete": {
-        "description": "Revoke (delete) the current user's API key",
-        "operationId": "revoke_api_key_api_auth_api_key_delete",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthMessageResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
         "summary": "Revoke Api Key",
         "tags": [
           "authentication"
         ]
       },
       "get": {
-        "description": "Return configuration metadata without disclosing the stored API key.",
+        "description": "Get current user's API key",
         "operationId": "get_api_key_api_auth_api_key_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiKeyStatusResponse"
+                  "$ref": "#/components/schemas/ApiKeyResponse"
                 }
               }
             },
@@ -9295,22 +6484,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthMessageResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
           },
           "422": {
             "content": {
@@ -9321,16 +6498,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
           }
         },
         "summary": "Forgot Password",
@@ -9364,26 +6531,6 @@
             },
             "description": "Successful Response"
           },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -9393,16 +6540,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -9451,9 +6588,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GoogleConfigResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -9557,9 +6692,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthSuccessResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -9705,22 +6838,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthMessageResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
           },
           "422": {
             "content": {
@@ -9762,32 +6883,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthMessageResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -9820,26 +6919,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -9876,26 +6955,6 @@
             },
             "description": "Successful Response"
           },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -9905,16 +6964,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -9936,32 +6985,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/S3ConnectionTestResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -9983,22 +7010,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthSuccessResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
           }
         },
         "security": [
@@ -10192,16 +7207,6 @@
             },
             "description": "Successful Response"
           },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -10211,16 +7216,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -10720,26 +7715,6 @@
             },
             "description": "Successful Response"
           },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -10749,16 +7724,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -10897,36 +7862,6 @@
             },
             "description": "Successful Response"
           },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -10936,16 +7871,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -11234,32 +8159,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ArchiveAnalysisResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -11270,26 +8173,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -11410,36 +8293,6 @@
             },
             "description": "Successful Response"
           },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -11449,16 +8302,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -11523,32 +8366,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GitHubReleasesResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -11559,16 +8380,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -11783,22 +8594,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScheduledTaskDeleteResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -12007,49 +8806,12 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SSHConnectionPoolStatsResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
         "summary": "Get Ssh Pool Stats",
         "tags": [
           "server-status"
@@ -12058,7 +8820,7 @@
     },
     "/api/server-status/{server_id}/config": {
       "get": {
-        "description": "Get server configuration for the startup script.\n\nThis endpoint can be called by the server to retrieve its configuration\nif needed by the startup script.\n\nArgs:\n    server_id: ID of the server requesting config\n    server: Authenticated server instance (from API key)\nReturns:\n    Server configuration data",
+        "description": "Get server configuration for the startup script.\n\nThis endpoint can be called by the server to retrieve its configuration\nif needed by the startup script.\n\nArgs:\n    server_id: ID of the server requesting config\n    server: Authenticated server instance (from API key)\n    db: Database session\n\nReturns:\n    Server configuration data",
         "operationId": "get_server_config_api_server_status__server_id__config_get",
         "parameters": [
           {
@@ -12069,38 +8831,27 @@
               "title": "Server Id",
               "type": "integer"
             }
+          },
+          {
+            "description": "Server API key for authentication",
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "description": "Server API key for authentication",
+              "title": "X-Api-Key",
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServerAgentConfigResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -12113,11 +8864,6 @@
             "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "ServerAgentApiKey": []
-          }
-        ],
         "summary": "Get Server Config",
         "tags": [
           "server-status"
@@ -12137,6 +8883,17 @@
               "title": "Server Id",
               "type": "integer"
             }
+          },
+          {
+            "description": "Server API key for authentication",
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "description": "Server API key for authentication",
+              "title": "X-Api-Key",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -12153,32 +8910,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServerStatusReportResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -12191,11 +8926,6 @@
             "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "ServerAgentApiKey": []
-          }
-        ],
         "summary": "Report Server Status",
         "tags": [
           "server-status"
@@ -12892,9 +9622,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EmailTestResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -12908,16 +9636,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
           }
         },
         "security": [
@@ -12990,40 +9708,19 @@
     },
     "/health": {
       "get": {
-        "description": "Compatibility health check which always responds with HTTP 200.",
+        "description": "Health check endpoint",
         "operationId": "health_check_health_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
           }
         },
         "summary": "Health Check"
-      }
-    },
-    "/livez": {
-      "get": {
-        "description": "Report that the ASGI process can serve requests without external I/O.",
-        "operationId": "liveness_check_livez_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LivenessResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Liveness Check"
       }
     },
     "/login": {
@@ -13103,35 +9800,6 @@
         "summary": "Profile Page"
       }
     },
-    "/readyz": {
-      "get": {
-        "description": "Require both database and Redis before accepting production traffic.",
-        "operationId": "readiness_check_readyz_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReadinessResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReadinessResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "Readiness Check"
-      }
-    },
     "/register": {
       "get": {
         "description": "Registration page",
@@ -13202,7 +9870,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/ServerSummary"
+                    "$ref": "#/components/schemas/ServerResponse"
                   },
                   "title": "Response List Servers Servers Get",
                   "type": "array"
@@ -13250,31 +9918,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServerCreatedResponse"
+                  "$ref": "#/components/schemas/ServerResponse"
                 }
               }
             },
             "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -13285,16 +9933,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "504": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Gateway Timeout"
           }
         },
         "security": [
@@ -13369,45 +10007,18 @@
     },
     "/servers/a2s-cache": {
       "get": {
-        "description": "Get cached A2S information for servers visible to the authenticated user.\n\nIMPORTANT: This route MUST be defined before /{server_id}/a2s-info\nto avoid path parameter matching conflicts.",
+        "description": "Get cached A2S information for all servers.\n\nCompletely rewritten endpoint with zero dependencies to prevent any 422 errors.\nNo database, no authentication, no validation - just pure data retrieval.\n\nIMPORTANT: This route MUST be defined before /{server_id}/a2s-info\nto avoid path parameter matching conflicts.",
         "operationId": "get_all_servers_a2s_cache_servers_a2s_cache_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/A2SCacheEnvelope"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
         "summary": "Get All Servers A2S Cache",
         "tags": [
           "servers"
@@ -13416,45 +10027,18 @@
     },
     "/servers/a2s-cache-test": {
       "get": {
-        "description": "Admin-only test endpoint used to verify that A2S cache routing works.",
+        "description": "Simple test endpoint to verify routing works.\nThe dependencies=[] explicitly overrides any global router dependencies.\nIf this returns 200 but /a2s-cache returns 422, \nthen the issue is with the a2s-cache endpoint itself.",
         "operationId": "test_a2s_cache_servers_a2s_cache_test_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/A2STestResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
           }
         },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
         "summary": "Test A2S Cache",
         "tags": [
           "servers"
@@ -13766,82 +10350,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PingResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
           }
         },
         "summary": "Ping",
-        "tags": [
-          "servers"
-        ]
-      }
-    },
-    "/servers/ssh-host-key/scan": {
-      "post": {
-        "description": "Scan a prospective server without sending authentication credentials.",
-        "operationId": "scan_new_server_host_key_servers_ssh_host_key_scan_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SSHHostKeyScanRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SSHHostKeyResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
-          "504": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Gateway Timeout"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Scan New Server Host Key",
         "tags": [
           "servers"
         ]
@@ -13906,7 +10421,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServerDetail"
+                  "$ref": "#/components/schemas/ServerResponse"
                 }
               }
             },
@@ -13962,7 +10477,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServerDetail"
+                  "$ref": "#/components/schemas/ServerResponse"
                 }
               }
             },
@@ -14009,32 +10524,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/A2SQueryResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -14045,16 +10538,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -14113,16 +10596,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -14156,7 +10629,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServerDetail"
+                  "$ref": "#/components/schemas/ServerResponse"
                 }
               }
             },
@@ -14203,32 +10676,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeploymentCheckResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -14239,16 +10690,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -14482,32 +10923,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CPUCountResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -14518,16 +10937,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -14694,16 +11103,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -14883,16 +11282,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -15231,40 +11620,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/DiskSpaceSuccessResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/DiskSpaceFailureResponse"
-                    }
-                  ],
-                  "title": "Response Get Server Disk Space Servers  Server Id  Disk Space Get"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -15275,16 +11634,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -15300,7 +11649,7 @@
     },
     "/servers/{server_id}/file-editor-popup": {
       "get": {
-        "description": "Render the editor shell; authenticated JSON APIs load and save content.",
+        "description": "File editor popup window",
         "operationId": "file_editor_popup_servers__server_id__file_editor_popup_get",
         "parameters": [
           {
@@ -15384,52 +11733,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileActionResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -15440,26 +11747,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -15513,36 +11800,6 @@
             },
             "description": "Successful Response"
           },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -15552,16 +11809,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
           }
         },
         "security": [
@@ -15604,52 +11851,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ArchiveInspectionResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -15701,42 +11906,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileContentResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -15747,16 +11920,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
           }
         },
         "security": [
@@ -15806,52 +11969,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileActionResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -15862,26 +11983,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -16006,42 +12107,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadTicketResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -16052,16 +12121,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -16104,42 +12163,10 @@
           "202": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadUrlStartedResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -16150,16 +12177,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -16201,42 +12218,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadUrlStatusResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -16289,42 +12274,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExtractionStartedResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -16376,42 +12329,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExtractionStatusResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -16473,52 +12394,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DirectoryCreatedResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -16529,26 +12408,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -16600,52 +12459,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileRenamedResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -16656,26 +12473,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -16727,62 +12524,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileUploadResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Content Too Large"
           },
           "422": {
             "content": {
@@ -16793,26 +12538,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -17128,41 +12853,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MapAddResponse"
+                  "additionalProperties": true,
+                  "title": "Response Add Map Servers  Server Id  Maps Post",
+                  "type": "object"
                 }
               }
             },
             "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "412": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Precondition Failed"
           },
           "422": {
             "content": {
@@ -17173,26 +12870,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -17398,41 +13075,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CustomMapSyncRunResponse"
+                  "additionalProperties": true,
+                  "title": "Response Run Custom Map Sync Servers  Server Id  Maps Custom Sync Run Post",
+                  "type": "object"
                 }
               }
             },
             "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "412": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Precondition Failed"
           },
           "422": {
             "content": {
@@ -17443,26 +13092,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -17670,41 +13299,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MapPresetResponse"
+                  "additionalProperties": true,
+                  "title": "Response Apply Map Preset Servers  Server Id  Maps Preset Post",
+                  "type": "object"
                 }
               }
             },
             "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "412": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Precondition Failed"
           },
           "422": {
             "content": {
@@ -17715,26 +13316,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "502": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Gateway"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -17816,32 +13397,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MetamodStatusResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -17852,16 +13411,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -17904,15 +13453,8 @@
             "name": "event_type",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Event Type"
+              "title": "Event Type",
+              "type": "string"
             }
           }
         ],
@@ -17920,36 +13462,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/MonitoringLogResponse"
-                  },
-                  "title": "Response Get Monitoring Logs Servers  Server Id  Monitoring Logs Get",
-                  "type": "array"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
           },
           "422": {
             "content": {
@@ -17960,16 +13476,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -18566,26 +14072,6 @@
             },
             "description": "Successful Response"
           },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -18595,16 +14081,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -18647,52 +14123,10 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/S3RestoreResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -18703,16 +14137,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -18853,182 +14277,6 @@
           }
         ],
         "summary": "Get Ssh Health Status",
-        "tags": [
-          "servers"
-        ]
-      }
-    },
-    "/servers/{server_id}/ssh-host-key/confirm": {
-      "post": {
-        "description": "Re-scan and atomically pin the exact key confirmed by the user.",
-        "operationId": "confirm_existing_server_host_key_servers__server_id__ssh_host_key_confirm_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "server_id",
-            "required": true,
-            "schema": {
-              "title": "Server Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SSHHostKeyConfirmRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServerDetail"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
-          "504": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Gateway Timeout"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Confirm Existing Server Host Key",
-        "tags": [
-          "servers"
-        ]
-      }
-    },
-    "/servers/{server_id}/ssh-host-key/scan": {
-      "post": {
-        "description": "Show the live key of an existing server for an explicit trust decision.",
-        "operationId": "scan_existing_server_host_key_servers__server_id__ssh_host_key_scan_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "server_id",
-            "required": true,
-            "schema": {
-              "title": "Server Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SSHHostKeyResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
-          "504": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Gateway Timeout"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Scan Existing Server Host Key",
         "tags": [
           "servers"
         ]

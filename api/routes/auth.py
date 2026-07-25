@@ -12,21 +12,9 @@ from google.oauth2 import id_token
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import get_unit_of_work, resolve_s3_backup_service
-from api.http_resource import ApplicationHTTP, resolve_application_http
-from cs2_manager.core import ErrorResponse, Principal
-from cs2_manager.features.auth import (
-    S3SettingsPatch,
-    S3SettingsRepository,
-    S3SettingsUserNotFoundError,
-    SteamAccountRepository,
-    SteamAccountUserNotFoundError,
-)
-from cs2_manager.infrastructure import UnitOfWork
 from modules import (
     ApiKeyGenerate,
     ApiKeyResponse,
-    ApiKeyStatusResponse,
     ForgotPasswordRequest,
     GenerateServerTokenRequest,
     GenerateServerTokenResponse,
@@ -53,34 +41,15 @@ from modules import (
     settings,
     verify_password_async,
 )
-from modules.auth import get_current_principal
-from modules.schemas.auth import (
-    AuthMessageResponse,
-    AuthSuccessResponse,
-    GoogleConfigResponse,
-    S3ConnectionTestResponse,
-)
 from services.captcha_service import captcha_service
 from services.rate_limit import enforce_rate_limit
-from services.s3_backup_service import (
-    S3BackupService,
-    S3UserConfig,
-    s3_backup_service,
-)
-from services.steam_api_service import SteamAPIService
+from services.s3_backup_service import s3_backup_service
+from services.steam_api_service import steam_api_service
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 
-def _registration_enabled(request: Request) -> bool:
-    app_settings = getattr(request.app.state, "settings", settings)
-    return app_settings.registration_enabled
-
-
-def _build_s3_settings_response(
-    user: S3UserConfig,
-    s3_service: S3BackupService = s3_backup_service,
-) -> S3SettingsResponse:
+def _build_s3_settings_response(user: User) -> S3SettingsResponse:
     return S3SettingsResponse(
         enabled=bool(user.s3_enabled),
         endpoint_url=user.s3_endpoint_url,
@@ -89,39 +58,13 @@ def _build_s3_settings_response(
         access_key_id=user.s3_access_key_id,
         prefix=user.s3_prefix,
         use_ssl=bool(user.s3_use_ssl),
-        retention_count=s3_service.get_retention_count(user),
+        retention_count=s3_backup_service.get_retention_count(user),
         has_secret=bool(user.s3_secret_access_key),
-        is_configured=s3_service.is_configured(user),
+        is_configured=s3_backup_service.is_configured(user),
     )
 
 
-def _uow_session(uow: UnitOfWork) -> AsyncSession:
-    if uow.session is None:
-        raise RuntimeError("Unit of work is not active")
-    return uow.session
-
-
-def _s3_user_not_found(exc: S3SettingsUserNotFoundError) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=str(exc),
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-
-def _steam_user_not_found(exc: SteamAccountUserNotFoundError) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=str(exc),
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-
-@router.get(
-    "/google-config",
-    response_model=GoogleConfigResponse,
-    status_code=status.HTTP_200_OK,
-)
+@router.get("/google-config")
 async def get_google_config():
     """Get Google OAuth configuration (public endpoint)"""
     return {"client_id": settings.GOOGLE_CLIENT_ID, "enabled": bool(settings.GOOGLE_CLIENT_ID)}
@@ -130,11 +73,6 @@ async def get_google_config():
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, request: Request, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
-    if not _registration_enabled(request):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Open registration is disabled",
-        )
     await enforce_rate_limit(request, "register", limit=5, window=3600, identity=user_data.username)
     # Validate CAPTCHA first
     is_valid = await captcha_service.validate_captcha(
@@ -220,12 +158,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_active_
     return current_user
 
 
-@router.post(
-    "/session",
-    response_model=AuthSuccessResponse,
-    status_code=status.HTTP_200_OK,
-    responses={status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse}},
-)
+@router.post("/session")
 async def bootstrap_web_session(
     request: Request,
     response: Response,
@@ -242,12 +175,7 @@ async def bootstrap_web_session(
     return {"success": True}
 
 
-@router.post(
-    "/reset-password",
-    response_model=AuthMessageResponse,
-    status_code=status.HTTP_200_OK,
-    responses={status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse}},
-)
+@router.post("/reset-password")
 async def reset_password(
     password_data: PasswordReset,
     current_user: User = Depends(get_current_active_user),
@@ -338,26 +266,26 @@ async def update_profile(
     return current_user
 
 
-@router.get("/api-key", response_model=ApiKeyStatusResponse)
+@router.get("/api-key", response_model=ApiKeyResponse)
 async def get_api_key(
     current_user: User = Depends(get_current_active_user),
 ):
-    """Return configuration metadata without disclosing the stored API key."""
-    prefix = current_user.api_key_prefix
-    if prefix is None and current_user.api_key:
-        # Temporary compatibility for a row awaiting token backfill.
-        prefix = current_user.api_key[:8]
-    return {
-        "configured": current_user.has_api_key,
-        "prefix": prefix,
-        "created_at": current_user.updated_at if current_user.has_api_key else None,
-    }
+    """Get current user's API key"""
+    if not current_user.api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No API key generated. Please generate one first.",
+        )
+
+    # Note: Using updated_at as a proxy for API key creation time.
+    # This timestamp reflects the last time the user record was updated,
+    # which includes API key generation/regeneration.
+    return {"api_key": current_user.api_key, "created_at": current_user.updated_at}
 
 
 @router.post("/api-key/generate", response_model=ApiKeyResponse)
 async def generate_user_api_key(
     api_key_data: ApiKeyGenerate,
-    response: Response,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -389,30 +317,23 @@ async def generate_user_api_key(
         )
 
     # Update user's API key
-    current_user.set_api_key(new_api_key)
+    current_user.api_key = new_api_key
     await db.commit()
     await db.refresh(current_user)
 
-    response.headers["Cache-Control"] = "no-store"
-    response.headers["Pragma"] = "no-cache"
-    return {"api_key": new_api_key, "created_at": current_user.updated_at}
+    return {"api_key": current_user.api_key, "created_at": current_user.updated_at}
 
 
-@router.delete(
-    "/api-key",
-    response_model=AuthMessageResponse,
-    status_code=status.HTTP_200_OK,
-    responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse}},
-)
+@router.delete("/api-key")
 async def revoke_api_key(
     current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)
 ):
     """Revoke (delete) the current user's API key"""
-    if not current_user.has_api_key:
+    if not current_user.api_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No API key to revoke")
 
     # Remove API key
-    current_user.set_api_key(None)
+    current_user.api_key = None
     await db.commit()
 
     return {"success": True, "message": "API key revoked successfully"}
@@ -441,45 +362,19 @@ async def get_github_token_status(
     return {"has_token": has_token, "token_prefix": token_prefix}
 
 
-@router.get(
-    "/s3-settings",
-    response_model=S3SettingsResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-    },
-)
+@router.get("/s3-settings", response_model=S3SettingsResponse)
 async def get_s3_settings(
-    current_user: Principal = Depends(get_current_principal),
-    uow: UnitOfWork = Depends(get_unit_of_work),
-    s3_service: S3BackupService = Depends(resolve_s3_backup_service),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Get current user's S3 backup settings without revealing the secret key"""
-    repository = S3SettingsRepository(_uow_session(uow))
-    try:
-        configuration = await repository.get_configuration(current_user.id)
-    except S3SettingsUserNotFoundError as exc:
-        raise _s3_user_not_found(exc) from exc
-    await uow.commit()
-    return _build_s3_settings_response(configuration, s3_service)
+    return _build_s3_settings_response(current_user)
 
 
-@router.put(
-    "/s3-settings",
-    response_model=S3SettingsResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-    },
-)
+@router.put("/s3-settings", response_model=S3SettingsResponse)
 async def update_s3_settings(
     settings_data: S3SettingsUpdate,
-    current_user: Principal = Depends(get_current_principal),
-    uow: UnitOfWork = Depends(get_unit_of_work),
-    s3_service: S3BackupService = Depends(resolve_s3_backup_service),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update current user's S3 backup settings"""
     is_valid = await captcha_service.validate_captcha(
@@ -490,73 +385,51 @@ async def update_s3_settings(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
         )
 
-    repository = S3SettingsRepository(_uow_session(uow))
-    try:
-        user = await repository.require_user(current_user.id)
-    except S3SettingsUserNotFoundError as exc:
-        raise _s3_user_not_found(exc) from exc
-    configuration = repository.apply(
-        user,
-        S3SettingsPatch(
-            enabled=settings_data.enabled,
-            endpoint_url=settings_data.endpoint_url,
-            region=settings_data.region,
-            bucket=settings_data.bucket,
-            access_key_id=settings_data.access_key_id,
-            secret_access_key=settings_data.secret_access_key,
-            prefix=settings_data.prefix,
-            use_ssl=settings_data.use_ssl,
-            retention_count=settings_data.retention_count,
-            clear_secret=settings_data.clear_secret,
-        ),
-    )
-    await uow.commit()
-    await s3_service.invalidate_user(current_user.id)
+    if settings_data.enabled is not None:
+        current_user.s3_enabled = settings_data.enabled
+    if settings_data.endpoint_url is not None:
+        current_user.s3_endpoint_url = settings_data.endpoint_url or None
+    if settings_data.region is not None:
+        current_user.s3_region = settings_data.region or None
+    if settings_data.bucket is not None:
+        current_user.s3_bucket = settings_data.bucket or None
+    if settings_data.access_key_id is not None:
+        current_user.s3_access_key_id = settings_data.access_key_id or None
+    if settings_data.prefix is not None:
+        current_user.s3_prefix = settings_data.prefix or None
+    if settings_data.use_ssl is not None:
+        current_user.s3_use_ssl = settings_data.use_ssl
+    if settings_data.retention_count is not None:
+        current_user.s3_retention_count = settings_data.retention_count
 
-    return _build_s3_settings_response(configuration, s3_service)
+    if settings_data.clear_secret:
+        current_user.s3_secret_access_key = None
+    elif (
+        settings_data.secret_access_key is not None
+        and settings_data.secret_access_key.strip() != ""
+    ):
+        current_user.s3_secret_access_key = settings_data.secret_access_key.strip()
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    return _build_s3_settings_response(current_user)
 
 
-@router.post(
-    "/s3-settings/test",
-    response_model=S3ConnectionTestResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-    },
-)
+@router.post("/s3-settings/test")
 async def test_s3_settings(
-    current_user: Principal = Depends(get_current_principal),
-    uow: UnitOfWork = Depends(get_unit_of_work),
-    s3_service: S3BackupService = Depends(resolve_s3_backup_service),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Test the saved S3 backup settings"""
-    repository = S3SettingsRepository(_uow_session(uow))
-    try:
-        configuration = await repository.get_configuration(current_user.id)
-    except S3SettingsUserNotFoundError as exc:
-        raise _s3_user_not_found(exc) from exc
-    await uow.commit()
-    success, message, steps = await s3_service.test_connection(configuration)
+    success, message, steps = await s3_backup_service.test_connection(current_user)
     return {"success": success, "message": message, "steps": steps}
 
 
-@router.post(
-    "/generate-server-token",
-    response_model=GenerateServerTokenResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-    },
-)
+@router.post("/generate-server-token", response_model=GenerateServerTokenResponse)
 async def generate_server_token(
     request_data: GenerateServerTokenRequest,
-    response: Response,
-    outbound_http: ApplicationHTTP = Depends(resolve_application_http),
-    current_user: Principal = Depends(get_current_principal),
-    uow: UnitOfWork = Depends(get_unit_of_work),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Generate a Steam game server login token (GSLT) using user's Steam API key"""
     # Validate CAPTCHA (required for security)
@@ -568,17 +441,8 @@ async def generate_server_token(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
         )
 
-    repository = SteamAccountRepository(_uow_session(uow))
-    try:
-        configuration = await repository.get_configuration(current_user.id)
-    except SteamAccountUserNotFoundError as exc:
-        raise _steam_user_not_found(exc) from exc
-
-    # Release the DB transaction and retain only a detached credential snapshot
-    # before making the comparatively slow Steam API request.
-    await uow.commit()
-
-    if not configuration.steam_api_key:
+    # Check if user has Steam API key set
+    if not current_user.steam_api_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Steam API key not set. Please set your Steam API key in profile settings first.",
@@ -586,33 +450,22 @@ async def generate_server_token(
 
     # Use provided server name or fallback to username-based name
     if request_data.server_name and isinstance(request_data.server_name, str):
-        memo = request_data.server_name.strip() or f"CS2 Server - {configuration.username}"
+        memo = request_data.server_name.strip() or f"CS2 Server - {current_user.username}"
     else:
-        memo = f"CS2 Server - {configuration.username}"
+        memo = f"CS2 Server - {current_user.username}"
 
-    success, result = await SteamAPIService(http_adapter=outbound_http).create_game_server_account(
-        steam_api_key=configuration.steam_api_key,
-        memo=memo,
+    success, result = await steam_api_service.create_game_server_account(
+        steam_api_key=current_user.steam_api_key, memo=memo
     )
 
-    if not success or result is None or not result.get("success"):
+    if not success or not result.get("success"):
         error_msg = result.get("error", "Unknown error") if result else "Failed to generate token"
         return GenerateServerTokenResponse(success=False, error=error_msg)
 
-    response.headers["Cache-Control"] = "no-store"
-    response.headers["Pragma"] = "no-cache"
     return GenerateServerTokenResponse(success=True, login_token=result.get("login_token"))
 
 
-@router.post(
-    "/forgot-password",
-    response_model=AuthMessageResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
-    },
-)
+@router.post("/forgot-password")
 async def forgot_password(
     reset_request: ForgotPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)
 ):
@@ -676,15 +529,7 @@ async def forgot_password(
     }
 
 
-@router.post(
-    "/reset-password-with-token",
-    response_model=AuthMessageResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    },
-)
+@router.post("/reset-password-with-token")
 async def reset_password_with_token(
     reset_request: ResetPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)
 ):
@@ -800,11 +645,6 @@ async def google_oauth_login(
 
         else:
             # User doesn't exist, need to register
-            if not _registration_enabled(request):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Open registration is disabled",
-                )
             if not oauth_data.username or not oauth_data.password:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -862,11 +702,7 @@ async def google_oauth_login(
         ) from e
 
 
-@router.post(
-    "/logout",
-    response_model=AuthSuccessResponse,
-    status_code=status.HTTP_200_OK,
-)
+@router.post("/logout")
 async def logout(response: Response):
     """Clear the HTTP-only browser session cookie."""
     clear_web_session_cookie(response)

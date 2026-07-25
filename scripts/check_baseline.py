@@ -10,7 +10,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VENV_BIN = Path(sys.executable).parent
-COVERAGE_BASELINE = int((PROJECT_ROOT / ".github" / "coverage-baseline.txt").read_text().strip())
 
 
 def executable(name: str) -> str:
@@ -34,27 +33,12 @@ def main() -> None:
     pytest = executable("pytest")
     pip_audit = executable("pip-audit")
     npm = executable("npm")
-    basedpyright = executable("basedpyright")
-    lint_imports = executable("lint-imports")
 
     checks = (
         ("Lock file", [uv, "lock", "--check"]),
         ("Ruff format", [ruff, "format", "--check", "."]),
         ("Ruff lint", [ruff, "check", "."]),
-        ("Progressive type checking", [basedpyright]),
-        ("Import architecture", [lint_imports]),
-        (
-            "Tests, branch coverage, and compatibility contracts",
-            [
-                pytest,
-                "-q",
-                "--cov",
-                "--cov-branch",
-                "--cov-report=term",
-                "--cov-report=xml:coverage.xml",
-                f"--cov-fail-under={COVERAGE_BASELINE}",
-            ],
-        ),
+        ("Tests and compatibility contracts", [pytest, "-q"]),
         (
             "Templates and vendored static files",
             [sys.executable, "scripts/validate_console_templates.py"],

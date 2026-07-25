@@ -8,7 +8,6 @@ need a database, Redis, a live SSH server, or a browser runtime.
 import asyncio
 import shlex
 import unittest
-from contextlib import asynccontextmanager
 from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
@@ -202,8 +201,14 @@ class FileManagerValidationTests(unittest.TestCase):
             def __init__(self):
                 self.calls = []
 
-            async def get(self, url, **kwargs):
-                self.calls.append((url, kwargs))
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, traceback):
+                return False
+
+            async def get(self, url, headers):
+                self.calls.append((url, dict(headers)))
                 request = file_manager.httpx.Request("GET", url)
                 if url == api_url:
                     return file_manager.httpx.Response(
@@ -220,12 +225,11 @@ class FileManagerValidationTests(unittest.TestCase):
                 raise AssertionError(f"Unexpected request: {url}")
 
         client = FakeGithubClient()
-
-        @asynccontextmanager
-        async def borrow_client():
-            yield client
-
-        with patch.object(file_manager.http_helper, "borrow_client", borrow_client):
+        with patch.object(
+            file_manager.httpx,
+            "AsyncClient",
+            return_value=client,
+        ) as client_factory:
             resolved_url, filename = asyncio.run(
                 file_manager._resolve_github_actions_artifact(
                     artifact_url,
@@ -237,12 +241,9 @@ class FileManagerValidationTests(unittest.TestCase):
         self.assertEqual(filename, "CS2Fixes Linux.zip")
         self.assertEqual([call[0] for call in client.calls], [api_url, f"{api_url}/zip"])
         self.assertTrue(
-            all(
-                call[1]["headers"].get("Authorization") == "Bearer github-token"
-                for call in client.calls
-            )
+            all(call[1].get("Authorization") == "Bearer github-token" for call in client.calls)
         )
-        self.assertTrue(all(call[1]["follow_redirects"] is False for call in client.calls))
+        self.assertFalse(client_factory.call_args.kwargs["follow_redirects"])
 
     def test_download_filename_rejects_missing_unsafe_and_unsupported_names(self):
         invalid_cases = (
@@ -1004,15 +1005,6 @@ class _TaskSSHManager:
         self.disconnected = True
 
 
-_TASK_SESSION_FACTORY = object()
-
-
-async def _load_task_server(session_factory, server_id, user_id, user_is_admin):
-    assert session_factory is _TASK_SESSION_FACTORY
-    assert (server_id, user_id, user_is_admin) == (7, 42, False)
-    return SimpleNamespace(id=server_id, user_id=user_id)
-
-
 class FileManagerTaskLifecycleTests(unittest.TestCase):
     def setUp(self):
         _TaskSSHManager.instances = []
@@ -1038,22 +1030,16 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
         }
         file_manager._extraction_task_refs[task_id] = object()
 
-        with (
-            patch.object(file_manager, "SSHManager", _TaskSSHManager),
-            patch.object(file_manager, "_load_server_snapshot", _load_task_server),
-        ):
+        with patch.object(file_manager, "SSHManager", _TaskSSHManager):
             asyncio.run(
                 file_manager._run_extraction_task(
                     task_id,
                     "/srv/game/archive.zip",
                     "/srv/game/output",
-                    7,
-                    42,
-                    False,
+                    SimpleNamespace(),
                     True,
                     "addons/plugins",
                     True,
-                    _TASK_SESSION_FACTORY,
                 )
             )
 
@@ -1086,22 +1072,16 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
         }
         file_manager._download_url_task_refs[task_id] = object()
 
-        with (
-            patch.object(file_manager, "SSHManager", _TaskSSHManager),
-            patch.object(file_manager, "_load_server_snapshot", _load_task_server),
-        ):
+        with patch.object(file_manager, "SSHManager", _TaskSSHManager):
             asyncio.run(
                 file_manager._run_download_url_task(
                     task_id,
                     secret_url,
                     "/srv/game",
                     "/srv/game/archive.zip",
-                    7,
-                    42,
-                    False,
+                    SimpleNamespace(),
                     False,
                     None,
-                    _TASK_SESSION_FACTORY,
                 )
             )
 
@@ -1131,22 +1111,16 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
         }
         file_manager._download_url_task_refs[task_id] = object()
 
-        with (
-            patch.object(file_manager, "SSHManager", _TaskSSHManager),
-            patch.object(file_manager, "_load_server_snapshot", _load_task_server),
-        ):
+        with patch.object(file_manager, "SSHManager", _TaskSSHManager):
             asyncio.run(
                 file_manager._run_download_url_task(
                     task_id,
                     url,
                     "/srv/game",
                     None,
-                    7,
-                    42,
-                    False,
+                    SimpleNamespace(),
                     False,
                     None,
-                    _TASK_SESSION_FACTORY,
                 )
             )
 
@@ -1176,10 +1150,9 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
         }
         file_manager._download_url_task_refs[task_id] = object()
 
-        async def resolve_artifact(url, token, *, http_resource=None):
+        async def resolve_artifact(url, token):
             self.assertEqual(url, artifact_url)
             self.assertEqual(token, "github-token")
-            self.assertIsNone(http_resource)
             return signed_url, "CS2Fixes Linux.zip"
 
         with (
@@ -1189,7 +1162,6 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
                 "_resolve_github_actions_artifact",
                 resolve_artifact,
             ),
-            patch.object(file_manager, "_load_server_snapshot", _load_task_server),
         ):
             asyncio.run(
                 file_manager._run_download_url_task(
@@ -1197,12 +1169,9 @@ class FileManagerTaskLifecycleTests(unittest.TestCase):
                     artifact_url,
                     "/srv/game",
                     None,
-                    7,
-                    42,
-                    False,
+                    SimpleNamespace(),
                     False,
                     "github-token",
-                    _TASK_SESSION_FACTORY,
                 )
             )
 

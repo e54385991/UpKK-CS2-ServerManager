@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from unittest.mock import patch
 
 import httpx
@@ -14,12 +13,6 @@ from services.remote_map_pool_service import (
     fetch_remote_map_pool,
     validate_remote_map_url,
 )
-
-
-@asynccontextmanager
-async def _borrowed_client(handler):
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        yield client
 
 
 @pytest.mark.asyncio
@@ -42,18 +35,20 @@ async def test_remote_map_url_rejects_local_and_private_targets():
 
 @pytest.mark.asyncio
 async def test_remote_map_pool_downloads_and_validates_keyvalues():
+    real_client = httpx.AsyncClient
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text=DEFAULT_MAPS_CONFIG, request=request)
+
+    def client_factory(**kwargs):
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
 
     with (
         patch(
             "services.remote_map_pool_service._resolve_hostname",
             return_value={"93.184.216.34"},
         ),
-        patch(
-            "services.remote_map_pool_service.http_helper.borrow_client",
-            side_effect=lambda: _borrowed_client(handler),
-        ),
+        patch("services.remote_map_pool_service.httpx.AsyncClient", side_effect=client_factory),
     ):
         content = await fetch_remote_map_pool("https://maps.example.com/maps.txt")
 
@@ -62,20 +57,21 @@ async def test_remote_map_pool_downloads_and_validates_keyvalues():
 
 @pytest.mark.asyncio
 async def test_remote_map_pool_accepts_valid_response_above_previous_one_mib_limit():
+    real_client = httpx.AsyncClient
     content = '"Maplist"\n{\n' + (" " * (1024 * 1024)) + "}\n"
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text=content, request=request)
+
+    def client_factory(**kwargs):
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
 
     with (
         patch(
             "services.remote_map_pool_service._resolve_hostname",
             return_value={"93.184.216.34"},
         ),
-        patch(
-            "services.remote_map_pool_service.http_helper.borrow_client",
-            side_effect=lambda: _borrowed_client(handler),
-        ),
+        patch("services.remote_map_pool_service.httpx.AsyncClient", side_effect=client_factory),
     ):
         downloaded = await fetch_remote_map_pool("https://maps.example.com/maps.txt")
 
@@ -84,6 +80,8 @@ async def test_remote_map_pool_accepts_valid_response_above_previous_one_mib_lim
 
 @pytest.mark.asyncio
 async def test_remote_map_pool_rejects_oversized_response():
+    real_client = httpx.AsyncClient
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
@@ -91,15 +89,15 @@ async def test_remote_map_pool_rejects_oversized_response():
             request=request,
         )
 
+    def client_factory(**kwargs):
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
     with (
         patch(
             "services.remote_map_pool_service._resolve_hostname",
             return_value={"93.184.216.34"},
         ),
-        patch(
-            "services.remote_map_pool_service.http_helper.borrow_client",
-            side_effect=lambda: _borrowed_client(handler),
-        ),
+        patch("services.remote_map_pool_service.httpx.AsyncClient", side_effect=client_factory),
         pytest.raises(RemoteMapPoolError, match="15 MiB"),
     ):
         await fetch_remote_map_pool("https://maps.example.com/maps.txt")

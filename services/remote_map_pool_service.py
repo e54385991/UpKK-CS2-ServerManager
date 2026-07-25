@@ -7,14 +7,11 @@ import posixpath
 import shlex
 import socket
 import uuid
-from contextlib import AbstractAsyncContextManager
-from typing import Protocol
 from urllib.parse import urljoin, urlsplit
 
 import anyio
 import httpx
 
-from modules.http_helper import http_helper
 from services.map_management_service import MAX_MAPS_CONFIG_BYTES, MapConfigError, parse_maps_config
 
 MAX_REMOTE_MAP_URL_LENGTH = 4096
@@ -24,10 +21,6 @@ REMOTE_MAP_TIMEOUT_SECONDS = 20
 
 class RemoteMapPoolError(ValueError):
     """Raised when a remote map pool cannot be fetched, validated, or installed."""
-
-
-class _HTTPBorrower(Protocol):
-    def borrow_client(self) -> AbstractAsyncContextManager[httpx.AsyncClient]: ...
 
 
 def _validate_remote_map_url_syntax(url: str) -> tuple[str, str, int]:
@@ -90,25 +83,18 @@ async def validate_remote_map_url(url: str) -> str:
     return candidate
 
 
-async def fetch_remote_map_pool(
-    url: str,
-    *,
-    http_resource: _HTTPBorrower | None = None,
-) -> str:
+async def fetch_remote_map_pool(url: str) -> str:
     current_url = await validate_remote_map_url(url)
     timeout = httpx.Timeout(REMOTE_MAP_TIMEOUT_SECONDS)
-    outbound_http = http_resource or http_helper
 
     try:
-        async with outbound_http.borrow_client() as client:
+        async with httpx.AsyncClient(
+            follow_redirects=False,
+            timeout=timeout,
+            headers={"User-Agent": "UpKK-CS2-ServerManager"},
+        ) as client:
             for redirect_count in range(MAX_REMOTE_MAP_REDIRECTS + 1):
-                async with client.stream(
-                    "GET",
-                    current_url,
-                    follow_redirects=False,
-                    timeout=timeout,
-                    headers={"User-Agent": "UpKK-CS2-ServerManager"},
-                ) as response:
+                async with client.stream("GET", current_url) as response:
                     if response.is_redirect:
                         if redirect_count >= MAX_REMOTE_MAP_REDIRECTS:
                             raise RemoteMapPoolError(

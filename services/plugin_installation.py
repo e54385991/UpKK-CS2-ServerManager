@@ -8,7 +8,7 @@ import shlex
 import shutil
 import tempfile
 import uuid
-from typing import Any, Optional, Protocol
+from typing import Optional
 
 from anyio import to_thread
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,17 +28,6 @@ from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
 PROGRESS_UPDATE_INTERVAL = 10
-
-
-class PluginDownloadHTTP(Protocol):
-    """Minimal outbound HTTP surface used by panel-proxy installations."""
-
-    async def download_file(
-        self,
-        url: str,
-        destination: str,
-        **kwargs: Any,
-    ) -> tuple[bool, Optional[str]]: ...
 
 
 def _build_plugin_copy_command(
@@ -100,9 +89,8 @@ async def get_server_for_user(
     )
     if server is None:
         raise LookupError("Server not found")
-    snapshot = Server.model_validate(server, from_attributes=True)
     await db.commit()
-    return snapshot
+    return server
 
 
 async def install_github_plugin(
@@ -110,9 +98,6 @@ async def install_github_plugin(
     request: GitHubPluginInstallRequest,
     db: AsyncSession,
     current_user: User,
-    *,
-    ssh_manager: SSHManager | None = None,
-    http_resource: PluginDownloadHTTP | None = None,
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from a GitHub release asset with WebSocket progress updates.
@@ -131,16 +116,7 @@ async def install_github_plugin(
         Installation result
     """
 
-    user_id = current_user.id
     server = await get_server_for_user(db, server_id, current_user)
-    if ssh_manager is None:
-        # Compatibility path for schedulers and direct Python callers.
-        ssh_manager = SSHManager()
-    if http_resource is None:
-        # Compatibility path for schedulers and direct Python callers.
-        from modules.http_helper import http_helper
-
-        http_resource = http_helper
 
     async def progress(msg: str, msg_type: str = "status"):
         """Send progress update via WebSocket"""
@@ -194,10 +170,11 @@ async def install_github_plugin(
             exclude_files=request.exclude_files,
         )
 
+    ssh_manager = SSHManager()
+
     success, msg = await ssh_manager.connect(server)
 
     if not success:
-        await ssh_manager.disconnect()
         await progress(f"SSH connection failed: {msg}", "error")
         await notify_install_result(False, f"SSH connection failed: {msg}")
         return GitHubPluginInstallResponse(success=False, message=f"SSH connection failed: {msg}")
@@ -246,7 +223,9 @@ async def install_github_plugin(
             await progress("Using panel server proxy mode (github_proxy setting ignored)...")
 
             # Create UID-isolated temp directory on panel server
-            panel_temp_dir = os.path.join(tempfile.gettempdir(), f"cs2_panel_proxy_{user_id}")
+            panel_temp_dir = os.path.join(
+                tempfile.gettempdir(), f"cs2_panel_proxy_{current_user.id}"
+            )
             os.makedirs(panel_temp_dir, exist_ok=True)
 
             # Create unique subdirectory for this download
@@ -262,6 +241,8 @@ async def install_github_plugin(
                 logger.info(
                     f"Panel proxy: Downloading from {request.download_url} to {panel_archive_path}"
                 )
+
+                from modules.http_helper import http_helper
 
                 # Progress tracking for download
                 last_progress_percent = 0
@@ -282,7 +263,7 @@ async def install_github_plugin(
                                 f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
                             )
 
-                success, error = await http_resource.download_file(
+                success, error = await http_helper.download_file(
                     request.download_url,
                     panel_archive_path,
                     timeout=600,

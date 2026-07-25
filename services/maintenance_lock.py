@@ -4,40 +4,16 @@ import asyncio
 import logging
 import time
 import uuid
-from collections.abc import Awaitable
 from contextlib import asynccontextmanager, suppress
-from typing import AsyncIterator, Dict, Protocol
+from typing import AsyncIterator, Dict
 
 from services.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
 
-MAINTENANCE_LOCK_SERVICE_KEY = "maintenance_lock"
-
-
-class MaintenanceLockRedisAdapter(Protocol):
-    """Minimal Redis contract required for distributed operation locks."""
-
-    def acquire_lock(
-        self,
-        key: str,
-        token: str,
-        expire: int,
-    ) -> Awaitable[bool | None]: ...
-
-    def is_lock_held(self, key: str) -> Awaitable[bool | None]: ...
-
-    def refresh_lock(self, key: str, token: str, expire: int) -> Awaitable[bool]: ...
-
-    def release_lock(self, key: str, token: str) -> Awaitable[bool]: ...
-
 
 class OperationBusyError(RuntimeError):
     """Raised when another mutating operation already owns a server lock."""
-
-
-class OperationCoordinationUnavailable(RuntimeError):
-    """Raised when distributed serialization cannot be guaranteed."""
 
 
 class _MaintenanceLockHandle:
@@ -75,17 +51,8 @@ class _MaintenanceLockHandle:
 
 
 class MaintenanceLockService:
-    def __init__(
-        self,
-        redis_adapter: MaintenanceLockRedisAdapter = redis_manager,
-    ) -> None:
-        self._redis = redis_adapter
+    def __init__(self) -> None:
         self._locks: Dict[int, asyncio.Lock] = {}
-
-    @property
-    def redis_adapter(self) -> MaintenanceLockRedisAdapter:
-        """Expose the bound adapter for diagnostics and isolation tests."""
-        return self._redis
 
     def get(
         self,
@@ -102,17 +69,7 @@ class MaintenanceLockService:
         local_lock = self._locks.get(server_id)
         if local_lock is not None and local_lock.locked():
             return True
-        try:
-            held = await self._redis.is_lock_held(f"server_operation_lock:{server_id}")
-        except Exception as exc:
-            raise OperationCoordinationUnavailable(
-                "Coordination storage is unavailable; refusing destructive operation"
-            ) from exc
-        if held is None:
-            raise OperationCoordinationUnavailable(
-                "Coordination storage is unavailable; refusing destructive operation"
-            )
-        return held
+        return bool(await redis_manager.is_lock_held(f"server_operation_lock:{server_id}"))
 
     @asynccontextmanager
     async def _hold(
@@ -142,16 +99,14 @@ class MaintenanceLockService:
         try:
             deadline = time.monotonic() + wait_timeout
             while True:
-                try:
-                    acquired = await self._redis.acquire_lock(key, token, ttl)
-                except Exception as exc:
-                    raise OperationCoordinationUnavailable(
-                        "Coordination storage is unavailable; refusing destructive operation"
-                    ) from exc
+                acquired = await redis_manager.acquire_lock(key, token, ttl)
                 if acquired is None:
-                    raise OperationCoordinationUnavailable(
-                        "Coordination storage is unavailable; refusing destructive operation"
+                    logger.warning(
+                        "Redis unavailable; server %s operation %s is protected in-process only",
+                        server_id,
+                        operation,
                     )
+                    break
                 if acquired:
                     distributed_acquired = True
                     break
@@ -162,9 +117,7 @@ class MaintenanceLockService:
                 await asyncio.sleep(0.25)
 
             if distributed_acquired:
-                renew_task = asyncio.create_task(
-                    self._renew(key, token, ttl, asyncio.current_task())
-                )
+                renew_task = asyncio.create_task(self._renew(key, token, ttl))
             yield
         finally:
             if renew_task is not None:
@@ -172,33 +125,16 @@ class MaintenanceLockService:
                 with suppress(asyncio.CancelledError):
                     await renew_task
             if distributed_acquired:
-                try:
-                    await self._redis.release_lock(key, token)
-                except Exception:
-                    logger.error("Failed to release distributed operation lock: %s", key)
+                await redis_manager.release_lock(key, token)
             local_lock.release()
 
-    async def _renew(
-        self,
-        key: str,
-        token: str,
-        ttl: int,
-        owner_task: asyncio.Task | None,
-    ) -> None:
+    @staticmethod
+    async def _renew(key: str, token: str, ttl: int) -> None:
         while True:
             await asyncio.sleep(max(1, ttl // 3))
-            try:
-                refreshed = await self._redis.refresh_lock(key, token, ttl)
-            except Exception:
-                refreshed = False
-            if not refreshed:
+            if not await redis_manager.refresh_lock(key, token, ttl):
                 logger.error("Lost distributed server operation lock: %s", key)
-                # Continuing a destructive operation after losing its global
-                # lease can corrupt state. Cancellation is the fail-closed
-                # boundary; command handlers already perform cleanup in finally.
-                if owner_task is not None:
-                    owner_task.cancel("Distributed operation lock was lost")
                 return
 
 
-maintenance_lock_service = MaintenanceLockService(redis_manager)
+maintenance_lock_service = MaintenanceLockService()

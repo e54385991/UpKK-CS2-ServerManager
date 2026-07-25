@@ -14,7 +14,6 @@ from services.game_session import (
     attach_command,
     availability_command,
     cleanup_command,
-    cs2_startup_parameters,
     find_running_session_manager,
     find_running_session_managers,
     force_stop_session_command,
@@ -97,86 +96,6 @@ def test_configured_gslt_creates_the_expected_startup_parameter():
         gslt_startup_parameter("ABC123token", masked=True)
         == '+sv_setsteamaccount "***STEAM_TOKEN***"'
     )
-
-
-def test_cs2_parameters_quote_database_values_and_parse_custom_argv():
-    rendered = cs2_startup_parameters(
-        game_port=27015,
-        default_map="de_dust2; touch /tmp/map-owned",
-        max_players=32,
-        server_name='name"; touch /tmp/name-owned',
-        ip_address="127.0.0.1; id",
-        steam_account_token="ABC123",
-        server_password="server'password; id",
-        rcon_password='rcon"password; id',
-        game_mode="1; id",
-        game_type="0; id",
-        additional_parameters='-custom "$(touch /tmp/custom-owned)" ; touch /tmp/argv-owned',
-    )
-
-    arguments = shlex.split(rendered)
-    assert arguments == [
-        "-dedicated",
-        "-port",
-        "27015",
-        "+map",
-        "de_dust2; touch /tmp/map-owned",
-        "-maxplayers",
-        "32",
-        "+hostname",
-        'name"; touch /tmp/name-owned',
-        "-ip",
-        "127.0.0.1; id",
-        "+clientport",
-        "27016",
-        "+sv_setsteamaccount",
-        "ABC123",
-        "+sv_password",
-        "server'password; id",
-        "+rcon_password",
-        'rcon"password; id',
-        "+game_mode",
-        "1; id",
-        "+game_type",
-        "0; id",
-        "-custom",
-        "$(touch /tmp/custom-owned)",
-        ";",
-        "touch",
-        "/tmp/argv-owned",
-    ]
-    assert rendered == shlex.join(arguments)
-
-
-def test_cs2_parameter_masking_never_embeds_credentials():
-    rendered = cs2_startup_parameters(
-        game_port=27015,
-        default_map="de_dust2",
-        max_players=32,
-        server_name="server",
-        steam_account_token="ABC123",
-        server_password="server-secret",
-        rcon_password="rcon-secret",
-        masked=True,
-    )
-
-    assert "ABC123" not in rendered
-    assert "server-secret" not in rendered
-    assert "rcon-secret" not in rendered
-    assert {"***STEAM_TOKEN***", "***PASSWORD***", "***RCON_PASSWORD***"} <= set(
-        shlex.split(rendered)
-    )
-
-
-def test_cs2_parameters_reject_malformed_custom_quoting():
-    with pytest.raises(ValueError, match="Invalid additional parameters"):
-        cs2_startup_parameters(
-            game_port=27015,
-            default_map="de_dust2",
-            max_players=32,
-            server_name="server",
-            additional_parameters="--name 'unterminated",
-        )
 
 
 @pytest.mark.parametrize("token", [None, "", " ", "\t\r\n"])

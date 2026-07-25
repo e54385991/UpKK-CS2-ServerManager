@@ -706,15 +706,6 @@ document.getElementById('proxy-mode').addEventListener('change', updateProxyFiel
 document.getElementById('email-enabled').addEventListener('change', updateEmailFields);
 document.getElementById('email-provider').addEventListener('change', updateEmailProviderFields);
 
-function renderTestEmailResult(container, alertClass, iconClass, message) {
-    const alert = document.createElement('div');
-    alert.className = `alert ${alertClass}`;
-    const icon = document.createElement('i');
-    icon.className = iconClass;
-    alert.append(icon, document.createTextNode(` ${message ?? ''}`));
-    container.replaceChildren(alert);
-}
-
 // Test email button
 document.getElementById('send-test-email-btn').addEventListener('click', async () => {
     const token = localStorage.getItem('access_token');
@@ -724,19 +715,14 @@ document.getElementById('send-test-email-btn').addEventListener('click', async (
     
     const testEmail = testEmailInput.value.trim();
     if (!testEmail) {
-        renderTestEmailResult(
-            testEmailResult,
-            'alert-warning',
-            'bi bi-exclamation-triangle',
-            'Please enter an email address'
-        );
+        testEmailResult.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> Please enter an email address</div>';
         return;
     }
     
     try {
         testBtn.disabled = true;
         testBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending...';
-        testEmailResult.replaceChildren();
+        testEmailResult.innerHTML = '';
         
         const response = await fetch('/api/system/settings/test-email', {
             method: 'POST',
@@ -755,21 +741,11 @@ document.getElementById('send-test-email-btn').addEventListener('click', async (
             throw new Error(data.detail || 'Failed to send test email');
         }
         
-        renderTestEmailResult(
-            testEmailResult,
-            'alert-success',
-            'bi bi-check-circle',
-            data.message
-        );
+        testEmailResult.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle"></i> ${data.message}</div>`;
         
     } catch (error) {
         console.error('Error sending test email:', error);
-        renderTestEmailResult(
-            testEmailResult,
-            'alert-danger',
-            'bi bi-x-circle',
-            error.message
-        );
+        testEmailResult.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ${error.message}</div>`;
     } finally {
         testBtn.disabled = false;
         testBtn.innerHTML = '<i class="bi bi-envelope-check"></i> <span data-i18n="systemSettings.sendTestEmail">Send Test Email</span>';

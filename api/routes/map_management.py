@@ -6,8 +6,8 @@ import logging
 import posixpath
 import shlex
 import uuid
-from datetime import datetime, timedelta
-from typing import Annotated, Any, Literal, Optional, cast
+from datetime import timedelta
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -15,14 +15,11 @@ from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import resolve_maintenance_lock_service
-from api.http_resource import ApplicationHTTP, as_application_http, resolve_application_http
 from api.routes.servers import get_server_with_permission
-from cs2_manager.core import ErrorResponse
 from modules import ManagedPlugin, ScheduledTask, Server, User, get_current_active_user, get_db
 from modules.http_helper import http_helper
 from modules.utils import get_current_time
-from services.maintenance_lock import MaintenanceLockService, maintenance_lock_service
+from services.maintenance_lock import maintenance_lock_service
 from services.map_management_service import (
     DEFAULT_MAPS_CONFIG,
     DEFAULT_PLUGIN_CONFIG_CONTENT,
@@ -76,18 +73,6 @@ MAP_POOL_SYNC_MIN_INTERVAL_SECONDS = 300
 MAPCHOOSER_UNINSTALL_CONFIRMATION = "UNINSTALL MAPCHOOSER"
 # Backward-compatible test/introspection alias; writes use the distributed service below.
 _map_write_locks = maintenance_lock_service._locks
-_DIRECT_MAINTENANCE_LOCK = object()
-_ApplicationMaintenanceLock = Annotated[
-    MaintenanceLockService | object,
-    Depends(resolve_maintenance_lock_service),
-]
-
-
-def _maintenance_locks(resource: MaintenanceLockService | object) -> MaintenanceLockService:
-    """Use the app-owned service, retaining the direct Python facade."""
-    if resource is _DIRECT_MAINTENANCE_LOCK:
-        return maintenance_lock_service
-    return cast(MaintenanceLockService, resource)
 
 
 class MapConfigUpdateRequest(BaseModel):
@@ -144,123 +129,6 @@ class CustomMapSyncRunRequest(BaseModel):
 
 class MapChooserUninstallRequest(BaseModel):
     confirmation: str = Field(min_length=1, max_length=64)
-
-
-class MapEntryResponse(BaseModel):
-    name: str
-    workshop_id: str
-    enabled: bool
-    filename: str
-    updated_name: str
-    min_players: str
-    only_nominate: bool
-    restricted_times: str
-
-
-class MapPrerequisitesResponse(BaseModel):
-    counterstrikesharp_installed: bool
-    mapchooser_installed: bool
-    maps_file_exists: bool
-    plugin_config_file_exists: bool
-    ready: bool
-    plugin_center_name: str
-    plugin_center_url: str
-    counterstrikesharp_install_action: str
-    maps_path: str
-    plugin_config_path: str
-    mapchooser_plugin_path: str
-
-
-class MapsConfigResponse(MapPrerequisitesResponse):
-    content: str
-    revision: str
-    maps: list[MapEntryResponse]
-    config_error: Optional[str] = None
-
-
-class CustomMapSyncResponse(BaseModel):
-    url: str
-    enabled: bool
-    interval_seconds: int
-    last_run: Optional[datetime] = None
-    next_run: Optional[datetime] = None
-    last_status: Optional[str] = None
-    last_error: Optional[str] = None
-    run_count: int
-
-
-class CustomMapSyncUpdateResponse(CustomMapSyncResponse):
-    message: str
-
-
-class CustomMapSyncRunResponse(MapsConfigResponse):
-    map_count: int
-    custom_sync: CustomMapSyncResponse
-    message: str
-
-
-class PluginConfigResponse(MapPrerequisitesResponse):
-    revision: str
-    fields: list[dict[str, Any]]
-    unsupported_fields: list[str]
-    config_error: Optional[str] = None
-
-
-class PluginConfigUpdateResponse(PluginConfigResponse):
-    message: str
-
-
-class MapPresetResponse(MapsConfigResponse):
-    preset: Literal["official", "kz", "ze"]
-    map_count: int
-    plugin_config: Optional[PluginConfigResponse] = None
-    message: str
-
-
-class AddedMapResponse(BaseModel):
-    name: str
-    workshop_id: str
-
-
-class MapAddResponse(MapsConfigResponse):
-    added_map: AddedMapResponse
-    message: str
-
-
-class MapsConfigUpdateResponse(MapsConfigResponse):
-    message: str
-
-
-class MapChooserUninstallResponse(BaseModel):
-    success: bool
-    deleted_path: str
-    mapchooser_installed: bool
-    ready: bool
-    message: str
-
-
-MAP_REMOTE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-    status.HTTP_502_BAD_GATEWAY: {"model": ErrorResponse},
-}
-MAP_READ_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    **MAP_REMOTE_ERROR_RESPONSES,
-    status.HTTP_412_PRECONDITION_FAILED: {"model": ErrorResponse},
-}
-MAP_WRITE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    **MAP_READ_ERROR_RESPONSES,
-    status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-}
-MAP_UNINSTALL_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    **MAP_REMOTE_ERROR_RESPONSES,
-    status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-    status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
-    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-}
-MAP_OUTBOUND_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    **MAP_WRITE_ERROR_RESPONSES,
-}
 
 
 def _remote_paths(server: Server) -> dict[str, str]:
@@ -517,13 +385,8 @@ def _plugin_config_payload(
     }
 
 
-async def _fetch_workshop_title(
-    workshop_id: str,
-    *,
-    http_resource: ApplicationHTTP | None = None,
-) -> Optional[str]:
-    outbound_http = http_resource or http_helper
-    success, data, error = await outbound_http.post(
+async def _fetch_workshop_title(workshop_id: str) -> Optional[str]:
+    success, data, error = await http_helper.post(
         "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/",
         headers={"User-Agent": "UpKK-CS2-ServerManager"},
         data={"itemcount": "1", "publishedfileids[0]": workshop_id},
@@ -567,18 +430,9 @@ async def _official_maps_config(ssh_manager: SSHManager, server: Server) -> str:
         ) from exc
 
 
-async def _remote_maps_config(
-    preset: Literal["kz", "ze"],
-    *,
-    http_resource: ApplicationHTTP | None = None,
-) -> str:
+async def _remote_maps_config(preset: Literal["kz", "ze"]) -> str:
     try:
-        if http_resource is None:
-            return await fetch_remote_map_pool(MAP_PRESET_URLS[preset])
-        return await fetch_remote_map_pool(
-            MAP_PRESET_URLS[preset],
-            http_resource=http_resource,
-        )
+        return await fetch_remote_map_pool(MAP_PRESET_URLS[preset])
     except RemoteMapPoolError as exc:
         logger.warning("Unable to fetch %s map preset: %s", preset, exc)
         raise HTTPException(
@@ -642,12 +496,7 @@ async def _record_map_sync_result(
     await db.commit()
 
 
-@router.get(
-    "/status",
-    response_model=MapPrerequisitesResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_REMOTE_ERROR_RESPONSES,
-)
+@router.get("/status")
 async def get_map_management_status(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -661,12 +510,7 @@ async def get_map_management_status(
         await ssh_manager.disconnect()
 
 
-@router.get(
-    "/custom-sync",
-    response_model=CustomMapSyncResponse,
-    status_code=status.HTTP_200_OK,
-    responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse}},
-)
+@router.get("/custom-sync")
 async def get_custom_map_sync(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -677,12 +521,7 @@ async def get_custom_map_sync(
     return _map_sync_payload(server, tasks[0] if tasks else None)
 
 
-@router.put(
-    "/custom-sync",
-    response_model=CustomMapSyncUpdateResponse,
-    status_code=status.HTTP_200_OK,
-    responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse}},
-)
+@router.put("/custom-sync")
 async def update_custom_map_sync(
     server_id: int,
     request: CustomMapSyncUpdateRequest,
@@ -743,19 +582,12 @@ async def update_custom_map_sync(
     }
 
 
-@router.post(
-    "/custom-sync/run",
-    response_model=CustomMapSyncRunResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_OUTBOUND_ERROR_RESPONSES,
-)
+@router.post("/custom-sync/run")
 async def run_custom_map_sync(
     server_id: int,
     request: CustomMapSyncRunRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
-    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     tasks = await _get_map_sync_tasks(db, server_id)
@@ -765,12 +597,8 @@ async def run_custom_map_sync(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Save a custom remote map-pool URL before synchronizing",
         )
-    # The task query starts a new transaction after server authorization.
-    # Release it before coordination, SSH, DNS, and outbound HTTP.
-    await db.commit()
-    outbound_http = as_application_http(http_resource)
 
-    async with _maintenance_locks(lock_service).get(
+    async with maintenance_lock_service.get(
         server_id,
         operation=MAP_POOL_SYNC_ACTION,
         wait=False,
@@ -791,16 +619,7 @@ async def run_custom_map_sync(
                 )
 
             try:
-                if outbound_http is None:
-                    # Compatibility for direct Python callers of this route
-                    # facade. FastAPI requests always inject a validated
-                    # application-owned adapter above.
-                    updated_content = await fetch_remote_map_pool(server.map_pool_sync_url)
-                else:
-                    updated_content = await fetch_remote_map_pool(
-                        server.map_pool_sync_url,
-                        http_resource=outbound_http,
-                    )
+                updated_content = await fetch_remote_map_pool(server.map_pool_sync_url)
                 await _replace_maps_config(ssh_manager, server, updated_content)
             except RemoteMapPoolError as exc:
                 await _record_map_sync_result(db, task, success=False, error=str(exc))
@@ -826,18 +645,12 @@ async def run_custom_map_sync(
             await ssh_manager.disconnect()
 
 
-@router.delete(
-    "/plugin",
-    response_model=MapChooserUninstallResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_UNINSTALL_ERROR_RESPONSES,
-)
+@router.delete("/plugin")
 async def uninstall_mapchooser_plugin(
     server_id: int,
     request: MapChooserUninstallRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ) -> dict[str, object]:
     if request.confirmation != MAPCHOOSER_UNINSTALL_CONFIRMATION:
         raise HTTPException(
@@ -858,7 +671,7 @@ async def uninstall_mapchooser_plugin(
             detail="Refusing to remove an unexpected plugin path",
         )
 
-    async with _maintenance_locks(lock_service).get(
+    async with maintenance_lock_service.get(
         server_id,
         operation="mapchooser_uninstall",
         wait=False,
@@ -912,12 +725,7 @@ async def uninstall_mapchooser_plugin(
     }
 
 
-@router.get(
-    "/plugin-config",
-    response_model=PluginConfigResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_READ_ERROR_RESPONSES,
-)
+@router.get("/plugin-config")
 async def get_plugin_config(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -942,25 +750,15 @@ async def get_plugin_config(
         await ssh_manager.disconnect()
 
 
-@router.put(
-    "/plugin-config",
-    response_model=PluginConfigUpdateResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_WRITE_ERROR_RESPONSES,
-)
+@router.put("/plugin-config")
 async def update_mapchooser_plugin_config(
     server_id: int,
     request: PluginConfigUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    async with _maintenance_locks(lock_service).get(
-        server_id,
-        operation="map_config",
-        wait=False,
-    ):
+    async with maintenance_lock_service.get(server_id, operation="map_config", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
@@ -999,12 +797,7 @@ async def update_mapchooser_plugin_config(
             await ssh_manager.disconnect()
 
 
-@router.get(
-    "",
-    response_model=MapsConfigResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_READ_ERROR_RESPONSES,
-)
+@router.get("")
 async def get_maps_config(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -1029,25 +822,15 @@ async def get_maps_config(
         await ssh_manager.disconnect()
 
 
-@router.put(
-    "",
-    response_model=MapsConfigUpdateResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_WRITE_ERROR_RESPONSES,
-)
+@router.put("")
 async def update_maps_config(
     server_id: int,
     request: MapConfigUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    async with _maintenance_locks(lock_service).get(
-        server_id,
-        operation="map_add",
-        wait=False,
-    ):
+    async with maintenance_lock_service.get(server_id, operation="map_add", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
@@ -1085,27 +868,15 @@ async def update_maps_config(
             await ssh_manager.disconnect()
 
 
-@router.post(
-    "/preset",
-    response_model=MapPresetResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_OUTBOUND_ERROR_RESPONSES,
-)
+@router.post("/preset")
 async def apply_map_preset(
     server_id: int,
     request: MapPresetApplyRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
-    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    outbound_http = as_application_http(http_resource)
-    async with _maintenance_locks(lock_service).get(
-        server_id,
-        operation="map_preset",
-        wait=False,
-    ):
+    async with maintenance_lock_service.get(server_id, operation="map_preset", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
@@ -1123,15 +894,8 @@ async def apply_map_preset(
 
             if request.preset == "official":
                 updated_maps_content = await _official_maps_config(ssh_manager, server)
-            elif outbound_http is None:
-                # Preserve the static facade used by direct unit/integration
-                # callers while HTTP requests remain application-resource only.
-                updated_maps_content = await _remote_maps_config(request.preset)
             else:
-                updated_maps_content = await _remote_maps_config(
-                    request.preset,
-                    http_resource=outbound_http,
-                )
+                updated_maps_content = await _remote_maps_config(request.preset)
 
             plugin_config_payload: Optional[dict[str, object]] = None
             if request.preset == "kz":
@@ -1192,27 +956,15 @@ async def apply_map_preset(
             await ssh_manager.disconnect()
 
 
-@router.post(
-    "",
-    response_model=MapAddResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_OUTBOUND_ERROR_RESPONSES,
-)
+@router.post("")
 async def add_map(
     server_id: int,
     request: MapAddRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    http_resource: ApplicationHTTP | object = Depends(resolve_application_http),
-    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    outbound_http = as_application_http(http_resource)
-    async with _maintenance_locks(lock_service).get(
-        server_id,
-        operation="map_update",
-        wait=False,
-    ):
+    async with maintenance_lock_service.get(server_id, operation="map_update", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
@@ -1233,16 +985,7 @@ async def add_map(
 
             name = request.name.strip() if request.name else ""
             if not name:
-                if outbound_http is None:
-                    name = await _fetch_workshop_title(workshop_id) or ""
-                else:
-                    name = (
-                        await _fetch_workshop_title(
-                            workshop_id,
-                            http_resource=outbound_http,
-                        )
-                        or ""
-                    )
+                name = await _fetch_workshop_title(workshop_id) or ""
                 if not name:
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -1282,25 +1025,15 @@ async def add_map(
             await ssh_manager.disconnect()
 
 
-@router.patch(
-    "",
-    response_model=MapsConfigUpdateResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_WRITE_ERROR_RESPONSES,
-)
+@router.patch("")
 async def update_map_enabled(
     server_id: int,
     request: MapEnabledUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    async with _maintenance_locks(lock_service).get(
-        server_id,
-        operation="map_delete",
-        wait=False,
-    ):
+    async with maintenance_lock_service.get(server_id, operation="map_delete", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)
@@ -1344,25 +1077,15 @@ async def update_map_enabled(
             await ssh_manager.disconnect()
 
 
-@router.delete(
-    "",
-    response_model=MapsConfigUpdateResponse,
-    status_code=status.HTTP_200_OK,
-    responses=MAP_WRITE_ERROR_RESPONSES,
-)
+@router.delete("")
 async def delete_map(
     server_id: int,
     request: MapIdentityRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
-    async with _maintenance_locks(lock_service).get(
-        server_id,
-        operation="map_batch",
-        wait=False,
-    ):
+    async with maintenance_lock_service.get(server_id, operation="map_batch", wait=False):
         ssh_manager = await _connect(server)
         try:
             prerequisites = await _inspect_prerequisites(ssh_manager, server)

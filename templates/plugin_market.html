@@ -705,10 +705,7 @@ function addInstallMessage(type, message) {
             msgDiv.className = 'text-light';
         }
         
-        const timestampSpan = document.createElement('span');
-        timestampSpan.className = 'text-muted';
-        timestampSpan.textContent = timestamp;
-        msgDiv.append(timestampSpan, document.createTextNode(` ${message ?? ''}`));
+        msgDiv.innerHTML = `<span class="text-muted">${timestamp}</span> ${escapeHtml(message)}`;
         terminal.appendChild(msgDiv);
         
         // Auto-scroll to bottom
@@ -951,43 +948,12 @@ async function loadPlugins(page = 1) {
     }
 }
 
-function appendIconText(parent, iconClass, text) {
-    const icon = document.createElement('i');
-    icon.className = iconClass;
-    parent.append(icon, document.createTextNode(` ${text ?? ''}`));
-}
-
-function createPluginActionButton(className, iconClass, label, handler) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = className;
-    appendIconText(button, iconClass, label);
-    button.addEventListener('click', handler);
-    return button;
-}
-
-function safeHttpUrl(rawUrl) {
-    if (!rawUrl) return null;
-    try {
-        const url = new URL(String(rawUrl), window.location.origin);
-        return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
-    } catch (error) {
-        return null;
-    }
-}
-
-// Render plugins without interpreting API-provided fields as markup or script.
+// Render plugins
 function renderPlugins(plugins) {
     const container = document.getElementById('plugins-container');
-    container.replaceChildren();
-
-    if (!Array.isArray(plugins) || plugins.length === 0) {
-        const emptyState = document.createElement('div');
-        emptyState.className = 'text-center text-muted';
-        const message = document.createElement('p');
-        message.textContent = 'No plugins found.';
-        emptyState.appendChild(message);
-        container.appendChild(emptyState);
+    
+    if (plugins.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted"><p>No plugins found.</p></div>';
         return;
     }
     
@@ -1000,178 +966,85 @@ function renderPlugins(plugins) {
     const editText = window.i18n ? window.i18n.t('pluginMarket.edit') : 'Edit';
     const deleteText = window.i18n ? window.i18n.t('pluginMarket.delete') : 'Delete';
     const viewOnGitHubText = window.i18n ? window.i18n.t('pluginMarket.viewOnGitHub') : 'View on GitHub';
-
-    const uninstallText = window.i18n ? window.i18n.t('pluginMarket.uninstall') : 'Uninstall';
-    const fragment = document.createDocumentFragment();
-
-    plugins.forEach(plugin => {
-        const pluginTitle = String(plugin.title ?? '');
-        const card = document.createElement('div');
-        card.className = 'plugin-card';
-
-        const cardLayout = document.createElement('div');
-        cardLayout.className = 'd-flex';
-
-        const iconUrl = safeHttpUrl(plugin.icon_url);
-        if (iconUrl) {
-            const image = document.createElement('img');
-            image.src = iconUrl;
-            image.className = 'plugin-icon';
-            image.alt = pluginTitle;
-            image.loading = 'lazy';
-            image.referrerPolicy = 'no-referrer';
-            cardLayout.appendChild(image);
-        } else {
-            const placeholder = document.createElement('div');
-            placeholder.className = 'plugin-icon-placeholder';
-            const icon = document.createElement('i');
-            icon.className = 'bi bi-puzzle';
-            placeholder.appendChild(icon);
-            cardLayout.appendChild(placeholder);
+    
+    container.innerHTML = plugins.map(plugin => {
+        // Format dependency details if available
+        let dependencyHtml = '';
+        if (plugin.dependency_details && plugin.dependency_details.length > 0) {
+            const depNames = plugin.dependency_details.map(dep => escapeHtml(dep.title)).join(', ');
+            dependencyHtml = `<p class="mb-1"><small><i class="bi bi-link-45deg"></i> <strong>${dependenciesText}:</strong> ${depNames}</small></p>`;
         }
-
-        const content = document.createElement('div');
-        content.className = 'flex-grow-1';
-        const header = document.createElement('div');
-        header.className = 'd-flex justify-content-between align-items-start mb-2';
-        const identity = document.createElement('div');
-        const title = document.createElement('h5');
-        title.className = 'mb-1';
-        title.textContent = pluginTitle;
-
-        const githubUrl = safeHttpUrl(plugin.github_url);
-        if (githubUrl) {
-            const githubLink = document.createElement('a');
-            githubLink.href = githubUrl;
-            githubLink.target = '_blank';
-            githubLink.rel = 'noopener noreferrer';
-            githubLink.referrerPolicy = 'no-referrer';
-            githubLink.className = 'btn btn-sm btn-outline-secondary ms-2';
-            githubLink.style.padding = '0.1rem 0.4rem';
-            githubLink.style.fontSize = '0.75rem';
-            githubLink.title = String(viewOnGitHubText);
-            const githubIcon = document.createElement('i');
-            githubIcon.className = 'bi bi-github';
-            githubLink.appendChild(githubIcon);
-            title.appendChild(githubLink);
-        }
-        identity.appendChild(title);
-
-        if (plugin.is_recommended) {
-            const recommended = document.createElement('span');
-            recommended.className = 'plugin-badge badge-recommended';
-            appendIconText(recommended, 'bi bi-star-fill', recommendedText);
-            identity.appendChild(recommended);
-        }
-
-        const category = document.createElement('span');
-        category.className = 'plugin-badge badge-category';
-        category.textContent = formatCategory(String(plugin.category ?? ''));
-        identity.appendChild(category);
-
-        const actions = document.createElement('div');
-        actions.className = 'btn-group';
-        actions.append(
-            createPluginActionButton(
-                'btn btn-primary btn-sm',
-                'bi bi-download',
-                installText,
-                () => showInstallModal(plugin.id, pluginTitle)
-            ),
-            createPluginActionButton(
-                'btn btn-danger btn-sm',
-                'bi bi-trash',
-                uninstallText,
-                () => showUninstallModal(plugin.id, pluginTitle)
-            )
-        );
-        header.append(identity, actions);
-        content.appendChild(header);
-
-        if (plugin.author) {
-            const author = document.createElement('p');
-            author.className = 'mb-1';
-            const authorDetail = document.createElement('small');
-            appendIconText(authorDetail, 'bi bi-person', plugin.author);
-            author.appendChild(authorDetail);
-            content.appendChild(author);
-        }
-        if (plugin.description) {
-            const description = document.createElement('p');
-            description.className = 'mb-2';
-            description.textContent = String(plugin.description);
-            content.appendChild(description);
-        }
-        if (Array.isArray(plugin.dependency_details) && plugin.dependency_details.length > 0) {
-            const dependencies = document.createElement('p');
-            dependencies.className = 'mb-1';
-            const detail = document.createElement('small');
-            const linkIcon = document.createElement('i');
-            linkIcon.className = 'bi bi-link-45deg';
-            const label = document.createElement('strong');
-            label.textContent = `${dependenciesText}:`;
-            const names = plugin.dependency_details.map(dep => String(dep.title ?? '')).join(', ');
-            detail.append(linkIcon, document.createTextNode(' '), label, document.createTextNode(` ${names}`));
-            dependencies.appendChild(detail);
-            content.appendChild(dependencies);
-        }
-
-        const footer = document.createElement('div');
-        footer.className = 'd-flex justify-content-between align-items-center';
-        const stats = document.createElement('div');
-        stats.className = 'plugin-stats';
-        appendIconText(stats, 'bi bi-download', `${plugin.download_count ?? 0} ${downloadsText}`);
-        const installs = document.createElement('span');
-        installs.className = 'ms-3';
-        appendIconText(installs, 'bi bi-box-seam', `${plugin.install_count ?? 0} ${installsText}`);
-        stats.appendChild(installs);
-        if (plugin.version) {
-            const version = document.createElement('span');
-            version.className = 'ms-3';
-            appendIconText(version, 'bi bi-tag', `v${plugin.version}`);
-            stats.appendChild(version);
-        }
-        footer.appendChild(stats);
-
-        if (currentUser && currentUser.is_admin) {
-            const adminActions = document.createElement('div');
-            adminActions.className = 'btn-group';
-            adminActions.append(
-                createPluginActionButton(
-                    'btn btn-sm btn-outline-primary',
-                    'bi bi-pencil',
-                    editText,
-                    () => showEditPluginModal(plugin.id)
-                ),
-                createPluginActionButton(
-                    'btn btn-sm btn-outline-danger',
-                    'bi bi-trash',
-                    deleteText,
-                    () => deletePlugin(plugin.id)
-                )
-            );
-            footer.appendChild(adminActions);
-        }
-
-        content.appendChild(footer);
-        cardLayout.appendChild(content);
-        card.appendChild(cardLayout);
-        fragment.appendChild(card);
-    });
-
-    container.appendChild(fragment);
+        
+        return `
+        <div class="plugin-card">
+            <div class="d-flex">
+                ${plugin.icon_url 
+                    ? `<img src="${escapeHtml(plugin.icon_url)}" class="plugin-icon" alt="${escapeHtml(plugin.title)}">`
+                    : `<div class="plugin-icon-placeholder"><i class="bi bi-puzzle"></i></div>`
+                }
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h5 class="mb-1">
+                                ${escapeHtml(plugin.title)}
+                                ${plugin.github_url ? `
+                                    <a href="${escapeHtml(plugin.github_url)}" target="_blank" rel="noopener noreferrer" 
+                                       class="btn btn-sm btn-outline-secondary ms-2" style="padding: 0.1rem 0.4rem; font-size: 0.75rem;"
+                                       title="${viewOnGitHubText}">
+                                        <i class="bi bi-github"></i>
+                                    </a>
+                                ` : ''}
+                            </h5>
+                            ${plugin.is_recommended 
+                                ? `<span class="plugin-badge badge-recommended"><i class="bi bi-star-fill"></i> ${recommendedText}</span>` 
+                                : ''
+                            }
+                            <span class="plugin-badge badge-category">${formatCategory(plugin.category)}</span>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-primary btn-sm" onclick="showInstallModal(${plugin.id}, '${escapeHtml(plugin.title)}')">
+                                <i class="bi bi-download"></i> ${installText}
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="showUninstallModal(${plugin.id}, '${escapeHtml(plugin.title)}')">
+                                <i class="bi bi-trash"></i> ${window.i18n ? window.i18n.t('pluginMarket.uninstall') : 'Uninstall'}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    ${plugin.author ? `<p class="mb-1"><small><i class="bi bi-person"></i> ${escapeHtml(plugin.author)}</small></p>` : ''}
+                    ${plugin.description ? `<p class="mb-2">${escapeHtml(plugin.description)}</p>` : ''}
+                    ${dependencyHtml}
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="plugin-stats">
+                            <i class="bi bi-download"></i> ${plugin.download_count} ${downloadsText}
+                            <span class="ms-3"><i class="bi bi-box-seam"></i> ${plugin.install_count} ${installsText}</span>
+                            ${plugin.version ? `<span class="ms-3"><i class="bi bi-tag"></i> v${escapeHtml(plugin.version)}</span>` : ''}
+                        </div>
+                        ${currentUser && currentUser.is_admin ? `
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-primary" onclick="showEditPluginModal(${plugin.id})">
+                                    <i class="bi bi-pencil"></i> ${editText}
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deletePlugin(${plugin.id})">
+                                    <i class="bi bi-trash"></i> ${deleteText}
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    }).join('');
 }
 
 // Render pagination
 function renderPagination(currentPage, totalPages) {
     const container = document.getElementById('pagination-container');
-    container.replaceChildren();
-
-    currentPage = Math.max(1, Number.parseInt(currentPage, 10) || 1);
-    totalPages = Math.max(0, Number.parseInt(totalPages, 10) || 0);
-    currentPage = Math.min(currentPage, totalPages || 1);
-
+    
     if (totalPages <= 1) {
+        container.innerHTML = '';
         return;
     }
     
@@ -1179,54 +1052,15 @@ function renderPagination(currentPage, totalPages) {
     const previousText = window.i18n ? window.i18n.t('pluginMarket.pagination.previous') : 'Previous';
     const nextText = window.i18n ? window.i18n.t('pluginMarket.pagination.next') : 'Next';
     
-    const nav = document.createElement('nav');
-    nav.setAttribute('aria-label', 'Plugin pagination');
-    const list = document.createElement('ul');
-    list.className = 'pagination mb-0';
-
-    function appendPageItem(page, label, options = {}) {
-        const item = document.createElement('li');
-        item.className = 'page-item';
-        if (options.disabled) item.classList.add('disabled');
-        if (options.active) item.classList.add('active');
-
-        const link = document.createElement('a');
-        link.className = 'page-link';
-        link.href = '#';
-        if (options.leadingIcon) {
-            const icon = document.createElement('i');
-            icon.className = options.leadingIcon;
-            link.append(icon, document.createTextNode(` ${label}`));
-        } else {
-            link.textContent = String(label);
-            if (options.trailingIcon) {
-                const icon = document.createElement('i');
-                icon.className = options.trailingIcon;
-                link.append(document.createTextNode(' '), icon);
-            }
-        }
-        link.addEventListener('click', event => {
-            event.preventDefault();
-            if (!options.disabled && !options.active) loadPlugins(page);
-        });
-        item.appendChild(link);
-        list.appendChild(item);
-    }
-
-    function appendEllipsis() {
-        const item = document.createElement('li');
-        item.className = 'page-item disabled';
-        const label = document.createElement('span');
-        label.className = 'page-link';
-        label.textContent = '...';
-        item.appendChild(label);
-        list.appendChild(item);
-    }
-
-    appendPageItem(currentPage - 1, previousText, {
-        disabled: currentPage === 1,
-        leadingIcon: 'bi bi-chevron-left'
-    });
+    let html = '<nav aria-label="Plugin pagination"><ul class="pagination mb-0">';
+    
+    // Previous button
+    html += `
+        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage === 1 ? 'return false;' : `loadPlugins(${currentPage - 1}); return false;`}">
+                <i class="bi bi-chevron-left"></i> ${previousText}
+            </a>
+        </li>`;
     
     // Calculate page range to show
     const maxPagesToShow = 7;
@@ -1240,31 +1074,45 @@ function renderPagination(currentPage, totalPages) {
     
     // First page button if not in range
     if (startPage > 1) {
-        appendPageItem(1, 1);
+        html += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="event.preventDefault(); loadPlugins(1); return false;">1</a>
+            </li>`;
         if (startPage > 2) {
-            appendEllipsis();
+            html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
         }
     }
     
     // Page number buttons
     for (let i = startPage; i <= endPage; i++) {
-        appendPageItem(i, i, {active: i === currentPage});
+        html += `
+            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="event.preventDefault(); ${i === currentPage ? 'return false;' : `loadPlugins(${i}); return false;`}">${i}</a>
+            </li>`;
     }
     
     // Last page button if not in range
     if (endPage < totalPages) {
         if (endPage < totalPages - 1) {
-            appendEllipsis();
+            html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
         }
-        appendPageItem(totalPages, totalPages);
+        html += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="event.preventDefault(); loadPlugins(${totalPages}); return false;">${totalPages}</a>
+            </li>`;
     }
-
-    appendPageItem(currentPage + 1, nextText, {
-        disabled: currentPage === totalPages,
-        trailingIcon: 'bi bi-chevron-right'
-    });
-    nav.appendChild(list);
-    container.appendChild(nav);
+    
+    // Next button
+    html += `
+        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage === totalPages ? 'return false;' : `loadPlugins(${currentPage + 1}); return false;`}">
+                ${nextText} <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>`;
+    
+    html += '</ul></nav>';
+    
+    container.innerHTML = html;
 }
 
 // Handle search keyup
@@ -2032,21 +1880,21 @@ async function analyzeArchive() {
 // Display directory tree with checkboxes
 function displayDirectoryTree(directories) {
     const container = document.getElementById('directory-tree');
-    container.replaceChildren();
+    container.innerHTML = '';
     
     if (!directories || directories.length === 0) {
-        renderTextMessage(container, 'text-muted', 'No directories found in archive');
+        container.innerHTML = '<p class="text-muted">No directories found in archive</p>';
         return;
     }
     
-    directories.forEach((dir, index) => {
+    directories.forEach(dir => {
         const div = document.createElement('div');
         div.className = 'form-check';
         
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = 'form-check-input';
-        checkbox.id = `exclude-dir-${index}`;
+        checkbox.id = `exclude-dir-${dir.replace(/\//g, '-')}`;
         checkbox.value = dir;
         
         // Add change listener to update dependency checkbox state
@@ -2055,9 +1903,7 @@ function displayDirectoryTree(directories) {
         const label = document.createElement('label');
         label.className = 'form-check-label';
         label.htmlFor = checkbox.id;
-        const folderIcon = document.createElement('i');
-        folderIcon.className = 'bi bi-folder';
-        label.append(folderIcon, document.createTextNode(` ${dir}`));
+        label.innerHTML = `<i class="bi bi-folder"></i> ${dir}`;
         
         div.appendChild(checkbox);
         div.appendChild(label);
@@ -2074,21 +1920,21 @@ function getExcludedDirectories() {
 // Display file tree with checkboxes
 function displayFileTree(files) {
     const container = document.getElementById('file-tree');
-    container.replaceChildren();
+    container.innerHTML = '';
     
     if (!files || files.length === 0) {
-        renderTextMessage(container, 'text-muted', 'No files found in archive');
+        container.innerHTML = '<p class="text-muted">No files found in archive</p>';
         return;
     }
     
-    files.forEach((file, index) => {
+    files.forEach(file => {
         const div = document.createElement('div');
         div.className = 'form-check';
         
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = 'form-check-input';
-        checkbox.id = `exclude-file-${index}`;
+        checkbox.id = `exclude-${file.path.replace(/\//g, '-')}`;
         checkbox.value = file.path;
         
         // Add change listener to update dependency checkbox state
@@ -2301,11 +2147,10 @@ async function deletePlugin(pluginId) {
 }
 
 // Utility functions
-function renderTextMessage(container, className, message) {
-    const paragraph = document.createElement('p');
-    paragraph.className = className;
-    paragraph.textContent = String(message ?? '');
-    container.replaceChildren(paragraph);
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function formatCategory(category) {
@@ -2351,11 +2196,7 @@ async function showUninstallModal(pluginId, pluginName) {
     uninstallFiles = [];
     uninstallReleases = [];
     uninstallSelectedAssetUrl = null;
-    renderTextMessage(
-        document.getElementById('uninstall-file-list'),
-        'text-muted',
-        'Please select a server and version first'
-    );
+    document.getElementById('uninstall-file-list').innerHTML = '<p class="text-muted"><span data-i18n="pluginMarket.uninstallModal.analyzing">Please select a server and version first</span></p>';
     document.getElementById('uninstall-files-selected-count').textContent = '0';
     document.getElementById('uninstall-version-section').style.display = 'none';
     document.getElementById('uninstall-asset-section').style.display = 'none';
@@ -2378,12 +2219,7 @@ async function loadServersForUninstall() {
     try {
         const servers = await getServersAvailableForPluginManagement();
         const select = document.getElementById('uninstall-server-select');
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = window.i18n
-            ? window.i18n.t('pluginMarket.installModal.serverPlaceholder')
-            : 'Select a server...';
-        select.replaceChildren(placeholder);
+        select.innerHTML = '<option value="">' + (window.i18n ? window.i18n.t('pluginMarket.installModal.serverPlaceholder') : 'Select a server...') + '</option>';
 
         servers.forEach(server => {
             const option = document.createElement('option');
@@ -2441,12 +2277,7 @@ async function loadUninstallReleases(serverId) {
         uninstallReleases = data.releases || [];
         
         const versionSelect = document.getElementById('uninstall-version-select');
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = window.i18n
-            ? window.i18n.t('pluginMarket.installModal.selectVersionPlaceholder')
-            : 'Select a version...';
-        versionSelect.replaceChildren(placeholder);
+        versionSelect.innerHTML = '<option value="">' + (window.i18n ? window.i18n.t('pluginMarket.installModal.selectVersionPlaceholder') : 'Select a version...') + '</option>';
         
         uninstallReleases.forEach((release, index) => {
             const option = document.createElement('option');
@@ -2471,25 +2302,21 @@ async function onUninstallVersionSelected() {
     // Show asset section and populate assets
     const release = uninstallReleases[versionIndex];
     const assetList = document.getElementById('uninstall-asset-list');
-    assetList.replaceChildren();
+    assetList.innerHTML = '';
     
-    release.assets.forEach(asset => {
+    release.assets.forEach((asset, index) => {
         const assetItem = document.createElement('button');
         assetItem.type = 'button';
         assetItem.className = 'list-group-item list-group-item-action';
-        const layout = document.createElement('div');
-        layout.className = 'd-flex justify-content-between align-items-center';
-        const name = document.createElement('div');
-        appendIconText(name, 'bi bi-file-earmark-zip', asset.name);
-        const size = document.createElement('small');
-        size.className = 'text-muted';
-        size.textContent = formatBytes(asset.size);
-        layout.append(name, size);
-        assetItem.appendChild(layout);
-        assetItem.addEventListener(
-            'click',
-            () => selectUninstallAsset(asset.browser_download_url, assetItem)
-        );
+        assetItem.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="bi bi-file-earmark-zip"></i> ${escapeHtml(asset.name)}
+                </div>
+                <small class="text-muted">${formatBytes(asset.size)}</small>
+            </div>
+        `;
+        assetItem.onclick = () => selectUninstallAsset(asset.browser_download_url, assetItem);
         assetList.appendChild(assetItem);
     });
     
@@ -2520,13 +2347,7 @@ async function analyzeUninstallFiles() {
     }
     
     const fileListDiv = document.getElementById('uninstall-file-list');
-    const spinner = document.createElement('div');
-    spinner.className = 'spinner-border spinner-border-sm';
-    spinner.setAttribute('role', 'status');
-    const analyzing = document.createElement('span');
-    analyzing.dataset.i18n = 'pluginMarket.uninstallModal.analyzing';
-    analyzing.textContent = 'Analyzing plugin archive...';
-    fileListDiv.replaceChildren(spinner, document.createTextNode(' '), analyzing);
+    fileListDiv.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> <span data-i18n="pluginMarket.uninstallModal.analyzing">Analyzing plugin archive...</span>';
     
     try {
         // Analyze the plugin archive from GitHub to get the list of files
@@ -2539,11 +2360,7 @@ async function analyzeUninstallFiles() {
         const data = await response.json();
         
         if (!data.success) {
-            renderTextMessage(
-                fileListDiv,
-                'text-danger',
-                data.error || 'Failed to analyze plugin archive'
-            );
+            fileListDiv.innerHTML = `<p class="text-danger">${data.error || 'Failed to analyze plugin archive'}</p>`;
             return;
         }
         
@@ -2551,7 +2368,7 @@ async function analyzeUninstallFiles() {
         uninstallFiles = data.all_files || [];
         
         if (uninstallFiles.length === 0) {
-            renderTextMessage(fileListDiv, 'text-muted', 'No files found in plugin archive');
+            fileListDiv.innerHTML = `<p class="text-muted">No files found in plugin archive</p>`;
             return;
         }
         
@@ -2562,7 +2379,7 @@ async function analyzeUninstallFiles() {
         
     } catch (error) {
         console.error('Error analyzing files:', error);
-        renderTextMessage(fileListDiv, 'text-danger', error.message);
+        fileListDiv.innerHTML = `<p class="text-danger">${error.message}</p>`;
     }
 }
 
@@ -2572,62 +2389,35 @@ function renderUninstallFileTree() {
     const selectFilesHelp = window.i18n ? window.i18n.t('pluginMarket.uninstallModal.selectFilesHelp') : 'Check the files and directories you want to REMOVE. Unchecked items will be kept.';
     const selectAllText = window.i18n ? window.i18n.t('common.selectAll') : 'Select All';
     
-    const heading = document.createElement('p');
-    const headingText = document.createElement('strong');
-    headingText.textContent = selectFilesText;
-    heading.appendChild(headingText);
-
-    const help = document.createElement('p');
-    help.className = 'text-muted small';
-    help.textContent = selectFilesHelp;
-
-    const selectAllContainer = document.createElement('div');
-    selectAllContainer.className = 'mb-2';
-    const selectAllCheck = document.createElement('div');
-    selectAllCheck.className = 'form-check';
-    const selectAll = document.createElement('input');
-    selectAll.type = 'checkbox';
-    selectAll.className = 'form-check-input';
-    selectAll.id = 'uninstall-select-all';
-    selectAll.addEventListener('change', () => toggleSelectAllUninstall(selectAll.checked));
-    const selectAllLabel = document.createElement('label');
-    selectAllLabel.className = 'form-check-label fw-bold';
-    selectAllLabel.htmlFor = selectAll.id;
-    selectAllLabel.textContent = selectAllText;
-    selectAllCheck.append(selectAll, selectAllLabel);
-    selectAllContainer.appendChild(selectAllCheck);
-
-    const fileList = document.createElement('div');
-    fileList.style.maxHeight = '400px';
-    fileList.style.overflowY = 'auto';
-    fileList.style.border = '1px solid #dee2e6';
-    fileList.style.padding = '10px';
-    fileList.style.borderRadius = '4px';
-
+    let html = `<p><strong>${selectFilesText}</strong></p>`;
+    html += `<p class="text-muted small">${selectFilesHelp}</p>`;
+    html += `<div class="mb-2">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="uninstall-select-all" onchange="toggleSelectAllUninstall(this.checked)">
+            <label class="form-check-label fw-bold" for="uninstall-select-all">
+                ${selectAllText}
+            </label>
+        </div>
+    </div>`;
+    html += '<div style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; padding: 10px; border-radius: 4px;">';
+    
     uninstallFiles.forEach((file, index) => {
-        const row = document.createElement('div');
-        row.className = 'form-check';
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'form-check-input uninstall-file-checkbox';
-        checkbox.value = String(file.path ?? '');
-        checkbox.id = `uninstall-file-${index}`;
-        checkbox.addEventListener('change', updateUninstallCount);
-        const label = document.createElement('label');
-        label.className = 'form-check-label';
-        label.htmlFor = checkbox.id;
-        const icon = document.createElement('i');
-        icon.className = `bi ${file.is_dir ? 'bi-folder' : 'bi-file-earmark'}`;
+        const icon = file.is_dir ? 'bi-folder' : 'bi-file-earmark';
         const sizeText = file.size > 0 ? `(${formatBytes(file.size)})` : '';
-        label.append(
-            icon,
-            document.createTextNode(` ${file.path ?? ''}${sizeText ? ` ${sizeText}` : ''}`)
-        );
-        row.append(checkbox, label);
-        fileList.appendChild(row);
+        // Escape special characters for HTML attribute value (& must be first)
+        const pathValue = file.path.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        html += `
+            <div class="form-check">
+                <input class="form-check-input uninstall-file-checkbox" type="checkbox" value="${pathValue}" id="uninstall-file-${index}" onchange="updateUninstallCount()">
+                <label class="form-check-label" for="uninstall-file-${index}">
+                    <i class="bi ${icon}"></i> ${escapeHtml(file.path)} ${sizeText}
+                </label>
+            </div>
+        `;
     });
-
-    fileListDiv.replaceChildren(heading, help, selectAllContainer, fileList);
+    
+    html += '</div>';
+    fileListDiv.innerHTML = html;
     updateUninstallCount();
 }
 

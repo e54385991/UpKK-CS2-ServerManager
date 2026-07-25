@@ -14,16 +14,11 @@ from typing import Any, Dict, List
 
 import asyncssh
 from anyio import to_thread
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import (
-    SSHManagerProvider,
-    require_server_access,
-    resolve_maintenance_lock_service,
-)
-from cs2_manager.core import ErrorResponse
+from api.dependencies import require_server_access
 from modules import (
     DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS,
     ActionResponse,
@@ -45,15 +40,10 @@ from modules import (
     S3RestoreRequest,
     Server,
     ServerCreate,
-    ServerDetail,
     ServerResponse,
     ServerResponseWithUser,
     ServerStatus,
-    ServerSummary,
     ServerUpdate,
-    SSHHostKeyConfirmRequest,
-    SSHHostKeyResponse,
-    SSHHostKeyScanRequest,
     SystemSettings,
     User,
     UserResponse,
@@ -64,13 +54,11 @@ from modules import (
     get_db,
 )
 from modules.config import settings as app_settings
-from modules.schemas import ServerCreatedResponse
 from services import redis_manager
 from services.captcha_service import captcha_service
 from services.discord_notification_service import discord_notification_service
 from services.game_cleanup_service import game_cleanup_service
 from services.game_session import (
-    cs2_startup_parameters,
     find_running_session_manager,
     gslt_startup_parameter,
     normalize_session_manager,
@@ -78,8 +66,7 @@ from services.game_session import (
     session_name,
     start_session_command,
 )
-from services.maintenance_lock import MaintenanceLockService
-from services.ssh_host_keys import pinned_host_key_options, scan_ssh_host_key
+from services.s3_backup_service import s3_backup_service
 from services.ssh_manager import SSHManager
 
 
@@ -163,7 +150,6 @@ async def execute_custom_commands(
     server: Server,
     target: str,
     commands: str,
-    ssh_manager: SSHManager | None = None,
 ) -> Dict[str, Any]:
     command_lines = parse_custom_command_lines(commands)
     if not command_lines:
@@ -171,11 +157,8 @@ async def execute_custom_commands(
             status_code=status.HTTP_400_BAD_REQUEST, detail="At least one command line is required"
         )
 
-    # FastAPI request paths always inject an application-owned manager. The
-    # fallback preserves the long-standing Python helper contract for explicit
-    # non-ASGI callers.
-    manager = ssh_manager if ssh_manager is not None else SSHManager()
-    connect_success, connect_message = await manager.connect(server)
+    ssh_manager = SSHManager()
+    connect_success, connect_message = await ssh_manager.connect(server)
     if not connect_success:
         return {
             "success": False,
@@ -189,7 +172,7 @@ async def execute_custom_commands(
         if target == "game_process":
             name = session_name(server.id)
             active_manager = await find_running_session_manager(
-                manager.execute_command,
+                ssh_manager.execute_command,
                 server.session_manager,
                 name,
             )
@@ -203,7 +186,7 @@ async def execute_custom_commands(
 
             for index, command in enumerate(command_lines, start=1):
                 input_cmd = send_keys_command(active_manager, name, command)
-                success, stdout, stderr = await manager.execute_command(input_cmd, timeout=10)
+                success, stdout, stderr = await ssh_manager.execute_command(input_cmd, timeout=10)
                 results.append(
                     {
                         "index": index,
@@ -215,7 +198,7 @@ async def execute_custom_commands(
                 )
         elif target == "host":
             for index, command in enumerate(command_lines, start=1):
-                success, stdout, stderr = await manager.execute_command(command, timeout=300)
+                success, stdout, stderr = await ssh_manager.execute_command(command, timeout=300)
                 results.append(
                     {
                         "index": index,
@@ -230,7 +213,7 @@ async def execute_custom_commands(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid custom command target"
             )
     finally:
-        await manager.disconnect()
+        await ssh_manager.disconnect()
 
     failed_count = len([result for result in results if not result["success"]])
     total_count = len(results)
@@ -254,10 +237,8 @@ async def execute_and_log_custom_commands(
     target: str,
     commands: str,
     name: str = "One-time custom command",
-    *,
-    ssh_manager: SSHManager | None = None,
 ) -> Dict[str, Any]:
-    result = await execute_custom_commands(server, target, commands, ssh_manager)
+    result = await execute_custom_commands(server, target, commands)
     output = format_custom_command_log(target, result.get("results", []))
     log = DeploymentLog(
         server_id=server.id,

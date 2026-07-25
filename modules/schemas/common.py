@@ -49,7 +49,7 @@ BATCH_ACTION_PATTERN = f"^({'|'.join(ALLOWED_BATCH_ACTIONS)})$"
 
 ALLOWED_PLUGINS = ["metamod", "counterstrikesharp", "cs2fixes"]
 
-MAX_BATCH_SERVERS = 40
+MAX_BATCH_SERVERS = 20
 
 
 def _unique_server_ids(server_ids: List[int]) -> List[int]:

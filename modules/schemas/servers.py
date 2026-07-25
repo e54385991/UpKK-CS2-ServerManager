@@ -15,12 +15,6 @@ class ServerCreate(SQLModel):
     ssh_user: str = Field(..., min_length=1, max_length=100)
     ssh_password: str = Field(..., min_length=1, description="SSH password (required)")
     sudo_password: Optional[str] = None
-    ssh_host_key_algorithm: Optional[str] = Field(None, min_length=1, max_length=64)
-    ssh_host_key_fingerprint: Optional[str] = Field(None, min_length=16, max_length=128)
-    ssh_host_key_confirmed: bool = Field(
-        default=False,
-        description="User explicitly confirmed the freshly scanned SSH host key",
-    )
     game_port: int = Field(default=27015, ge=1, le=65535)
     game_directory: str = Field(default="/home/cs2server/cs2")
     description: Optional[str] = None
@@ -321,7 +315,7 @@ class ServerUpdate(SQLModel):
 
 
 class ServerResponse(SQLModel):
-    """Secret-free schema for server responses."""
+    """Schema for server response (password authentication only)"""
 
     id: int
     user_id: int
@@ -329,8 +323,6 @@ class ServerResponse(SQLModel):
     host: str
     ssh_port: int
     ssh_user: str
-    ssh_host_key_algorithm: Optional[str] = None
-    ssh_host_key_fingerprint: Optional[str] = None
     game_port: int
     game_directory: str
     status: ServerStatus
@@ -341,9 +333,9 @@ class ServerResponse(SQLModel):
 
     # LGSM-style server configuration
     server_name: str
-    server_password_configured: bool
-    rcon_password_configured: bool
-    steam_account_token_configured: bool
+    server_password: Optional[str] = None
+    rcon_password: Optional[str] = None
+    steam_account_token: Optional[str] = None
     default_map: str
     max_players: int
     game_mode: str
@@ -357,7 +349,7 @@ class ServerResponse(SQLModel):
     tv_enable: bool
 
     # Server-to-backend communication
-    api_key_configured: bool
+    api_key: Optional[str] = None
     backend_url: Optional[str] = None
 
     # Auto-cleanup configuration
@@ -404,49 +396,7 @@ class ServerResponse(SQLModel):
     model_config = {"from_attributes": True}
 
 
-class ServerSummary(ServerResponse):
-    """Secret-free list representation.
-
-    During the compatibility phase this intentionally retains the legacy list
-    fields.  Giving the representation a dedicated public type lets a later
-    version reduce list payloads without conflating list and detail contracts.
-    """
-
-
-class ServerDetail(ServerResponse):
-    """Secret-free detailed server representation."""
-
-
-class ServerCreatedResponse(ServerDetail):
-    """Server response which reveals its agent API key exactly once at creation."""
-
-    api_key: str
-
-
-class SSHHostKeyScanRequest(SQLModel):
-    """Inspect a host key without sending SSH credentials."""
-
-    host: str = Field(..., min_length=1, max_length=255)
-    ssh_port: int = Field(default=22, ge=1, le=65535)
-
-
-class SSHHostKeyConfirmRequest(SQLModel):
-    """Host key identity a user has explicitly chosen to trust."""
-
-    algorithm: str = Field(..., min_length=1, max_length=64)
-    fingerprint: str = Field(..., min_length=16, max_length=128)
-
-
-class SSHHostKeyResponse(SQLModel):
-    """Public SSH host-key metadata and pin state."""
-
-    algorithm: str
-    fingerprint: str
-    configured: bool = False
-    matches_configured: Optional[bool] = None
-
-
-class ServerResponseWithUser(ServerDetail):
+class ServerResponseWithUser(ServerResponse):
     """Schema for server response with user information (admin only)"""
 
     user: Optional[UserResponse] = None

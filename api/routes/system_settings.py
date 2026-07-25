@@ -5,7 +5,6 @@ System settings routes (admin only)
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cs2_manager.core import ErrorResponse
 from modules import (
     EmailTestRequest,
     SystemSettings,
@@ -15,7 +14,6 @@ from modules import (
     get_current_admin_user,
     get_db,
 )
-from modules.schemas.system import EmailTestResponse
 from services.email_service import email_service
 
 router = APIRouter(prefix="/api/system", tags=["system"])
@@ -58,12 +56,7 @@ async def update_system_settings(
     return settings
 
 
-@router.post(
-    "/settings/test-email",
-    response_model=EmailTestResponse,
-    status_code=status.HTTP_200_OK,
-    responses={status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse}},
-)
+@router.post("/settings/test-email")
 async def test_email(
     request: EmailTestRequest,
     db: AsyncSession = Depends(get_db),

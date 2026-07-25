@@ -297,7 +297,7 @@ function showGoogleRegistrationModal(idToken, message) {
                                 <input type="password" class="form-control" id="google-password" required minlength="6">
                                 <div class="form-text">Choose a secure password (minimum 6 characters)</div>
                             </div>
-                            <input type="hidden" id="google-id-token" value="">
+                            <input type="hidden" id="google-id-token" value="${idToken || ''}">
                         </form>
                     </div>
                     <div class="modal-footer">
@@ -317,7 +317,6 @@ function showGoogleRegistrationModal(idToken, message) {
     
     // Add modal to body
     document.body.insertAdjacentHTML('beforeend', modalHtml);
-    document.getElementById('google-id-token').value = idToken || '';
     
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('googleRegisterModal'));

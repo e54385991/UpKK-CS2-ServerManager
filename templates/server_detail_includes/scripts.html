@@ -7,7 +7,7 @@
         function serverDetail(serverId) {
             return {
                 serverId: serverId,
-                server: {{ server_json | tojson }},
+                server: {{ server_json | safe }},
                 logs: [],
                 history: [],
                 loadingHistory: true,
@@ -98,13 +98,7 @@
                                     ssh_key_path: '',
                                         game_port: 27015,
                                             game_directory: '',
-            description: ''
-        },
-        sshHostKey: {
-            scanning: false,
-            confirming: false,
-            candidate: null,
-            error: ''
+                                                description: ''
         },
         configForm: {
             server_name: '',
@@ -118,12 +112,7 @@
                                             tv_enable: false,
                                                 tv_port: 27020,
                                                     additional_parameters: '',
-                                                session_manager: 'tmux'
-        },
-        secretClear: {
-            server_password: false,
-            rcon_password: false,
-            steam_account_token: false
+                                                        session_manager: 'tmux'
         },
         generatingToken: false,
         showTokenGeneratorModal: false,
@@ -608,74 +597,6 @@
             }
         },
 
-        async scanSSHHostKey() {
-            this.sshHostKey.scanning = true;
-            this.sshHostKey.error = '';
-            this.sshHostKey.candidate = null;
-            try {
-                const response = await authFetch(`/servers/${this.serverId}/ssh-host-key/scan`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                if (!response.ok) {
-                    const detail = typeof data.detail === 'string'
-                        ? data.detail
-                        : (data.detail?.message || 'Unable to scan the SSH host key');
-                    throw new Error(detail);
-                }
-                this.sshHostKey.candidate = data;
-            } catch (error) {
-                this.sshHostKey.error = error?.message || 'Unable to scan the SSH host key';
-            } finally {
-                this.sshHostKey.scanning = false;
-            }
-        },
-
-        async confirmSSHHostKey() {
-            const candidate = this.sshHostKey.candidate;
-            if (!candidate || candidate.matches_configured === true) return;
-            const confirmed = window.confirm([
-                'Verify this SHA-256 fingerprint with the server operator before trusting it.',
-                '',
-                `${candidate.algorithm} ${candidate.fingerprint}`,
-                '',
-                'Trust and pin this SSH host key?'
-            ].join('\n'));
-            if (!confirmed) return;
-
-            this.sshHostKey.confirming = true;
-            this.sshHostKey.error = '';
-            try {
-                const response = await authFetch(`/servers/${this.serverId}/ssh-host-key/confirm`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        algorithm: candidate.algorithm,
-                        fingerprint: candidate.fingerprint
-                    })
-                });
-                const data = await response.json();
-                if (!response.ok) {
-                    const detail = typeof data.detail === 'string'
-                        ? data.detail
-                        : (data.detail?.message || 'Unable to confirm the SSH host key');
-                    throw new Error(detail);
-                }
-                this.server = data;
-                this.sshHostKey.candidate = {
-                    algorithm: data.ssh_host_key_algorithm,
-                    fingerprint: data.ssh_host_key_fingerprint,
-                    configured: true,
-                    matches_configured: true
-                };
-                this.showToast('SSH host key pinned successfully', 'success');
-            } catch (error) {
-                this.sshHostKey.error = error?.message || 'Unable to confirm the SSH host key';
-            } finally {
-                this.sshHostKey.confirming = false;
-            }
-        },
-
         loadConfigForm() {
             // Load current configuration into form
             this.configForm = {
@@ -684,18 +605,13 @@
                 max_players: this.server.max_players || 32,
                 game_mode: this.server.game_mode || 'competitive',
                 game_type: this.server.game_type || '0',
-                server_password: '',
-                rcon_password: '',
-                steam_account_token: '',
+                server_password: this.server.server_password || '',
+                rcon_password: this.server.rcon_password || '',
+                steam_account_token: this.server.steam_account_token || '',
                 tv_enable: this.server.tv_enable || false,
                 tv_port: this.server.tv_port || 27020,
                 additional_parameters: this.server.additional_parameters || '',
                 session_manager: this.server.session_manager || 'tmux'
-            };
-            this.secretClear = {
-                server_password: false,
-                rcon_password: false,
-                steam_account_token: false
             };
             this.updateGameTypeFromMode();
         },
@@ -764,7 +680,6 @@
                 const data = await response.json();
                 
                 if (response.ok && data.success) {
-                    this.secretClear.steam_account_token = false;
                     this.configForm.steam_account_token = data.login_token;
                     this.showTokenGeneratorModal = false;
                     this.tokenCaptchaCode = '';
@@ -791,26 +706,17 @@
         async saveConfiguration() {
             this.savingConfig = true;
             try {
-                const updateData = { ...this.configForm };
-                ['server_password', 'rcon_password', 'steam_account_token'].forEach(field => {
-                    if (this.secretClear[field]) {
-                        updateData[field] = null;
-                    } else if (updateData[field] === '') {
-                        delete updateData[field];
-                    }
-                });
                 const response = await authFetch(`/servers/${this.serverId}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(updateData)
+                    body: JSON.stringify(this.configForm)
                 });
 
                 if (response.ok) {
                     const updated = await response.json();
                     this.server = updated;
-                    this.loadConfigForm();
                     this.showConfigEdit = false;
                     this.addLog('complete', 'Configuration saved successfully');
                     this.showToast(
@@ -3037,7 +2943,7 @@
                 loading: false,
                 files: [],
                 currentPath: '',
-                serverGameDirectory: {{ server.game_directory | tojson }},
+                serverGameDirectory: '{{ server.game_directory }}',
                 selectedFile: null,
                 showEditorModal: false,
                 showCreateFolderModal: false,
@@ -4369,20 +4275,9 @@
         
         // GitHub Plugin Uninstall Functions
         let githubUninstallFiles = [];
-
-        function renderGitHubUninstallMessage(container, className, message) {
-            const paragraph = document.createElement('p');
-            paragraph.className = className;
-            paragraph.textContent = String(message ?? '');
-            container.replaceChildren(paragraph);
-        }
         
         function showGitHubUninstallModal() {
-            renderGitHubUninstallMessage(
-                document.getElementById('github-uninstall-file-list'),
-                'text-muted',
-                'Click "Analyze Installed Files" to start'
-            );
+            document.getElementById('github-uninstall-file-list').innerHTML = '<p class="text-muted">Click "Analyze Installed Files" to start</p>';
             document.getElementById('github-uninstall-info').style.display = 'none';
             document.getElementById('github-uninstall-button').style.display = 'none';
             githubUninstallFiles = [];
@@ -4393,34 +4288,20 @@
         
         async function analyzeGitHubInstalledFiles() {
             const fileListDiv = document.getElementById('github-uninstall-file-list');
-            const spinner = document.createElement('div');
-            spinner.className = 'spinner-border spinner-border-sm';
-            spinner.setAttribute('role', 'status');
-            fileListDiv.replaceChildren(
-                spinner,
-                document.createTextNode(' Analyzing plugin archive...')
-            );
+            fileListDiv.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Analyzing plugin archive...';
             
             try {
                 // Get the selected asset URL from the install section
                 const serverDetailElement = document.querySelector('[x-data*="serverDetail"]');
                 if (!serverDetailElement) {
-                    renderGitHubUninstallMessage(
-                        fileListDiv,
-                        'text-danger',
-                        'Cannot access server detail component. Please refresh the page.'
-                    );
+                    fileListDiv.innerHTML = '<p class="text-danger">Cannot access server detail component. Please refresh the page.</p>';
                     return;
                 }
                 
                 const serverDetailComponent = Alpine.$data(serverDetailElement);
                 
                 if (!serverDetailComponent || serverDetailComponent.selectedReleaseIndex === '' || serverDetailComponent.selectedAssetIndex === '') {
-                    renderGitHubUninstallMessage(
-                        fileListDiv,
-                        'text-danger',
-                        'Please select a release and asset in the GitHub Plugin Install section above first.'
-                    );
+                    fileListDiv.innerHTML = '<p class="text-danger">Please select a release and asset in the GitHub Plugin Install section above first.</p>';
                     return;
                 }
                 
@@ -4438,22 +4319,14 @@
                 const data = await response.json();
                 
                 if (!data.success) {
-                    renderGitHubUninstallMessage(
-                        fileListDiv,
-                        'text-danger',
-                        data.error || 'Failed to analyze plugin archive'
-                    );
+                    fileListDiv.innerHTML = `<p class="text-danger">${data.error || 'Failed to analyze plugin archive'}</p>`;
                     return;
                 }
                 
-                githubUninstallFiles = Array.isArray(data.all_files) ? data.all_files : [];
+                githubUninstallFiles = data.all_files || [];
                 
                 if (githubUninstallFiles.length === 0) {
-                    renderGitHubUninstallMessage(
-                        fileListDiv,
-                        'text-muted',
-                        'No files found in plugin archive'
-                    );
+                    fileListDiv.innerHTML = `<p class="text-muted">No files found in plugin archive</p>`;
                     return;
                 }
                 
@@ -4463,7 +4336,7 @@
                 
             } catch (error) {
                 console.error('Error analyzing files:', error);
-                renderGitHubUninstallMessage(fileListDiv, 'text-danger', error.message);
+                fileListDiv.innerHTML = `<p class="text-danger">${error.message}</p>`;
             }
         }
         
@@ -4473,67 +4346,35 @@
             const selectFilesHelp = window.i18n ? window.i18n.t('pluginMarket.uninstallModal.selectFilesHelp') : 'Check the files and directories you want to REMOVE. Unchecked items will be kept.';
             const selectAllText = window.i18n ? window.i18n.t('common.selectAll') : 'Select All';
             
-            const heading = document.createElement('p');
-            const headingText = document.createElement('strong');
-            headingText.textContent = selectFilesText;
-            heading.appendChild(headingText);
-
-            const help = document.createElement('p');
-            help.className = 'text-muted small';
-            help.textContent = selectFilesHelp;
-
-            const selectAllContainer = document.createElement('div');
-            selectAllContainer.className = 'mb-2';
-            const selectAllCheck = document.createElement('div');
-            selectAllCheck.className = 'form-check';
-            const selectAll = document.createElement('input');
-            selectAll.type = 'checkbox';
-            selectAll.className = 'form-check-input';
-            selectAll.id = 'github-uninstall-select-all';
-            selectAll.addEventListener(
-                'change',
-                () => toggleSelectAllGitHubUninstall(selectAll.checked)
-            );
-            const selectAllLabel = document.createElement('label');
-            selectAllLabel.className = 'form-check-label fw-bold';
-            selectAllLabel.htmlFor = selectAll.id;
-            selectAllLabel.textContent = selectAllText;
-            selectAllCheck.append(selectAll, selectAllLabel);
-            selectAllContainer.appendChild(selectAllCheck);
-
-            const fileList = document.createElement('div');
-            fileList.style.maxHeight = '400px';
-            fileList.style.overflowY = 'auto';
-            fileList.style.border = '1px solid #dee2e6';
-            fileList.style.padding = '10px';
-            fileList.style.borderRadius = '4px';
+            let html = `<p><strong>${selectFilesText}</strong></p>`;
+            html += `<p class="text-muted small">${selectFilesHelp}</p>`;
+            html += `<div class="mb-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="github-uninstall-select-all" onchange="toggleSelectAllGitHubUninstall(this.checked)">
+                    <label class="form-check-label fw-bold" for="github-uninstall-select-all">
+                        ${selectAllText}
+                    </label>
+                </div>
+            </div>`;
+            html += '<div style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; padding: 10px; border-radius: 4px;">';
             
             githubUninstallFiles.forEach((file, index) => {
-                const row = document.createElement('div');
-                row.className = 'form-check';
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'form-check-input github-uninstall-file-checkbox';
-                checkbox.value = String(file.path ?? '');
-                checkbox.id = `github-file-${index}`;
-                checkbox.addEventListener('change', updateGitHubUninstallCount);
-                const label = document.createElement('label');
-                label.className = 'form-check-label';
-                label.htmlFor = checkbox.id;
-                const icon = document.createElement('i');
-                icon.className = `bi ${file.is_dir ? 'bi-folder' : 'bi-file-earmark'}`;
+                const icon = file.is_dir ? 'bi-folder' : 'bi-file-earmark';
                 const sizeText = file.size > 0 ? `(${formatBytesUtil(file.size)})` : '';
-                label.append(
-                    icon,
-                    document.createTextNode(
-                        ` ${file.path ?? ''}${sizeText ? ` ${sizeText}` : ''}`
-                    )
-                );
-                row.append(checkbox, label);
-                fileList.appendChild(row);
+                // Escape special characters for HTML attribute value
+                const pathValue = file.path.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html += `
+                    <div class="form-check">
+                        <input class="form-check-input github-uninstall-file-checkbox" type="checkbox" value="${pathValue}" id="github-file-${index}" onchange="updateGitHubUninstallCount()">
+                        <label class="form-check-label" for="github-file-${index}">
+                            <i class="bi ${icon}"></i> ${file.path} ${sizeText}
+                        </label>
+                    </div>
+                `;
             });
-
-            fileListDiv.replaceChildren(heading, help, selectAllContainer, fileList);
+            
+            html += '</div>';
+            fileListDiv.innerHTML = html;
             updateGitHubUninstallCount();
         }
         

@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "CS2 Server Manager web panel"
 requires-python = ">=3.14"
 dependencies = [
-    "alembic>=1.16.5,<2.0.0",
     "fastapi>=0.139.2",
     "uvicorn[standard]>=0.51.0",
     "sqlmodel>=0.0.39",
@@ -36,13 +35,9 @@ package = false
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.31.7,<2.0.0",
-    "diff-cover>=9.7.1,<10.0.0",
-    "import-linter>=2.7.0,<3.0.0",
     "pip-audit>=2.10.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
-    "pytest-cov>=7.0.0,<8.0.0",
     "ruff>=0.15.22",
 ]
 
@@ -50,11 +45,6 @@ dev = [
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
-markers = [
-    "redis_integration: use a real Redis coordination store",
-    "integration: requires real MySQL and Redis services",
-    "performance: acceptance/load scenario reserved for scheduled CI",
-]
 
 [tool.ruff]
 target-version = "py314"
@@ -63,22 +53,3 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "B"]
 ignore = ["B008"]
-
-[tool.coverage.run]
-branch = true
-relative_files = true
-source = ["api", "cs2_manager", "modules", "services"]
-
-[tool.coverage.report]
-skip_empty = true
-show_missing = true
-
-[tool.basedpyright]
-include = [
-    "cs2_manager/core",
-    "cs2_manager/infrastructure",
-    "cs2_manager/runtime",
-]
-pythonVersion = "3.14"
-typeCheckingMode = "basic"
-reportMissingTypeStubs = false

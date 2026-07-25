@@ -1,53 +1,40 @@
-name: cs2-server-manager
+version: '3.8'
 
-# Development infrastructure. Database ports are intentionally not published
-# by default; opt in with docker-compose.dev.yml when running the API on host.
 services:
   mysql:
     image: mysql:8.0
+    container_name: cs2_mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-cs2_manager}
-      MYSQL_USER: ${MYSQL_USER:-cs2_manager}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
-    expose:
-      - "3306"
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: cs2_manager
+      MYSQL_USER: cs2admin
+      MYSQL_PASSWORD: cs2password
+    ports:
+      - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
       - cs2_network
     healthcheck:
-      test:
-        - CMD-SHELL
-        - MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysqladmin ping -h 127.0.0.1 -u root --silent
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 20s
-    restart: unless-stopped
+      retries: 5
 
   redis:
     image: redis:7-alpine
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
-    command:
-      - /bin/sh
-      - -c
-      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
-    expose:
-      - "6379"
+    container_name: cs2_redis
+    ports:
+      - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
       - cs2_network
     healthcheck:
-      test:
-        - CMD-SHELL
-        - redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep PONG
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 10
-    restart: unless-stopped
+      retries: 5
 
 volumes:
   mysql_data:

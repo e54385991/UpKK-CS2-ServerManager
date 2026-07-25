@@ -6,8 +6,10 @@ Using SQLModel for seamless FastAPI integration
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlmodel import SQLModel
 
 from .config import settings
+from .migrations import run_migrations
 
 engine = create_async_engine(
     settings.mysql_url,
@@ -25,17 +27,42 @@ async_session_maker = AsyncSessionLocal
 
 
 async def init_db():
-    """Compatibility revision check; runtime ``create_all`` is disabled."""
-    from cs2_manager.infrastructure.migrations import require_database_current
+    """Initialize database tables using SQLModel"""
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    print("Database initialized successfully!")
 
-    await require_database_current(engine)
+    # Create default admin user if no users exist
+    from sqlmodel import select
+
+    from .auth import get_password_hash
+    from .models import User
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User))
+        users = result.scalars().all()
+
+        if not users:
+            print("Creating default admin user...")
+            admin_user = User(
+                username="admin",
+                email="admin@example.com",
+                hashed_password=get_password_hash("admin123"),
+                is_admin=True,
+                is_active=True,
+            )
+            session.add(admin_user)
+            await session.commit()
+            print("✓ Default admin user created:")
+            print("  Username: admin")
+            print("  Password: admin123")
+            print("  ⚠️  IMPORTANT: Please change the default password after first login!")
 
 
 async def migrate_db():
-    """Compatibility wrapper around the advisory-lock Alembic migration."""
-    from cs2_manager.infrastructure.migrations import MigrationCoordinator
-
-    await MigrationCoordinator(engine).upgrade()
+    """Run ordered, compatibility-preserving schema migrations."""
+    async with engine.begin() as conn:
+        await run_migrations(conn)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

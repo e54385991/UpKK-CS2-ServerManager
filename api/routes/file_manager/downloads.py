@@ -2,47 +2,20 @@
 
 # ruff: noqa: F403,F405
 
-from api.http_resource import (
-    ApplicationHTTP as _ApplicationHTTP,
-)
-from api.http_resource import (
-    as_application_http as _as_application_http,
-)
-from api.http_resource import (
-    resolve_application_http as _resolve_application_http,
-)
-
 from .common import *
 
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 
 
-@router.post(
-    "/download-url",
-    response_model=DownloadUrlStartedResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    responses=file_error_responses(
-        status.HTTP_401_UNAUTHORIZED,
-        status.HTTP_403_FORBIDDEN,
-        status.HTTP_404_NOT_FOUND,
-        status.HTTP_503_SERVICE_UNAVAILABLE,
-    ),
-)
+@router.post("/download-url", status_code=status.HTTP_202_ACCEPTED)
 async def download_archive_from_url(
     server_id: int,
     request: DownloadUrlRequest,
-    http_request: Request,
-    http_resource: _ApplicationHTTP | object = Depends(_resolve_application_http),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: MaintenanceLockService = Depends(resolve_maintenance_lock_service),
-    ssh_manager: SSHManager = Depends(get_ssh_manager),
 ):
     """Start downloading an HTTP(S) archive directly on the SSH host."""
-    lock_service = _coerce_maintenance_lock_service(lock_service)
     server = await get_server_for_user(server_id, db, current_user)
-    ssh_manager = _coerce_ssh_manager(ssh_manager, SSHManager)
-    ssh_manager_factory = _bound_ssh_manager_factory(ssh_manager, SSHManager)
     url = _validate_download_url(request.url)
 
     if not request.destination_path or not request.destination_path.strip():
@@ -66,23 +39,18 @@ async def download_archive_from_url(
             detail="Access denied: destination path is outside server directory",
         )
 
-    user_id = current_user.id
-    user_is_admin = current_user.is_admin
-    github_token = await get_effective_github_token(db, current_user)
-    # End every request DB transaction before SSH or outbound HTTP starts.
-    await db.commit()
-
     # Resolve existing ancestors on the SSH host so an in-tree symlink cannot
     # redirect the write outside the canonical game directory.
+    validator = SSHManager()
     try:
-        valid, validation_error = await ssh_manager.validate_path_within_base(
+        valid, validation_error = await validator.validate_path_within_base(
             server.game_directory,
             target_path or destination_path,
             server,
             allow_missing=True,
         )
     finally:
-        await _disconnect_ssh_manager(ssh_manager, operation="URL download validation")
+        await validator.disconnect()
     if not valid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -96,7 +64,7 @@ async def download_archive_from_url(
             "status": "pending",
             "target_path": target_path,
             "server_id": server_id,
-            "user_id": user_id,
+            "user_id": current_user.id,
             "created_at": time.time(),
             "started_at": None,
             "completed_at": None,
@@ -104,35 +72,22 @@ async def download_archive_from_url(
             "error": None,
         }
 
-    session_factory, _supervisor = _background_resources(http_request)
-    coroutine = _run_bounded_file_task(
-        user_id,
-        _run_download_url_task,
-        task_id,
-        url,
-        destination_path,
-        target_path,
-        server_id,
-        user_id,
-        user_is_admin,
-        request.overwrite,
-        github_token,
-        session_factory,
-        lock_service,
-        _as_application_http(http_resource),
-        ssh_manager_factory,
-    )
-    try:
-        task = _spawn_file_task(
-            http_request,
-            coroutine,
-            name=f"file-url-download-{task_id}",
+    github_token = await get_effective_github_token(db, current_user)
+    task = asyncio.create_task(
+        _run_bounded_file_task(
+            current_user.id,
+            lambda: _run_download_url_task(
+                task_id,
+                url,
+                destination_path,
+                target_path,
+                server,
+                request.overwrite,
+                github_token,
+            ),
         )
-    except Exception:
-        coroutine.close()
-        async with download_url_tasks_lock:
-            download_url_tasks.pop(task_id, None)
-        raise
+    )
+    file_task_registry.add(task)
     async with download_url_tasks_lock:
         _download_url_task_refs[task_id] = task
 
@@ -144,16 +99,7 @@ async def download_archive_from_url(
     }
 
 
-@router.get(
-    "/download-url/status/{task_id}",
-    response_model=DownloadUrlStatusResponse,
-    status_code=status.HTTP_200_OK,
-    responses=file_error_responses(
-        status.HTTP_401_UNAUTHORIZED,
-        status.HTTP_403_FORBIDDEN,
-        status.HTTP_404_NOT_FOUND,
-    ),
-)
+@router.get("/download-url/status/{task_id}")
 async def get_download_url_status(
     server_id: int,
     task_id: str,

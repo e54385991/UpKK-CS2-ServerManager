@@ -160,7 +160,7 @@ Copy-Item .env.example .env
 
 **⚠️ 重要提示**: 数据库和 Redis 配置是必需的，不可省略！
 
-**🔒 安全提示**: `.env` 已被 Git 忽略，请勿将它提交到版本库或发送给他人。生产环境必须分别生成 `SECRET_KEY`、`JWT_SECRET_KEY`、`TOKEN_HASH_KEY`，并配置一个 URL-safe Base64 编码的 32 字节 AES 密钥到 `CREDENTIAL_ENCRYPTION_KEYS`/`CREDENTIAL_ACTIVE_KEY_ID`。迁移和应用进程必须使用同一组密钥；丢失密钥将无法恢复已保存的凭据。
+**🔒 安全提示**: `.env` 已被 Git 忽略，请勿将它提交到版本库或发送给他人。生产环境必须为 `SECRET_KEY` 和 `JWT_SECRET_KEY` 分别生成足够长的随机值。
 
 **🔥 Redis 无密码特别说明**  
 如果你的 Redis 服务器**没有设置密码**，请将值留空：
@@ -190,27 +190,9 @@ REDIS_DB=0
 
 SECRET_KEY=请替换为至少32位的随机字符串
 JWT_SECRET_KEY=请替换为另一个至少32位的随机字符串
-TOKEN_HASH_KEY=请替换为第三个至少32位的随机字符串
-CREDENTIAL_ENCRYPTION_KEYS={"v1":"请替换为32字节URL-safe-Base64密钥"}
-CREDENTIAL_ACTIVE_KEY_ID=v1
 ```
 
-#### 步骤 4: 迁移数据库并创建管理员
-
-生产、1Panel 和容器部署必须先独立执行迁移；应用启动只校验 Alembic 版本，不会自动建表或修改结构：
-
-```bash
-uv run python -m cs2_manager.migrate upgrade
-uv run python -m cs2_manager.migrate check
-uv run python -m cs2_manager.cli create-admin \
-  --username YOUR_ADMIN_NAME \
-  --email YOUR_ADMIN_EMAIL \
-  --password-prompt
-```
-
-重复执行同一身份的 `create-admin` 是安全的空操作，不会覆盖、提权或修改已有账户。
-
-#### 步骤 5: 启动服务
+#### 步骤 4: 启动服务
 
 使用 uvicorn 启动应用([1Panel](https://github.com/1Panel-dev/1Panel) 启动命令相同)：
 
@@ -218,7 +200,7 @@ uv run python -m cs2_manager.cli create-admin \
 pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
 ```
 
-#### 步骤 6: 访问应用
+#### 步骤 5: 访问应用
 
 打开浏览器访问以下地址：
 
@@ -230,6 +212,17 @@ pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 
 - **API 文档**: 
   - Swagger UI: http://localhost:8000/docs
   - ReDoc: http://localhost:8000/redoc
+
+#### 步骤 6: 首次登录
+
+首次启动应用时，系统会自动创建默认管理员账户：
+
+```
+用户名: admin
+密码: admin123
+```
+
+**⚠️ 安全提示**: 请在首次登录后立即修改默认密码！
 
 ### 🔧 关于自动初始化
 
@@ -388,7 +381,7 @@ Copy-Item .env.example .env
 Then edit `.env` in the project root and enter the database, Redis, security-key, and other runtime settings. See [`.env.example`](.env.example) for the complete list and recommended defaults. System environment variables override matching values in `.env`.
 
 
-**🔒 Security Notice**: `.env` is ignored by Git. Never commit or share it. In production, generate independent `SECRET_KEY`, `JWT_SECRET_KEY`, and `TOKEN_HASH_KEY` values, plus a URL-safe Base64-encoded 32-byte AES key in `CREDENTIAL_ENCRYPTION_KEYS`/`CREDENTIAL_ACTIVE_KEY_ID`. Migration and application processes must use the same keyring; losing it makes stored credentials unrecoverable.
+**🔒 Security Notice**: `.env` is ignored by Git. Never commit or share it. Generate separate, sufficiently long random values for `SECRET_KEY` and `JWT_SECRET_KEY` in production.
 
 **🔥 Special Note for Redis WITHOUT Password**  
 If your Redis server has **no password set**, leave the value empty:
@@ -421,27 +414,9 @@ REDIS_DB=0
 
 SECRET_KEY=replace_with_a_random_string_of_at_least_32_characters
 JWT_SECRET_KEY=replace_with_a_different_random_string_of_at_least_32_characters
-TOKEN_HASH_KEY=replace_with_a_third_random_string_of_at_least_32_characters
-CREDENTIAL_ENCRYPTION_KEYS={"v1":"replace_with_a_32_byte_urlsafe_base64_key"}
-CREDENTIAL_ACTIVE_KEY_ID=v1
 ```
 
-#### Step 5: Migrate the Database and Create an Administrator
-
-Production, 1Panel, and container deployments must run migrations as a separate step. Application startup only checks the Alembic revision and never creates or alters tables:
-
-```bash
-uv run python -m cs2_manager.migrate upgrade
-uv run python -m cs2_manager.migrate check
-uv run python -m cs2_manager.cli create-admin \
-  --username YOUR_ADMIN_NAME \
-  --email YOUR_ADMIN_EMAIL \
-  --password-prompt
-```
-
-Repeating `create-admin` for the same identity is a safe no-op; it never overwrites, promotes, or modifies an existing account.
-
-#### Step 6: Start Service
+#### Step 5: Start Service
 
 Start the application using uvicorn (same command for 1Panel startup):
 
@@ -449,7 +424,7 @@ Start the application using uvicorn (same command for 1Panel startup):
 pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
 ```
 
-#### Step 7: Access Application
+#### Step 6: Access Application
 
 Open your browser and visit:
 
@@ -461,6 +436,17 @@ Open your browser and visit:
 - **API Documentation**: 
   - Swagger UI: http://localhost:8000/docs
   - ReDoc: http://localhost:8000/redoc
+
+#### Step 7: First Login
+
+On first startup, the system automatically creates a default admin account:
+
+```
+Username: admin
+Password: admin123
+```
+
+**⚠️ Security Notice**: Please change the default password immediately after first login!
 
 ### 🔧 About Auto-Initialization
 

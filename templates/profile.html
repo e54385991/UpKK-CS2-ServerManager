@@ -796,16 +796,14 @@ async function loadApiKey() {
         
         if (response.ok) {
             const data = await response.json();
-            if (data.configured) {
-                document.getElementById('apikey-value').textContent = `${data.prefix || ''}••••••••`;
-                document.getElementById('copy-apikey-btn').classList.add('d-none');
-                document.getElementById('apikey-display').classList.remove('d-none');
-                document.getElementById('no-apikey-message').classList.add('d-none');
-                document.getElementById('generate-apikey-btn').classList.add('d-none');
-                document.getElementById('regenerate-apikey-btn').classList.remove('d-none');
-                document.getElementById('revoke-apikey-btn').classList.remove('d-none');
-                return;
-            }
+            document.getElementById('apikey-value').textContent = data.api_key;
+            document.getElementById('apikey-display').classList.remove('d-none');
+            document.getElementById('no-apikey-message').classList.add('d-none');
+            document.getElementById('generate-apikey-btn').classList.add('d-none');
+            document.getElementById('regenerate-apikey-btn').classList.remove('d-none');
+            document.getElementById('revoke-apikey-btn').classList.remove('d-none');
+        } else if (response.status === 404) {
+            // No API key generated yet
             document.getElementById('apikey-display').classList.add('d-none');
             document.getElementById('no-apikey-message').classList.remove('d-none');
             document.getElementById('generate-apikey-btn').classList.remove('d-none');
@@ -909,14 +907,7 @@ async function generateApiKey() {
             successDiv.classList.remove('d-none');
             document.getElementById('apikey-captcha').value = '';
             document.getElementById('apikey-captcha-token').value = '';  // Clear token to prevent reuse
-            // The full value is intentionally available only in this response.
-            document.getElementById('apikey-value').textContent = data.api_key;
-            document.getElementById('copy-apikey-btn').classList.remove('d-none');
-            document.getElementById('apikey-display').classList.remove('d-none');
-            document.getElementById('no-apikey-message').classList.add('d-none');
-            document.getElementById('generate-apikey-btn').classList.add('d-none');
-            document.getElementById('regenerate-apikey-btn').classList.remove('d-none');
-            document.getElementById('revoke-apikey-btn').classList.remove('d-none');
+            loadApiKey();
         } else {
             errorDiv.textContent = data.detail || (window.i18n ? window.i18n.t('profile.apiKeyGenerateFailed') : 'Failed to generate API key');
             errorDiv.classList.remove('d-none');

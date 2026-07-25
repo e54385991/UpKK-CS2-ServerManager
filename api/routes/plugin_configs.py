@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import posixpath
-from typing import Annotated, Any, Literal, Optional, cast
+from typing import Any, Literal, Optional
 
 import asyncssh
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,9 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import resolve_maintenance_lock_service
 from api.routes.servers import get_server_with_permission
-from cs2_manager.core import ErrorResponse
 from modules import (
     DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS,
     PluginConfigSource,
@@ -24,7 +22,7 @@ from modules import (
     get_current_active_user,
     get_db,
 )
-from services.maintenance_lock import MaintenanceLockService, maintenance_lock_service
+from services.maintenance_lock import maintenance_lock_service
 from services.plugin_config_service import (
     MAX_CONFIG_BYTES,
     SUPPORTED_DIRECTORY_EXTENSIONS,
@@ -47,18 +45,6 @@ router = APIRouter(
     prefix="/servers/{server_id}/plugin-configs",
     tags=["plugin-configs"],
 )
-_DIRECT_MAINTENANCE_LOCK = object()
-_ApplicationMaintenanceLock = Annotated[
-    MaintenanceLockService | object,
-    Depends(resolve_maintenance_lock_service),
-]
-
-
-def _maintenance_locks(resource: MaintenanceLockService | object) -> MaintenanceLockService:
-    """Use the app-owned service, retaining the direct Python facade."""
-    if resource is _DIRECT_MAINTENANCE_LOCK:
-        return maintenance_lock_service
-    return cast(MaintenanceLockService, resource)
 
 
 class SourceCreateRequest(BaseModel):
@@ -76,87 +62,6 @@ class ConfigSaveRequest(BaseModel):
     mode: Literal["visual", "raw"]
     changes: list[ConfigChange] = Field(default_factory=list, max_length=5000)
     content: Optional[str] = Field(default=None, max_length=MAX_CONFIG_BYTES)
-
-
-class PluginConfigSourceResponse(BaseModel):
-    id: Optional[int] = None
-    path: str
-    absolute_path: str
-    name: str
-    type: str
-    is_default: bool
-    persisted: bool
-
-
-class PluginConfigSourcesResponse(BaseModel):
-    game_directory: str
-    sources: list[PluginConfigSourceResponse]
-
-
-class PluginConfigSourceRestoreResponse(PluginConfigSourceResponse):
-    sources: list[PluginConfigSourceResponse]
-
-
-class PluginConfigDeleteResponse(BaseModel):
-    success: bool
-
-
-class PluginConfigBrowseItemResponse(BaseModel):
-    name: str
-    path: Optional[str] = None
-    type: Literal["directory", "file", "symlink"]
-    selectable: bool
-    size: Optional[int] = None
-
-
-class PluginConfigBrowseResponse(BaseModel):
-    path: str
-    items: list[PluginConfigBrowseItemResponse]
-
-
-class PluginConfigFieldResponse(BaseModel):
-    id: str
-    key: str
-    group: str
-    kind: str
-    value: Any
-    line: int
-    comment: str
-
-
-class PluginConfigFileResponse(BaseModel):
-    path: str
-    name: str
-    format: str
-    revision: str
-    content: str
-    visual_supported: bool
-    parse_error: Optional[str] = None
-    fields: list[PluginConfigFieldResponse]
-
-
-class PluginConfigFileSaveResponse(PluginConfigFileResponse):
-    message: str
-
-
-PLUGIN_CONFIG_SOURCE_ERRORS: dict[int | str, dict[str, Any]] = {
-    status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-}
-PLUGIN_CONFIG_REMOTE_ERRORS: dict[int | str, dict[str, Any]] = {
-    **PLUGIN_CONFIG_SOURCE_ERRORS,
-    status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
-    status.HTTP_502_BAD_GATEWAY: {"model": ErrorResponse},
-}
-PLUGIN_CONFIG_FILE_ERRORS: dict[int | str, dict[str, Any]] = {
-    **PLUGIN_CONFIG_REMOTE_ERRORS,
-    status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
-    status.HTTP_415_UNSUPPORTED_MEDIA_TYPE: {"model": ErrorResponse},
-}
-PLUGIN_CONFIG_FILE_WRITE_ERRORS: dict[int | str, dict[str, Any]] = {
-    **PLUGIN_CONFIG_FILE_ERRORS,
-    status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-    status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
-}
 
 
 def _source_payload(source: PluginConfigSource, game_directory: str) -> dict[str, Any]:
@@ -249,12 +154,7 @@ def _file_payload(relative_path: str, content: str) -> dict[str, Any]:
     }
 
 
-@router.get(
-    "/sources",
-    response_model=PluginConfigSourcesResponse,
-    status_code=status.HTTP_200_OK,
-    responses=PLUGIN_CONFIG_SOURCE_ERRORS,
-)
+@router.get("/sources")
 async def list_sources(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -277,15 +177,7 @@ async def list_sources(
     }
 
 
-@router.post(
-    "/sources",
-    response_model=PluginConfigSourceResponse,
-    status_code=status.HTTP_201_CREATED,
-    responses={
-        **PLUGIN_CONFIG_REMOTE_ERRORS,
-        status.HTTP_409_CONFLICT: {"model": ErrorResponse},
-    },
-)
+@router.post("/sources", status_code=status.HTTP_201_CREATED)
 async def create_source(
     server_id: int,
     request: SourceCreateRequest,
@@ -339,12 +231,7 @@ async def create_source(
     return _source_payload(source, server.game_directory)
 
 
-@router.delete(
-    "/sources/{source_id}",
-    response_model=PluginConfigDeleteResponse,
-    status_code=status.HTTP_200_OK,
-    responses=PLUGIN_CONFIG_SOURCE_ERRORS,
-)
+@router.delete("/sources/{source_id}")
 async def delete_source(
     server_id: int,
     source_id: int,
@@ -362,12 +249,7 @@ async def delete_source(
     return {"success": True}
 
 
-@router.post(
-    "/sources/restore-default",
-    response_model=PluginConfigSourceRestoreResponse,
-    status_code=status.HTTP_200_OK,
-    responses=PLUGIN_CONFIG_SOURCE_ERRORS,
-)
+@router.post("/sources/restore-default")
 async def restore_default_source(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -408,13 +290,7 @@ async def restore_default_source(
     return {**payloads[0], "sources": payloads}
 
 
-@router.get(
-    "/browse",
-    response_model=PluginConfigBrowseResponse,
-    response_model_exclude_none=True,
-    status_code=status.HTTP_200_OK,
-    responses=PLUGIN_CONFIG_REMOTE_ERRORS,
-)
+@router.get("/browse")
 async def browse_source_path(
     server_id: int,
     path: str = Query("."),
@@ -486,12 +362,7 @@ async def load_source_files(
     )
 
 
-@router.get(
-    "/sources/{source_id}/file",
-    response_model=PluginConfigFileResponse,
-    status_code=status.HTTP_200_OK,
-    responses=PLUGIN_CONFIG_FILE_ERRORS,
-)
+@router.get("/sources/{source_id}/file")
 async def get_config_file(
     server_id: int,
     source_id: int,
@@ -512,28 +383,18 @@ async def get_config_file(
         await manager.disconnect()
 
 
-@router.put(
-    "/sources/{source_id}/file",
-    response_model=PluginConfigFileSaveResponse,
-    status_code=status.HTTP_200_OK,
-    responses=PLUGIN_CONFIG_FILE_WRITE_ERRORS,
-)
+@router.put("/sources/{source_id}/file")
 async def save_config_file(
     server_id: int,
     source_id: int,
     request: ConfigSaveRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)
     relative = _file_for_source(server, source, request.path)
-    async with _maintenance_locks(lock_service).get(
-        server_id,
-        operation="plugin_config_save",
-        wait=False,
-    ):
+    async with maintenance_lock_service.get(server_id, operation="plugin_config_save", wait=False):
         manager = await _connect(server)
         try:
             current_content = await read_text_file(manager, server, relative)

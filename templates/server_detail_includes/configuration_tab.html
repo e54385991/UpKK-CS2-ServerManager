@@ -5,7 +5,7 @@
                             <h5 class="mb-0"><i class="bi bi-sliders"></i> <span
                                     data-i18n="serverDetail.serverConfiguration">Server Configuration
                                     (LGSM-Style)</span></h5>
-                            <button @click="showConfigEdit = !showConfigEdit; if (showConfigEdit) loadConfigForm()" class="btn btn-sm btn-outline-primary">
+                            <button @click="showConfigEdit = !showConfigEdit" class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-pencil"></i> <span
                                     x-text="showConfigEdit ? (window.i18n?.t('serverDetail.cancel') || 'Cancel') : (window.i18n?.t('serverDetail.edit') || 'Edit')"></span>
                             </button>
@@ -43,14 +43,14 @@
                                             <li><i class="bi bi-lock"></i> <strong
                                                     data-i18n="serverDetail.serverPassword">Server Password:</strong>
                                                 <span
-                                                    x-text="server.server_password_configured ? '••••••' : (window.i18n?.t('serverDetail.none') || 'None')"></span>
+                                                    x-text="server.server_password ? '••••••' : (window.i18n?.t('serverDetail.none') || 'None')"></span>
                                             </li>
                                             <li><i class="bi bi-shield-lock"></i> <strong
                                                     data-i18n="serverDetail.rconPassword">RCON Password:</strong> <span
-                                                    x-text="server.rcon_password_configured ? '••••••' : (window.i18n?.t('serverDetail.none') || 'None')"></span>
+                                                    x-text="server.rcon_password ? '••••••' : (window.i18n?.t('serverDetail.none') || 'None')"></span>
                                             </li>
                                             <li><i class="bi bi-steam"></i> <strong>Steam Account Token:</strong> <span
-                                                    x-text="server.steam_account_token_configured ? '••••••' : (window.i18n?.t('serverDetail.none') || 'None')"></span>
+                                                    x-text="server.steam_account_token ? server.steam_account_token.substring(0, 8) + '...' : (window.i18n?.t('serverDetail.none') || 'None')"></span>
                                             </li>
                                             <li><i class="bi bi-camera-video"></i> <strong
                                                     data-i18n="serverDetail.sourceTV">SourceTV:</strong> <span
@@ -148,54 +148,26 @@
                                             <label class="form-label">Server Password (optional)</label>
                                             <input type="password" class="form-control"
                                                 x-model="configForm.server_password"
-                                                :disabled="secretClear.server_password"
-                                                :placeholder="server.server_password_configured ? 'Leave blank to keep current password' : 'Leave empty for public server'"
-                                                autocomplete="new-password">
-                                            <div class="form-check mt-1" x-show="server.server_password_configured">
-                                                <input class="form-check-input" type="checkbox"
-                                                    id="clear-server-password"
-                                                    x-model="secretClear.server_password"
-                                                    @change="if (secretClear.server_password) configForm.server_password = ''">
-                                                <label class="form-check-label" for="clear-server-password">Clear existing server password</label>
-                                            </div>
+                                                placeholder="Leave empty for public server">
                                         </div>
                                         <div class="col-md-6">
                                             <label class="form-label">RCON Password</label>
                                             <input type="password" class="form-control"
-                                                x-model="configForm.rcon_password"
-                                                :disabled="secretClear.rcon_password"
-                                                :placeholder="server.rcon_password_configured ? 'Leave blank to keep current password' : 'Admin password'"
-                                                autocomplete="new-password">
-                                            <div class="form-check mt-1" x-show="server.rcon_password_configured">
-                                                <input class="form-check-input" type="checkbox"
-                                                    id="clear-rcon-password"
-                                                    x-model="secretClear.rcon_password"
-                                                    @change="if (secretClear.rcon_password) configForm.rcon_password = ''">
-                                                <label class="form-check-label" for="clear-rcon-password">Clear existing RCON password</label>
-                                            </div>
+                                                x-model="configForm.rcon_password" placeholder="Admin password">
                                         </div>
                                         <div class="col-md-12">
                                             <label class="form-label" data-i18n="serverDetail.steamGSLT">Steam Game Server Login Token (GSLT)</label>
                                             <div class="input-group mb-2">
-                                                <input type="password" class="form-control"
+                                                <input type="text" class="form-control"
                                                     x-model="configForm.steam_account_token"
-                                                    :disabled="secretClear.steam_account_token"
                                                     data-i18n-placeholder="serverDetail.steamGSLTHint"
                                                     placeholder="Optional - Required for public servers"
-                                                    autocomplete="new-password"
                                                     id="steam-token-input">
                                                 <button type="button" class="btn btn-outline-secondary" 
                                                     @click="showTokenGeneratorModal = true"
                                                     :disabled="generatingToken">
                                                     <i class="bi bi-magic"></i> <span data-i18n="serverDetail.steamGSLTGenerate">Generate</span>
                                                 </button>
-                                            </div>
-                                            <div class="form-check mb-2" x-show="server.steam_account_token_configured">
-                                                <input class="form-check-input" type="checkbox"
-                                                    id="clear-steam-account-token"
-                                                    x-model="secretClear.steam_account_token"
-                                                    @change="if (secretClear.steam_account_token) configForm.steam_account_token = ''">
-                                                <label class="form-check-label" for="clear-steam-account-token">Clear existing GSLT</label>
                                             </div>
                                             <small class="text-muted">
                                                 <span data-i18n="serverDetail.steamGSLTInfo">⚠️ Important: GSLT is required if using CS2 Workshop maps. Apply for GSLT from Steam Community, AppID 730</span>

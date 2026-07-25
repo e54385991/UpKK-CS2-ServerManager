@@ -10,8 +10,7 @@ from typing import Any, Optional
 
 import redis.asyncio as aioredis
 
-from cs2_manager.core import SettingsProtocol
-from modules.config import settings as default_settings
+from modules.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ class RedisManager:
     # Cache duration constants
     INITIALIZED_SERVER_CACHE_TTL = 2592000  # 30 days in seconds
 
-    def __init__(self, settings: SettingsProtocol = default_settings):
+    def __init__(self):
         self._coordination_retry_after = 0.0
         # Create Redis client with connection pool settings from config
         # The Redis class manages its own connection pool internally
@@ -45,7 +44,7 @@ class RedisManager:
                 value = json.dumps(value)
             return await self.client.setex(key, expire, value)
         except Exception as e:
-            logger.error("Redis set error: %s", e)
+            print(f"Redis set error: {e}")
             return False
 
     async def get(self, key: str) -> Optional[Any]:
@@ -59,37 +58,15 @@ class RedisManager:
                     return value
             return None
         except Exception as e:
-            logger.error("Redis get error: %s", e)
+            print(f"Redis get error: {e}")
             return None
-
-    async def mget(self, keys: list[str]) -> list[Optional[Any]]:
-        """Fetch and JSON-decode multiple values in one Redis round trip."""
-        if not keys:
-            return []
-        try:
-            values = await self.client.mget(keys)
-            decoded: list[Optional[Any]] = []
-            for value in values:
-                if value is None:
-                    decoded.append(None)
-                    continue
-                if isinstance(value, bytes):
-                    value = value.decode("utf-8")
-                try:
-                    decoded.append(json.loads(value))
-                except json.JSONDecodeError, TypeError:
-                    decoded.append(value)
-            return decoded
-        except Exception as e:
-            logger.error("Redis mget error: %s", e)
-            return [None] * len(keys)
 
     async def delete(self, key: str) -> bool:
         """Delete a key from Redis"""
         try:
             return bool(await self.client.delete(key))
         except Exception as e:
-            logger.error("Redis delete error: %s", e)
+            print(f"Redis delete error: {e}")
             return False
 
     async def acquire_lock(self, key: str, token: str, expire: int) -> Optional[bool]:
@@ -201,7 +178,7 @@ class RedisManager:
             await self.delete_by_pattern(pattern)
             return True
         except Exception as e:
-            logger.error("Redis clear cache error: %s", e)
+            print(f"Redis clear cache error: {e}")
             return False
 
     async def delete_by_pattern(self, pattern: str, count: int = 100) -> int:
@@ -221,7 +198,7 @@ class RedisManager:
         try:
             return await self.client.ping()
         except Exception as e:
-            logger.error("Redis ping error: %s", e)
+            print(f"Redis ping error: {e}")
             return False
 
     async def close(self):
@@ -271,7 +248,7 @@ class RedisManager:
 
             return servers
         except Exception as e:
-            logger.error("Redis get initialized servers error: %s", e)
+            print(f"Redis get initialized servers error: {e}")
             return []
 
     async def get_initialized_server(self, server_key: str) -> Optional[dict]:
@@ -285,7 +262,7 @@ class RedisManager:
         try:
             await self.client.lrem(list_key, 1, server_key)
         except Exception as e:
-            logger.error("Redis list remove error: %s", e)
+            print(f"Redis list remove error: {e}")
 
         # Delete the server data
         return await self.delete(server_key)
@@ -306,34 +283,18 @@ class RedisManager:
         Returns:
             bool: Success status
         """
-        return await self.append_deployment_progress_batch(
-            server_id,
-            [{"type": msg_type, "message": message, "timestamp": timestamp}],
-        )
-
-    async def append_deployment_progress_batch(
-        self,
-        server_id: int,
-        entries: list[dict[str, str]],
-        *,
-        expire: int = 7200,
-        max_entries: int = 1000,
-    ) -> bool:
-        """Append progress entries and cap/refresh the list in one pipeline."""
-        if not entries:
-            return True
-
         key = f"deployment_progress:{server_id}"
-        encoded_entries = [json.dumps(entry) for entry in entries]
         try:
-            pipeline = self.client.pipeline(transaction=True)
-            pipeline.rpush(key, *encoded_entries)
-            pipeline.ltrim(key, -max_entries, -1)
-            pipeline.expire(key, expire)
-            await pipeline.execute()
+            # Store as JSON for structured data
+            progress_entry = json.dumps(
+                {"type": msg_type, "message": message, "timestamp": timestamp}
+            )
+            await self.client.rpush(key, progress_entry)
+            # Set expiration to 2 hours (matches deployment lock TTL)
+            await self.client.expire(key, 7200)
             return True
         except Exception as e:
-            logger.error("Redis append deployment progress error: %s", e)
+            print(f"Redis append deployment progress error: {e}")
             return False
 
     async def get_deployment_progress(self, server_id: int) -> list:
@@ -351,7 +312,7 @@ class RedisManager:
             progress_entries = await self.client.lrange(key, 0, -1)
             return [json.loads(entry) for entry in progress_entries]
         except Exception as e:
-            logger.error("Redis get deployment progress error: %s", e)
+            print(f"Redis get deployment progress error: {e}")
             return []
 
     async def clear_deployment_progress(self, server_id: int) -> bool:
@@ -368,47 +329,8 @@ class RedisManager:
         return await self.delete(key)
 
     # Batch action methods
-    async def initialize_batch_action(
-        self,
-        batch_id: str,
-        user_id: int,
-        server_ids: list[int],
-        status: str,
-        message: str = "",
-        expire: int = 3600,
-    ) -> bool:
-        """Initialize every server status and the batch owner in one pipeline."""
-        if not server_ids:
-            return False
-
-        key = f"batch_action:{batch_id}"
-        timestamp = time.time()
-        mapping = {
-            str(server_id): json.dumps(
-                {"status": status, "message": message, "timestamp": timestamp}
-            )
-            for server_id in server_ids
-        }
-        mapping["__owner_user_id"] = str(user_id)
-        try:
-            pipeline = self.client.pipeline(transaction=True)
-            pipeline.hset(key, mapping=mapping)
-            pipeline.expire(key, expire)
-            await pipeline.execute()
-            return True
-        except Exception as e:
-            logger.error("Redis initialize batch action error: %s", e)
-            return False
-
     async def set_batch_action_status(
-        self,
-        batch_id: str,
-        server_id: int,
-        status: str,
-        message: str = "",
-        expire: int = 3600,
-        *,
-        user_id: Optional[int] = None,
+        self, batch_id: str, server_id: int, status: str, message: str = "", expire: int = 3600
     ) -> bool:
         """
         Set status for a server in a batch action
@@ -419,109 +341,46 @@ class RedisManager:
             status: Status (pending, in_progress, success, failed)
             message: Optional status message
             expire: TTL in seconds (default 1 hour)
-            user_id: When supplied, update only a batch owned by this user
 
         Returns:
             bool: Success status
         """
-        key = f"batch_action:{batch_id}"
+        key = f"batch_action:{batch_id}:{server_id}"
         try:
             data = json.dumps({"status": status, "message": message, "timestamp": time.time()})
-            if user_id is None:
-                pipeline = self.client.pipeline(transaction=True)
-                pipeline.hset(key, str(server_id), data)
-                pipeline.expire(key, expire)
-                await pipeline.execute()
-                return True
-
-            script = """
-            local owner = redis.call('hget', KEYS[1], ARGV[1])
-            if not owner or owner ~= ARGV[2] then
-                return 0
-            end
-            redis.call('hset', KEYS[1], ARGV[3], ARGV[4])
-            redis.call('expire', KEYS[1], ARGV[5])
-            return 1
-            """
-            return bool(
-                await self.client.eval(
-                    script,
-                    1,
-                    key,
-                    "__owner_user_id",
-                    str(user_id),
-                    str(server_id),
-                    data,
-                    expire,
-                )
-            )
+            return await self.client.setex(key, expire, data)
         except Exception as e:
-            logger.error("Redis set batch action status error: %s", e)
+            print(f"Redis set batch action status error: {e}")
             return False
 
-    async def get_batch_action_status(
-        self, batch_id: str, *, user_id: Optional[int] = None
-    ) -> dict:
+    async def get_batch_action_status(self, batch_id: str) -> dict:
         """
         Get status for all servers in a batch action
 
-        Reads the current hash layout in one call. During the legacy-key TTL
-        window, ownerless internal callers can still read old keys via
-        SCAN + MGET without blocking Redis.
+        Uses SCAN instead of KEYS to avoid blocking Redis on large datasets.
 
         Args:
             batch_id: Unique batch action identifier
-            user_id: Expected batch owner; ownerless legacy data is rejected
 
         Returns:
             dict: Dictionary of server_id -> status data
         """
-        key = f"batch_action:{batch_id}"
+        pattern = f"batch_action:{batch_id}:*"
         try:
-            hash_values = await self.client.hgetall(key)
-            if hash_values:
-                owner = hash_values.pop("__owner_user_id", None)
-                if user_id is not None and owner != str(user_id):
-                    return {}
-
-                results = {}
-                for server_id, data in hash_values.items():
-                    try:
-                        results[str(server_id)] = json.loads(data)
-                    except json.JSONDecodeError, TypeError:
-                        logger.warning(
-                            "Ignoring invalid batch status for %s/%s", batch_id, server_id
-                        )
-                return results
-
-            # Compatibility read for the former one-key-per-server layout. New
-            # authenticated callers cannot claim ownerless historical batches.
-            if user_id is not None:
-                return {}
-
-            return await self.get_legacy_batch_action_status(batch_id)
-        except Exception as e:
-            logger.error("Redis get batch action status error: %s", e)
-            return {}
-
-    async def get_legacy_batch_action_status(self, batch_id: str) -> dict:
-        """Read the expiring one-key-per-server layout with SCAN + MGET."""
-        try:
-            pattern = f"batch_action:{batch_id}:*"
             results = {}
             cursor = 0
             while True:
                 cursor, keys = await self.client.scan(cursor, match=pattern, count=100)
-                values = await self.mget(keys)
-                for legacy_key, data in zip(keys, values, strict=True):
+                for key in keys:
+                    server_id = key.split(":")[-1]
+                    data = await self.get(key)
                     if data:
-                        server_id = legacy_key.split(":")[-1]
                         results[server_id] = data
                 if cursor == 0:
                     break
             return results
         except Exception as e:
-            logger.error("Redis get legacy batch action status error: %s", e)
+            print(f"Redis get batch action status error: {e}")
             return {}
 
     # Monitoring log methods - uses Redis list with max 50 entries

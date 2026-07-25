@@ -1,8 +1,0 @@
-# Explicit host-access override for developers running Uvicorn outside Compose.
-services:
-  mysql:
-    ports:
-      - "${MYSQL_BIND_ADDRESS:-127.0.0.1}:${MYSQL_PORT:-3306}:3306"
-  redis:
-    ports:
-      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6379}:6379"

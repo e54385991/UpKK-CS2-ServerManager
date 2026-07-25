@@ -24,14 +24,11 @@ from .configuration import (
 )
 from .crud import (
     apply_system_defaults_to_server,
-    confirm_existing_server_host_key,
     create_server,
     delete_server,
     get_server,
     list_all_servers_admin,
     list_servers,
-    scan_existing_server_host_key,
-    scan_new_server_host_key,
     update_server,
 )
 from .maintenance import (
@@ -59,9 +56,6 @@ ENDPOINT_ORDER = (
     "create_server",
     "list_servers",
     "list_all_servers_admin",
-    "scan_new_server_host_key",
-    "scan_existing_server_host_key",
-    "confirm_existing_server_host_key",
     "get_all_servers_disk_space",
     "get_server",
     "get_discord_settings",

@@ -5,54 +5,31 @@ File manager routes for server file operations
 
 import asyncio
 import ipaddress
-import json
 import logging
 import os
 import posixpath
 import re
-import secrets
 import socket
 import tempfile
 import time
 import uuid
-from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlsplit
 
 import anyio
 import httpx
 import jwt
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Header,
-    HTTPException,
-    Query,
-    Request,
-    UploadFile,
-    status,
-)
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
 from jwt import InvalidTokenError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel, select
 from starlette.background import BackgroundTask
 
-from api.dependencies import (
-    get_ssh_manager,
-    require_server_access,
-    resolve_maintenance_lock_service,
-)
-from api.http_resource import ApplicationHTTP as _ApplicationHTTP
-from cs2_manager.core import ErrorResponse
-from cs2_manager.infrastructure.credentials import hash_token
+from api.dependencies import require_server_access
 from modules import Server, User, get_current_active_user, get_db, settings
-from modules.database import async_session_maker
-from modules.http_helper import http_helper
 from services import SSHManager
 from services.github_credentials import get_effective_github_token
-from services.maintenance_lock import MaintenanceLockService, maintenance_lock_service
 from services.task_registry import file_task_registry
 
 logger = logging.getLogger(__name__)
@@ -89,103 +66,20 @@ _download_url_task_refs: Dict[str, asyncio.Task] = {}
 
 download_url_tasks_lock = asyncio.Lock()
 
+download_tickets: Dict[str, Dict[str, Any]] = {}
+
+download_tickets_lock = asyncio.Lock()
+
 _file_task_semaphore = asyncio.Semaphore(4)
 
 _file_user_semaphores: dict[int, asyncio.Semaphore] = {}
 
-SSHManagerFactory = Callable[[], SSHManager]
 
-
-def _coerce_maintenance_lock_service(
-    candidate: object,
-) -> MaintenanceLockService:
-    """Keep direct facade calls compatible while HTTP dependency lookup is strict."""
-    if callable(getattr(candidate, "get", None)):
-        return candidate  # type: ignore[return-value]
-    return maintenance_lock_service
-
-
-def _coerce_ssh_manager(
-    candidate: object,
-    constructor: Callable[[], SSHManager],
-) -> SSHManager:
-    """Keep direct facade calls compatible while HTTP dependency lookup is strict."""
-    if callable(getattr(candidate, "disconnect", None)):
-        return candidate  # type: ignore[return-value]
-    return constructor()
-
-
-def _bound_ssh_manager_factory(
-    manager: SSHManager,
-    constructor: Callable[..., SSHManager],
-) -> SSHManagerFactory:
-    """Create task-local managers bound to the request application's resources."""
-    connection_pool = getattr(manager, "connection_pool", None)
-    http_resource = getattr(manager, "http_resource", None)
-    if connection_pool is None or http_resource is None:
-        # Compatibility callers can continue patching the facade constructor.
-        # Request dependencies always supply both explicit application resources.
-        return constructor
-    return lambda: constructor(
-        connection_pool=connection_pool,
-        http_resource=http_resource,
-    )
-
-
-async def _run_bounded_file_task(
-    user_id: int,
-    callback: Callable[..., Awaitable[None]],
-    *args: Any,
-) -> None:
-    """Run file work with bounded fan-out without closing over request objects."""
+async def _run_bounded_file_task(user_id: int, callback) -> None:
     user_semaphore = _file_user_semaphores.setdefault(user_id, asyncio.Semaphore(2))
     async with user_semaphore:
         async with _file_task_semaphore:
-            await callback(*args)
-
-
-def _background_resources(request: Request):
-    """Resolve lifespan-owned task and database resources before a request ends."""
-    state = request.app.state
-    container = getattr(state, "container", None)
-    database = getattr(container, "database", None)
-    session_factory = getattr(database, "session_factory", async_session_maker)
-    return session_factory, getattr(state, "task_supervisor", None)
-
-
-def _spawn_file_task(request: Request, coroutine, *, name: str) -> asyncio.Task:
-    """Prefer the application supervisor and retain the legacy test fallback."""
-    _session_factory, supervisor = _background_resources(request)
-    if supervisor is not None:
-        return supervisor.create(coroutine, name=name)
-    return file_task_registry.add(asyncio.create_task(coroutine, name=name))
-
-
-async def _load_server_snapshot(
-    session_factory,
-    server_id: int,
-    user_id: int,
-    user_is_admin: bool,
-) -> Server:
-    """Load and copy a server in a short session before any remote I/O."""
-    async with session_factory() as session:
-        server = await session.get(Server, server_id)
-        if server is None or (not user_is_admin and server.user_id != user_id):
-            raise RuntimeError("Server is no longer available")
-        # SQLModel validation creates a transient instance. This guarantees the
-        # slow SSH phase cannot lazy-load through, or retain, the request DB
-        # session even when an injected factory uses expire_on_commit=True.
-        snapshot = Server.model_validate(server, from_attributes=True)
-        await session.commit()
-    return snapshot
-
-
-async def _disconnect_ssh_manager(ssh_manager: SSHManager, *, operation: str) -> None:
-    """Best-effort release which never hides the operation's primary result."""
-    try:
-        await ssh_manager.disconnect()
-    except Exception:
-        logger.warning("Failed to release SSH connection after %s", operation, exc_info=True)
+            await callback()
 
 
 async def shutdown_background_tasks() -> None:
@@ -214,101 +108,6 @@ class DirectoryListResponse(SQLModel):
     files: List[FileInfo]
 
 
-class FileContentResponse(SQLModel):
-    """Editable text-file content response."""
-
-    path: str
-    content: str
-
-
-class FileActionResponse(SQLModel):
-    """Success envelope for file operations without additional data."""
-
-    success: bool
-    message: str
-
-
-class FileUploadResponse(FileActionResponse):
-    """Successful upload response."""
-
-    path: str
-    filename: str
-
-
-class DownloadTicketResponse(SQLModel):
-    """Short-lived one-time download credential."""
-
-    ticket: str
-    expires_in: int
-
-
-class DirectoryCreatedResponse(FileActionResponse):
-    """Successful directory creation response."""
-
-    path: str
-
-
-class FileRenamedResponse(FileActionResponse):
-    """Successful rename response."""
-
-    new_path: str
-
-
-class ArchiveInspectionResponse(SQLModel):
-    """Safe, selectable metadata discovered in a remote archive."""
-
-    archive_type: str
-    folders: List[str]
-    entry_count: int
-
-
-class ExtractionStartedResponse(FileActionResponse):
-    """Accepted extraction task response."""
-
-    task_id: str
-    status: str
-    destination: str
-
-
-class ExtractionStatusResponse(SQLModel):
-    """Current state of an extraction task."""
-
-    task_id: str
-    status: str
-    archive_path: str
-    destination_path: str
-    source_folder: Optional[str] = None
-    strip_source_folder: bool
-    message: Optional[str] = None
-    error: Optional[str] = None
-    elapsed_seconds: Optional[float] = None
-
-
-class DownloadUrlStartedResponse(SQLModel):
-    """Accepted remote URL download task response."""
-
-    success: bool
-    task_id: str
-    status: str
-    target_path: Optional[str] = None
-
-
-class DownloadUrlStatusResponse(SQLModel):
-    """Current state of a remote URL download task."""
-
-    task_id: str
-    status: str
-    target_path: Optional[str] = None
-    message: Optional[str] = None
-    error: Optional[str] = None
-    elapsed_seconds: Optional[float] = None
-
-
-def file_error_responses(*status_codes: int) -> dict[int | str, dict[str, Any]]:
-    """Build explicit legacy ``{"detail": ...}`` error declarations."""
-    return {status_code: {"model": ErrorResponse} for status_code in status_codes}
-
-
 class FileContentRequest(SQLModel):
     """File content update request"""
 
@@ -325,10 +124,6 @@ class DownloadTicketRequest(SQLModel):
     """Create a short-lived browser download ticket"""
 
     path: str
-
-
-class DownloadTicketStoreUnavailable(RuntimeError):
-    """Raised when Redis cannot safely issue or consume a one-time ticket."""
 
 
 class DeleteRequest(SQLModel):
@@ -370,119 +165,46 @@ class InspectArchiveRequest(SQLModel):
 
 
 async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
-    """Authorize and detach a server before any slow remote operation."""
-    server = await require_server_access(
-        db,
-        server_id,
-        current_user,
-        commit=False,
-    )
-    snapshot = Server.model_validate(server, from_attributes=True)
-    await db.commit()
-    return snapshot
+    """Helper to get server and verify ownership - admins can access any server"""
+    return await require_server_access(db, server_id, current_user)
 
 
-def _download_ticket_resources(request: Request, operation: str) -> tuple[Any, str]:
-    """Resolve only the Redis and hash key owned by the request's application."""
-    try:
-        container = request.app.state.container
-        redis_resource = container.redis
-        redis_client = redis_resource.client
-        ticket_settings = container.settings
-        token_key = ticket_settings.TOKEN_HASH_KEY or ticket_settings.SECRET_KEY
-        redis_operation = getattr(redis_client, operation)
-    except Exception as exc:
-        logger.error("Download ticket application resources are unavailable: %s", exc)
-        raise DownloadTicketStoreUnavailable(
-            "Download ticket service is temporarily unavailable"
-        ) from exc
+async def _create_download_ticket(user_id: int, server_id: int, path: str) -> str:
+    """Create a short-lived one-time ticket bound to a user, server and path."""
+    now = time.monotonic()
+    async with download_tickets_lock:
+        expired_tickets = [
+            ticket for ticket, info in download_tickets.items() if info["expires_at"] <= now
+        ]
+        for ticket in expired_tickets:
+            download_tickets.pop(ticket, None)
 
-    if not token_key or not callable(redis_operation):
-        logger.error("Download ticket application resources are incomplete")
-        raise DownloadTicketStoreUnavailable("Download ticket service is temporarily unavailable")
-    return redis_client, token_key
-
-
-async def _create_download_ticket(
-    request: Request,
-    user_id: int,
-    server_id: int,
-    path: str,
-) -> str:
-    """Create a Redis-backed, hashed, one-time ticket bound to exact inputs."""
-    payload = json.dumps(
-        {"user_id": user_id, "server_id": server_id, "path": path},
-        separators=(",", ":"),
-    )
-    redis_client, token_key = _download_ticket_resources(request, "set")
-    try:
-        async with asyncio.timeout(1.0):
-            for _attempt in range(3):
-                ticket = secrets.token_urlsafe(32)
-                digest = hash_token(ticket, token_key)
-                created = await redis_client.set(
-                    f"download_ticket:{digest}",
-                    payload,
-                    ex=DOWNLOAD_TICKET_TTL_SECONDS,
-                    nx=True,
-                )
-                if created:
-                    return ticket
-    except Exception as exc:
-        logger.error("Unable to create download ticket in coordination storage: %s", exc)
-        raise DownloadTicketStoreUnavailable(
-            "Download ticket service is temporarily unavailable"
-        ) from exc
-    raise DownloadTicketStoreUnavailable("Unable to allocate a unique download ticket")
+        ticket = uuid.uuid4().hex
+        download_tickets[ticket] = {
+            "user_id": user_id,
+            "server_id": server_id,
+            "path": path,
+            "expires_at": now + DOWNLOAD_TICKET_TTL_SECONDS,
+        }
+        return ticket
 
 
-async def _consume_download_ticket(
-    request: Request,
-    ticket: str,
-    server_id: int,
-    path: str,
-) -> Optional[int]:
-    """Atomically consume and validate a Redis-backed one-time ticket."""
-    if not ticket or len(ticket) > 256:
+async def _consume_download_ticket(ticket: str, server_id: int, path: str) -> Optional[int]:
+    """Consume and validate a one-time download ticket."""
+    now = time.monotonic()
+    async with download_tickets_lock:
+        ticket_info = download_tickets.pop(ticket, None)
+
+    if not ticket_info:
         return None
-    redis_client, token_key = _download_ticket_resources(request, "eval")
-    digest = hash_token(ticket, token_key)
-    consume_script = """
-    local value = redis.call('GET', KEYS[1])
-    if value then redis.call('DEL', KEYS[1]) end
-    return value
-    """
-    try:
-        async with asyncio.timeout(1.0):
-            encoded = await redis_client.eval(
-                consume_script,
-                1,
-                f"download_ticket:{digest}",
-            )
-    except Exception as exc:
-        logger.error("Unable to consume download ticket from coordination storage: %s", exc)
-        raise DownloadTicketStoreUnavailable(
-            "Download ticket service is temporarily unavailable"
-        ) from exc
-    if not encoded:
+    if ticket_info["expires_at"] <= now:
         return None
-    if isinstance(encoded, bytes):
-        encoded = encoded.decode("utf-8")
-    try:
-        ticket_info = json.loads(encoded)
-    except TypeError, json.JSONDecodeError:
-        logger.error("Discarded malformed download ticket payload")
+    if ticket_info["server_id"] != server_id or ticket_info["path"] != path:
         return None
-    if ticket_info.get("server_id") != server_id or ticket_info.get("path") != path:
-        return None
-    try:
-        return int(ticket_info["user_id"])
-    except KeyError, TypeError, ValueError:
-        return None
+    return int(ticket_info["user_id"])
 
 
 async def get_current_active_user_for_download(
-    request: Request,
     server_id: int,
     path: str,
     ticket: Optional[str] = Query(None),
@@ -499,13 +221,7 @@ async def get_current_active_user_for_download(
     user_id: Optional[int] = None
 
     if ticket:
-        try:
-            user_id = await _consume_download_ticket(request, ticket, server_id, path)
-        except DownloadTicketStoreUnavailable as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=str(exc),
-            ) from exc
+        user_id = await _consume_download_ticket(ticket, server_id, path)
         if user_id is None:
             raise credentials_exception
     elif authorization:
@@ -740,8 +456,6 @@ def _parse_github_actions_artifact_url(url: str) -> Optional[Tuple[str, str, int
 async def _resolve_github_actions_artifact(
     url: str,
     github_token: Optional[str],
-    *,
-    http_resource: _ApplicationHTTP | None = None,
 ) -> Tuple[str, str]:
     """Resolve GitHub artifact metadata and its short-lived signed URL locally.
 
@@ -766,19 +480,12 @@ async def _resolve_github_actions_artifact(
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    # Direct Python users of the compatibility facade retain the legacy
-    # process-global default. FastAPI request paths always pass the adapter
-    # owned by their application container explicitly.
-    outbound_http = http_resource or http_helper
     try:
-        async with outbound_http.borrow_client() as client:
-            request_timeout = httpx.Timeout(20.0, connect=10.0)
-            metadata_response = await client.get(
-                api_base,
-                headers=headers,
-                timeout=request_timeout,
-                follow_redirects=False,
-            )
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(20.0, connect=10.0),
+            follow_redirects=False,
+        ) as client:
+            metadata_response = await client.get(api_base, headers=headers)
             if metadata_response.status_code != 200:
                 if metadata_response.status_code in (401, 403):
                     if token:
@@ -816,12 +523,7 @@ async def _resolve_github_actions_artifact(
             if SSHManager.archive_type_from_path(filename) != "zip":
                 raise RuntimeError("GitHub artifact filename is not a ZIP archive")
 
-            download_response = await client.get(
-                f"{api_base}/zip",
-                headers=headers,
-                timeout=request_timeout,
-                follow_redirects=False,
-            )
+            download_response = await client.get(f"{api_base}/zip", headers=headers)
             if download_response.status_code != 302:
                 if download_response.status_code in (401, 403):
                     if token:
@@ -882,18 +584,11 @@ async def _run_download_url_task(
     url: str,
     destination_path: str,
     target_path: Optional[str],
-    server_id: int,
-    user_id: int,
-    user_is_admin: bool,
+    server: Server,
     overwrite: bool,
     github_token: Optional[str],
-    session_factory=async_session_maker,
-    lock_service: MaintenanceLockService | None = None,
-    http_resource: _ApplicationHTTP | None = None,
-    ssh_manager_factory: SSHManagerFactory | None = None,
 ):
-    """Download on the SSH host after loading a detached server snapshot."""
-    lock_service = _coerce_maintenance_lock_service(lock_service)
+    """Download an archive on the SSH host without retaining its URL in status."""
     ssh_manager: Optional[SSHManager] = None
 
     async def update_target_path(resolved_target_path: str) -> None:
@@ -907,75 +602,50 @@ async def _run_download_url_task(
             download_url_tasks[task_id]["status"] = "running"
             download_url_tasks[task_id]["started_at"] = time.time()
 
-        async with lock_service.get(
-            server_id,
-            operation="file_download_url",
-            wait=False,
-            ttl=7200,
-        ):
-            server = await _load_server_snapshot(
-                session_factory,
-                server_id,
-                user_id,
-                user_is_admin,
+        ssh_manager = SSHManager()
+        connected, connection_error = await ssh_manager.connect(server)
+        if not connected:
+            raise RuntimeError(f"Connection failed: {connection_error}")
+
+        is_github_artifact = _parse_github_actions_artifact_url(url) is not None
+        download_url = url
+        if is_github_artifact:
+            download_url, artifact_filename = await _resolve_github_actions_artifact(
+                url,
+                github_token,
             )
-            manager_factory = ssh_manager_factory or SSHManager
-            ssh_manager = manager_factory()
-            try:
-                connected, connection_error = await ssh_manager.connect(server)
-                if not connected:
-                    raise RuntimeError(f"Connection failed: {connection_error}")
+            if target_path is None:
+                target_path = remote_join(destination_path, artifact_filename)
+                await update_target_path(target_path)
 
-                is_github_artifact = _parse_github_actions_artifact_url(url) is not None
-                download_url = url
-                if is_github_artifact:
-                    download_url, artifact_filename = await _resolve_github_actions_artifact(
-                        url,
-                        github_token,
-                        http_resource=http_resource,
-                    )
-                    if target_path is None:
-                        target_path = remote_join(destination_path, artifact_filename)
-                        await update_target_path(target_path)
+        logger.info(
+            "[URL Download] Starting task %s -> %s",
+            task_id,
+            target_path or destination_path,
+        )
+        success, error = await ssh_manager.download_url_to_file(
+            download_url,
+            target_path,
+            server,
+            overwrite=overwrite,
+            destination_path=destination_path,
+            resolved_target_callback=update_target_path,
+        )
 
-                logger.info(
-                    "[URL Download] Starting task %s -> %s",
-                    task_id,
-                    target_path or destination_path,
-                )
-                success, error = await ssh_manager.download_url_to_file(
-                    download_url,
-                    target_path,
-                    server,
-                    overwrite=overwrite,
-                    destination_path=destination_path,
-                    resolved_target_callback=update_target_path,
-                )
-
-                # GitHub's signed object-storage redirect expires after one minute. If
-                # curl reached it too late, fetch a fresh redirect and retry exactly
-                # once. Non-transfer failures (unsafe path, conflict, missing curl) do
-                # not benefit from another authenticated API request.
-                if is_github_artifact and not success and error.startswith("Download failed:"):
-                    download_url, _ = await _resolve_github_actions_artifact(
-                        url,
-                        github_token,
-                        http_resource=http_resource,
-                    )
-                    success, error = await ssh_manager.download_url_to_file(
-                        download_url,
-                        target_path,
-                        server,
-                        overwrite=overwrite,
-                        destination_path=destination_path,
-                        resolved_target_callback=update_target_path,
-                    )
-            finally:
-                await _disconnect_ssh_manager(
-                    ssh_manager,
-                    operation=f"URL download task {task_id}",
-                )
-                ssh_manager = None
+        # GitHub's signed object-storage redirect expires after one minute. If
+        # curl reached it too late, fetch a fresh redirect and retry exactly
+        # once. Non-transfer failures (unsafe path, conflict, missing curl) do
+        # not benefit from another authenticated API request.
+        if is_github_artifact and not success and error.startswith("Download failed:"):
+            download_url, _ = await _resolve_github_actions_artifact(url, github_token)
+            success, error = await ssh_manager.download_url_to_file(
+                download_url,
+                target_path,
+                server,
+                overwrite=overwrite,
+                destination_path=destination_path,
+                resolved_target_callback=update_target_path,
+            )
 
         # The SSH host only ever receives an expiring signed URL, never this
         # credential. Drop the coroutine's local token reference after use.
@@ -989,13 +659,6 @@ async def _run_download_url_task(
                 download_url_tasks[task_id]["status"] = "failed"
                 download_url_tasks[task_id]["error"] = error
             download_url_tasks[task_id]["completed_at"] = time.time()
-    except asyncio.CancelledError:
-        async with download_url_tasks_lock:
-            if task_id in download_url_tasks:
-                download_url_tasks[task_id]["status"] = "failed"
-                download_url_tasks[task_id]["error"] = "Download task was cancelled"
-                download_url_tasks[task_id]["completed_at"] = time.time()
-        raise
     except Exception as exc:
         logger.exception("[URL Download] Task %s failed", task_id)
         async with download_url_tasks_lock:
@@ -1005,7 +668,14 @@ async def _run_download_url_task(
                 download_url_tasks[task_id]["completed_at"] = time.time()
     finally:
         if ssh_manager is not None:
-            await _disconnect_ssh_manager(ssh_manager, operation=f"URL download task {task_id}")
+            try:
+                await ssh_manager.disconnect()
+            except Exception:
+                logger.warning(
+                    "[URL Download] Failed to release SSH connection for task %s",
+                    task_id,
+                    exc_info=True,
+                )
         async with download_url_tasks_lock:
             _download_url_task_refs.pop(task_id, None)
 
@@ -1039,18 +709,12 @@ async def _run_extraction_task(
     task_id: str,
     archive_path: str,
     destination_path: str,
-    server_id: int,
-    user_id: int,
-    user_is_admin: bool,
+    server: Server,
     overwrite: bool,
     source_folder: Optional[str],
     strip_source_folder: bool,
-    session_factory=async_session_maker,
-    lock_service: MaintenanceLockService | None = None,
-    ssh_manager_factory: SSHManagerFactory | None = None,
 ):
-    """Extract an archive using a detached server loaded inside the task."""
-    lock_service = _coerce_maintenance_lock_service(lock_service)
+    """Background task to perform archive extraction"""
     ssh_manager: Optional[SSHManager] = None
     try:
         async with extraction_tasks_lock:
@@ -1061,35 +725,16 @@ async def _run_extraction_task(
             f"[Extraction] Starting extraction task {task_id}: {archive_path} -> {destination_path}"
         )
 
-        async with lock_service.get(
-            server_id,
-            operation="file_extract",
-            wait=False,
-            ttl=7200,
-        ):
-            server = await _load_server_snapshot(
-                session_factory,
-                server_id,
-                user_id,
-                user_is_admin,
-            )
-            manager_factory = ssh_manager_factory or SSHManager
-            ssh_manager = manager_factory()
-            try:
-                success, error = await ssh_manager.extract_archive(
-                    archive_path,
-                    destination_path,
-                    server,
-                    overwrite,
-                    source_folder=source_folder,
-                    strip_source_folder=strip_source_folder,
-                )
-            finally:
-                await _disconnect_ssh_manager(
-                    ssh_manager,
-                    operation=f"extraction task {task_id}",
-                )
-                ssh_manager = None
+        # Extract using SSH
+        ssh_manager = SSHManager()
+        success, error = await ssh_manager.extract_archive(
+            archive_path,
+            destination_path,
+            server,
+            overwrite,
+            source_folder=source_folder,
+            strip_source_folder=strip_source_folder,
+        )
 
         async with extraction_tasks_lock:
             if success:
@@ -1103,23 +748,22 @@ async def _run_extraction_task(
 
             extraction_tasks[task_id]["completed_at"] = time.time()
 
-    except asyncio.CancelledError:
-        async with extraction_tasks_lock:
-            if task_id in extraction_tasks:
-                extraction_tasks[task_id]["status"] = "failed"
-                extraction_tasks[task_id]["error"] = "Extraction task was cancelled"
-                extraction_tasks[task_id]["completed_at"] = time.time()
-        raise
     except Exception as e:
         logger.exception(f"[Extraction] Task {task_id} encountered an exception")
         async with extraction_tasks_lock:
-            if task_id in extraction_tasks:
-                extraction_tasks[task_id]["status"] = "failed"
-                extraction_tasks[task_id]["error"] = str(e)
-                extraction_tasks[task_id]["completed_at"] = time.time()
+            extraction_tasks[task_id]["status"] = "failed"
+            extraction_tasks[task_id]["error"] = str(e)
+            extraction_tasks[task_id]["completed_at"] = time.time()
     finally:
         if ssh_manager is not None:
-            await _disconnect_ssh_manager(ssh_manager, operation=f"extraction task {task_id}")
+            try:
+                await ssh_manager.disconnect()
+            except Exception:
+                logger.warning(
+                    "[Extraction] Failed to release SSH connection for task %s",
+                    task_id,
+                    exc_info=True,
+                )
         # Clean up task reference
         async with extraction_tasks_lock:
             if task_id in _extraction_task_refs:
