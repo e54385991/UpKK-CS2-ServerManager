@@ -8,7 +8,7 @@ import shlex
 import shutil
 import tempfile
 import uuid
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, cast
 
 from anyio import to_thread
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,8 +36,10 @@ class PluginDownloadHTTP(Protocol):
     async def download_file(
         self,
         url: str,
-        destination: str,
-        **kwargs: Any,
+        local_path: str,
+        headers: dict[str, str] | None = None,
+        timeout: int = 300,
+        progress_callback: Any = None,
     ) -> tuple[bool, Optional[str]]: ...
 
 
@@ -93,6 +95,8 @@ async def get_server_for_user(
     server_id: int,
     user: User,
 ) -> Server:
+    if user.id is None:
+        raise LookupError("Server not found")
     server = (
         await Server.get_by_id(db, server_id)
         if user.is_admin
@@ -140,7 +144,8 @@ async def install_github_plugin(
         # Compatibility path for schedulers and direct Python callers.
         from modules.http_helper import http_helper
 
-        http_resource = http_helper
+        http_resource = cast(PluginDownloadHTTP, http_helper)
+    outbound_http = http_resource
 
     async def progress(msg: str, msg_type: str = "status"):
         """Send progress update via WebSocket"""
@@ -153,7 +158,7 @@ async def install_github_plugin(
     ) -> None:
         if request.suppress_notification:
             return
-        details = {
+        details: dict[str, object] = {
             "Download URL": request.download_url,
         }
         if installed_files is not None:
@@ -180,7 +185,7 @@ async def install_github_plugin(
 
         repo_url = canonical_repo_url(request.repo_url)
         await upsert_managed_plugin(
-            server_id=server.id,
+            server_id=server_id,
             source_type="github",
             source_key=repo_url.lower(),
             display_name=request.display_name or repo_url.rsplit("/", 1)[-1],
@@ -282,7 +287,7 @@ async def install_github_plugin(
                                 f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
                             )
 
-                success, error = await http_resource.download_file(
+                success, error = await outbound_http.download_file(
                     request.download_url,
                     panel_archive_path,
                     timeout=600,

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from modules.http_helper import http_helper
 from modules.models import AuthType, ScheduledTask, Server, User
 from services.maintenance_lock import maintenance_lock_service
 from services.s3_backup_service import s3_backup_service
@@ -213,10 +214,99 @@ async def test_scheduled_s3_backup_uses_injected_service_after_owner_session_clo
     global_upload.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_scheduled_s3_backup_accepts_lifespan_owned_runtime_service(
+    monkeypatch,
+) -> None:
+    owner = User(
+        id=7,
+        username="owner",
+        email="owner@example.com",
+        hashed_password="hash",
+        s3_enabled=True,
+        s3_bucket="backups",
+        s3_access_key_id="access",
+        s3_secret_access_key="secret",
+    )
+    session_factory = _SessionFactory({User: owner})
+    manager = SimpleNamespace(
+        last_plugin_backup={"path": "/remote/plugins.tar.gz"},
+        backup_plugins=AsyncMock(return_value=(True, "local backup complete")),
+    )
+    constructor_s3 = SimpleNamespace(
+        is_configured=Mock(side_effect=AssertionError("constructor S3 must not be used")),
+    )
+    runtime_s3 = SimpleNamespace(
+        is_configured=Mock(return_value=True),
+        upload_remote_backup=AsyncMock(return_value=(True, "uploaded", "object-key")),
+    )
+    service = ScheduledTaskService(
+        session_factory=session_factory,  # type: ignore[arg-type]
+        s3_service=constructor_s3,  # type: ignore[arg-type]
+    )
+    monkeypatch.setattr(
+        s3_backup_service,
+        "upload_remote_backup",
+        AsyncMock(side_effect=AssertionError("global S3 must not be used")),
+    )
+
+    success, message = await service._execute_action(
+        manager,  # type: ignore[arg-type]
+        _server(),
+        "backup_plugins",
+        s3_service=runtime_s3,  # type: ignore[arg-type]
+    )
+
+    assert success is True
+    assert message == "local backup complete\nuploaded"
+    runtime_s3.is_configured.assert_called_once()
+    runtime_s3.upload_remote_backup.assert_awaited_once()
+    constructor_s3.is_configured.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_scheduled_map_sync_uses_injected_http_resource(monkeypatch) -> None:
+    server = _server()
+    server.map_pool_sync_url = "https://maps.example.com/maps.txt"
+    manager = SimpleNamespace()
+    outbound_http = SimpleNamespace(name="application-http")
+
+    async def synchronize(
+        received_manager,
+        received_server,
+        url: str,
+        *,
+        http_resource: object,
+    ):
+        assert received_manager is manager
+        assert received_server is server
+        assert url == server.map_pool_sync_url
+        assert http_resource is outbound_http
+        return '"Maplist"\n{\n}\n', 12
+
+    monkeypatch.setattr(
+        "services.remote_map_pool_service.synchronize_remote_map_pool",
+        synchronize,
+    )
+    service = ScheduledTaskService(
+        http_resource=outbound_http,
+    )
+
+    success, message = await service._execute_action(
+        manager,  # type: ignore[arg-type]
+        server,
+        "map_pool_sync",
+    )
+
+    assert success is True
+    assert message == "Synchronized 12 maps from the custom remote map pool"
+
+
 def test_scheduled_service_legacy_facade_keeps_explicit_compatibility_defaults() -> None:
     service = ScheduledTaskService()
 
     assert service._lock_service is maintenance_lock_service
     assert service._s3_service is s3_backup_service
+    assert service._http_resource is http_helper
     assert callable(service._session_factory)
     assert callable(service._ssh_manager_factory)

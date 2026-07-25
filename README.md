@@ -144,7 +144,7 @@ cd UpKK-CS2-ServerManager
 
 #### 步骤 3: 配置数据库和 Redis
 
-先复制环境变量模板：
+首次部署建议先复制环境变量模板，以便在升级前填写数据库和 Redis 连接：
 
 ```bash
 # Linux / macOS
@@ -156,7 +156,9 @@ cp .env.example .env
 Copy-Item .env.example .env
 ```
 
-然后编辑项目根目录下的 `.env`，填写数据库、Redis、安全密钥和其他运行参数。完整配置项及默认建议值请参考 [`.env.example`](.env.example)；系统环境变量会覆盖 `.env` 中的同名配置。
+然后编辑项目根目录下的 `.env`，填写数据库、Redis 和其他运行参数。完整配置项及默认建议值请参考 [`.env.example`](.env.example)；系统环境变量会覆盖 `.env` 中的同名配置。
+
+源码单实例部署也可以不手工复制：`./upgrade.sh` 会从 `.env.example` 创建 `.env`，或仅向已有 `.env` 追加缺失键，不覆盖已有值或注释，并将文件权限收紧为仅所有者可读写（`0600`）。空值和模板占位的 `SECRET_KEY`、`JWT_SECRET_KEY`、`TOKEN_HASH_KEY` 及凭据加密 keyring 会使用系统安全随机源生成；已由运维设置的非占位值保持不变。数据库和 Redis 连接仍需由运维填写正确；首次自动创建后连接尚未可用时，脚本会失败停止，编辑 `.env` 后重新运行即可。
 
 **⚠️ 重要提示**: 数据库和 Redis 配置是必需的，不可省略！
 
@@ -195,13 +197,26 @@ CREDENTIAL_ENCRYPTION_KEYS={"v1":"请替换为32字节URL-safe-Base64密钥"}
 CREDENTIAL_ACTIVE_KEY_ID=v1
 ```
 
-#### 步骤 4: 迁移数据库并创建管理员
+#### 步骤 4: 升级源码并创建管理员
 
-生产、1Panel 和容器部署必须先独立执行迁移；应用启动只校验 Alembic 版本，不会自动建表或修改结构：
+源码单实例便利启动先运行：
 
 ```bash
-uv run python -m cs2_manager.migrate upgrade
-uv run python -m cs2_manager.migrate check
+./upgrade.sh
+```
+
+该脚本可从任意工作目录调用，会准备锁定依赖、幂等合并 `.env`、在 MySQL advisory lock 下执行旧结构归一化和 Alembic `upgrade`，随后执行迁移版本检查。失败时会立即停止，且不会启动 Web 服务。
+
+生产、1Panel、容器或多进程部署不要把升级与应用启动绑定，仍须在发布阶段独立执行：
+
+```bash
+uv run --locked python -m cs2_manager.migrate upgrade
+uv run --locked python -m cs2_manager.migrate check
+```
+
+数据库升级完成后创建管理员：
+
+```bash
 uv run python -m cs2_manager.cli create-admin \
   --username YOUR_ADMIN_NAME \
   --email YOUR_ADMIN_EMAIL \
@@ -212,7 +227,13 @@ uv run python -m cs2_manager.cli create-admin \
 
 #### 步骤 5: 启动服务
 
-使用 uvicorn 启动应用([1Panel](https://github.com/1Panel-dev/1Panel) 启动命令相同)：
+源码单实例在 `./upgrade.sh` 成功后启动：
+
+```bash
+./start.sh
+```
+
+[1Panel](https://github.com/1Panel-dev/1Panel) 和生产进程管理器在独立迁移成功后使用单 worker 启动命令：
 
 ```bash
 pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
@@ -365,27 +386,21 @@ git clone https://github.com/e54385991/UpKK-CS2-ServerManager.git
 cd UpKK-CS2-ServerManager
 ```
 
-#### Step 3: Install Dependencies
+#### Step 3: Configure the Environment
 
 ```bash
-pip install uv && uv sync --locked
+cp .env.example .env
+# Edit database and Redis settings before upgrading.
 ```
 
-#### Step 4: Configure Database and Redis
-
-Copy the environment template first:
+Copying is optional for a single-instance source deployment. `./upgrade.sh` creates `.env` from `.env.example` when absent, or appends only missing keys to an existing file without replacing operator values or comments, and restricts it to owner read/write permissions (`0600`). It securely randomizes empty or example `SECRET_KEY`, `JWT_SECRET_KEY`, `TOKEN_HASH_KEY`, and credential-keyring values. Database and Redis connection details must still be configured by the operator. If those connections are not ready after the first automatic creation, the script stops; edit `.env` and rerun it.
 
 ```bash
 # Linux / macOS
-cp .env.example .env
+./upgrade.sh
 ```
 
-```powershell
-# Windows PowerShell
-Copy-Item .env.example .env
-```
-
-Then edit `.env` in the project root and enter the database, Redis, security-key, and other runtime settings. See [`.env.example`](.env.example) for the complete list and recommended defaults. System environment variables override matching values in `.env`.
+The upgrade helper can be called from any working directory. It prepares locked dependencies, merges `.env` idempotently, runs legacy normalization and Alembic under the MySQL advisory lock, and verifies the resulting revision. It stops on failure and never starts the web process. See [`.env.example`](.env.example) for all settings; system environment variables override matching values in `.env`.
 
 
 **🔒 Security Notice**: `.env` is ignored by Git. Never commit or share it. In production, generate independent `SECRET_KEY`, `JWT_SECRET_KEY`, and `TOKEN_HASH_KEY` values, plus a URL-safe Base64-encoded 32-byte AES key in `CREDENTIAL_ENCRYPTION_KEYS`/`CREDENTIAL_ACTIVE_KEY_ID`. Migration and application processes must use the same keyring; losing it makes stored credentials unrecoverable.
@@ -426,13 +441,18 @@ CREDENTIAL_ENCRYPTION_KEYS={"v1":"replace_with_a_32_byte_urlsafe_base64_key"}
 CREDENTIAL_ACTIVE_KEY_ID=v1
 ```
 
-#### Step 5: Migrate the Database and Create an Administrator
+#### Step 4: Upgrade and Create an Administrator
 
-Production, 1Panel, and container deployments must run migrations as a separate step. Application startup only checks the Alembic revision and never creates or alters tables:
+For a single-instance source deployment, run `./upgrade.sh` before `./start.sh`. Production, 1Panel, container, and multi-process deployments must continue running migrations as a separate release step:
 
 ```bash
-uv run python -m cs2_manager.migrate upgrade
-uv run python -m cs2_manager.migrate check
+uv run --locked python -m cs2_manager.migrate upgrade
+uv run --locked python -m cs2_manager.migrate check
+```
+
+After the database upgrade succeeds:
+
+```bash
 uv run python -m cs2_manager.cli create-admin \
   --username YOUR_ADMIN_NAME \
   --email YOUR_ADMIN_EMAIL \
@@ -441,15 +461,21 @@ uv run python -m cs2_manager.cli create-admin \
 
 Repeating `create-admin` for the same identity is a safe no-op; it never overwrites, promotes, or modifies an existing account.
 
-#### Step 6: Start Service
+#### Step 5: Start Service
 
-Start the application using uvicorn (same command for 1Panel startup):
+After `./upgrade.sh` succeeds, start a single-instance source checkout with:
+
+```bash
+./start.sh
+```
+
+For 1Panel and production process managers, use the single-worker command only after the separate migration step:
 
 ```bash
 pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
 ```
 
-#### Step 7: Access Application
+#### Step 6: Access Application
 
 Open your browser and visit:
 

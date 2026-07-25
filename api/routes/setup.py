@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.response_models import OperationMessageResponse
+from cs2_manager.core import ErrorResponse, Principal
 from modules import (
     SSHServerSudo,
     User,
@@ -22,6 +24,7 @@ from modules import (
     get_current_time,
     get_db,
 )
+from modules.auth import get_current_principal
 from services.captcha_service import captcha_service
 from services.redis_manager import redis_manager
 from services.ssh_host_keys import pinned_host_key_options, scan_ssh_host_key
@@ -789,7 +792,9 @@ async def auto_setup_server(
 
 
 @router.get("/initialized-servers", response_model=List[RedisServerListItem])
-async def list_initialized_servers(current_user: User = Depends(get_current_active_user)):
+async def list_initialized_servers(
+    current_user: Principal = Depends(get_current_principal),
+):
     """
     List all initialized servers for the current user from Redis (without sensitive credentials)
 
@@ -815,9 +820,20 @@ async def list_initialized_servers(current_user: User = Depends(get_current_acti
     return safe_servers
 
 
-@router.delete("/initialized-servers/{server_key:path}")
+@router.delete(
+    "/initialized-servers/{server_key:path}",
+    response_model=OperationMessageResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+    },
+)
 async def delete_initialized_server(
-    server_key: str, current_user: User = Depends(get_current_active_user)
+    server_key: str,
+    current_user: Principal = Depends(get_current_principal),
 ):
     """
     Delete an initialized server configuration from Redis
@@ -852,7 +868,8 @@ async def delete_initialized_server(
 
 @router.get("/initialized-servers/{server_key:path}", response_model=RedisServerDetail)
 async def get_initialized_server(
-    server_key: str, current_user: User = Depends(get_current_active_user)
+    server_key: str,
+    current_user: Principal = Depends(get_current_principal),
 ):
     """
     Get a specific initialized server configuration from Redis (including credentials)

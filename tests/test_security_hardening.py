@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import HTTPException, Response
@@ -15,7 +15,6 @@ from api.routes.servers import crud, monitoring
 from cs2_manager.core import Principal
 from modules.auth import (
     create_access_token,
-    get_current_admin_user,
     get_current_principal,
 )
 from modules.config import settings as default_settings
@@ -179,7 +178,7 @@ def test_a2s_diagnostics_and_pool_stats_require_admin():
     assert monitoring.get_admin_principal in _dependency_calls(
         monitoring.router, "/servers/a2s-cache-test"
     )
-    assert get_current_admin_user in _dependency_calls(
+    assert get_admin_principal in _dependency_calls(
         server_status.router, "/api/server-status/pool/stats"
     )
     assert get_current_principal in _dependency_calls(public.router, "/a2s-cache")
@@ -552,6 +551,7 @@ async def test_ssh_credential_revision_changes_only_when_credentials_change(monk
     await crud.update_server(
         server_id=server.id,
         server_data=ServerUpdate(ssh_password="new"),
+        ssh_manager=SimpleNamespace(),
         db=_UpdateDatabase(),
         current_user=SimpleNamespace(id=server.user_id, is_admin=False),
     )
@@ -560,7 +560,31 @@ async def test_ssh_credential_revision_changes_only_when_credentials_change(monk
     await crud.update_server(
         server_id=server.id,
         server_data=ServerUpdate(ssh_password="new"),
+        ssh_manager=SimpleNamespace(),
         db=_UpdateDatabase(),
         current_user=SimpleNamespace(id=server.user_id, is_admin=False),
     )
     assert server.credential_revision == 4
+
+
+@pytest.mark.asyncio
+async def test_enabling_monitoring_uses_the_application_ssh_manager(monkeypatch):
+    server = _server(enable_panel_monitoring=False)
+    manager = SimpleNamespace(name="application-manager")
+    start_monitoring = Mock()
+    monkeypatch.setattr(crud, "get_server_with_permission", AsyncMock(return_value=server))
+    monkeypatch.setattr(crud.redis_manager, "clear_server_cache", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        "services.server_monitor.server_monitor.start_monitoring",
+        start_monitoring,
+    )
+
+    await crud.update_server(
+        server_id=server.id,
+        server_data=ServerUpdate(enable_panel_monitoring=True),
+        ssh_manager=manager,
+        db=_UpdateDatabase(),
+        current_user=SimpleNamespace(id=server.user_id, is_admin=False),
+    )
+
+    start_monitoring.assert_called_once_with(server.id, manager)

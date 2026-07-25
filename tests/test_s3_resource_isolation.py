@@ -76,6 +76,20 @@ def test_isolated_apps_own_distinct_s3_client_caches() -> None:
     assert resolve_s3_backup_service(_request_for(second_app)) is second
 
 
+def test_default_main_app_factory_no_longer_reuses_global_s3_cache() -> None:
+    first_app = create_app(lifespan=None)
+    second_app = create_app(lifespan=None)
+
+    first = first_app.state.container.services[S3_BACKUP_SERVICE_KEY]
+    second = second_app.state.container.services[S3_BACKUP_SERVICE_KEY]
+
+    assert isinstance(first, S3BackupService)
+    assert isinstance(second, S3BackupService)
+    assert first is not second
+    assert first is not s3_backup_service
+    assert second is not s3_backup_service
+
+
 def test_s3_dependency_fails_closed_without_an_application_service() -> None:
     app = SimpleNamespace(
         state=SimpleNamespace(

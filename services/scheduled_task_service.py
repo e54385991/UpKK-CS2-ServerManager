@@ -16,6 +16,7 @@ from sqlmodel import update as sql_update
 
 from cs2_manager.features.auth import S3UserConfiguration
 from modules.database import async_session_maker
+from modules.http_helper import http_helper
 from modules.models import ScheduledTask, Server, User
 from modules.utils import get_current_time
 from services.discord_notification_service import (
@@ -54,11 +55,18 @@ class ScheduledTaskService:
         lock_service: MaintenanceLockService | None = None,
         s3_service: S3BackupService | None = None,
         ssh_manager_factory: SSHManagerFactory | None = None,
+        http_resource: object | None = None,
     ) -> None:
         self._session_factory = session_factory or async_session_maker
-        self._lock_service = lock_service or maintenance_lock_service
+        self._lock_service = maintenance_lock_service if lock_service is None else lock_service
         self._s3_service = s3_service or s3_backup_service
-        self._ssh_manager_factory = ssh_manager_factory or SSHManager
+        self._ssh_manager_factory = (
+            SSHManager if ssh_manager_factory is None else ssh_manager_factory
+        )
+        # Direct Python callers retain the legacy facade; lifespan callers pass
+        # the current AppContainer adapter explicitly to ``start``.
+        self._has_explicit_http_resource = http_resource is not None
+        self._http_resource = http_helper if http_resource is None else http_resource
         self.check_interval = 30  # Check every 30 seconds
         self.task: Optional[asyncio.Task] = None
         self.running = False
@@ -66,11 +74,31 @@ class ScheduledTaskService:
         self.running_tasks: Dict[int, asyncio.Task] = {}
         self.running_server_ids: set[int] = set()
 
-    async def start(self):
+    async def start(
+        self,
+        *,
+        http_resource: object | None = None,
+        ssh_manager_factory: SSHManagerFactory | None = None,
+        lock_service: MaintenanceLockService | None = None,
+        s3_service: S3BackupService | None = None,
+    ):
         """Start the background scheduled task service"""
         if self.task is None or self.task.done():
+            outbound_http = self._http_resource if http_resource is None else http_resource
+            manager_factory = (
+                self._ssh_manager_factory if ssh_manager_factory is None else ssh_manager_factory
+            )
+            runtime_lock_service = self._lock_service if lock_service is None else lock_service
+            runtime_s3_service = self._s3_service if s3_service is None else s3_service
             self.running = True
-            self.task = asyncio.create_task(self._execution_loop())
+            self.task = asyncio.create_task(
+                self._execution_loop(
+                    http_resource=outbound_http,
+                    ssh_manager_factory=manager_factory,
+                    lock_service=runtime_lock_service,
+                    s3_service=runtime_s3_service,
+                )
+            )
             logger.info("Scheduled task service started")
             # Calculate next run times for all tasks on startup
             await self._calculate_all_next_runs()
@@ -93,19 +121,44 @@ class ScheduledTaskService:
         self.running_server_ids.clear()
         logger.info("Scheduled task service stopped")
 
-    async def _execution_loop(self):
+    async def _execution_loop(
+        self,
+        *,
+        http_resource: object,
+        ssh_manager_factory: SSHManagerFactory,
+        lock_service: MaintenanceLockService,
+        s3_service: S3BackupService,
+    ):
         """Main execution loop"""
         while self.running:
             try:
-                await self._check_and_execute_tasks()
+                await self._check_and_execute_tasks(
+                    http_resource=http_resource,
+                    ssh_manager_factory=ssh_manager_factory,
+                    lock_service=lock_service,
+                    s3_service=s3_service,
+                )
             except Exception as e:
                 logger.error(f"Error in scheduled task loop: {e}")
 
             # Wait for next check
             await asyncio.sleep(self.check_interval)
 
-    async def _check_and_execute_tasks(self):
+    async def _check_and_execute_tasks(
+        self,
+        *,
+        http_resource: object | None = None,
+        ssh_manager_factory: SSHManagerFactory | None = None,
+        lock_service: MaintenanceLockService | None = None,
+        s3_service: S3BackupService | None = None,
+    ):
         """Check for tasks that need to be executed"""
+        outbound_http = self._http_resource if http_resource is None else http_resource
+        manager_factory = (
+            self._ssh_manager_factory if ssh_manager_factory is None else ssh_manager_factory
+        )
+        runtime_lock_service = self._lock_service if lock_service is None else lock_service
+        runtime_s3_service = self._s3_service if s3_service is None else s3_service
         try:
             async with self._session_factory() as db:
                 now = get_current_time()
@@ -143,7 +196,15 @@ class ScheduledTaskService:
                         f"Executing scheduled task {task.id}: {task.name} (action: {task.action})"
                     )
                     detached_task = ScheduledTask.model_validate(task, from_attributes=True)
-                    execution_task = asyncio.create_task(self._execute_task(detached_task))
+                    execution_task = asyncio.create_task(
+                        self._execute_task(
+                            detached_task,
+                            http_resource=outbound_http,
+                            ssh_manager_factory=manager_factory,
+                            lock_service=runtime_lock_service,
+                            s3_service=runtime_s3_service,
+                        )
+                    )
                     self.running_tasks[task.id] = execution_task
                     self.running_server_ids.add(task.server_id)
                     available_slots -= 1
@@ -151,7 +212,15 @@ class ScheduledTaskService:
         except Exception as e:
             logger.error(f"Error checking scheduled tasks: {e}")
 
-    async def _execute_task(self, task: ScheduledTask):
+    async def _execute_task(
+        self,
+        task: ScheduledTask,
+        *,
+        http_resource: object | None = None,
+        ssh_manager_factory: SSHManagerFactory | None = None,
+        lock_service: MaintenanceLockService | None = None,
+        s3_service: S3BackupService | None = None,
+    ):
         """Execute a single scheduled task"""
         detached_server: Server | None = None
         operation_lock = None
@@ -178,7 +247,8 @@ class ScheduledTaskService:
                 )
                 return
 
-            operation_lock = self._lock_service.get(
+            runtime_lock_service = self._lock_service if lock_service is None else lock_service
+            operation_lock = runtime_lock_service.get(
                 detached_server.id,
                 operation=f"scheduled:{task.action}",
                 wait=False,
@@ -187,7 +257,10 @@ class ScheduledTaskService:
             await operation_lock.acquire()
 
             # Create SSH manager using the pattern from main.py
-            ssh_manager = self._ssh_manager_factory()
+            manager_factory = (
+                self._ssh_manager_factory if ssh_manager_factory is None else ssh_manager_factory
+            )
+            ssh_manager = manager_factory()
 
             # Connect to server
             connect_success, connect_msg = await ssh_manager.connect(detached_server)
@@ -212,6 +285,8 @@ class ScheduledTaskService:
                     ssh_manager,
                     detached_server,
                     task.action,
+                    http_resource=http_resource,
+                    s3_service=s3_service,
                 )
 
                 if success:
@@ -265,7 +340,15 @@ class ScheduledTaskService:
             },
         )
 
-    async def _execute_action(self, ssh_manager: SSHManager, server: Server, action: str):
+    async def _execute_action(
+        self,
+        ssh_manager: SSHManager,
+        server: Server,
+        action: str,
+        *,
+        http_resource: object | None = None,
+        s3_service: S3BackupService | None = None,
+    ):
         """Execute the specified action on the server"""
         try:
 
@@ -306,6 +389,7 @@ class ScheduledTaskService:
             elif action == "validate":
                 return await ssh_manager.validate_server(server, progress_callback=log_progress)
             elif action == "backup_plugins":
+                runtime_s3_service = self._s3_service if s3_service is None else s3_service
                 success, message = await ssh_manager.backup_plugins(
                     server, progress_callback=log_progress
                 )
@@ -320,7 +404,7 @@ class ScheduledTaskService:
 
                 if owner_configuration is None:
                     return True, message
-                if not self._s3_service.is_configured(owner_configuration):
+                if not runtime_s3_service.is_configured(owner_configuration):
                     return True, message
 
                 backup_info = getattr(ssh_manager, "last_plugin_backup", None)
@@ -344,7 +428,7 @@ class ScheduledTaskService:
                     upload_success,
                     upload_message,
                     object_key,
-                ) = await self._s3_service.upload_remote_backup(
+                ) = await runtime_s3_service.upload_remote_backup(
                     ssh_manager,
                     server,
                     owner_configuration,
@@ -379,11 +463,21 @@ class ScheduledTaskService:
                 if not server.map_pool_sync_url:
                     return False, "No custom MapChooser map-pool URL is configured"
                 try:
-                    _, map_count = await synchronize_remote_map_pool(
-                        ssh_manager,
-                        server,
-                        server.map_pool_sync_url,
-                    )
+                    if http_resource is None and not self._has_explicit_http_resource:
+                        _, map_count = await synchronize_remote_map_pool(
+                            ssh_manager,
+                            server,
+                            server.map_pool_sync_url,
+                        )
+                    else:
+                        _, map_count = await synchronize_remote_map_pool(
+                            ssh_manager,
+                            server,
+                            server.map_pool_sync_url,
+                            http_resource=(
+                                self._http_resource if http_resource is None else http_resource
+                            ),
+                        )
                 except RemoteMapPoolError as exc:
                     return False, str(exc)
                 return True, f"Synchronized {map_count} maps from the custom remote map pool"

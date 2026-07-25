@@ -16,15 +16,26 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
     user, server = await authenticate_websocket(websocket, server_id)
     if user is None or server is None:
         return
+
+    try:
+        ssh_manager = get_ssh_manager(websocket)
+    except HTTPException as exc:
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc.detail))
+        return
     await websocket.accept()
 
     try:
         # Create SSH connection
-        ssh_manager = SSHManager()
         success, msg = await ssh_manager.connect(server)
 
         if not success:
             await websocket.send_json({"type": "error", "message": f"SSH connection failed: {msg}"})
+            await websocket.close()
+            return
+        if ssh_manager.conn is None:
+            await websocket.send_json(
+                {"type": "error", "message": "SSH connection did not provide a session"}
+            )
             await websocket.close()
             return
 
@@ -84,10 +95,11 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
                 with suppress(Exception):
                     process.terminate()
                     await asyncio.wait_for(process.wait_closed(), timeout=2)
-            await ssh_manager.disconnect()
 
     except WebSocketDisconnect:
         pass
+    finally:
+        await ssh_manager.disconnect()
 
 
 @router.websocket("/servers/{server_id}/game-console")
@@ -99,15 +111,26 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
     user, server = await authenticate_websocket(websocket, server_id)
     if user is None or server is None:
         return
+
+    try:
+        ssh_manager = get_ssh_manager(websocket)
+    except HTTPException as exc:
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc.detail))
+        return
     await websocket.accept()
 
     try:
         # Create SSH connection using SSHManager (same as SSH console)
-        ssh_manager = SSHManager()
         success, msg = await ssh_manager.connect(server)
 
         if not success:
             await websocket.send_json({"type": "error", "message": f"SSH connection failed: {msg}"})
+            await websocket.close()
+            return
+        if ssh_manager.conn is None:
+            await websocket.send_json(
+                {"type": "error", "message": "SSH connection did not provide a session"}
+            )
             await websocket.close()
             return
 
@@ -127,14 +150,12 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                     }
                 )
                 await websocket.close()
-                await ssh_manager.disconnect()
                 return
         except Exception as e:
             await websocket.send_json(
                 {"type": "error", "message": f"Failed to check server status: {str(e)}"}
             )
             await websocket.close()
-            await ssh_manager.disconnect()
             return
 
         await websocket.send_json(
@@ -214,7 +235,7 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                         process.kill()
                         await asyncio.wait_for(process.wait_closed(), timeout=2)
 
-            await ssh_manager.disconnect()
-
     except WebSocketDisconnect:
         pass
+    finally:
+        await ssh_manager.disconnect()

@@ -56,18 +56,15 @@ On your **management server** (can be your local computer):
 git clone https://github.com/e54385991/UpKK-CS2-ServerManager.git
 cd UpKK-CS2-ServerManager
 
-# Install Python dependencies
-pip install uv && uv sync --locked
-
-# Configure environment
+# Configure database and Redis before the first upgrade
 cp .env.example .env
-# Edit .env with your database and Redis settings
+# Edit .env with your database and Redis connection settings
 
 # Start dependencies (MySQL + Redis)
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
-# Apply the schema as an explicit deployment step
-uv run python -m cs2_manager.migrate upgrade
+# Prepare locked dependencies and apply/verify migrations
+./upgrade.sh
 
 # Create the first administrator (replace every placeholder)
 uv run python -m cs2_manager.cli create-admin \
@@ -75,9 +72,15 @@ uv run python -m cs2_manager.cli create-admin \
   --email YOUR_ADMIN_EMAIL \
   --password-prompt
 
-# Run the manager
-uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
+# Run the single-worker manager
+./start.sh
 ```
+
+For a single-instance source checkout, `upgrade.sh` may be called from any working directory. If `.env` is absent it copies `.env.example`; otherwise it appends only missing keys and keeps existing values/comments. It restricts the resulting `.env` to owner read/write permissions (`0600`). Empty or example application secrets and the AES-256-GCM keyring are generated from a cryptographically secure random source. The script then runs legacy normalization, Alembic upgrade, and revision checking under the existing MySQL advisory lock. It is idempotent, stops on failure, and never starts the application.
+
+Database and Redis connection values are operator-owned. If the first run creates `.env` but cannot connect, edit those values and rerun `./upgrade.sh`.
+
+Production Docker, 1Panel, and multi-process deployments must still run `uv run --locked python -m cs2_manager.migrate upgrade` and `check` as an independent release step before starting any application process. Do not use `upgrade.sh` as a container entrypoint or process-manager startup hook.
 
 **✅ Verification:**
 - Open http://localhost:8000 in your browser
@@ -209,18 +212,15 @@ sudo passwd cs2server
 git clone https://github.com/e54385991/UpKK-CS2-ServerManager.git
 cd UpKK-CS2-ServerManager
 
-# 安装 Python 依赖
-pip install uv && uv sync --locked
-
-# 配置环境
+# 首次升级前配置数据库和 Redis
 cp .env.example .env
-# 编辑 .env 文件，配置数据库和 Redis 设置
+# 编辑 .env 文件中的数据库和 Redis 连接
 
 # 启动依赖（MySQL + Redis）
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
-# 将数据库迁移到当前版本（应用启动不会自动建表）
-uv run python -m cs2_manager.migrate upgrade
+# 准备锁定依赖，并执行/校验迁移
+./upgrade.sh
 
 # 创建首个管理员（请替换所有占位值）
 uv run python -m cs2_manager.cli create-admin \
@@ -228,9 +228,15 @@ uv run python -m cs2_manager.cli create-admin \
   --email YOUR_ADMIN_EMAIL \
   --password-prompt
 
-# 运行管理器
-uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
+# 运行单 worker 管理器
+./start.sh
 ```
+
+源码单实例可从任意工作目录调用 `upgrade.sh`。缺少 `.env` 时脚本从 `.env.example` 创建；已有文件时仅追加缺失键，保留已有值和注释，并将最终 `.env` 权限收紧为仅所有者可读写（`0600`）。空值或模板占位的应用密钥及 AES-256-GCM keyring 会使用加密安全随机源生成。随后脚本在现有 MySQL advisory lock 保护下执行旧结构归一化、Alembic upgrade 和版本检查。整个过程幂等、失败即停止，并且不会启动应用。
+
+数据库和 Redis 连接由运维负责。首次运行创建 `.env` 后如果无法连接，请编辑连接值并重新执行 `./upgrade.sh`。
+
+生产 Docker、1Panel 和多进程部署仍须在发布阶段独立执行 `uv run --locked python -m cs2_manager.migrate upgrade` 和 `check`，然后再启动任何应用进程；不要把 `upgrade.sh` 作为容器入口或进程管理器启动钩子。
 
 **✅ 验证：**
 - 在浏览器中打开 http://localhost:8000

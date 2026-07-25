@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import (
+    get_ssh_manager,
     require_server_access,
     resolve_maintenance_lock_service,
     resolve_s3_backup_service,
@@ -343,7 +344,33 @@ def _request_session_factory(request: Request):
     """Return the database factory owned by the request's application."""
     container = getattr(request.app.state, "container", None)
     database = getattr(container, "database", None)
-    return _resolve_background_session_factory(getattr(database, "session_factory", None))
+    session_factory = getattr(database, "session_factory", None)
+    if not callable(session_factory):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Background database sessions are unavailable",
+        )
+    return session_factory
+
+
+def _resolve_background_ssh_manager_factory(ssh_manager_factory=None):
+    """Preserve the direct-call facade while request paths pass owned resources."""
+    return ssh_manager_factory or SSHManager
+
+
+def _request_ssh_manager_factory(request: Request):
+    """Freeze one app's SSH resources into a request-independent factory."""
+    prototype = get_ssh_manager(request)
+    connection_pool = prototype.connection_pool
+    http_resource = prototype.http_resource
+
+    def create_manager() -> SSHManager:
+        return SSHManager(
+            connection_pool=connection_pool,
+            http_resource=http_resource,
+        )
+
+    return create_manager
 
 
 async def execute_single_server_action(
@@ -354,6 +381,7 @@ async def execute_single_server_action(
     batch_id: str,
     *,
     session_factory=None,
+    ssh_manager_factory=None,
 ):
     """
     Execute an action on a single server in the background.
@@ -371,6 +399,7 @@ async def execute_single_server_action(
     logger = logging.getLogger(__name__)
     server = None
     session_factory = _resolve_background_session_factory(session_factory)
+    ssh_manager_factory = _resolve_background_ssh_manager_factory(ssh_manager_factory)
 
     try:
         # Update status to in_progress
@@ -381,17 +410,18 @@ async def execute_single_server_action(
         # Get server and verify ownership - close DB session quickly to avoid pool exhaustion
         async with session_factory() as db:
             if is_admin:
-                server = await Server.get_by_id(db, server_id)
+                server_record = await Server.get_by_id(db, server_id)
             else:
-                server = await Server.get_by_id_and_user(db, server_id, user_id)
-            if not server:
+                server_record = await Server.get_by_id_and_user(db, server_id, user_id)
+            if not server_record:
                 await redis_manager.set_batch_action_status(
                     batch_id, server_id, "failed", "Server not found"
                 )
                 return
+            server = Server.model_validate(server_record, from_attributes=True)
 
         # DB session closed here - perform SSH operations without holding DB connection
-        ssh_manager = SSHManager()
+        ssh_manager = ssh_manager_factory()
         success = False
         message = ""
         new_status = None
@@ -499,6 +529,7 @@ async def execute_single_server_plugins(
     batch_id: str,
     *,
     session_factory=None,
+    ssh_manager_factory=None,
 ):
     """
     Install plugins on a single server in the background.
@@ -517,6 +548,7 @@ async def execute_single_server_plugins(
     server = None
     owner = None
     session_factory = _resolve_background_session_factory(session_factory)
+    ssh_manager_factory = _resolve_background_ssh_manager_factory(ssh_manager_factory)
 
     try:
         # Update status to in_progress
@@ -527,19 +559,25 @@ async def execute_single_server_plugins(
         # Get server and verify ownership - close DB session quickly to avoid pool exhaustion
         async with session_factory() as db:
             if is_admin:
-                server = await Server.get_by_id(db, server_id)
+                server_record = await Server.get_by_id(db, server_id)
             else:
-                server = await Server.get_by_id_and_user(db, server_id, user_id)
-            owner = await db.get(User, server.user_id) if server else None
+                server_record = await Server.get_by_id_and_user(db, server_id, user_id)
 
-            if not server:
+            if not server_record:
                 await redis_manager.set_batch_action_status(
                     batch_id, server_id, "failed", "Server not found"
                 )
                 return
+            owner_record = await db.get(User, server_record.user_id)
+            server = Server.model_validate(server_record, from_attributes=True)
+            owner = (
+                User.model_validate(owner_record, from_attributes=True)
+                if owner_record is not None
+                else None
+            )
 
         # DB session closed here - perform SSH operations without holding DB connection
-        ssh_manager = SSHManager()
+        ssh_manager = ssh_manager_factory()
         plugin_results = []
 
         for plugin in plugins:
@@ -569,9 +607,21 @@ async def execute_single_server_plugins(
                         )
 
                         if plugin in {"metamod", "counterstrikesharp"}:
-                            await record_framework_installation(server, owner, plugin)
+                            await record_framework_installation(
+                                server,
+                                owner,
+                                plugin,
+                                http_resource=ssh_manager.http_resource,
+                                ssh_manager_factory=ssh_manager_factory,
+                            )
                             if plugin == "counterstrikesharp":
-                                await record_framework_installation(server, owner, "metamod")
+                                await record_framework_installation(
+                                    server,
+                                    owner,
+                                    "metamod",
+                                    http_resource=ssh_manager.http_resource,
+                                    ssh_manager_factory=ssh_manager_factory,
+                                )
                         elif plugin == "cs2fixes":
                             await record_known_github_installation(
                                 server,
@@ -579,8 +629,15 @@ async def execute_single_server_plugins(
                                 "https://github.com/Source2ZE/CS2Fixes",
                                 "CS2Fixes",
                                 "CS2Fixes-*-linux.tar.gz",
+                                http_resource=ssh_manager.http_resource,
                             )
-                            await record_framework_installation(server, owner, "metamod")
+                            await record_framework_installation(
+                                server,
+                                owner,
+                                "metamod",
+                                http_resource=ssh_manager.http_resource,
+                                ssh_manager_factory=ssh_manager_factory,
+                            )
                     except Exception as tracking_error:
                         logger.warning(
                             "Plugin installed but tracking metadata failed: %s", tracking_error
@@ -650,6 +707,7 @@ async def execute_single_server_command(
     batch_id: str,
     *,
     session_factory=None,
+    ssh_manager_factory=None,
 ):
     """
     Send a command to a single game server in the background.
@@ -663,6 +721,7 @@ async def execute_single_server_command(
         batch_id: Batch ID for tracking progress
     """
     session_factory = _resolve_background_session_factory(session_factory)
+    ssh_manager_factory = _resolve_background_ssh_manager_factory(ssh_manager_factory)
 
     try:
         await redis_manager.set_batch_action_status(
@@ -670,25 +729,26 @@ async def execute_single_server_command(
         )
 
         async with session_factory() as db:
-            server = await db.get(Server, server_id)
+            server_record = await db.get(Server, server_id)
 
-            if not server:
+            if not server_record:
                 await redis_manager.set_batch_action_status(
                     batch_id, server_id, "failed", "Server not found"
                 )
                 return
 
             # Verify ownership
-            if not is_admin and server.user_id != user_id:
+            if not is_admin and server_record.user_id != user_id:
                 await redis_manager.set_batch_action_status(
                     batch_id, server_id, "failed", "Access denied"
                 )
                 return
+            server = Server.model_validate(server_record, from_attributes=True)
 
         # The discovery session must be returned to the pool before any slow
         # SSH work starts. Batch commands can fan out to 40 servers, so holding
         # one checkout per target here would exhaust a normally sized DB pool.
-        ssh_manager = SSHManager()
+        ssh_manager = ssh_manager_factory()
         success, msg = await ssh_manager.connect(server)
 
         if not success:

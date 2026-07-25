@@ -44,10 +44,34 @@ class _CapturingSupervisor:
             await coroutine
 
 
+def _background_server(
+    server_id: int,
+    *,
+    user_id: int = 7,
+    session_manager: str = "tmux",
+) -> Server:
+    return Server(
+        id=server_id,
+        user_id=user_id,
+        name=f"server-{server_id}",
+        host=f"server-{server_id}.example.com",
+        ssh_user="cs2",
+        auth_type=AuthType.PASSWORD,
+        session_manager=session_manager,
+    )
+
+
 @pytest.mark.asyncio
 async def test_batch_plugin_and_command_routes_forward_app_session_factory(monkeypatch):
     session = _CommitSession()
-    session_factory = object()
+    session_factory = Mock()
+    ssh_pool = object()
+    http_resource = SimpleNamespace(
+        get=AsyncMock(),
+        post=AsyncMock(),
+        borrow_client=Mock(),
+        download_file=AsyncMock(),
+    )
     supervisor = _CapturingSupervisor()
     http_request = SimpleNamespace(
         app=SimpleNamespace(
@@ -55,6 +79,8 @@ async def test_batch_plugin_and_command_routes_forward_app_session_factory(monke
                 task_supervisor=supervisor,
                 container=SimpleNamespace(
                     database=SimpleNamespace(session_factory=session_factory),
+                    ssh_pool=ssh_pool,
+                    http=http_resource,
                 ),
             )
         )
@@ -105,6 +131,18 @@ async def test_batch_plugin_and_command_routes_forward_app_session_factory(monke
     assert all(
         call.kwargs["session_factory"] is session_factory for call in install.await_args_list
     )
+    ssh_manager_factory = install.await_args_list[0].kwargs["ssh_manager_factory"]
+    assert all(
+        call.kwargs["ssh_manager_factory"] is ssh_manager_factory
+        for call in install.await_args_list
+    )
+    manager = ssh_manager_factory()
+    assert manager.connection_pool is ssh_pool
+    assert manager.http_resource is http_resource
+    command_ssh_manager_factory = command.await_args.kwargs["ssh_manager_factory"]
+    command_manager = command_ssh_manager_factory()
+    assert command_manager.connection_pool is ssh_pool
+    assert command_manager.http_resource is http_resource
     command.assert_awaited_once_with(
         3,
         "status",
@@ -112,6 +150,7 @@ async def test_batch_plugin_and_command_routes_forward_app_session_factory(monke
         False,
         "batch-token",
         session_factory=session_factory,
+        ssh_manager_factory=command_ssh_manager_factory,
     )
 
 
@@ -195,7 +234,7 @@ async def test_batch_command_owner_failure_and_ssh_finally_branches(monkeypatch)
     )
     assert status_updates[-1][-1] == "Access denied"
 
-    failed_session = _CommandSession(SimpleNamespace(user_id=7, session_manager="tmux"))
+    failed_session = _CommandSession(_background_server(2))
     failed_manager = _CommandManager(
         failed_session,
         connect=(False, "unreachable"),
@@ -211,7 +250,7 @@ async def test_batch_command_owner_failure_and_ssh_finally_branches(monkeypatch)
     )
     assert status_updates[-1][-1] == "SSH connection failed: unreachable"
 
-    no_session_db = _CommandSession(SimpleNamespace(user_id=7, session_manager="tmux"))
+    no_session_db = _CommandSession(_background_server(3))
     no_session_manager = _CommandManager(no_session_db)
     monkeypatch.setattr(action_common, "SSHManager", lambda: no_session_manager)
     monkeypatch.setattr(
@@ -230,7 +269,7 @@ async def test_batch_command_owner_failure_and_ssh_finally_branches(monkeypatch)
     assert "Game server is not running" in status_updates[-1][-1]
     assert no_session_manager.disconnect_count == 1
 
-    command_db = _CommandSession(SimpleNamespace(user_id=7, session_manager="tmux"))
+    command_db = _CommandSession(_background_server(4))
     command_manager = _CommandManager(
         command_db,
         execute=(False, "", "command rejected"),
@@ -318,7 +357,7 @@ async def test_background_action_and_plugin_workers_use_injected_sessions(monkey
     monkeypatch.setattr(
         action_common.Server,
         "get_by_id_and_user",
-        AsyncMock(side_effect=[None, SimpleNamespace(id=2, user_id=7)]),
+        AsyncMock(side_effect=[None, _background_server(2)]),
     )
 
     await action_common.execute_single_server_action(

@@ -26,7 +26,7 @@ from api.response_models import (
 )
 from api.routes.actions import deployment as deployment_routes
 from api.routes.servers import configuration as configuration_routes
-from modules import get_current_active_user, get_db
+from modules import AuthType, Server, get_current_active_user, get_db
 
 SUCCESS_CONTRACTS = {
     ("/servers/{server_id}/ssh-connection-info", "get"): "SSHConnectionInfoResponse",
@@ -77,7 +77,12 @@ ERROR_CONTRACTS = {
     ("/servers/{server_id}/confirm-deployment", "post"): {"401", "404", "409"},
     ("/servers/{server_id}/ssh-reconnect", "post"): {"401", "403", "404"},
     ("/servers/{server_id}/ssh-health", "get"): {"401", "403", "404"},
-    ("/servers/{server_id}/discord-settings/test", "post"): {"400", "401", "404"},
+    ("/servers/{server_id}/discord-settings/test", "post"): {
+        "400",
+        "401",
+        "404",
+        "503",
+    },
     (
         "/servers/{server_id}/custom-commands/{command_id}",
         "delete",
@@ -131,9 +136,7 @@ def test_typed_data_envelopes_do_not_fall_back_to_free_form_objects() -> None:
         "$ref": "#/components/schemas/CustomCommandResult"
     }
     command_results = schemas["CustomCommandResult"]["properties"]["results"]
-    assert command_results["items"] == {
-        "$ref": "#/components/schemas/CustomCommandResultEntry"
-    }
+    assert command_results["items"] == {"$ref": "#/components/schemas/CustomCommandResultEntry"}
 
 
 @pytest.mark.asyncio
@@ -184,13 +187,22 @@ async def test_discord_probe_response_body_remains_unchanged(monkeypatch) -> Non
     monkeypatch.setattr(
         configuration_routes,
         "get_server_with_permission",
-        AsyncMock(return_value=SimpleNamespace(id=17)),
+        AsyncMock(
+            return_value=Server(
+                id=17,
+                user_id=7,
+                name="Contract Server",
+                host="192.0.2.17",
+                ssh_user="steam",
+                auth_type=AuthType.PASSWORD,
+            )
+        ),
     )
-    monkeypatch.setattr(
-        configuration_routes.discord_notification_service,
-        "send_test",
-        AsyncMock(return_value=(True, "Discord notification sent")),
-    )
+
+    async def send_test(_service, _server, _message):
+        return True, "Discord notification sent"
+
+    monkeypatch.setattr(configuration_routes.DiscordNotificationService, "send_test", send_test)
 
     app = FastAPI()
     app.include_router(configuration_routes.router)
@@ -198,6 +210,9 @@ async def test_discord_probe_response_body_remains_unchanged(monkeypatch) -> Non
     app.dependency_overrides[get_current_active_user] = lambda: SimpleNamespace(
         id=7,
         is_admin=False,
+    )
+    app.dependency_overrides[configuration_routes.resolve_application_http] = lambda: (
+        SimpleNamespace(request=AsyncMock())
     )
 
     async with httpx.AsyncClient(

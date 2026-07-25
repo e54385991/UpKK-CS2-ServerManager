@@ -2,14 +2,16 @@
 
 # ruff: noqa: F403,F405
 
+import asyncio
 import logging
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 from fastapi import Request
 
 from api.dependencies import (
     SSHManagerProvider,
     get_unit_of_work,
+    resolve_maintenance_lock_service,
     resolve_s3_backup_service,
 )
 from api.response_models import (
@@ -35,13 +37,47 @@ from cs2_manager.features.servers import (
 )
 from cs2_manager.infrastructure import UnitOfWork
 from modules.auth import get_current_principal
-from services.maintenance_lock import maintenance_lock_service
+from services.maintenance_lock import (
+    MaintenanceLockService,
+    OperationCoordinationUnavailable,
+    maintenance_lock_service,
+)
 from services.s3_backup_service import S3BackupService
+from services.ssh_manager import SSHManager
 
 from .common import *
 
 router = APIRouter(prefix="/servers", tags=["servers"])
 logger = logging.getLogger(__name__)
+_DIRECT_MAINTENANCE_LOCK = object()
+_ApplicationMaintenanceLock = Annotated[
+    MaintenanceLockService | object,
+    Depends(resolve_maintenance_lock_service),
+]
+_DIRECT_SSH_MANAGER = cast(SSHManager, object())
+
+
+def _maintenance_locks(resource: MaintenanceLockService | object) -> MaintenanceLockService:
+    """Use request-owned coordination; direct calls retain the compatibility facade."""
+    if resource is _DIRECT_MAINTENANCE_LOCK:
+        return maintenance_lock_service
+    if callable(getattr(resource, "get", None)):
+        return cast(MaintenanceLockService, resource)
+    raise OperationCoordinationUnavailable(
+        "Operation coordination is unavailable; refusing destructive operation"
+    )
+
+
+def _coerce_ssh_manager(candidate: object) -> SSHManager:
+    """Use request-owned SSH; only an omitted direct-call argument may fall back."""
+    if callable(getattr(candidate, "disconnect", None)):
+        return cast(SSHManager, candidate)
+    if candidate is _DIRECT_SSH_MANAGER:
+        return SSHManager()
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="SSH connection pool is unavailable",
+    )
 
 
 def _uow_session(uow: UnitOfWork) -> AsyncSession:
@@ -95,12 +131,15 @@ async def _release_ssh_manager(ssh_manager: SSHManager, operation: str) -> None:
     status_code=status.HTTP_200_OK,
     responses={
         status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
     },
 )
 async def get_all_servers_disk_space(
+    request: Request,
     force_refresh: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ):
     """
     Get cached disk space information for all servers owned by current user.
@@ -111,15 +150,29 @@ async def get_all_servers_disk_space(
     NOTE: This route MUST be defined before /{server_id} routes
     to avoid path parameter matching conflicts.
     """
-    from services.system_info_helper import system_info_helper
+    server_records = await Server.get_all_by_user(db, cast(int, current_user.id))
+    servers = [Server.model_validate(server, from_attributes=True) for server in server_records]
+    await db.commit()
 
-    # Get all servers for current user
-    servers = await Server.get_all_by_user(db, cast(int, current_user.id))
+    cache = _require_system_info_cache(request)
+    connection_pool = ssh_manager.connection_pool
+    http_resource = ssh_manager.http_resource
+    semaphore = asyncio.Semaphore(4)
 
-    # Get disk space for all servers
-    disk_space_map = await system_info_helper.get_all_servers_disk_space(
-        servers, force_refresh=force_refresh
-    )
+    async def get_one(server: Server):
+        async with semaphore:
+            manager = SSHManager(
+                connection_pool=connection_pool,
+                http_resource=http_resource,
+            )
+            result = await DiskSpaceService(cache, manager).get_disk_space(
+                server,
+                force_refresh=force_refresh,
+            )
+            disk_space = result.disk_space.model_dump() if result.disk_space is not None else None
+            return cast(int, server.id), disk_space
+
+    disk_space_map = dict(await asyncio.gather(*(get_one(server) for server in servers)))
 
     # Convert to string keys for JSON
     response = {str(k): v for k, v in disk_space_map.items()}
@@ -141,10 +194,11 @@ async def scan_server_cleanup(
     server_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ):
     """Scan approved game directory cleanup candidates for this server"""
     server = await get_server_with_permission(server_id, current_user, db)
-    ssh_manager = SSHManager()
+    ssh_manager = _coerce_ssh_manager(ssh_manager)
 
     try:
         success, data, error = await game_cleanup_service.scan(ssh_manager, server)
@@ -172,19 +226,18 @@ async def delete_server_cleanup_items(
     cleanup_data: CleanupDeleteRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: MaintenanceLockService = Depends(resolve_maintenance_lock_service),
+    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
+    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ):
     """Delete approved game directory cleanup candidates for this server"""
-    if not callable(getattr(lock_service, "get", None)):
-        lock_service = maintenance_lock_service
     server = await get_server_with_permission(server_id, current_user, db)
-    async with lock_service.get(
+    async with _maintenance_locks(lock_service).get(
         server_id,
         operation="server_cleanup_delete",
         wait=False,
         ttl=7200,
     ):
-        ssh_manager = SSHManager()
+        ssh_manager = _coerce_ssh_manager(ssh_manager)
         try:
             success, result, error = await game_cleanup_service.delete(
                 ssh_manager,
@@ -251,12 +304,11 @@ async def restore_server_s3_backup(
     restore_data: S3RestoreRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    lock_service: MaintenanceLockService = Depends(resolve_maintenance_lock_service),
+    lock_service: _ApplicationMaintenanceLock = _DIRECT_MAINTENANCE_LOCK,
     s3_service: S3BackupService = Depends(resolve_s3_backup_service),
+    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ):
     """Restore a selected S3 plugin backup to this server"""
-    if not callable(getattr(lock_service, "get", None)):
-        lock_service = maintenance_lock_service
     server = await get_server_with_permission(server_id, current_user, db)
     owner = await get_server_owner_user(db, server, current_user)
 
@@ -271,7 +323,7 @@ async def restore_server_s3_backup(
     detached_owner = User.model_validate(owner, from_attributes=True)
     await db.commit()
 
-    async with lock_service.get(
+    async with _maintenance_locks(lock_service).get(
         server_id,
         operation="s3_restore",
         wait=False,
@@ -282,7 +334,7 @@ async def restore_server_s3_backup(
             temp_dir,
             s3_service.safe_object_filename(restore_data.object_key),
         )
-        ssh_manager = SSHManager()
+        ssh_manager = _coerce_ssh_manager(ssh_manager)
 
         try:
             download_success, download_error = await s3_service.download_backup(
@@ -484,6 +536,7 @@ async def confirm_server_deployment(
         status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
         status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
         status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
     },
     description=(
         "Manually reconnect to a server and reset SSH health status\n\n"
@@ -495,6 +548,7 @@ async def manual_ssh_reconnect(
     server_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    ssh_manager: SSHManagerProvider = _DIRECT_SSH_MANAGER,
 ):
     """
     Manually reconnect to a server and reset SSH health status
@@ -512,15 +566,37 @@ async def manual_ssh_reconnect(
             status_code=403, detail="You don't have permission to access this server"
         )
 
-    # Use SSH health monitor to perform manual reconnection
-    from services.ssh_health_monitor import ssh_health_monitor
+    detached_server = Server.model_validate(server, from_attributes=True)
+    failed_health_status = server.ssh_health_status
+    await db.commit()
 
-    success, message = await ssh_health_monitor.manual_reconnect(server_id)
+    ssh_manager = _coerce_ssh_manager(ssh_manager)
+    try:
+        success, _ = await ssh_manager.connect(detached_server)
+    except Exception:
+        logger.warning("Manual SSH reconnect failed for server %s", server_id, exc_info=True)
+        success = False
+    finally:
+        await _release_ssh_manager(ssh_manager, "manual SSH reconnect")
 
     if success:
-        return {"success": True, "message": message, "ssh_health_status": "healthy"}
-    else:
-        return {"success": False, "message": message, "ssh_health_status": server.ssh_health_status}
+        now = get_current_time()
+        server.last_ssh_success = now
+        server.last_ssh_health_check = now
+        server.consecutive_ssh_failures = 0
+        server.is_ssh_down = False
+        server.ssh_health_status = "healthy"
+        await db.commit()
+        return {
+            "success": True,
+            "message": "SSH connection successful - server health restored",
+            "ssh_health_status": "healthy",
+        }
+    return {
+        "success": False,
+        "message": "SSH connection failed - server is still unreachable",
+        "ssh_health_status": failed_health_status,
+    }
 
 
 @router.get(

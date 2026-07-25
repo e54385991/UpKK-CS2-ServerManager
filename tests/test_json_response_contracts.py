@@ -16,7 +16,9 @@ from api.routes import captcha as captcha_routes
 from api.routes import gmail_oauth as gmail_oauth_routes
 from api.routes import public as public_routes
 from api.routes import scheduled_tasks as scheduled_task_routes
+from api.routes import setup as setup_routes
 from api.routes import system_settings as system_settings_routes
+from api.routes.actions import batch as batch_routes
 from modules import get_current_active_user, get_current_admin_user, get_current_user, get_db
 from modules.auth import get_current_principal
 
@@ -38,6 +40,11 @@ JSON_SUCCESS_CONTRACTS = {
     ("/api/gmail-oauth/upload-credentials", "post"): "GmailOAuthActionResponse",
     ("/api/gmail-oauth/revoke", "delete"): "GmailOAuthActionResponse",
     ("/api/gmail-oauth/status", "get"): "GmailOAuthStatusResponse",
+    ("/servers/batch-actions/{batch_id}", "get"): "BatchActionStatusResponse",
+    (
+        "/api/setup/initialized-servers/{server_key}",
+        "delete",
+    ): "OperationMessageResponse",
     (
         "/api/scheduled-tasks/{server_id}/tasks/{task_id}",
         "delete",
@@ -64,6 +71,11 @@ ERROR_CONTRACTS = {
     },
     ("/api/gmail-oauth/revoke", "delete"): {"401", "403", "500", "503"},
     ("/api/gmail-oauth/status", "get"): {"401", "403", "500", "503"},
+    ("/servers/batch-actions/{batch_id}", "get"): {"401", "404"},
+    (
+        "/api/setup/initialized-servers/{server_key}",
+        "delete",
+    ): {"401", "403", "404", "500"},
     (
         "/api/scheduled-tasks/{server_id}/tasks/{task_id}",
         "delete",
@@ -79,6 +91,8 @@ def test_small_json_routes_have_explicit_success_models_and_status_codes():
         + captcha_routes.router.routes
         + auth_routes.router.routes
         + gmail_oauth_routes.router.routes
+        + batch_routes.router.routes
+        + setup_routes.router.routes
         + system_settings_routes.router.routes
         + scheduled_task_routes.router.routes
     )
@@ -91,7 +105,7 @@ def test_small_json_routes_have_explicit_success_models_and_status_codes():
         route = next(
             route
             for route in source_routes
-            if getattr(route, "path", None) == path
+            if getattr(route, "path_format", getattr(route, "path", None)) == path
             and method.upper() in (getattr(route, "methods", None) or set())
         )
         assert route.status_code == 200

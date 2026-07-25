@@ -14,7 +14,7 @@ from api.routes.actions.batch import (
     get_batch_action_status,
 )
 from api.routes.plugin_market import populate_dependency_details
-from modules.models import MarketPlugin
+from modules.models import AuthType, MarketPlugin, Server
 from modules.schemas import BatchActionRequest
 from services.a2s_cache_service import A2SCacheService
 from services.deployment_progress import (
@@ -227,8 +227,23 @@ async def test_40_server_batch_uses_one_select_and_one_redis_pipeline(monkeypatc
     client = _FakeRedisClient()
     manager = _manager_with_client(client)
     supervisor = DiscardingSupervisor()
+    http_resource = SimpleNamespace(
+        get=AsyncMock(),
+        post=AsyncMock(),
+        borrow_client=lambda: None,
+        download_file=AsyncMock(),
+    )
     request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(task_supervisor=supervisor))
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                task_supervisor=supervisor,
+                container=SimpleNamespace(
+                    database=SimpleNamespace(session_factory=lambda: None),
+                    ssh_pool=object(),
+                    http=http_resource,
+                ),
+            )
+        )
     )
     current_user = SimpleNamespace(id=7, is_admin=False)
     batch_routes._pending_batch_counts.clear()
@@ -473,6 +488,7 @@ async def test_30_slow_remote_commands_release_db_checkouts_before_io(monkeypatc
     class PoolState:
         def __init__(self):
             self.available = asyncio.Semaphore(5)
+            self.sessions = []
             self.pool_timeouts = 0
             self.checkout_durations = []
             self.remote_active = 0
@@ -480,7 +496,9 @@ async def test_30_slow_remote_commands_release_db_checkouts_before_io(monkeypatc
             self.all_remote_started = asyncio.Event()
 
         def session(self):
-            return PooledSession(self)
+            session = PooledSession(self)
+            self.sessions.append(session)
+            return session
 
     class PooledSession:
         def __init__(self, pool):
@@ -507,18 +525,22 @@ async def test_30_slow_remote_commands_release_db_checkouts_before_io(monkeypatc
             self.pool.available.release()
 
         async def get(self, _model, server_id):
-            return SimpleNamespace(
+            return Server(
                 id=server_id,
                 user_id=7,
+                name=f"server-{server_id}",
+                host=f"server-{server_id}.example.com",
+                ssh_user="cs2",
+                auth_type=AuthType.PASSWORD,
                 session_manager="tmux",
-                discovery_session=self,
             )
 
     pool = PoolState()
 
     class SlowSSHManager:
         async def connect(self, server):
-            assert server.discovery_session.closed is True
+            assert isinstance(server, Server)
+            assert all(session.closed for session in pool.sessions)
             pool.remote_active += 1
             pool.max_remote_active = max(pool.max_remote_active, pool.remote_active)
             if pool.remote_active == 30:

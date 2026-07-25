@@ -1,17 +1,12 @@
 #!/bin/bash
 
-# CS2 Server Manager - Startup Script
-# This script installs uv when needed and starts the application with uv run.
+# CS2 Server Manager - source upgrade helper
+# Prepares dependencies and configuration, then upgrades the database.
 
 set -euo pipefail
 
 PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 cd "$PROJECT_ROOT"
-
-echo "=========================================="
-echo "CS2 Server Manager - Starting Application"
-echo "=========================================="
-echo ""
 
 PYTHON_BIN="${PYTHON_BIN:-}"
 
@@ -33,14 +28,13 @@ install_uv() {
     find_bootstrap_python
 
     if [ -z "$PYTHON_BIN" ]; then
-        echo "Error: uv is not installed and Python 3.14+ was not found to install it."
-        echo "Install Python 3.14+ first, then run: pip install uv"
+        echo "Error: uv is not installed and Python 3.14+ was not found to install it." >&2
         exit 1
     fi
 
     if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)'; then
-        echo "Error: uv is not installed and Python 3.14+ is required to install it."
-        echo "Current interpreter: $("$PYTHON_BIN" --version 2>&1)"
+        echo "Error: uv is not installed and Python 3.14+ is required to install it." >&2
+        echo "Current interpreter: $("$PYTHON_BIN" --version 2>&1)" >&2
         exit 1
     fi
 
@@ -53,25 +47,29 @@ if command -v uv >/dev/null 2>&1; then
     UV_CMD=(uv)
 else
     install_uv
-
     if command -v uv >/dev/null 2>&1; then
         UV_CMD=(uv)
     else
         UV_CMD=("$PYTHON_BIN" -m uv)
         "${UV_CMD[@]}" --version >/dev/null 2>&1 || {
-            echo "Error: uv was installed, but it is not available on PATH."
+            echo "Error: uv was installed, but it is not available on PATH." >&2
             exit 1
         }
     fi
 fi
 
-echo ""
-echo "Starting CS2 Server Manager..."
-echo "Access the application at: http://localhost:8000"
-echo ""
-echo "Press Ctrl+C to stop the server"
-echo "=========================================="
-echo ""
+echo "Preparing locked Python 3.14 dependencies..."
+"${UV_CMD[@]}" sync --python 3.14 --locked
 
-# uv reads pyproject.toml/uv.lock, creates .venv if needed, and starts the app.
-"${UV_CMD[@]}" run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
+echo "Preparing .env without overwriting operator values..."
+"${UV_CMD[@]}" run --locked python scripts/prepare_env.py \
+    --env-file "$PROJECT_ROOT/.env" \
+    --example-file "$PROJECT_ROOT/.env.example"
+
+echo "Upgrading the database under the migration advisory lock..."
+"${UV_CMD[@]}" run --locked python -m cs2_manager.migrate upgrade
+
+echo "Verifying the database revision..."
+"${UV_CMD[@]}" run --locked python -m cs2_manager.migrate check
+
+echo "Upgrade complete. Start the single-worker source service with ./start.sh."

@@ -322,7 +322,7 @@ async def test_game_console_disconnect_cleans_reader_process_and_ssh(
         "async_session_maker",
         lambda: FakeSessionContext(server),
     )
-    monkeypatch.setattr(actions, "SSHManager", lambda: manager)
+    monkeypatch.setattr(actions, "get_ssh_manager", lambda _websocket: manager)
     monkeypatch.setattr(actions, "find_running_session_manager", find_running)
     monkeypatch.setattr(actions, "authenticate_websocket", authenticate)
 

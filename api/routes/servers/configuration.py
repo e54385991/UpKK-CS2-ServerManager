@@ -2,16 +2,38 @@
 
 # ruff: noqa: F403,F405
 
+from typing import Annotated, cast
+
+from api.http_resource import ApplicationHTTP, resolve_application_http
 from api.response_models import (
     CustomCommandDeleteResponse,
     CustomCommandExecutionResponse,
     OperationMessageResponse,
     StartupCommandResponse,
 )
+from modules.http_helper import HTTPHelper
+from services.discord_notification_service import DiscordNotificationService
 
 from .common import *
 
 router = APIRouter(prefix="/servers", tags=["servers"])
+_DIRECT_DISCORD_HTTP = cast(ApplicationHTTP, object())
+_ApplicationHTTPProvider = Annotated[
+    ApplicationHTTP,
+    Depends(resolve_application_http),
+]
+
+
+def _discord_service(candidate: object) -> DiscordNotificationService:
+    """Bind Discord delivery to this app while retaining the direct-call facade."""
+    if candidate is _DIRECT_DISCORD_HTTP:
+        return discord_notification_service
+    if callable(getattr(candidate, "request", None)):
+        return DiscordNotificationService(http_client=cast(HTTPHelper, candidate))
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Outbound HTTP client is unavailable",
+    )
 
 
 @router.get(
@@ -114,6 +136,7 @@ async def update_discord_settings(
         status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
         status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse},
         status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
     },
 )
 async def test_discord_settings(
@@ -121,10 +144,14 @@ async def test_discord_settings(
     request: DiscordTestRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    http_resource: _ApplicationHTTPProvider = _DIRECT_DISCORD_HTTP,
 ):
     """Send a Discord test notification using the saved webhook."""
-    server = await get_server_with_permission(server_id, current_user, db)
-    success, message = await discord_notification_service.send_test(server, request.message)
+    server = Server.model_validate(
+        await get_server_with_permission(server_id, current_user, db),
+        from_attributes=True,
+    )
+    success, message = await _discord_service(http_resource).send_test(server, request.message)
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
     return {"success": True, "message": message}

@@ -691,8 +691,7 @@ async def test_gmail_json_mutations_and_status_use_explicit_uow(
     assert upload_response.model_dump() == {
         "success": True,
         "message": (
-            "Gmail credentials uploaded successfully. "
-            "You can now authorize the application."
+            "Gmail credentials uploaded successfully. You can now authorize the application."
         ),
     }
     assert upload_settings.gmail_credentials_json == '{"web":{"client_id":"client"}}'
