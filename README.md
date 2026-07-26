@@ -204,7 +204,7 @@ JWT_SECRET_KEY=请替换为另一个至少32位的随机字符串
 使用 uvicorn 启动应用([1Panel](https://github.com/1Panel-dev/1Panel) 启动命令相同)：
 
 ```bash
-pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
+pip install uv && uv run --no-dev --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
 ```
 
 #### 步骤 5: 访问应用
@@ -428,7 +428,7 @@ JWT_SECRET_KEY=replace_with_a_different_random_string_of_at_least_32_characters
 Start the application using uvicorn (same command for 1Panel startup):
 
 ```bash
-pip install uv && uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
+pip install uv && uv run --no-dev --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 100 --backlog 2048 --timeout-keep-alive 5
 ```
 
 #### Step 6: Access Application

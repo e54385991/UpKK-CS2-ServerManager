@@ -7,6 +7,9 @@ import inspect
 import json
 from pathlib import Path
 
+from fastapi.routing import iter_route_contexts
+from starlette.routing import Match
+
 import main
 import modules
 import services
@@ -22,13 +25,9 @@ def _load_json(name: str):
 
 
 def _iter_registered_routes(routes):
-    """Flatten FastAPI's lazy included-router wrappers in registration order."""
-    for route in routes:
-        original_router = getattr(route, "original_router", None)
-        if original_router is not None:
-            yield from _iter_registered_routes(original_router.routes)
-        else:
-            yield route
+    """Expand included routers through FastAPI's public traversal API."""
+    for context in iter_route_contexts(routes):
+        yield context.route
 
 
 def _route_manifest(app):
@@ -41,6 +40,15 @@ def _route_manifest(app):
         }
         for route in _iter_registered_routes(app.routes)
     ]
+
+
+def _first_http_route_name(app, path: str, method: str = "GET") -> str | None:
+    scope = {"type": "http", "path": path, "method": method}
+    for context in iter_route_contexts(app.routes):
+        match, _ = context.matches(scope)
+        if match is Match.FULL:
+            return context.name
+    return None
 
 
 def test_openapi_contract_matches_the_pre_refactor_baseline():
@@ -81,9 +89,15 @@ def test_route_registration_order_matches_the_pre_refactor_baseline():
 
 def test_composed_domain_routers_follow_their_declared_endpoint_order():
     for route_module in (actions, file_manager, servers):
-        assert [route.name for route in route_module.router.routes] == list(
-            route_module.ENDPOINT_ORDER
-        )
+        actual = [route.name for route in _iter_registered_routes(route_module.router.routes)]
+        assert actual == list(route_module.ENDPOINT_ORDER)
+
+
+def test_static_server_routes_match_before_the_server_id_route():
+    app = create_app(lifespan=None)
+
+    assert _first_http_route_name(app, "/servers/admin/all") == "list_all_servers_admin"
+    assert _first_http_route_name(app, "/servers/disk-space-all") == "get_all_servers_disk_space"
 
 
 def test_public_python_exports_remain_importable():

@@ -6,10 +6,12 @@ import hashlib
 
 from .common import *
 
-router = APIRouter(prefix="/servers", tags=["servers"])
+collection_router = APIRouter(prefix="/servers", tags=["servers"])
+item_router = APIRouter(prefix="/servers", tags=["servers"])
+mutation_router = APIRouter(prefix="/servers", tags=["servers"])
 
 
-@router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
+@collection_router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
 async def create_server(
     server_data: ServerCreate,
     db: AsyncSession = Depends(get_db),
@@ -165,7 +167,7 @@ async def create_server(
     return server
 
 
-@router.get("", response_model=List[ServerResponse])
+@collection_router.get("", response_model=List[ServerResponse])
 async def list_servers(
     skip: int = 0,
     limit: int = 100,
@@ -177,7 +179,7 @@ async def list_servers(
     return servers
 
 
-@router.get("/admin/all", response_model=List[ServerResponseWithUser])
+@collection_router.get("/admin/all", response_model=List[ServerResponseWithUser])
 async def list_all_servers_admin(
     skip: int = 0,
     limit: int = 100,
@@ -207,7 +209,7 @@ async def list_all_servers_admin(
     return result
 
 
-@router.get("/{server_id}", response_model=ServerResponse)
+@item_router.get("/{server_id}", response_model=ServerResponse)
 async def get_server(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -218,7 +220,7 @@ async def get_server(
     return server
 
 
-@router.put("/{server_id}", response_model=ServerResponse)
+@mutation_router.put("/{server_id}", response_model=ServerResponse)
 async def update_server(
     server_id: int,
     server_data: ServerUpdate,
@@ -260,8 +262,7 @@ async def update_server(
 
     # Update fields using SQLModel's sqlmodel_update method
     update_data = server_data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(server, key, value)
+    server.sqlmodel_update(update_data)
 
     # Check if any startup-affecting fields changed while server is running
     restart_required = False
@@ -297,7 +298,7 @@ async def update_server(
     return response
 
 
-@router.post("/{server_id}/apply-system-defaults", response_model=ServerResponse)
+@mutation_router.post("/{server_id}/apply-system-defaults", response_model=ServerResponse)
 async def apply_system_defaults_to_server(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -333,7 +334,7 @@ async def apply_system_defaults_to_server(
     return server
 
 
-@router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
+@mutation_router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_server(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -349,3 +350,8 @@ async def delete_server(
     await redis_manager.clear_server_cache(server_id)
 
     return None
+
+
+router = APIRouter()
+for _router in (collection_router, item_router, mutation_router):
+    router.include_router(_router)

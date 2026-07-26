@@ -41,8 +41,7 @@ async def update_system_settings(
     update_data = settings_update.model_dump(exclude_unset=True)
     clear_global_github_token = update_data.pop("clear_global_github_token", False)
     global_github_token = update_data.pop("global_github_token", None)
-    for field, value in update_data.items():
-        setattr(settings, field, value)
+    settings.sqlmodel_update(update_data)
 
     if clear_global_github_token:
         settings.global_github_token = None

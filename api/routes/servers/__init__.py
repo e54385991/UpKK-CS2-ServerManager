@@ -89,8 +89,18 @@ ENDPOINT_ORDER = (
 )
 
 router = compose_router(
-    (_crud.router, _configuration.router, _maintenance.router, _monitoring.router),
-    ENDPOINT_ORDER,
+    (
+        _crud.collection_router,
+        _maintenance.global_router,
+        _crud.item_router,
+        _configuration.discord_router,
+        _maintenance.cleanup_router,
+        _configuration.custom_commands_router,
+        _crud.mutation_router,
+        _monitoring.router,
+        _maintenance.diagnostics_router,
+        _configuration.startup_router,
+    )
 )
 
 install_patch_compatibility(

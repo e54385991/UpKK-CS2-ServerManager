@@ -4,10 +4,12 @@
 
 from .common import *
 
-router = APIRouter(prefix="/servers", tags=["servers"])
+global_router = APIRouter(prefix="/servers", tags=["servers"])
+cleanup_router = APIRouter(prefix="/servers", tags=["servers"])
+diagnostics_router = APIRouter(prefix="/servers", tags=["servers"])
 
 
-@router.get("/disk-space-all")
+@global_router.get("/disk-space-all")
 async def get_all_servers_disk_space(
     force_refresh: bool = False,
     db: AsyncSession = Depends(get_db),
@@ -38,7 +40,7 @@ async def get_all_servers_disk_space(
     return {"servers": response, "timestamp": get_current_time().isoformat()}
 
 
-@router.get("/{server_id}/cleanup/scan", response_model=CleanupScanResponse)
+@cleanup_router.get("/{server_id}/cleanup/scan", response_model=CleanupScanResponse)
 async def scan_server_cleanup(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -60,7 +62,7 @@ async def scan_server_cleanup(
             pass
 
 
-@router.post("/{server_id}/cleanup/delete", response_model=CleanupDeleteResponse)
+@cleanup_router.post("/{server_id}/cleanup/delete", response_model=CleanupDeleteResponse)
 async def delete_server_cleanup_items(
     server_id: int,
     cleanup_data: CleanupDeleteRequest,
@@ -89,7 +91,7 @@ async def delete_server_cleanup_items(
             pass
 
 
-@router.get("/{server_id}/s3-backups", response_model=List[S3BackupItem])
+@cleanup_router.get("/{server_id}/s3-backups", response_model=List[S3BackupItem])
 async def list_server_s3_backups(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -105,7 +107,7 @@ async def list_server_s3_backups(
     return backups
 
 
-@router.post("/{server_id}/s3-restore")
+@cleanup_router.post("/{server_id}/s3-restore")
 async def restore_server_s3_backup(
     server_id: int,
     restore_data: S3RestoreRequest,
@@ -186,7 +188,7 @@ async def restore_server_s3_backup(
         await to_thread.run_sync(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
 
 
-@router.get("/{server_id}/cpu-count")
+@diagnostics_router.get("/{server_id}/cpu-count")
 async def get_server_cpu_count(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -248,7 +250,7 @@ async def get_server_cpu_count(
         await ssh_manager.disconnect()
 
 
-@router.get("/{server_id}/disk-space")
+@diagnostics_router.get("/{server_id}/disk-space")
 async def get_server_disk_space(
     server_id: int,
     force_refresh: bool = False,
@@ -279,7 +281,7 @@ async def get_server_disk_space(
         }
 
 
-@router.get("/{server_id}/check-deployment")
+@diagnostics_router.get("/{server_id}/check-deployment")
 async def check_server_deployment(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -333,7 +335,7 @@ async def check_server_deployment(
         }
 
 
-@router.post("/{server_id}/confirm-deployment")
+@diagnostics_router.post("/{server_id}/confirm-deployment")
 async def confirm_server_deployment(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -373,7 +375,7 @@ async def confirm_server_deployment(
     }
 
 
-@router.post(
+@diagnostics_router.post(
     "/{server_id}/ssh-reconnect",
     description=(
         "Manually reconnect to a server and reset SSH health status\n\n"
@@ -413,7 +415,7 @@ async def manual_ssh_reconnect(
         return {"success": False, "message": message, "ssh_health_status": server.ssh_health_status}
 
 
-@router.get("/{server_id}/ssh-health")
+@diagnostics_router.get("/{server_id}/ssh-health")
 async def get_ssh_health_status(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -460,3 +462,8 @@ async def get_ssh_health_status(
         "offline_duration_estimate": offline_duration_estimate,
         "monitoring_enabled": server.enable_ssh_health_monitoring,
     }
+
+
+router = APIRouter()
+for _router in (global_router, cleanup_router, diagnostics_router):
+    router.include_router(_router)

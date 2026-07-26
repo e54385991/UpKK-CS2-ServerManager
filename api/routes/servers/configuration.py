@@ -4,10 +4,12 @@
 
 from .common import *
 
-router = APIRouter(prefix="/servers", tags=["servers"])
+discord_router = APIRouter(prefix="/servers", tags=["servers"])
+custom_commands_router = APIRouter(prefix="/servers", tags=["servers"])
+startup_router = APIRouter(prefix="/servers", tags=["servers"])
 
 
-@router.get("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
+@discord_router.get("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
 async def get_discord_settings(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -18,7 +20,7 @@ async def get_discord_settings(
     return build_discord_settings_response(server)
 
 
-@router.put("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
+@discord_router.put("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
 async def update_discord_settings(
     server_id: int,
     settings_data: DiscordSettingsUpdate,
@@ -82,7 +84,7 @@ async def update_discord_settings(
     return build_discord_settings_response(server)
 
 
-@router.post("/{server_id}/discord-settings/test")
+@discord_router.post("/{server_id}/discord-settings/test")
 async def test_discord_settings(
     server_id: int,
     request: DiscordTestRequest,
@@ -97,7 +99,9 @@ async def test_discord_settings(
     return {"success": True, "message": message}
 
 
-@router.get("/{server_id}/custom-commands", response_model=List[CustomCommandResponse])
+@custom_commands_router.get(
+    "/{server_id}/custom-commands", response_model=List[CustomCommandResponse]
+)
 async def list_custom_commands(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -108,7 +112,7 @@ async def list_custom_commands(
     return await CustomCommand.get_all_by_server_and_user(db, server.id, current_user.id)
 
 
-@router.post(
+@custom_commands_router.post(
     "/{server_id}/custom-commands",
     response_model=CustomCommandResponse,
     status_code=status.HTTP_201_CREATED,
@@ -134,7 +138,9 @@ async def create_custom_command(
     return custom_command
 
 
-@router.put("/{server_id}/custom-commands/{command_id}", response_model=CustomCommandResponse)
+@custom_commands_router.put(
+    "/{server_id}/custom-commands/{command_id}", response_model=CustomCommandResponse
+)
 async def update_custom_command(
     server_id: int,
     command_id: int,
@@ -147,8 +153,7 @@ async def update_custom_command(
     custom_command = await get_custom_command_or_404(db, server.id, command_id, current_user)
 
     update_data = command_data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(custom_command, key, value)
+    custom_command.sqlmodel_update(update_data)
 
     db.add(custom_command)
     await db.commit()
@@ -156,7 +161,9 @@ async def update_custom_command(
     return custom_command
 
 
-@router.delete("/{server_id}/custom-commands/{command_id}", response_model=ActionResponse)
+@custom_commands_router.delete(
+    "/{server_id}/custom-commands/{command_id}", response_model=ActionResponse
+)
 async def delete_custom_command(
     server_id: int,
     command_id: int,
@@ -171,7 +178,7 @@ async def delete_custom_command(
     return ActionResponse(success=True, message="Custom command deleted successfully")
 
 
-@router.post("/{server_id}/custom-commands/execute", response_model=ActionResponse)
+@custom_commands_router.post("/{server_id}/custom-commands/execute", response_model=ActionResponse)
 async def execute_one_time_custom_command(
     server_id: int,
     command_data: CustomCommandExecuteRequest,
@@ -189,7 +196,9 @@ async def execute_one_time_custom_command(
     return ActionResponse(success=result["success"], message=result["message"], data=result)
 
 
-@router.post("/{server_id}/custom-commands/{command_id}/execute", response_model=ActionResponse)
+@custom_commands_router.post(
+    "/{server_id}/custom-commands/{command_id}/execute", response_model=ActionResponse
+)
 async def execute_saved_custom_command(
     server_id: int,
     command_id: int,
@@ -209,7 +218,7 @@ async def execute_saved_custom_command(
     return ActionResponse(success=result["success"], message=result["message"], data=result)
 
 
-@router.get("/{server_id}/startup-command")
+@startup_router.get("/{server_id}/startup-command")
 async def get_startup_command(
     server_id: int,
     db: AsyncSession = Depends(get_db),
@@ -349,3 +358,8 @@ async def get_startup_command(
         "session_manager": manager,
         "game_mode_resolved": f"{game_mode_str} (game_type: {game_type}, game_mode: {game_mode})",
     }
+
+
+router = APIRouter()
+for _router in (discord_router, custom_commands_router, startup_router):
+    router.include_router(_router)

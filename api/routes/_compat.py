@@ -9,20 +9,11 @@ from typing import Any
 from fastapi import APIRouter
 
 
-def compose_router(
-    routers: tuple[APIRouter, ...],
-    endpoint_order: tuple[str, ...],
-) -> APIRouter:
-    """Combine domain routers while retaining the legacy registration order."""
-    order = {name: index for index, name in enumerate(endpoint_order)}
-    routes = [route for router in routers for route in router.routes]
-    unknown = [route.name for route in routes if route.name not in order]
-    if unknown:
-        raise RuntimeError(f"Router contains endpoints missing from its order: {unknown}")
-    routes.sort(key=lambda route: order[route.name])
-
+def compose_router(routers: tuple[APIRouter, ...]) -> APIRouter:
+    """Combine domain routers using FastAPI's public composition API."""
     combined = APIRouter()
-    combined.routes.extend(routes)
+    for router in routers:
+        combined.include_router(router)
     return combined
 
 

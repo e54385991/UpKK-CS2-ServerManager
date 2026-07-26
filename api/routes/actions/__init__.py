@@ -57,10 +57,7 @@ ENDPOINT_ORDER = (
     "get_metamod_status",
 )
 
-router = compose_router(
-    (_deployment.router, _batch.router, _console.router, _status_routes.router),
-    ENDPOINT_ORDER,
-)
+router = compose_router((_deployment.router, _batch.router, _console.router, _status_routes.router))
 
 install_patch_compatibility(
     __name__,

@@ -8,7 +8,7 @@ The new features require database tables. When you start the application, the ta
 
 ```bash
 pip install uv
-uv run --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
+uv run --no-dev --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 The following tables will be created:

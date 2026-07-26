@@ -190,8 +190,7 @@ async def update_plugin(
 ):
     await owned_server(db, server_id, current_user)
     plugin = await owned_plugin(db, server_id, plugin_id)
-    for field, value in request.model_dump(exclude_unset=True).items():
-        setattr(plugin, field, value)
+    plugin.sqlmodel_update(request.model_dump(exclude_unset=True))
     db.add(plugin)
     await db.commit()
     await db.refresh(plugin)

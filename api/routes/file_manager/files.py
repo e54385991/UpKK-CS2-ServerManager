@@ -4,10 +4,11 @@
 
 from .common import *
 
-router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
+transfer_router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
+mutation_router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 
 
-@router.get("", response_model=DirectoryListResponse)
+@transfer_router.get("", response_model=DirectoryListResponse)
 async def list_directory(
     server_id: int,
     path: Optional[str] = None,
@@ -38,7 +39,7 @@ async def list_directory(
     return DirectoryListResponse(path=path, files=files)
 
 
-@router.get("/content")
+@transfer_router.get("/content")
 async def get_file_content(
     server_id: int,
     path: str,
@@ -65,7 +66,7 @@ async def get_file_content(
     return {"path": path, "content": content}
 
 
-@router.put("/content")
+@transfer_router.put("/content")
 async def update_file_content(
     server_id: int,
     path: str,
@@ -93,7 +94,7 @@ async def update_file_content(
     return {"success": True, "message": "File updated successfully"}
 
 
-@router.post("/upload")
+@transfer_router.post("/upload")
 async def upload_file(
     server_id: int,
     path: str,
@@ -154,7 +155,7 @@ async def upload_file(
             os.unlink(temp_file)
 
 
-@router.get("/download")
+@transfer_router.get("/download")
 async def download_file(
     server_id: int,
     path: str,
@@ -225,7 +226,7 @@ async def download_file(
         ) from e
 
 
-@router.post("/download-ticket")
+@transfer_router.post("/download-ticket")
 async def create_download_ticket(
     server_id: int,
     request: DownloadTicketRequest,
@@ -245,7 +246,7 @@ async def create_download_ticket(
     return {"ticket": ticket, "expires_in": DOWNLOAD_TICKET_TTL_SECONDS}
 
 
-@router.post("/mkdir")
+@mutation_router.post("/mkdir")
 async def create_directory(
     server_id: int,
     path: str,
@@ -281,7 +282,7 @@ async def create_directory(
     return {"success": True, "message": "Directory created successfully", "path": new_dir_path}
 
 
-@router.delete("")
+@mutation_router.delete("")
 async def delete_path(
     server_id: int,
     path: str,
@@ -314,7 +315,7 @@ async def delete_path(
     return {"success": True, "message": "Deleted successfully"}
 
 
-@router.post("/rename")
+@mutation_router.post("/rename")
 async def rename_file_or_directory(
     server_id: int,
     path: str,
@@ -356,3 +357,8 @@ async def rename_file_or_directory(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
 
     return {"success": True, "message": "Renamed successfully", "new_path": new_path}
+
+
+router = APIRouter()
+for _router in (transfer_router, mutation_router):
+    router.include_router(_router)

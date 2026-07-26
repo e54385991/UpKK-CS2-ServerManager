@@ -48,8 +48,12 @@ ENDPOINT_ORDER = (
 )
 
 router = compose_router(
-    (_files.router, _downloads.router, _archives.router),
-    ENDPOINT_ORDER,
+    (
+        _files.transfer_router,
+        _downloads.router,
+        _files.mutation_router,
+        _archives.router,
+    )
 )
 
 install_patch_compatibility(
