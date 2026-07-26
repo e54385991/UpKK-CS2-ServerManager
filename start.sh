@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Keep this script LF-only; Linux must parse the shebang before Bash starts.
+
 # CS2 Server Manager - Startup Script
 # This script installs uv when needed and starts the application with uv run.
 
