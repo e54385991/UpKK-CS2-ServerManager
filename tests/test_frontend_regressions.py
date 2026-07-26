@@ -88,6 +88,17 @@ def test_plugin_market_loads_admin_accessible_servers_for_plugin_management():
     assert "formatPluginManagementServerName(server)" in template
 
 
+def test_server_admin_view_refreshes_admin_authorized_a2s_cache():
+    template = (PROJECT_ROOT / "templates" / "servers.html").read_text(encoding="utf-8")
+
+    assert "? '/a2s-cache?admin_view=true'" in template
+    toggle_start = template.index("async toggleAdminView()")
+    toggle_end = template.index("async refreshA2SData()", toggle_start)
+    toggle_source = template[toggle_start:toggle_end]
+    assert "await this.loadServers();" in toggle_source
+    assert "await this.refreshA2SData();" in toggle_source
+
+
 def test_plugin_config_restore_supports_multiple_default_sources():
     script = (PROJECT_ROOT / "static" / "js" / "plugin-config-manager.js").read_text(
         encoding="utf-8"

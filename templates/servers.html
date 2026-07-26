@@ -707,6 +707,7 @@ function serverManager() {
             if (!this.currentUser?.is_admin) return;
             // adminViewMode is already updated by x-model binding
             await this.loadServers();
+            await this.refreshA2SData();
         },
         
         async refreshA2SData() {
@@ -715,7 +716,10 @@ function serverManager() {
             this.pollAttempts++;
             
             try {
-                const response = await authFetch('/a2s-cache');
+                const endpoint = this.adminViewMode && this.currentUser?.is_admin
+                    ? '/a2s-cache?admin_view=true'
+                    : '/a2s-cache';
+                const response = await authFetch(endpoint);
                 if (response.ok) {
                     const data = await response.json();
                     const oldDataCount = Object.keys(this.a2sData).length;

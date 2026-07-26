@@ -3,9 +3,9 @@ Routes for a2s-cache - requires authentication to filter by user
 Separate router to avoid /servers prefix issues
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
-from modules.auth import get_current_active_user
+from modules.auth import get_current_active_user, get_current_admin_user
 from modules.models import User
 from modules.utils import get_current_time
 
@@ -36,7 +36,10 @@ async def test_a2s_cache():
 
 
 @router.get("/a2s-cache")
-async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_active_user)):
+async def get_user_servers_a2s_cache(
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+):
     """
     Get cached A2S information for current user's servers.
 
@@ -51,8 +54,13 @@ async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_ac
     from modules.models import Server
     from services.a2s_cache_service import a2s_cache_service
 
+    admin_view = request.query_params.get("admin_view", "").lower() == "true"
+    if admin_view:
+        await get_current_admin_user(current_user)
+
     logger = logging.getLogger(__name__)
-    logger.info(f"=== A2S-CACHE ENDPOINT CALLED for user {current_user.id} ===")
+    cache_scope = "all servers" if admin_view else f"user {current_user.id}"
+    logger.info(f"=== A2S-CACHE ENDPOINT CALLED for {cache_scope} ===")
 
     # Initialize response
     response = {
@@ -61,19 +69,22 @@ async def get_user_servers_a2s_cache(current_user: User = Depends(get_current_ac
         "debug": {
             "endpoint": "a2s-cache",
             "router": "cache",
-            "version": "4.0-user-filtered",
+            "version": "5.0-admin-aware",
             "user_id": current_user.id,
             "authenticated": True,
+            "admin_view": admin_view,
         },
     }
 
     try:
         # Use a separate session
         async with async_session_maker() as session:
-            # Get servers for current user only
-            servers = await Server.get_all_by_user(session, current_user.id)
+            if admin_view:
+                servers = await Server.get_all(session)
+            else:
+                servers = await Server.get_all_by_user(session, current_user.id)
 
-            logger.info(f"Found {len(servers)} servers for user {current_user.id}")
+            logger.info(f"Found {len(servers)} servers for {cache_scope}")
 
             # Get cached data for each server
             for server in servers:
