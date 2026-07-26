@@ -11,6 +11,7 @@ from typing import Any, Optional
 import redis.asyncio as aioredis
 
 from modules.config import settings
+from services.bounded_output import truncate_utf8_tail
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +269,9 @@ class RedisManager:
         return await self.delete(server_key)
 
     # Deployment progress methods
+    MAX_DEPLOYMENT_PROGRESS_ENTRIES = 5000
+    MAX_DEPLOYMENT_PROGRESS_MESSAGE_BYTES = 64 * 1024
+
     async def append_deployment_progress(
         self, server_id: int, msg_type: str, message: str, timestamp: str
     ) -> bool:
@@ -285,13 +289,23 @@ class RedisManager:
         """
         key = f"deployment_progress:{server_id}"
         try:
+            message = truncate_utf8_tail(
+                message,
+                self.MAX_DEPLOYMENT_PROGRESS_MESSAGE_BYTES,
+            )
             # Store as JSON for structured data
             progress_entry = json.dumps(
-                {"type": msg_type, "message": message, "timestamp": timestamp}
+                {"type": msg_type, "message": message, "timestamp": timestamp},
+                ensure_ascii=False,
             )
-            await self.client.rpush(key, progress_entry)
-            # Set expiration to 2 hours (matches deployment lock TTL)
-            await self.client.expire(key, 7200)
+            # One batched round trip appends, bounds retained history, and refreshes the
+            # two-hour expiry. Long-running SteamCMD jobs can emit thousands of
+            # lines, so TTL alone is not a memory bound while a job is active.
+            async with self.client.pipeline(transaction=False) as pipeline:
+                pipeline.rpush(key, progress_entry)
+                pipeline.ltrim(key, -self.MAX_DEPLOYMENT_PROGRESS_ENTRIES, -1)
+                pipeline.expire(key, 7200)
+                await pipeline.execute()
             return True
         except Exception as e:
             print(f"Redis append deployment progress error: {e}")
@@ -309,7 +323,11 @@ class RedisManager:
         """
         key = f"deployment_progress:{server_id}"
         try:
-            progress_entries = await self.client.lrange(key, 0, -1)
+            progress_entries = await self.client.lrange(
+                key,
+                -self.MAX_DEPLOYMENT_PROGRESS_ENTRIES,
+                -1,
+            )
             return [json.loads(entry) for entry in progress_entries]
         except Exception as e:
             print(f"Redis get deployment progress error: {e}")

@@ -24,6 +24,8 @@ from modules.utils import get_current_time
 
 logger = logging.getLogger(__name__)
 
+MAX_CONCURRENT_HEALTH_CHECKS = 4
+
 
 class SSHHealthMonitor:
     """Background daemon for SSH health monitoring"""
@@ -83,19 +85,32 @@ class SSHHealthMonitor:
                 result = await db.execute(
                     select(Server).where(Server.enable_ssh_health_monitoring.is_(True))
                 )
-                servers = result.scalars().all()
+                servers = list(result.scalars().all())
 
-                if not servers:
-                    return
+            # Remote checks can take several seconds each.  Release the database
+            # connection before any network I/O so one monitor pass cannot
+            # starve request handlers of pooled DB connections.
+            active_server_ids = {server.id for server in servers}
+            self.last_check_times = {
+                server_id: checked_at
+                for server_id, checked_at in self.last_check_times.items()
+                if server_id in active_server_ids
+            }
 
-                logger.debug(f"SSH health monitor: checking {len(servers)} server(s)")
+            if not servers:
+                return
 
-                # Check each server
-                for server in servers:
+            logger.debug(f"SSH health monitor: checking {len(servers)} server(s)")
+            concurrency = asyncio.Semaphore(MAX_CONCURRENT_HEALTH_CHECKS)
+
+            async def check(server) -> None:
+                async with concurrency:
                     try:
                         await self._check_server_health(server)
                     except Exception as e:
                         logger.error(f"Error checking SSH health for server {server.id}: {e}")
+
+            await asyncio.gather(*(check(server) for server in servers))
         except Exception as e:
             logger.error(f"Error getting servers for SSH health check: {e}")
 

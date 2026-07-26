@@ -7,6 +7,7 @@ import asyncio
 import logging
 import time
 from typing import Dict, List, Optional, Tuple
+from weakref import WeakValueDictionary
 
 import asyncssh
 
@@ -50,6 +51,7 @@ class PooledConnection:
         self.created_at = time.time()
         self.last_used = time.time()
         self.in_use_count = 0
+        self.draining = False
         self.reconnection_attempts: List[float] = []  # Timestamps of reconnection attempts
 
     def is_alive(self) -> bool:
@@ -104,7 +106,7 @@ class SSHConnectionPool:
     # Singleton instance
     _instance = None
 
-    def __new__(cls):
+    def __new__(cls, *_args, **_kwargs):
         # Simple singleton without locks - Python's GIL ensures thread safety for instance creation
         # Multiple calls will see the same _instance after first creation
         if cls._instance is None:
@@ -139,8 +141,10 @@ class SSHConnectionPool:
 
         # Connection storage: ConnectionKey -> PooledConnection
         self.connections: Dict[ConnectionKey, PooledConnection] = {}
+        self._draining_connections: Dict[int, PooledConnection] = {}
+        self._connection_index: Dict[int, PooledConnection] = {}
         self.pool_lock = asyncio.Lock()
-        self._key_locks: Dict[ConnectionKey, asyncio.Lock] = {}
+        self._key_locks: WeakValueDictionary[ConnectionKey, asyncio.Lock] = WeakValueDictionary()
 
         # Cleanup task
         self.cleanup_task: Optional[asyncio.Task] = None
@@ -183,38 +187,35 @@ class SSHConnectionPool:
         stale_connections: list[PooledConnection] = []
         async with self.pool_lock:
             now = time.time()
-            to_remove = []
+            to_remove: list[PooledConnection] = []
 
-            for key, pooled_conn in self.connections.items():
+            for key, pooled_conn in list(self.connections.items()):
                 # Check if connection is dead
                 if not pooled_conn.is_alive():
-                    to_remove.append(key)
+                    to_remove.append(pooled_conn)
                     logger.debug(f"Removing dead connection: {key}")
-                    continue
-
-                # Don't clean up connections in use
-                if pooled_conn.in_use_count > 0:
                     continue
 
                 # Check idle timeout
                 idle_time = now - pooled_conn.last_used
-                if idle_time > self.idle_timeout:
-                    to_remove.append(key)
+                if pooled_conn.in_use_count == 0 and idle_time > self.idle_timeout:
+                    to_remove.append(pooled_conn)
                     logger.debug(f"Removing idle connection (idle {idle_time:.1f}s): {key}")
                     continue
 
                 # Check max lifetime
                 age = now - pooled_conn.created_at
                 if age > self.max_lifetime:
-                    to_remove.append(key)
+                    to_remove.append(pooled_conn)
                     logger.debug(f"Removing old connection (age {age:.1f}s): {key}")
                     continue
 
-            # Remove stale connections
-            for key in to_remove:
-                pooled_conn = self.connections.pop(key, None)
-                if pooled_conn:
-                    stale_connections.append(pooled_conn)
+            # Retire stale connections. Active leases keep their exact generation
+            # alive until every holder releases it.
+            for pooled_conn in to_remove:
+                close_candidate = self._retire_connection_locked(pooled_conn)
+                if close_candidate is not None:
+                    stale_connections.append(close_candidate)
 
             if to_remove:
                 logger.info(
@@ -223,10 +224,7 @@ class SSHConnectionPool:
                 )
 
         if stale_connections:
-            await asyncio.gather(
-                *(connection.close() for connection in stale_connections),
-                return_exceptions=True,
-            )
+            await self._close_connections_safely(stale_connections)
 
     def _create_connection_key(self, server: Server) -> ConnectionKey:
         """Create a connection key from server configuration"""
@@ -238,6 +236,87 @@ class SSHConnectionPool:
         """Return a per-target lock while holding the global map lock only briefly."""
         async with self.pool_lock:
             return self._key_locks.setdefault(key, asyncio.Lock())
+
+    def _register_connection_locked(self, pooled_conn: PooledConnection) -> None:
+        """Register a newly opened active connection while holding ``pool_lock``."""
+        pooled_conn.draining = False
+        self.connections[pooled_conn.key] = pooled_conn
+        if pooled_conn.conn is not None:
+            self._connection_index[id(pooled_conn.conn)] = pooled_conn
+
+    def _forget_connection_locked(self, pooled_conn: PooledConnection) -> None:
+        """Remove all pool-owned references to one connection generation."""
+        if self.connections.get(pooled_conn.key) is pooled_conn:
+            self.connections.pop(pooled_conn.key, None)
+        self._draining_connections.pop(id(pooled_conn), None)
+        if pooled_conn.conn is not None:
+            connection_id = id(pooled_conn.conn)
+            if self._connection_index.get(connection_id) is pooled_conn:
+                self._connection_index.pop(connection_id, None)
+
+    def _retire_connection_locked(
+        self, pooled_conn: PooledConnection
+    ) -> Optional[PooledConnection]:
+        """Stop new leases and return the generation once it is safe to close."""
+        if self.connections.get(pooled_conn.key) is pooled_conn:
+            self.connections.pop(pooled_conn.key, None)
+        pooled_conn.draining = True
+        if pooled_conn.in_use_count > 0:
+            self._draining_connections[id(pooled_conn)] = pooled_conn
+            return None
+        self._forget_connection_locked(pooled_conn)
+        return pooled_conn
+
+    def _find_connection_locked(
+        self, connection: Optional[asyncssh.SSHClientConnection]
+    ) -> Optional[PooledConnection]:
+        """Resolve a raw AsyncSSH connection to its exact pool generation."""
+        if connection is None:
+            return None
+        pooled_conn = self._connection_index.get(id(connection))
+        if pooled_conn is None or pooled_conn.conn is not connection:
+            return None
+        return pooled_conn
+
+    async def _close_connections_safely(
+        self,
+        connections: List[PooledConnection],
+    ) -> None:
+        """Close pool-owned connections fully before propagating cancellation."""
+        unique_connections = list(
+            {id(connection): connection for connection in connections}.values()
+        )
+        if not unique_connections:
+            return
+
+        close_future = asyncio.gather(
+            *(connection.close() for connection in unique_connections),
+            return_exceptions=True,
+        )
+        try:
+            await asyncio.shield(close_future)
+        except asyncio.CancelledError:
+            await close_future
+            raise
+
+    async def _register_acquired_connection(
+        self,
+        server: Server,
+        pooled_conn: PooledConnection,
+    ) -> int:
+        """Register a leased generation or clean it up if registration is cancelled."""
+        registered = False
+        try:
+            async with self.pool_lock:
+                self._register_connection_locked(pooled_conn)
+                registered = True
+                return len(self.connections)
+        except BaseException:
+            if registered:
+                await self.release_connection(server, pooled_conn.conn)
+            else:
+                await self._close_connections_safely([pooled_conn])
+            raise
 
     async def _open_connection(self, server: Server) -> asyncssh.SSHClientConnection:
         """Open one SSH connection without holding any pool-wide lock."""
@@ -342,19 +421,17 @@ class SSHConnectionPool:
                         pooled_conn.acquire()
                         logger.debug(f"Reusing existing connection: {key}")
                         return True, pooled_conn.conn, "Reused existing connection"
-                    stale_connection = self.connections.pop(key, None)
+                    stale_connection = self._retire_connection_locked(pooled_conn)
 
             if stale_connection is not None:
-                await stale_connection.close()
+                await self._close_connections_safely([stale_connection])
 
             try:
                 logger.debug(f"Creating new SSH connection: {key}")
                 conn = await self._open_connection(server)
                 pooled_conn = PooledConnection(conn, key)
                 pooled_conn.acquire()
-                async with self.pool_lock:
-                    self.connections[key] = pooled_conn
-                    total = len(self.connections)
+                total = await self._register_acquired_connection(server, pooled_conn)
                 logger.info(f"Created new SSH connection: {key}. Total connections: {total}")
                 return True, conn, "Connected successfully"
             except asyncssh.PermissionDenied:
@@ -387,23 +464,64 @@ class SSHConnectionPool:
         Returns:
             Tuple[bool, Optional[connection], str]: (success, connection, message)
         """
+        return await self._reconnect(server)
+
+    async def reconnect_for_connection(
+        self,
+        server: Server,
+        failed_connection: Optional[asyncssh.SSHClientConnection],
+    ) -> Tuple[bool, Optional[asyncssh.SSHClientConnection], str]:
+        """Reconnect the generation held by one SSHManager.
+
+        If another holder already replaced that generation, lease the replacement
+        instead of rotating the healthy new connection a second time.
+        """
+        return await self._reconnect(server, failed_connection=failed_connection)
+
+    async def _reconnect(
+        self,
+        server: Server,
+        *,
+        failed_connection: Optional[asyncssh.SSHClientConnection] = None,
+    ) -> Tuple[bool, Optional[asyncssh.SSHClientConnection], str]:
+        """Reconnect one target, optionally scoped to a failed generation."""
         key = self._create_connection_key(server)
         key_lock = await self._get_key_lock(key)
 
         async with key_lock:
+            stale_connection = None
             async with self.pool_lock:
-                pooled_conn = self.connections.get(key)
-                if pooled_conn is not None:
-                    can_reconnect, limit_msg = self._can_reconnect(pooled_conn)
+                active_connection = self.connections.get(key)
+                failed_generation = self._find_connection_locked(failed_connection)
+
+                # A concurrent holder may already have replaced the same failed
+                # generation. Reuse that replacement instead of opening a third
+                # connection and disrupting its active leases.
+                if failed_connection is not None and failed_generation is not active_connection:
+                    if active_connection is not None and active_connection.is_alive():
+                        connection_age = time.time() - active_connection.created_at
+                        if connection_age <= self.max_lifetime:
+                            active_connection.acquire()
+                            return (
+                                True,
+                                active_connection.conn,
+                                "Reconnected successfully",
+                            )
+
+                rate_limit_source = active_connection or failed_generation
+                if rate_limit_source is not None:
+                    can_reconnect, limit_msg = self._can_reconnect(rate_limit_source)
                     if not can_reconnect:
                         return False, None, limit_msg
-                    reconnection_attempts = pooled_conn.reconnection_attempts.copy()
-                    self.connections.pop(key, None)
+                    reconnection_attempts = rate_limit_source.reconnection_attempts.copy()
                 else:
                     reconnection_attempts = []
 
-            if pooled_conn is not None:
-                await pooled_conn.close()
+                if active_connection is not None:
+                    stale_connection = self._retire_connection_locked(active_connection)
+
+            if stale_connection is not None:
+                await self._close_connections_safely([stale_connection])
 
             try:
                 conn = await self._open_connection(server)
@@ -411,8 +529,7 @@ class SSHConnectionPool:
                 new_pooled_conn.reconnection_attempts = reconnection_attempts
                 self._record_reconnection(new_pooled_conn)
                 new_pooled_conn.acquire()
-                async with self.pool_lock:
-                    self.connections[key] = new_pooled_conn
+                await self._register_acquired_connection(server, new_pooled_conn)
                 return True, conn, "Reconnected successfully"
             except asyncssh.PermissionDenied:
                 return False, None, "Authentication failed"
@@ -447,17 +564,19 @@ class SSHConnectionPool:
         key_lock = await self._get_key_lock(key)
 
         async with key_lock:
+            stale_connection = None
             async with self.pool_lock:
-                pooled_conn = self.connections.pop(key, None)
-            if pooled_conn is not None:
-                await pooled_conn.close()
+                pooled_conn = self.connections.get(key)
+                if pooled_conn is not None:
+                    stale_connection = self._retire_connection_locked(pooled_conn)
+            if stale_connection is not None:
+                await self._close_connections_safely([stale_connection])
 
             try:
                 conn = await self._open_connection(server)
                 new_pooled_conn = PooledConnection(conn, key)
                 new_pooled_conn.acquire()
-                async with self.pool_lock:
-                    self.connections[key] = new_pooled_conn
+                await self._register_acquired_connection(server, new_pooled_conn)
                 return (
                     True,
                     conn,
@@ -505,20 +624,57 @@ class SSHConnectionPool:
                 logger.info(f"[SSH Pool] No connection found for {key}, nothing to reset")
                 return True, "无活动连接，无需重置 | No active connection, nothing to reset"
 
-    async def release_connection(self, server: Server):
+    async def release_connection(
+        self,
+        server: Server,
+        connection: Optional[asyncssh.SSHClientConnection] = None,
+    ):
         """
         Release a connection back to the pool
 
         Args:
             server: Server instance
+            connection: Exact connection generation held by the caller. Legacy
+                callers may omit this to release the current active generation.
         """
+        release_task = asyncio.create_task(self._release_connection(server, connection))
+        try:
+            await asyncio.shield(release_task)
+        except asyncio.CancelledError:
+            # A cancelled request must not strand a draining generation. Finish
+            # the small bookkeeping/close operation before propagating cancel.
+            await release_task
+            raise
+
+    async def _release_connection(
+        self,
+        server: Server,
+        connection: Optional[asyncssh.SSHClientConnection],
+    ) -> None:
+        """Perform exact-generation release for the cancellation-safe wrapper."""
         key = self._create_connection_key(server)
+        close_candidate = None
 
         async with self.pool_lock:
-            if key in self.connections:
-                pooled_conn = self.connections[key]
+            pooled_conn = (
+                self._find_connection_locked(connection)
+                if connection is not None
+                else self.connections.get(key)
+            )
+            if pooled_conn is not None:
                 pooled_conn.release()
-                logger.debug(f"Released connection: {key}")
+                logger.debug(
+                    "Released connection generation: %s (draining=%s, remaining=%s)",
+                    key,
+                    pooled_conn.draining,
+                    pooled_conn.in_use_count,
+                )
+                if pooled_conn.draining and pooled_conn.in_use_count == 0:
+                    self._forget_connection_locked(pooled_conn)
+                    close_candidate = pooled_conn
+
+        if close_candidate is not None:
+            await self._close_connections_safely([close_candidate])
 
     async def remove_connection(self, server: Server):
         """
@@ -530,22 +686,26 @@ class SSHConnectionPool:
         key = self._create_connection_key(server)
         key_lock = await self._get_key_lock(key)
         async with key_lock:
+            close_candidate = None
             async with self.pool_lock:
-                pooled_conn = self.connections.pop(key, None)
-            if pooled_conn is not None:
-                await pooled_conn.close()
+                pooled_conn = self.connections.get(key)
+                if pooled_conn is not None:
+                    close_candidate = self._retire_connection_locked(pooled_conn)
+            if close_candidate is not None:
+                await self._close_connections_safely([close_candidate])
                 logger.info(f"Removed connection: {key}")
 
     async def close_all(self):
         """Close all connections in the pool"""
         async with self.pool_lock:
-            connections = list(self.connections.values())
+            connections = list(self.connections.values()) + list(
+                self._draining_connections.values()
+            )
             self.connections.clear()
+            self._draining_connections.clear()
+            self._connection_index.clear()
         logger.info(f"Closing all {len(connections)} connections")
-        await asyncio.gather(
-            *(connection.close() for connection in connections),
-            return_exceptions=True,
-        )
+        await self._close_connections_safely(connections)
         logger.info("All connections closed")
 
     async def get_pool_stats(self) -> Dict:

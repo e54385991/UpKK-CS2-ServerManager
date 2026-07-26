@@ -2,11 +2,15 @@
 
 # ruff: noqa: F403,F405
 
+from services.bounded_output import BoundedLineBuffer
+
 from .common import *
 
 
 class ConnectionMixin:
     """Internal connection behavior; instantiate through SSHManager."""
+
+    STREAMING_OUTPUT_MAX_BYTES = 2 * 1024 * 1024
 
     @staticmethod
     def archive_type_from_path(path: str) -> Optional[str]:
@@ -314,6 +318,24 @@ class ConnectionMixin:
             message or "Remote command failed",
         )
 
+    async def _reconnect_current_pooled_connection(
+        self, server: Server
+    ) -> Tuple[bool, Optional[asyncssh.SSHClientConnection], str]:
+        """Replace this manager's lease without affecting another generation."""
+        previous_connection = self.conn
+        success, connection, message = await ssh_connection_pool.reconnect_for_connection(
+            server,
+            previous_connection,
+        )
+        if success:
+            self.conn = connection
+            if previous_connection is not None and previous_connection is not connection:
+                await ssh_connection_pool.release_connection(
+                    server,
+                    previous_connection,
+                )
+        return success, connection, message
+
     async def _handle_sftp_error_with_reconnect(
         self, error: Exception, server: Server, operation_name: str, retry_func
     ):
@@ -340,9 +362,10 @@ class ConnectionMixin:
             )
             # Try to reconnect - use server parameter for consistency
             if self.use_pool:
-                success, conn, reconnect_msg = await ssh_connection_pool.reconnect(server)
+                success, conn, reconnect_msg = await self._reconnect_current_pooled_connection(
+                    server
+                )
                 if success:
-                    self.conn = conn
                     logger.info(f"[SSH Manager] Reconnection successful, retrying {operation_name}")
                     # Retry the operation once after reconnection
                     try:
@@ -602,11 +625,10 @@ class ConnectionMixin:
             logger.warning(f"[SSH Manager] SSH connection error in execute_command: {error_msg}")
             if self.use_pool and self.current_server:
                 try:
-                    success, conn, reconnect_msg = await ssh_connection_pool.reconnect(
+                    success, conn, reconnect_msg = await self._reconnect_current_pooled_connection(
                         self.current_server
                     )
                     if success:
-                        self.conn = conn
                         logger.info(
                             "[SSH Manager] Reconnection successful, retrying execute_command"
                         )
@@ -644,8 +666,8 @@ class ConnectionMixin:
         if not self.conn:
             return False, "", "Not connected"
 
-        stdout_lines = []
-        stderr_lines = []
+        stdout_lines = BoundedLineBuffer(self.STREAMING_OUTPUT_MAX_BYTES)
+        stderr_lines = BoundedLineBuffer(self.STREAMING_OUTPUT_MAX_BYTES)
 
         async def _execute():
             # Create the process
@@ -684,15 +706,15 @@ class ConnectionMixin:
             # zero makes every streaming command look like a failure.
             completed = await process.wait()
 
-            stdout_text = "\n".join(stdout_lines)
-            stderr_text = "\n".join(stderr_lines)
+            stdout_text = stdout_lines.text()
+            stderr_text = stderr_lines.text()
 
             return completed.exit_status == 0, stdout_text, stderr_text
 
         try:
             return await asyncio.wait_for(_execute(), timeout=timeout)
         except asyncio.TimeoutError:
-            return False, "\n".join(stdout_lines), "Command timeout"
+            return False, stdout_lines.text(), "Command timeout"
         except (asyncssh.ConnectionLost, asyncssh.DisconnectError, asyncssh.ChannelOpenError) as e:
             # SSH connection errors that can be fixed by reconnection
             error_msg = str(e)
@@ -701,11 +723,10 @@ class ConnectionMixin:
             )
             if self.use_pool and self.current_server:
                 try:
-                    success, conn, reconnect_msg = await ssh_connection_pool.reconnect(
+                    success, conn, reconnect_msg = await self._reconnect_current_pooled_connection(
                         self.current_server
                     )
                     if success:
-                        self.conn = conn
                         logger.info(
                             "[SSH Manager] Reconnection successful, retrying execute_command_streaming"
                         )
@@ -717,7 +738,7 @@ class ConnectionMixin:
                         logger.error(f"[SSH Manager] Reconnection failed: {reconnect_msg}")
                         return (
                             False,
-                            "\n".join(stdout_lines),
+                            stdout_lines.text(),
                             f"连接失败 | Connection failed: {reconnect_msg}",
                         )
                 except Exception as retry_e:
@@ -726,12 +747,12 @@ class ConnectionMixin:
                     )
                     return (
                         False,
-                        "\n".join(stdout_lines),
+                        stdout_lines.text(),
                         f"操作失败（重连后重试仍失败）| Operation failed after reconnection: {str(retry_e)}",
                     )
-            return False, "\n".join(stdout_lines), str(e)
+            return False, stdout_lines.text(), str(e)
         except Exception as e:
-            return False, "\n".join(stdout_lines), f"Execution error: {str(e)}"
+            return False, stdout_lines.text(), f"Execution error: {str(e)}"
 
     async def execute_sudo_command(
         self, command: str, sudo_password: Optional[str] = None, timeout: int = 30
@@ -770,7 +791,7 @@ class ConnectionMixin:
         if self.conn:
             if self.use_pool and self.current_server:
                 # Release connection back to pool
-                await ssh_connection_pool.release_connection(self.current_server)
+                await ssh_connection_pool.release_connection(self.current_server, self.conn)
             else:
                 # Direct connection - close it
                 self.conn.close()

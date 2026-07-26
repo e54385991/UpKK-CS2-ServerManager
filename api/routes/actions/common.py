@@ -34,6 +34,7 @@ from modules import (
 )
 from modules.database import async_session_maker
 from services import SSHManager, redis_manager
+from services.concurrency_limiter import KeyedConcurrencyLimiter
 from services.deployment_progress import (
     DeploymentWebSocket,
     deployment_ws,
@@ -64,9 +65,7 @@ DEPLOYMENT_PROGRESS_CLEANUP_DELAY = (
 
 _background_tasks = action_task_registry.tasks
 
-_batch_operation_semaphore = asyncio.Semaphore(8)
-
-_user_batch_semaphores: dict[int, asyncio.Semaphore] = {}
+_batch_operation_limiter = KeyedConcurrencyLimiter[int](global_limit=8, per_key_limit=2)
 
 _pending_batch_counts: dict[int, int] = {}
 
@@ -196,23 +195,19 @@ async def _run_bounded_batch_operation(
     callback,
 ) -> None:
     """Bound global fan-out and serialize destructive work per server."""
-    user_semaphore = _user_batch_semaphores.setdefault(user_id, asyncio.Semaphore(2))
     try:
-        async with user_semaphore:
-            async with _batch_operation_semaphore:
-                try:
-                    async with maintenance_lock_service.get(
-                        server_id,
-                        operation=operation,
-                        wait=True,
-                        wait_timeout=30,
-                        ttl=7200,
-                    ):
-                        await callback()
-                except OperationBusyError as exc:
-                    await redis_manager.set_batch_action_status(
-                        batch_id, server_id, "failed", str(exc)
-                    )
+        async with _batch_operation_limiter.slot(user_id):
+            try:
+                async with maintenance_lock_service.get(
+                    server_id,
+                    operation=operation,
+                    wait=True,
+                    wait_timeout=30,
+                    ttl=7200,
+                ):
+                    await callback()
+            except OperationBusyError as exc:
+                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(exc))
     finally:
         async with _pending_batch_counts_lock:
             remaining = max(0, _pending_batch_counts.get(user_id, 1) - 1)

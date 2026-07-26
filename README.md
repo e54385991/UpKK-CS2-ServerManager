@@ -21,8 +21,15 @@ contracts, templates, and Python/frontend dependency advisories.
 
 ```bash
 uv sync --locked --group dev
+uv run pre-commit install
 uv run python scripts/check_baseline.py
 ```
+
+The Git hook checks changed Python files before each commit. To run it against
+the whole repository manually, use `uv run pre-commit run --all-files`.
+
+Git hook 会在每次提交前检查变更的 Python 文件。若要手动检查整个仓库，请运行
+`uv run pre-commit run --all-files`。
 
 ---
 

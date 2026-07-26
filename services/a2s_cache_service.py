@@ -9,9 +9,12 @@ from typing import Dict, Optional
 
 from modules.utils import get_current_time
 from services.a2s_query import a2s_service
+from services.concurrency_limiter import KeyedConcurrencyLimiter
 from services.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
+
+MAX_CONCURRENT_A2S_QUERIES = 8
 
 
 class A2SCacheService:
@@ -122,17 +125,25 @@ class A2SCacheService:
 
             logger.debug(f"Querying {len(servers)} servers for A2S info")
 
-            # Query each server
-            # DB session is already closed, so network operations won't hold DB connections
-            for server in servers:
+            # The DB session is already closed. Query independent servers in
+            # parallel, with a conservative cap to avoid UDP/Redis bursts.
+            limiter = KeyedConcurrencyLimiter[int](
+                global_limit=MAX_CONCURRENT_A2S_QUERIES,
+                per_key_limit=1,
+            )
+
+            async def query(server) -> None:
                 # Skip servers that are marked as down due to SSH failures
                 if server.should_skip_background_checks():
                     logger.debug(
                         f"Skipping A2S query for server {server.id} - marked as SSH down for 3+ days"
                     )
-                    continue
+                    return
 
-                await self._query_and_cache_server(server)
+                async with limiter.slot(server.id):
+                    await self._query_and_cache_server(server)
+
+            await asyncio.gather(*(query(server) for server in servers))
 
         except Exception as e:
             logger.error(f"Error querying servers: {e}")

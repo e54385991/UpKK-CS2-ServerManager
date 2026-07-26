@@ -29,6 +29,7 @@ from starlette.background import BackgroundTask
 from api.dependencies import require_server_access
 from modules import Server, User, get_current_active_user, get_db, settings
 from services import SSHManager
+from services.concurrency_limiter import KeyedConcurrencyLimiter
 from services.github_credentials import get_effective_github_token
 from services.task_registry import file_task_registry
 
@@ -70,16 +71,12 @@ download_tickets: Dict[str, Dict[str, Any]] = {}
 
 download_tickets_lock = asyncio.Lock()
 
-_file_task_semaphore = asyncio.Semaphore(4)
-
-_file_user_semaphores: dict[int, asyncio.Semaphore] = {}
+_file_task_limiter = KeyedConcurrencyLimiter[int](global_limit=4, per_key_limit=2)
 
 
 async def _run_bounded_file_task(user_id: int, callback) -> None:
-    user_semaphore = _file_user_semaphores.setdefault(user_id, asyncio.Semaphore(2))
-    async with user_semaphore:
-        async with _file_task_semaphore:
-            await callback()
+    async with _file_task_limiter.slot(user_id):
+        await callback()
 
 
 async def shutdown_background_tasks() -> None:

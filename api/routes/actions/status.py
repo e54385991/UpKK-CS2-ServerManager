@@ -56,8 +56,9 @@ async def reconnect_ssh(
     # Perform manual reconnection through pool
     from services.ssh_connection_pool import ssh_connection_pool
 
+    connection = None
     try:
-        success, conn, msg = await ssh_connection_pool.manual_reconnect(server)
+        success, connection, msg = await ssh_connection_pool.manual_reconnect(server)
         if success:
             # Update ssh_health_status to healthy after successful reconnection
             now = get_current_time()
@@ -82,6 +83,9 @@ async def reconnect_ssh(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reconnect: {str(e)}",
         ) from e
+    finally:
+        if connection is not None:
+            await ssh_connection_pool.release_connection(server, connection)
 
 
 @router.post("/servers/{server_id}/reset-reconnect-counter")

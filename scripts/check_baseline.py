@@ -29,6 +29,7 @@ def run(label: str, command: list[str]) -> None:
 
 def main() -> None:
     uv = executable("uv")
+    pre_commit = executable("pre-commit")
     ruff = executable("ruff")
     pytest = executable("pytest")
     pip_audit = executable("pip-audit")
@@ -36,6 +37,7 @@ def main() -> None:
 
     checks = (
         ("Lock file", [uv, "lock", "--check"]),
+        ("Pre-commit hooks", [pre_commit, "run", "--all-files", "--show-diff-on-failure"]),
         ("Ruff format", [ruff, "format", "--check", "."]),
         ("Ruff lint", [ruff, "check", "."]),
         ("Tests and compatibility contracts", [pytest, "-q"]),

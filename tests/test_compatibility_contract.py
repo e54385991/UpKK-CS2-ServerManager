@@ -11,6 +11,7 @@ import main
 import modules
 import services
 from api.application import create_app
+from api.routes import actions, file_manager, servers
 from services.ssh_manager import SSHManager
 
 BASELINE_DIRECTORY = Path(__file__).with_name("baselines")
@@ -18,6 +19,16 @@ BASELINE_DIRECTORY = Path(__file__).with_name("baselines")
 
 def _load_json(name: str):
     return json.loads((BASELINE_DIRECTORY / name).read_text(encoding="utf-8"))
+
+
+def _iter_registered_routes(routes):
+    """Flatten FastAPI's lazy included-router wrappers in registration order."""
+    for route in routes:
+        original_router = getattr(route, "original_router", None)
+        if original_router is not None:
+            yield from _iter_registered_routes(original_router.routes)
+        else:
+            yield route
 
 
 def _route_manifest(app):
@@ -28,7 +39,7 @@ def _route_manifest(app):
             "name": getattr(route, "name", None),
             "methods": sorted(getattr(route, "methods", None) or []),
         }
-        for route in app.routes
+        for route in _iter_registered_routes(app.routes)
     ]
 
 
@@ -37,7 +48,42 @@ def test_openapi_contract_matches_the_pre_refactor_baseline():
 
 
 def test_route_registration_order_matches_the_pre_refactor_baseline():
-    assert _route_manifest(create_app(lifespan=None)) == _load_json("routes.json")
+    actual = _route_manifest(create_app(lifespan=None))
+
+    assert actual == _load_json("routes.json")
+    assert [route for route in actual if route["kind"] == "APIWebSocketRoute"] == [
+        {
+            "kind": "APIWebSocketRoute",
+            "path": "/servers/{server_id}/deployment-status",
+            "name": "deployment_status_websocket",
+            "methods": [],
+        },
+        {
+            "kind": "APIWebSocketRoute",
+            "path": "/servers/{server_id}/ssh-console",
+            "name": "ssh_console_websocket",
+            "methods": [],
+        },
+        {
+            "kind": "APIWebSocketRoute",
+            "path": "/servers/{server_id}/game-console",
+            "name": "game_console_websocket",
+            "methods": [],
+        },
+        {
+            "kind": "APIWebSocketRoute",
+            "path": "/api/setup/setup-progress/{session_id}",
+            "name": "setup_progress_websocket",
+            "methods": [],
+        },
+    ]
+
+
+def test_composed_domain_routers_follow_their_declared_endpoint_order():
+    for route_module in (actions, file_manager, servers):
+        assert [route.name for route in route_module.router.routes] == list(
+            route_module.ENDPOINT_ORDER
+        )
 
 
 def test_public_python_exports_remain_importable():

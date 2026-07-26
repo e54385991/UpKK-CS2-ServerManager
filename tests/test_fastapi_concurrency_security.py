@@ -129,6 +129,22 @@ async def test_nonblocking_server_lock_reports_conflict(monkeypatch):
     assert await service.is_locked(42) is False
 
 
+@pytest.mark.asyncio
+async def test_server_lock_registry_forgets_inactive_server_ids(monkeypatch):
+    service = MaintenanceLockService()
+
+    async def redis_unavailable(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(redis_manager, "acquire_lock", redis_unavailable)
+
+    for server_id in range(100):
+        async with service.get(server_id):
+            assert service._locks[server_id].locked()
+
+    assert len(service._locks) == 0
+
+
 def test_batch_requests_are_deduplicated_and_bounded():
     request = BatchActionRequest(server_ids=[1, 1, 2], action="restart")
     assert request.server_ids == [1, 2]

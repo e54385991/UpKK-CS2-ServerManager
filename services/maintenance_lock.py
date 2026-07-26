@@ -5,7 +5,8 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
-from typing import AsyncIterator, Dict
+from typing import AsyncIterator, MutableMapping
+from weakref import WeakValueDictionary
 
 from services.redis_manager import redis_manager
 
@@ -52,7 +53,10 @@ class _MaintenanceLockHandle:
 
 class MaintenanceLockService:
     def __init__(self) -> None:
-        self._locks: Dict[int, asyncio.Lock] = {}
+        # Active holders and waiters keep their lock strongly referenced. Once
+        # the final operation exits, the weak map forgets that server ID instead
+        # of growing for the lifetime of the process.
+        self._locks: MutableMapping[int, asyncio.Lock] = WeakValueDictionary()
 
     def get(
         self,

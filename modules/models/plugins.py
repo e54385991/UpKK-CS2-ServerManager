@@ -64,6 +64,19 @@ class MarketPlugin(SQLModel, table=True):
         return result.scalar_one_or_none()
 
     @classmethod
+    async def get_by_ids(
+        cls,
+        session: AsyncSession,
+        plugin_ids: List[int],
+    ) -> List["MarketPlugin"]:
+        """Get plugins in one query while ignoring duplicate requested IDs."""
+        unique_ids = list(dict.fromkeys(plugin_ids))
+        if not unique_ids:
+            return []
+        result = await session.execute(select(cls).where(cls.id.in_(unique_ids)))
+        return list(result.scalars().all())
+
+    @classmethod
     async def get_by_github_url(
         cls, session: AsyncSession, github_url: str
     ) -> Optional["MarketPlugin"]:

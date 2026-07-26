@@ -54,6 +54,7 @@ async def get_server_for_user(server_id: int, db: AsyncSession, current_user: Us
 
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+    # End the read transaction before potentially long SSH/GitHub work.
     await db.commit()
     return server
 
@@ -117,13 +118,14 @@ async def validate_dependencies(db: AsyncSession, dependency_ids: list[int]) -> 
     Raises:
         HTTPException: If any dependency plugin is not found
     """
-    for dep_id in dependency_ids:
-        dep_plugin = await MarketPlugin.get_by_id(db, dep_id)
-        if not dep_plugin:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Dependency plugin with ID {dep_id} not found",
-            )
+    dependencies = await MarketPlugin.get_by_ids(db, dependency_ids)
+    existing_ids = {plugin.id for plugin in dependencies}
+    missing_id = next((dep_id for dep_id in dependency_ids if dep_id not in existing_ids), None)
+    if missing_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dependency plugin with ID {missing_id} not found",
+        )
 
 
 async def fetch_github_repo_info(
@@ -207,27 +209,33 @@ async def populate_dependency_details(
         List of MarketPluginResponse with dependency details populated
     """
     responses = []
+    parsed_dependencies: list[Optional[list[int]]] = []
+    all_dependency_ids: list[int] = []
 
     for plugin in plugins:
-        response = MarketPluginResponse.model_validate(plugin)
-
-        # Populate dependency details if plugin has dependencies
         if plugin.dependencies:
             try:
                 dep_ids = parse_dependency_ids(plugin.dependencies)
-                dependency_details = []
-
-                for dep_id in dep_ids:
-                    dep_plugin = await MarketPlugin.get_by_id(db, dep_id)
-                    if dep_plugin:
-                        dependency_details.append(
-                            DependencyInfo(id=dep_plugin.id, title=dep_plugin.title)
-                        )
-
-                response.dependency_details = dependency_details if dependency_details else None
             except ValueError:
-                # Invalid dependency format, skip
-                pass
+                dep_ids = None
+        else:
+            dep_ids = []
+        parsed_dependencies.append(dep_ids)
+        if dep_ids:
+            all_dependency_ids.extend(dep_ids)
+
+    dependencies = await MarketPlugin.get_by_ids(db, all_dependency_ids)
+    dependencies_by_id = {plugin.id: plugin for plugin in dependencies}
+
+    for plugin, dep_ids in zip(plugins, parsed_dependencies, strict=True):
+        response = MarketPluginResponse.model_validate(plugin)
+        if dep_ids:
+            dependency_details = [
+                DependencyInfo(id=dep_plugin.id, title=dep_plugin.title)
+                for dep_id in dep_ids
+                if (dep_plugin := dependencies_by_id.get(dep_id)) is not None
+            ]
+            response.dependency_details = dependency_details or None
 
         responses.append(response)
 
@@ -669,8 +677,10 @@ async def install_plugin(
     if install_dependencies and plugin.dependencies:
         try:
             dep_ids = parse_dependency_ids(plugin.dependencies)
+            dependencies = await MarketPlugin.get_by_ids(db, dep_ids)
+            dependencies_by_id = {dependency.id: dependency for dependency in dependencies}
             for dep_id in dep_ids:
-                dep_plugin = await MarketPlugin.get_by_id(db, dep_id)
+                dep_plugin = dependencies_by_id.get(dep_id)
                 if dep_plugin:
                     logger.info(f"Installing dependency: {dep_plugin.title}")
                     # Recursively install dependency (without its own dependencies to avoid infinite loops)

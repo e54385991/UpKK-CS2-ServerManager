@@ -6,6 +6,10 @@ import asyncssh
 import pytest
 from fastapi import HTTPException
 
+import services.plugin_config_service as legacy_plugin_config
+import services.plugin_configs as plugin_configs
+import services.plugin_configs.parser as plugin_config_parser
+import services.plugin_configs.remote as plugin_config_remote
 from api.routes.plugin_configs import _file_for_source
 from services.plugin_config_service import (
     MAX_CONFIG_BYTES,
@@ -24,6 +28,73 @@ mm_extra_addons_timeout\t\t\t120
 mm_cache_clients_with_addons 0
 mm_block_disconnect_messages 1
 """
+
+
+def test_legacy_facade_preserves_split_module_symbol_identity():
+    assert legacy_plugin_config.__all__ == plugin_configs.__all__
+    for name in legacy_plugin_config.__all__:
+        assert getattr(legacy_plugin_config, name) is getattr(plugin_configs, name)
+
+    assert (
+        legacy_plugin_config.PluginConfigError
+        is plugin_config_parser.PluginConfigError
+        is plugin_config_remote.PluginConfigError
+    )
+    assert legacy_plugin_config.parse_config is plugin_config_parser.parse_config
+    assert legacy_plugin_config.scan_source is plugin_config_remote.scan_source
+    assert legacy_plugin_config.PluginConfigError.__module__ == "services.plugin_config_service"
+    assert legacy_plugin_config.ConfigField.__module__ == "services.plugin_config_service"
+    assert legacy_plugin_config.ParsedConfig.__module__ == "services.plugin_config_service"
+
+    private_parser_symbols = (
+        "_decode_line_value",
+        "_extension",
+        "_find_inline_comment",
+        "_JsoncParser",
+        "_JsonToken",
+        "_line_offsets",
+        "_match_case",
+        "_parse_cfg",
+        "_parse_ini",
+        "_serialize_field",
+    )
+    for name in private_parser_symbols:
+        assert getattr(legacy_plugin_config, name) is getattr(plugin_config_parser, name)
+    assert legacy_plugin_config._sftp_root is plugin_config_remote._sftp_root
+
+
+def test_document_parser_has_no_ssh_or_sftp_dependency():
+    assert "asyncssh" not in vars(plugin_config_parser)
+    assert "SSHManager" not in vars(plugin_config_parser)
+    assert "Server" not in vars(plugin_config_parser)
+
+
+@pytest.mark.asyncio
+async def test_legacy_facade_patch_propagates_to_remote_collaborators(monkeypatch):
+    async def replacement_scan(*_args, **_kwargs):
+        yield {
+            "type": "file",
+            "file": {
+                "name": "patched.cfg",
+                "path": "patched.cfg",
+                "tree_path": "patched.cfg",
+            },
+        }
+        yield {"type": "complete", "truncated": False, "count": 1}
+
+    monkeypatch.setattr(legacy_plugin_config, "iter_source_scan", replacement_scan)
+
+    result = await legacy_plugin_config.scan_source(object(), object(), ".", "directory")
+
+    assert result["count"] == 1
+    assert result["files"][0]["name"] == "patched.cfg"
+
+
+def test_legacy_facade_patch_propagates_constants_to_parser(monkeypatch):
+    monkeypatch.setattr(legacy_plugin_config, "MAX_CONFIG_BYTES", 3)
+
+    with pytest.raises(PluginConfigError, match="10 MiB"):
+        legacy_plugin_config.validate_raw_content("four", "settings.cfg")
 
 
 def test_cfg_visual_fields_and_update_preserve_everything_except_value():
