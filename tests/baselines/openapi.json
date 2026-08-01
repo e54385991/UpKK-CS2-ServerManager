@@ -1933,9 +1933,433 @@
         "title": "GenerateServerTokenResponse",
         "type": "object"
       },
+      "GitHubInstallRecipeCreate": {
+        "properties": {
+          "config_globs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Config Globs",
+            "type": "array"
+          },
+          "display_name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "documentation_commit": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentation Commit"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "enum": [
+                  "metamod",
+                  "counterstrikesharp"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "repo_url": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Repo Url",
+            "type": "string"
+          },
+          "required_repositories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Required Repositories",
+            "type": "array"
+          },
+          "source_prefix": {
+            "maxLength": 500,
+            "title": "Source Prefix",
+            "type": "string"
+          },
+          "target_prefix": {
+            "enum": [
+              "addons",
+              "cfg"
+            ],
+            "title": "Target Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo_url",
+          "display_name",
+          "source_prefix",
+          "target_prefix"
+        ],
+        "title": "GitHubInstallRecipeCreate",
+        "type": "object"
+      },
+      "GitHubPluginInspectRequest": {
+        "properties": {
+          "mode": {
+            "default": "install",
+            "enum": [
+              "install",
+              "upgrade"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "repo_url": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Repo Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo_url"
+        ],
+        "title": "GitHubPluginInspectRequest",
+        "type": "object"
+      },
+      "GitHubPluginInspectResponse": {
+        "properties": {
+          "documentation": {
+            "additionalProperties": true,
+            "title": "Documentation",
+            "type": "object"
+          },
+          "release": {
+            "additionalProperties": true,
+            "title": "Release",
+            "type": "object"
+          },
+          "repo_url": {
+            "title": "Repo Url",
+            "type": "string"
+          },
+          "repository": {
+            "additionalProperties": true,
+            "title": "Repository",
+            "type": "object"
+          },
+          "selected_asset": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Asset"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "repo_url"
+        ],
+        "title": "GitHubPluginInspectResponse",
+        "type": "object"
+      },
+      "GitHubPluginInstallExecuteRequest": {
+        "properties": {
+          "acknowledge_unknown_compatibility": {
+            "default": false,
+            "title": "Acknowledge Unknown Compatibility",
+            "type": "boolean"
+          },
+          "acknowledge_warning_rule_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Acknowledge Warning Rule Ids",
+            "type": "array"
+          },
+          "asset_name": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Name"
+          },
+          "config_policy": {
+            "default": "preserve",
+            "enum": [
+              "preserve",
+              "overwrite"
+            ],
+            "title": "Config Policy",
+            "type": "string"
+          },
+          "expected_plan_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Expected Plan Hash",
+            "type": "string"
+          },
+          "mode": {
+            "default": "install",
+            "enum": [
+              "install",
+              "upgrade"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          },
+          "repo_url": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Repo Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo_url",
+          "expected_plan_hash"
+        ],
+        "title": "GitHubPluginInstallExecuteRequest",
+        "type": "object"
+      },
+      "GitHubPluginInstallPlanRequest": {
+        "properties": {
+          "asset_name": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Name"
+          },
+          "config_policy": {
+            "default": "preserve",
+            "enum": [
+              "preserve",
+              "overwrite"
+            ],
+            "title": "Config Policy",
+            "type": "string"
+          },
+          "mode": {
+            "default": "install",
+            "enum": [
+              "install",
+              "upgrade"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          },
+          "repo_url": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Repo Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo_url"
+        ],
+        "title": "GitHubPluginInstallPlanRequest",
+        "type": "object"
+      },
+      "GitHubPluginInstallPlanResponse": {
+        "properties": {
+          "already_installed": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Already Installed",
+            "type": "array"
+          },
+          "archive_sha256": {
+            "title": "Archive Sha256",
+            "type": "string"
+          },
+          "asset": {
+            "additionalProperties": true,
+            "title": "Asset",
+            "type": "object"
+          },
+          "compatibility_unknown": {
+            "default": false,
+            "title": "Compatibility Unknown",
+            "type": "boolean"
+          },
+          "config_policy": {
+            "title": "Config Policy",
+            "type": "string"
+          },
+          "conflict_warnings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conflict Warnings",
+            "type": "array"
+          },
+          "dependencies": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Dependencies",
+            "type": "array"
+          },
+          "files": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "hard_conflicts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Hard Conflicts",
+            "type": "array"
+          },
+          "mapping": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Mapping",
+            "type": "array"
+          },
+          "mapping_required": {
+            "default": false,
+            "title": "Mapping Required",
+            "type": "boolean"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "plan_hash": {
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "plugin_metadata": {
+            "additionalProperties": true,
+            "title": "Plugin Metadata",
+            "type": "object"
+          },
+          "release": {
+            "additionalProperties": true,
+            "title": "Release",
+            "type": "object"
+          },
+          "repo_url": {
+            "title": "Repo Url",
+            "type": "string"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "server_id",
+          "repo_url",
+          "mode",
+          "config_policy",
+          "plan_hash",
+          "archive_sha256"
+        ],
+        "title": "GitHubPluginInstallPlanResponse",
+        "type": "object"
+      },
       "GitHubPluginInstallRequest": {
         "description": "Schema for GitHub plugin installation request",
         "properties": {
+          "acknowledge_unknown_compatibility": {
+            "default": false,
+            "title": "Acknowledge Unknown Compatibility",
+            "type": "boolean"
+          },
+          "acknowledge_warning_rule_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Acknowledge Warning Rule Ids",
+            "type": "array"
+          },
+          "allowed_roots": {
+            "items": {
+              "enum": [
+                "addons",
+                "cfg"
+              ],
+              "type": "string"
+            },
+            "title": "Allowed Roots",
+            "type": "array"
+          },
           "asset_glob": {
             "anyOf": [
               {
@@ -1959,6 +2383,15 @@
               }
             ],
             "title": "Asset Name"
+          },
+          "config_policy": {
+            "default": "preserve",
+            "enum": [
+              "preserve",
+              "overwrite"
+            ],
+            "title": "Config Policy",
+            "type": "string"
           },
           "custom_install_path": {
             "anyOf": [
@@ -2007,6 +2440,41 @@
             "title": "Exclude Files",
             "type": "array"
           },
+          "expected_archive_sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Archive Sha256"
+          },
+          "install_mode": {
+            "default": "install",
+            "enum": [
+              "install",
+              "upgrade"
+            ],
+            "title": "Install Mode",
+            "type": "string"
+          },
+          "installation_plan_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Plan Hash"
+          },
           "record_installation": {
             "default": true,
             "title": "Record Installation",
@@ -2048,6 +2516,18 @@
             ],
             "title": "Repo Url"
           },
+          "source_prefix": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Prefix"
+          },
           "suppress_notification": {
             "default": false,
             "title": "Suppress Notification",
@@ -2082,6 +2562,38 @@
           "message"
         ],
         "title": "GitHubPluginInstallResponse",
+        "type": "object"
+      },
+      "GitHubPluginSearchResponse": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "recommended_repo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Repo Url"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "GitHubPluginSearchResponse",
         "type": "object"
       },
       "GitHubRelease": {
@@ -3721,6 +4233,204 @@
           }
         },
         "title": "PluginConflictRulesUpdate",
+        "type": "object"
+      },
+      "PluginDiagnosticExecuteRequest": {
+        "properties": {
+          "expected_plan_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Expected Plan Hash",
+            "type": "string"
+          },
+          "scope": {
+            "default": "both",
+            "enum": [
+              "metamod",
+              "counterstrikesharp",
+              "both"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_plan_hash"
+        ],
+        "title": "PluginDiagnosticExecuteRequest",
+        "type": "object"
+      },
+      "PluginDiagnosticPlanRequest": {
+        "properties": {
+          "scope": {
+            "default": "both",
+            "enum": [
+              "metamod",
+              "counterstrikesharp",
+              "both"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "PluginDiagnosticPlanRequest",
+        "type": "object"
+      },
+      "PluginDiagnosticPlanResponse": {
+        "properties": {
+          "candidate_groups": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Candidate Groups",
+            "type": "array"
+          },
+          "candidates": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "estimated_max_starts": {
+            "title": "Estimated Max Starts",
+            "type": "integer"
+          },
+          "health_policy": {
+            "additionalProperties": true,
+            "title": "Health Policy",
+            "type": "object"
+          },
+          "plan_hash": {
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "server_id",
+          "scope",
+          "plan_hash",
+          "estimated_max_starts"
+        ],
+        "title": "PluginDiagnosticPlanResponse",
+        "type": "object"
+      },
+      "PluginDiagnosticRunResponse": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "culprit_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Culprit Keys",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "plan_hash": {
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "quarantine": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Quarantine",
+            "type": "array"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "integer"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "start_attempts": {
+            "default": 0,
+            "title": "Start Attempts",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "server_id",
+          "requested_by",
+          "scope",
+          "status",
+          "plan_hash"
+        ],
+        "title": "PluginDiagnosticRunResponse",
         "type": "object"
       },
       "PluginUninstallRequest": {
@@ -8395,6 +9105,100 @@
         ]
       }
     },
+    "/api/github-plugins/inspect": {
+      "post": {
+        "operationId": "inspect_github_plugin_api_github_plugins_inspect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubPluginInspectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubPluginInspectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Inspect Github Plugin",
+        "tags": [
+          "github-plugins"
+        ]
+      }
+    },
+    "/api/github-plugins/recipes": {
+      "post": {
+        "operationId": "create_github_install_recipe_api_github_plugins_recipes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubInstallRecipeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Github Install Recipe Api Github Plugins Recipes Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Github Install Recipe",
+        "tags": [
+          "github-plugins"
+        ]
+      }
+    },
     "/api/github-plugins/releases": {
       "get": {
         "description": "Fetch recent releases from a GitHub repository.\n\nArgs:\n    repo_url: GitHub repository URL (e.g., https://github.com/Source2ZE/CS2Fixes)\n    count: Number of releases to fetch (default: 5, max: 10)\n    server_id: Optional server ID to use server's GitHub proxy configuration\n\nReturns:\n    List of releases with their assets",
@@ -8464,6 +9268,67 @@
           }
         ],
         "summary": "Get Github Releases",
+        "tags": [
+          "github-plugins"
+        ]
+      }
+    },
+    "/api/github-plugins/search": {
+      "get": {
+        "operationId": "search_github_cs2_plugins_api_github_plugins_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "maximum": 3,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubPluginSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Search Github Cs2 Plugins",
         "tags": [
           "github-plugins"
         ]
@@ -8635,6 +9500,122 @@
           }
         ],
         "summary": "Install Github Plugin",
+        "tags": [
+          "github-plugins"
+        ]
+      }
+    },
+    "/api/github-plugins/servers/{server_id}/install-plan": {
+      "post": {
+        "operationId": "plan_github_plugin_install_api_github_plugins_servers__server_id__install_plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubPluginInstallPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubPluginInstallPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Plan Github Plugin Install",
+        "tags": [
+          "github-plugins"
+        ]
+      }
+    },
+    "/api/github-plugins/servers/{server_id}/install-plan/execute": {
+      "post": {
+        "operationId": "apply_github_plugin_install_api_github_plugins_servers__server_id__install_plan_execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubPluginInstallExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Apply Github Plugin Install Api Github Plugins Servers  Server Id  Install Plan Execute Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Apply Github Plugin Install",
         "tags": [
           "github-plugins"
         ]
@@ -10796,6 +11777,349 @@
         "summary": "Get Run Status",
         "tags": [
           "plugin-auto-update"
+        ]
+      }
+    },
+    "/api/servers/{server_id}/plugin-diagnostics/plan": {
+      "post": {
+        "operationId": "plan_plugin_diagnostic_api_servers__server_id__plugin_diagnostics_plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginDiagnosticPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Plan Plugin Diagnostic",
+        "tags": [
+          "plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/servers/{server_id}/plugin-diagnostics/recommendation": {
+      "get": {
+        "description": "Return a read-only hint; this endpoint never changes plugin state.",
+        "operationId": "read_plugin_diagnostic_recommendation_api_servers__server_id__plugin_diagnostics_recommendation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Read Plugin Diagnostic Recommendation Api Servers  Server Id  Plugin Diagnostics Recommendation Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Plugin Diagnostic Recommendation",
+        "tags": [
+          "plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/servers/{server_id}/plugin-diagnostics/runs": {
+      "post": {
+        "operationId": "run_plugin_diagnostic_api_servers__server_id__plugin_diagnostics_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginDiagnosticExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Run Plugin Diagnostic",
+        "tags": [
+          "plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}": {
+      "get": {
+        "operationId": "read_plugin_diagnostic_api_servers__server_id__plugin_diagnostics_runs__diagnostic_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "diagnostic_id",
+            "required": true,
+            "schema": {
+              "title": "Diagnostic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Plugin Diagnostic",
+        "tags": [
+          "plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/restore": {
+      "post": {
+        "operationId": "restore_plugin_diagnostic_api_servers__server_id__plugin_diagnostics_runs__diagnostic_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "diagnostic_id",
+            "required": true,
+            "schema": {
+              "title": "Diagnostic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Restore Plugin Diagnostic",
+        "tags": [
+          "plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/resume": {
+      "post": {
+        "description": "Safely resume by restoring the interrupted snapshot and starting a newly approved run.",
+        "operationId": "resume_plugin_diagnostic_api_servers__server_id__plugin_diagnostics_runs__diagnostic_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "diagnostic_id",
+            "required": true,
+            "schema": {
+              "title": "Diagnostic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginDiagnosticExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Resume Plugin Diagnostic",
+        "tags": [
+          "plugin-diagnostics"
         ]
       }
     },

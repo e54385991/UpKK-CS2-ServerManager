@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import os
+import stat
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -52,6 +55,64 @@ def test_credentials_are_encrypted_and_never_round_trip_as_plaintext(monkeypatch
     assert encrypted != "sk-private-value"
     assert "sk-private-value" not in encrypted
     assert decrypt_credential(encrypted) == "sk-private-value"
+
+
+def test_missing_ai_key_is_generated_once_in_persistent_data_file(monkeypatch, tmp_path):
+    key_file = tmp_path / "data" / "ai_credential_encryption.key"
+    monkeypatch.setattr(ai_security.settings, "AI_CREDENTIAL_ENCRYPTION_KEY", None)
+    monkeypatch.setattr(ai_security, "CREDENTIAL_KEY_FILE", key_file)
+
+    encrypted = encrypt_credential("sk-generated-key")
+    generated = key_file.read_text(encoding="ascii").strip()
+
+    assert generated
+    assert decrypt_credential(encrypted) == "sk-generated-key"
+    assert key_file.read_text(encoding="ascii").strip() == generated
+    if os.name != "nt":
+        assert stat.S_IMODE(key_file.stat().st_mode) == 0o600
+
+
+def test_explicit_ai_key_does_not_create_persistent_file(monkeypatch, tmp_path):
+    key_file = tmp_path / "data" / "ai_credential_encryption.key"
+    monkeypatch.setattr(
+        ai_security.settings,
+        "AI_CREDENTIAL_ENCRYPTION_KEY",
+        Fernet.generate_key().decode(),
+    )
+    monkeypatch.setattr(ai_security, "CREDENTIAL_KEY_FILE", key_file)
+
+    encrypt_credential("sk-explicit-key")
+
+    assert not key_file.exists()
+
+
+def test_concurrent_ai_key_generation_publishes_one_complete_key(tmp_path):
+    key_file = tmp_path / "data" / "ai_credential_encryption.key"
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        keys = list(
+            executor.map(lambda _index: ai_security._load_or_create_key_file(key_file), range(16))
+        )
+
+    assert len(set(keys)) == 1
+    assert key_file.read_text(encoding="ascii").strip() == keys[0]
+    Fernet(keys[0].encode("ascii"))
+
+
+def test_ai_key_file_rejects_symbolic_links(monkeypatch, tmp_path):
+    target = tmp_path / "target.key"
+    target.write_text(Fernet.generate_key().decode(), encoding="ascii")
+    key_file = tmp_path / "data" / "ai_credential_encryption.key"
+    key_file.parent.mkdir()
+    try:
+        key_file.symlink_to(target)
+    except OSError:
+        pytest.skip("Symbolic links are unavailable on this platform")
+    monkeypatch.setattr(ai_security.settings, "AI_CREDENTIAL_ENCRYPTION_KEY", None)
+    monkeypatch.setattr(ai_security, "CREDENTIAL_KEY_FILE", key_file)
+
+    with pytest.raises(AIConfigurationError, match="symbolic link"):
+        encrypt_credential("must-not-use-link")
 
 
 @pytest.mark.asyncio

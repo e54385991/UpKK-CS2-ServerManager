@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
+import os
 import re
+import secrets
 import socket
+import stat
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 import anyio
@@ -18,6 +23,9 @@ from modules.models import AISystemSettings, User, UserAISettings
 
 MAX_PROVIDER_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_TOOL_RESULT_CHARS = 20_000
+CREDENTIAL_KEY_FILE = Path(__file__).resolve().parents[1] / "data" / "ai_credential_encryption.key"
+
+logger = logging.getLogger(__name__)
 
 
 class AIConfigurationError(ValueError):
@@ -35,16 +43,116 @@ class AIProviderConfig:
     admin_prompt: str = ""
 
 
+def _read_key_file(path: Path) -> str:
+    if path.is_symlink():
+        raise AIConfigurationError("AI credential key file cannot be a symbolic link")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise AIConfigurationError(f"Unable to read AI credential key file: {path}") from exc
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 512:
+            raise AIConfigurationError("AI credential key file must be a small regular file")
+        value = os.read(descriptor, 512).decode("ascii").strip()
+    except (OSError, UnicodeError) as exc:
+        raise AIConfigurationError("AI credential key file is unreadable") from exc
+    finally:
+        os.close(descriptor)
+    try:
+        os.chmod(path, 0o600)
+    except OSError as exc:
+        raise AIConfigurationError("Unable to secure AI credential key file permissions") from exc
+    return value
+
+
+def _load_or_create_key_file(path: Path | None = None) -> str:
+    path = path or CREDENTIAL_KEY_FILE
+    if path.parent.is_symlink():
+        raise AIConfigurationError("AI credential data directory cannot be a symbolic link")
+    try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(path.parent, 0o700)
+    except OSError as exc:
+        raise AIConfigurationError(
+            f"Unable to create AI credential data directory: {path.parent}"
+        ) from exc
+    if path.exists() or path.is_symlink():
+        return _read_key_file(path)
+
+    generated = Fernet.generate_key()
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(temporary, flags, 0o600)
+    except OSError as exc:
+        raise AIConfigurationError(f"Unable to stage AI credential key file: {path}") from exc
+    write_error: OSError | None = None
+    try:
+        payload = generated + b"\n"
+        offset = 0
+        while offset < len(payload):
+            offset += os.write(descriptor, payload[offset:])
+        os.fsync(descriptor)
+    except OSError as exc:
+        write_error = exc
+    finally:
+        os.close(descriptor)
+    if write_error is not None:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise AIConfigurationError("Unable to persist AI credential key file") from write_error
+    created = False
+    try:
+        os.link(temporary, path, follow_symlinks=False)
+        created = True
+    except FileExistsError:
+        pass
+    except OSError as exc:
+        raise AIConfigurationError(f"Unable to publish AI credential key file: {path}") from exc
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+    if not created:
+        return _read_key_file(path)
+    os.chmod(path, 0o600)
+    logger.info("Generated persistent AI credential encryption key at %s", path)
+    return generated.decode("ascii")
+
+
 def _fernet() -> Fernet:
     value = (settings.AI_CREDENTIAL_ENCRYPTION_KEY or "").strip()
     if not value:
-        raise AIConfigurationError("AI_CREDENTIAL_ENCRYPTION_KEY is not configured")
+        value = _load_or_create_key_file()
     try:
         return Fernet(value.encode("ascii"))
     except (ValueError, UnicodeEncodeError) as exc:
         raise AIConfigurationError(
-            "AI_CREDENTIAL_ENCRYPTION_KEY must be a valid Fernet key"
+            "AI credential encryption key must be a valid Fernet key"
         ) from exc
+
+
+def initialize_credential_encryption() -> str:
+    """Generate or validate encryption material without exposing the key."""
+    _fernet()
+    return (
+        "environment"
+        if (settings.AI_CREDENTIAL_ENCRYPTION_KEY or "").strip()
+        else str(CREDENTIAL_KEY_FILE)
+    )
+
+
+def credential_encryption_available() -> bool:
+    try:
+        _fernet()
+    except AIConfigurationError:
+        return False
+    return True
 
 
 def encrypt_credential(value: str) -> str:

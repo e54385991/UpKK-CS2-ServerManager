@@ -61,7 +61,24 @@
     "useCustom": "Use my provider",
     "save": "Save AI settings",
     "saved": "AI settings saved",
-    "test": "Test text + tools"
+    "test": "Test text + tools",
+    "examples": "Examples (fill the input only)",
+    "exampleLabels": {
+      "cssLogs": "Analyze CSS errors",
+      "crashIsolation": "Diagnose plugin crash",
+      "marketInstall": "Install from market",
+      "githubInstall": "Install GitHub link",
+      "githubSearch": "Find maintained plugin",
+      "workshop": "Add Workshop map"
+    },
+    "examplePrompts": {
+      "cssLogs": "Analyze the latest CounterStrikeSharp error logs and correlate console, process, port, and A2S evidence.",
+      "crashIsolation": "Plan a plugin crash diagnosis after a game update. Show isolation scope, restart limit, and risks before executing anything.",
+      "marketInstall": "Find and install a suitable plugin from the plugin market. Check dependencies and conflicts and show the plan first.",
+      "githubInstall": "Install a plugin from this GitHub link. Use only a stable Linux Release, preserve existing configuration during upgrades, and show the file mapping and plan first.",
+      "githubSearch": "Find actively maintained CS2 plugins with stable Linux Releases. Return the top three and explain the recommendation.",
+      "workshop": "Add a CS2 Workshop map to this server after validating the item, dependencies, and MapChooser configuration."
+    }
   },
   "home": {
     "title": "CS2 Server Manager",
@@ -347,6 +364,9 @@
     "monitoring": "Monitoring",
     "monitoringAndRestart": "Monitoring & Restart",
     "monitoringPriorityTitle": "Monitoring Priority Notice:",
+    "pluginDiagnosticSuggestedTitle": "Plugin crash diagnosis suggested",
+    "pluginDiagnosticSuggestedInfo": "Repeated startup failures were detected after an update or restart-loop protection was triggered. Review an isolation plan before making changes.",
+    "openDiagnosticAssistant": "Open AI diagnosis",
     "monitoringPriorityInfo": "If A2S Monitoring is enabled, it takes priority and Panel Monitoring (SSH process check) will not be used. A2S queries are more lightweight and accurate for detecting server status.",
     "a2sPriorityWarning": "A2S Monitoring Active:",
     "a2sPriorityInfo": "A2S monitoring is currently enabled and takes priority. Panel Monitoring (SSH process check) will not be used for status checks.",

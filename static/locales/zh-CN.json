@@ -61,7 +61,24 @@
     "useCustom": "使用我的提供商",
     "save": "保存 AI 设置",
     "saved": "AI 设置已保存",
-    "test": "测试文本与工具调用"
+    "test": "测试文本与工具调用",
+    "examples": "用法示例（仅填充输入框）",
+    "exampleLabels": {
+      "cssLogs": "分析 CSS 错误",
+      "crashIsolation": "排查插件崩溃",
+      "marketInstall": "市场安装插件",
+      "githubInstall": "GitHub 链接安装",
+      "githubSearch": "查找活跃插件",
+      "workshop": "添加创意工坊地图"
+    },
+    "examplePrompts": {
+      "cssLogs": "分析 CounterStrikeSharp 最新错误日志，并结合控制台、进程、端口和 A2S 判断原因。",
+      "crashIsolation": "规划排查游戏更新后发生的插件崩溃；先展示隔离范围、重启上限和风险，不要直接执行。",
+      "marketInstall": "从插件市场为我查找并安装合适的插件，先检查依赖和冲突并展示计划。",
+      "githubInstall": "使用这个 GitHub 链接安装插件；只使用正式 Linux Release，升级时保留已有配置，并先展示文件映射与计划。",
+      "githubSearch": "查找目前仍积极维护且有正式 Linux Release 的 CS2 插件，给出前三项和推荐依据。",
+      "workshop": "为当前服务器添加一个 CS2 创意工坊地图，先校验条目、依赖和 MapChooser 配置。"
+    }
   },
   "home": {
     "title": "CS2 服务器管理器",
@@ -347,6 +364,9 @@
     "monitoring": "监控",
     "monitoringAndRestart": "监控与重启",
     "monitoringPriorityTitle": "监控优先级提示：",
+    "pluginDiagnosticSuggestedTitle": "建议进行插件崩溃诊断",
+    "pluginDiagnosticSuggestedInfo": "检测到更新后连续启动失败或已触发重启循环保护。请先审查隔离计划，再确认是否修改插件状态。",
+    "openDiagnosticAssistant": "打开 AI 诊断",
     "monitoringPriorityInfo": "如果启用了 A2S 监控，则优先使用 A2S，面板监控（SSH 进程检查）将不会被使用。A2S 查询更轻量且对服务器状态检测更准确。",
     "a2sPriorityWarning": "A2S 监控已启用：",
     "a2sPriorityInfo": "A2S 监控当前已启用并优先使用。面板监控（SSH 进程检查）将不会用于状态检查。",

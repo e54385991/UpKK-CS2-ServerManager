@@ -421,6 +421,7 @@ async def server_action(
 
             if success:
                 # Keep the same status as before update (or set to STOPPED if it was running)
+                server.last_update_time = get_current_time()
                 log.status = "success"
                 log.output = message
                 await send_deployment_update(server_id, "complete", "Server updated successfully")

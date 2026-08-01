@@ -145,3 +145,6 @@ i18n_demo.html
 
 # Application logs
 logs/
+
+# Runtime secrets and persistent application data
+data/

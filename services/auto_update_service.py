@@ -268,6 +268,14 @@ class AutoUpdateService:
         version_source: Optional[str] = None,
     ):
         """Trigger update for a server and restart it"""
+        from services.plugin_diagnostic_service import has_diagnostic_blocker
+
+        if await has_diagnostic_blocker(server.id):
+            logger.warning(
+                "Skipping auto-update for server %s while plugin isolation requires attention",
+                server.id,
+            )
+            return
         lock = maintenance_lock_service.get(server.id)
 
         # Try to acquire lock without blocking - if already locked, skip this update

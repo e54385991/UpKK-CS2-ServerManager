@@ -91,6 +91,18 @@ class ApplicationLifecycle:
             self._add_cleanup("HTTP client", http_helper.close)
             self._add_cleanup("Redis client", redis_manager.close)
 
+            from services.ai_security import (
+                AIConfigurationError,
+                initialize_credential_encryption,
+            )
+
+            try:
+                key_source = initialize_credential_encryption()
+                logger.info("AI credential encryption ready (source: %s)", key_source)
+            except AIConfigurationError:
+                # AI remains disabled, while all non-AI panel functions can start.
+                logger.exception("AI credential encryption initialization failed")
+
             await migrate_db()
             await init_db()
 

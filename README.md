@@ -33,21 +33,25 @@ Git hook 会在每次提交前检查变更的 Python 文件。若要手动检查
 
 ### AI assistant configuration / AI 助手配置
 
-The AI assistant is disabled by default. Generate a dedicated Fernet key for
-`AI_CREDENTIAL_ENCRYPTION_KEY`, restart the panel, then save and test an
+The AI assistant is disabled by default. On first startup the panel generates
+`data/ai_credential_encryption.key` with owner-only permissions. Persist the
+`/app/data` directory when using containers. `AI_CREDENTIAL_ENCRYPTION_KEY`
+remains available as an explicit override. Then save and test an
 OpenAI-compatible `/v1/chat/completions` provider in **System Settings**. Both
 the text-response and standard `tool_calls` tests must pass before an
 administrator can enable the assistant. API keys are encrypted at rest and are
 never returned by the settings APIs.
 
-AI 助手默认关闭。请先为 `AI_CREDENTIAL_ENCRYPTION_KEY` 生成独立的 Fernet 密钥，
-重启面板后在“系统设置”中保存并测试兼容 `/v1/chat/completions` 的提供商。普通文本
+AI 助手默认关闭。首次启动时，面板会自动生成仅当前用户可读的
+`data/ai_credential_encryption.key`；容器部署必须持久化 `/app/data` 目录。
+`AI_CREDENTIAL_ENCRYPTION_KEY` 仍可作为显式覆盖。随后在“系统设置”中保存并测试兼容 `/v1/chat/completions` 的提供商。普通文本
 和标准 `tool_calls` 两项测试都通过后，管理员才能启用助手；设置接口只返回密钥
 是否已配置，不会返回密钥内容。
 
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
+Do not delete or replace the generated key after saving provider credentials;
+otherwise those credentials cannot be decrypted.
+
+保存提供商凭据后请勿删除或替换自动生成的密钥，否则已有凭据将无法解密。
 
 Public provider endpoints must use HTTPS. Private HTTP/HTTPS providers require
 an administrator allowlist entry matching the exact `scheme://host:port`

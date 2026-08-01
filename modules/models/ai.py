@@ -180,6 +180,7 @@ class AIToolRun(SQLModel, table=True):
         sa_column=Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
     )
     approved_at: Optional[datetime] = Field(default=None)
+    approval_expires_at: Optional[datetime] = Field(default=None, index=True)
     result: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
     error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(

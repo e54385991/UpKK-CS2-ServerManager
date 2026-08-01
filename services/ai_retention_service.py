@@ -25,6 +25,14 @@ class AIRetentionService:
         interrupted = await interrupt_active_ai_runs()
         if interrupted:
             logger.warning("Marked %s AI run(s) interrupted after restart", interrupted)
+        from services.plugin_diagnostic_service import interrupt_active_plugin_diagnostics
+
+        interrupted_diagnostics = await interrupt_active_plugin_diagnostics()
+        if interrupted_diagnostics:
+            logger.warning(
+                "Marked %s plugin diagnostic run(s) interrupted after restart",
+                interrupted_diagnostics,
+            )
         await self.cleanup_once()
         self._task = asyncio.create_task(self._loop())
 

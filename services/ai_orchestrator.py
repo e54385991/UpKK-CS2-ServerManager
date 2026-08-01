@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+from datetime import timedelta
 from typing import Any
 
 from pydantic import ValidationError
@@ -21,6 +22,7 @@ from modules.models import (
     User,
 )
 from modules.utils import get_current_time
+from services.ai_access import audit_security_event, authorized_server
 from services.ai_events import ai_event_hub
 from services.ai_prompt import build_system_prompt
 from services.ai_provider import AIProviderError, create_chat_completion
@@ -38,6 +40,7 @@ from services.ai_tools import (
     execute_tool,
     tool_definitions,
 )
+from services.maintenance_lock import maintenance_lock_service
 
 logger = logging.getLogger(__name__)
 MAX_PROVIDER_ROUNDS = 8
@@ -117,9 +120,50 @@ async def _execute_tool_run(
 
     context = ToolContext(db=db, user=user, server=server, emit=tool_event)
     try:
-        result = await execute_tool(tool_run.tool_name, tool_run.arguments, context)
+        current_user = await db.get(User, user.id)
+        if current_user is None or not current_user.is_active:
+            raise PermissionError("The approving user is no longer active")
+        if tool_run.requires_approval:
+            _serialized, current_hash = canonical_arguments(tool_run.arguments)
+            if current_hash != tool_run.arguments_hash:
+                raise PermissionError("Tool arguments changed after approval")
+            if tool_run.approved_by != user.id or tool_run.approved_at is None:
+                raise PermissionError("Tool approval is not bound to the current user")
+            approval_now = get_current_time()
+            if (
+                tool_run.approval_expires_at is not None
+                and tool_run.approval_expires_at.tzinfo is None
+            ):
+                approval_now = approval_now.replace(tzinfo=None)
+            if tool_run.approval_expires_at is None or tool_run.approval_expires_at <= approval_now:
+                raise PermissionError("Tool approval expired before execution")
+        if server is not None and server.id is not None:
+            server = await authorized_server(db, current_user, server.id)
+            context.server = server
+        context.user = current_user
+        context.run_id = run.id
+        if tool_run.risk == "write":
+            # Positive IDs are server locks. A reserved negative namespace gives
+            # each principal one cross-process AI write lease without nesting the
+            # same server lock used by the underlying business service.
+            async with maintenance_lock_service.get(
+                -(current_user.id + 1),
+                operation="ai_user_write",
+                wait=False,
+                ttl=30 * 60,
+            ):
+                result = await execute_tool(tool_run.tool_name, tool_run.arguments, context)
+        else:
+            result = await execute_tool(tool_run.tool_name, tool_run.arguments, context)
     except Exception as exc:
         safe_error = redact_sensitive_text(str(exc), limit=2000)
+        audit_security_event(
+            "tool_execution_rejected",
+            user_id=user.id,
+            server_id=server.id if server is not None else None,
+            operation=tool_run.tool_name,
+            detail=safe_error,
+        )
         tool_run.status = "failed"
         tool_run.error = safe_error
         tool_run.result = {"success": False, "error": safe_error}
@@ -365,6 +409,11 @@ async def process_ai_run(run_id: str) -> None:
                         risk=spec.risk,
                         requires_approval=spec.risk == "write",
                         status="pending_approval" if spec.risk == "write" else "pending",
+                        approval_expires_at=(
+                            get_current_time() + timedelta(minutes=15)
+                            if spec.risk == "write"
+                            else None
+                        ),
                     )
                     db.add(item)
                     created.append(item)
@@ -390,16 +439,47 @@ async def process_ai_run(run_id: str) -> None:
                                 ),
                             )
                         except Exception as exc:
-                            summary = {
-                                "validation_error": redact_sensitive_text(str(exc), limit=2000)
-                            }
+                            safe_error = redact_sensitive_text(str(exc), limit=2000)
+                            audit_security_event(
+                                "approval_plan_rejected",
+                                user_id=user.id,
+                                server_id=server.id if server is not None else None,
+                                operation=item.tool_name,
+                                detail=safe_error,
+                            )
+                            item.status = "failed"
+                            item.error = safe_error
+                            item.result = {"success": False, "error": safe_error}
+                            item.completed_at = get_current_time()
+                            db.add(item)
+                            db.add(
+                                AIMessage(
+                                    conversation_id=run.conversation_id,
+                                    role="tool",
+                                    content=json.dumps(item.result, ensure_ascii=False),
+                                    tool_call_id=item.tool_call_id,
+                                    tool_name=item.tool_name,
+                                    visible=False,
+                                )
+                            )
+                            await db.commit()
+                            await _emit(
+                                run.id,
+                                "tool_failed",
+                                {
+                                    "tool_run_id": item.id,
+                                    "tool_name": item.tool_name,
+                                    "result": item.result,
+                                },
+                            )
+                            continue
                         await _emit(
                             run.id,
                             "tool_approval_required",
                             {
                                 "tool_run_id": item.id,
                                 "tool_name": item.tool_name,
-                                "arguments": item.arguments,
+                                "arguments": sanitize_tool_result(item.arguments),
                                 "arguments_hash": item.arguments_hash,
                                 "risk": item.risk,
                                 "summary": sanitize_tool_result(summary),
@@ -408,7 +488,7 @@ async def process_ai_run(run_id: str) -> None:
                     else:
                         await _execute_tool_run(db, run, item, user, server)
 
-                if any(item.requires_approval for item in created):
+                if any(item.status == "pending_approval" for item in created):
                     run.status = "waiting_approval"
                     db.add(run)
                     await db.commit()

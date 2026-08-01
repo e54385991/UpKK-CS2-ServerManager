@@ -33,6 +33,7 @@
                                                                             loadingStatusLogs: false,
                                                                                 loadingRestartLogs: false,
                                                                                     loadingA2SCheckLogs: false,
+                                                                                        diagnosticRecommendation: null,
         pluginSelection: {
             metamod: false,
                 counterstrikesharp: false
@@ -290,6 +291,7 @@
             await this.loadS3Backups();
             await this.loadCustomCommands();
             await this.loadStartupCommand();
+            await this.loadDiagnosticRecommendation();
             
             // Check actual deployment status
             await this.checkDeploymentStatus();
@@ -750,6 +752,24 @@
                 auto_restart_on_crash: this.server.auto_restart_on_crash !== undefined ? this.server.auto_restart_on_crash : true,
                 auto_clear_crash_hours: this.server.auto_clear_crash_hours || null
             };
+        },
+
+        async loadDiagnosticRecommendation() {
+            try {
+                const response = await authFetch(`/api/servers/${this.serverId}/plugin-diagnostics/recommendation`);
+                if (response.ok) this.diagnosticRecommendation = await response.json();
+            } catch (err) {
+                console.debug('Plugin diagnostic recommendation unavailable:', err);
+            }
+        },
+
+        openDiagnosticAssistant() {
+            const input = document.getElementById('ai-message-input');
+            if (input) {
+                input.value = window.i18n?.t('ai.examplePrompts.crashIsolation')
+                    || 'Investigate plugin crashes after the game update and prepare an isolation plan.';
+                input.focus();
+            }
         },
         
         async saveMonitoring() {
@@ -2539,24 +2559,56 @@
             this.openOperationModal('install_github_plugin');
             
             try {
-                const response = await authFetch(`/api/github-plugins/servers/${this.serverId}/install`, {
+                const planResponse = await authFetch(`/api/github-plugins/servers/${this.serverId}/install-plan`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        download_url: asset.browser_download_url,
-                        exclude_dirs: this.githubExcludeDirs,
-                        exclude_files: this.githubExcludeFiles,
                         repo_url: this.githubRepoUrl,
-                        release_id: release.id,
-                        release_tag: release.tag_name,
                         asset_name: asset.name,
-                        display_name: this.githubRepoUrl.split('/').filter(Boolean).pop()
+                        mode: 'install',
+                        config_policy: 'preserve'
                     })
                 });
-                
+                const plan = await planResponse.json();
+                if (!planResponse.ok) throw new Error(plan.detail || 'Unable to create GitHub install plan');
+                if (plan.mapping_required) throw new Error('Archive layout requires an administrator-approved recipe');
+                if ((plan.hard_conflicts || []).length) {
+                    throw new Error(`Installation blocked by hard conflict rules: ${plan.hard_conflicts.map(item => item.rule_id).join(', ')}`);
+                }
+                const summary = JSON.stringify({
+                    repository: plan.repo_url,
+                    release: plan.release?.tag,
+                    asset: plan.asset?.name,
+                    sha256: plan.archive_sha256,
+                    mapping: plan.mapping,
+                    dependencies: plan.dependencies,
+                    warnings: [...(plan.warnings || []), ...(plan.conflict_warnings || [])],
+                    config_policy: plan.config_policy
+                }, null, 2);
+                const confirmed = await new Promise((resolve) => {
+                    showConfirm(summary, () => resolve(true), () => resolve(false), 'Confirm GitHub plugin plan');
+                });
+                if (!confirmed) {
+                    this.addLog('info', 'GitHub plugin installation cancelled');
+                    return;
+                }
+                const response = await authFetch(`/api/github-plugins/servers/${this.serverId}/install-plan/execute`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        repo_url: this.githubRepoUrl,
+                        asset_name: asset.name,
+                        mode: 'install',
+                        config_policy: 'preserve',
+                        expected_plan_hash: plan.plan_hash,
+                        acknowledge_warning_rule_ids: (plan.conflict_warnings || []).map(item => item.rule_id),
+                        acknowledge_unknown_compatibility: Boolean(plan.compatibility_unknown)
+                    })
+                });
                 const result = await response.json();
+                if (!response.ok) throw new Error(result.detail || 'GitHub installation failed');
                 
                 if (result.success) {
                     this.addLog('complete', result.message);

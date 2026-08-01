@@ -77,6 +77,44 @@ def _build_plugin_copy_command(
     return f"{primary_copy} && {gamedata_copy}"
 
 
+def _build_backup_command(source_dir: str, target_dir: str, backup_dir: str) -> str:
+    script = (
+        'source="$1"; target="$2"; backup="$3"; '
+        'manifest="$backup/manifest.tsv"; files="$backup/source-files.txt"; '
+        'mkdir -p -- "$backup/files"; : > "$manifest"; '
+        'cd "$source" || exit 1; find . -type f -print > "$files" || exit 1; '
+        "while IFS= read -r relative; do relative=${relative#./}; "
+        'case "$relative" in ""|/*|*".."*) exit 91;; esac; '
+        'destination="$target/$relative"; saved="$backup/files/$relative"; '
+        'if test -L "$destination"; then exit 92; '
+        'elif test -e "$destination"; then mkdir -p -- "${saved%/*}" '
+        '&& cp -a --no-dereference -- "$destination" "$saved" || exit 1; '
+        'printf "existing\\t%s\\n" "$relative" >> "$manifest"; '
+        'else printf "new\\t%s\\n" "$relative" >> "$manifest"; fi; '
+        'done < "$files"'
+    )
+    return (
+        f"sh -c {shlex.quote(script)} sh {shlex.quote(source_dir)} "
+        f"{shlex.quote(target_dir)} {shlex.quote(backup_dir)}"
+    )
+
+
+def _build_rollback_command(target_dir: str, backup_dir: str) -> str:
+    script = (
+        'target="$1"; backup="$2"; manifest="$backup/manifest.tsv"; '
+        'test -f "$manifest" || exit 1; '
+        'while IFS="$(printf "\\t")" read -r state relative; do '
+        'case "$relative" in ""|/*|*".."*) exit 91;; esac; '
+        'destination="$target/$relative"; '
+        'if test "$state" = new; then rm -f -- "$destination" || exit 1; '
+        'elif test "$state" = existing; then saved="$backup/files/$relative"; '
+        'mkdir -p -- "${destination%/*}" && cp -a --no-dereference '
+        '--remove-destination -- "$saved" "$destination" || exit 1; fi; '
+        'done < "$manifest"'
+    )
+    return f"sh -c {shlex.quote(script)} sh {shlex.quote(target_dir)} {shlex.quote(backup_dir)}"
+
+
 async def get_server_for_user(
     db: AsyncSession,
     server_id: int,
@@ -217,8 +255,46 @@ async def install_github_plugin(
             archive_type = "zip"  # Default assumption
             archive_filename = "plugin.zip"
 
-        # Check if we should use panel proxy mode (server-level setting)
-        if server.use_panel_proxy:
+        # Approved plans always download through the panel's strict GitHub
+        # redirect allowlist. This bypasses server proxies and remote curl so a
+        # release cannot redirect the managed host to an arbitrary destination.
+        secure_plan_download = bool(request.expected_archive_sha256)
+        if secure_plan_download:
+            from services.github_plugin_plan_service import _download_release_asset
+
+            await progress("Downloading approved release through the secure GitHub gateway...")
+            local_archive_path, local_digest, _local_size = await _download_release_asset(
+                request.download_url
+            )
+            try:
+                if local_digest.casefold() != request.expected_archive_sha256.casefold():
+                    error_msg = "Release archive digest changed after approval"
+                    await progress(error_msg, "error")
+                    await notify_install_result(False, error_msg)
+                    return GitHubPluginInstallResponse(success=False, message=error_msg)
+                remote_temp_dir = f"/tmp/github_plugin_{server_id}"
+                await ssh_manager.execute_command(
+                    f"rm -rf -- {shlex.quote(remote_temp_dir)} && "
+                    f"mkdir -p -- {shlex.quote(remote_temp_dir)}"
+                )
+                archive_file = f"{remote_temp_dir}/{archive_filename}"
+                uploaded, upload_error = await ssh_manager.upload_file_with_progress(
+                    local_archive_path,
+                    archive_file,
+                    server,
+                )
+                if not uploaded:
+                    error_msg = f"Failed to upload approved release: {upload_error}"
+                    await progress(error_msg, "error")
+                    await notify_install_result(False, error_msg)
+                    return GitHubPluginInstallResponse(success=False, message=error_msg)
+            finally:
+                try:
+                    os.unlink(local_archive_path)
+                except OSError:
+                    pass
+        # Legacy non-plan callers retain the existing optional panel proxy path.
+        elif server.use_panel_proxy:
             # Panel Proxy Mode: Download to panel server first, then SFTP upload
             await progress("Using panel server proxy mode (github_proxy setting ignored)...")
 
@@ -392,13 +468,25 @@ async def install_github_plugin(
 
         # Continue with common extraction logic
         # Get remote temp directory based on mode
-        if server.use_panel_proxy:
+        if server.use_panel_proxy or secure_plan_download:
             remote_temp_dir = f"/tmp/github_plugin_{server_id}"
         else:
             remote_temp_dir = temp_dir
 
+        if request.expected_archive_sha256:
+            await progress("Verifying immutable release archive digest...")
+            digest_cmd = f"sha256sum -- {shlex.quote(archive_file)} | awk '{{print $1}}'"
+            digest_ok, digest_output, _ = await ssh_manager.execute_command(digest_cmd)
+            actual_digest = digest_output.strip().casefold()
+            if not digest_ok or actual_digest != request.expected_archive_sha256.casefold():
+                await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
+                error_msg = "Release archive digest changed after approval"
+                await progress(error_msg, "error")
+                await notify_install_result(False, error_msg)
+                return GitHubPluginInstallResponse(success=False, message=error_msg)
+
         # Verify download and get file size (only needed for non-panel-proxy mode)
-        if not server.use_panel_proxy:
+        if not server.use_panel_proxy and not secure_plan_download:
             size_cmd = (
                 f"stat -c%s {archive_file} 2>/dev/null || stat -f%z {archive_file} 2>/dev/null"
             )
@@ -462,19 +550,96 @@ async def install_github_plugin(
 
         await progress("Extraction complete, analyzing archive structure...")
 
+        source_prefix = request.source_prefix or ""
+        requested_source_dir = f"{extract_dir}/{source_prefix}" if source_prefix else extract_dir
+        source_check = f"test -d {shlex.quote(requested_source_dir)}"
+        source_ok, _, _ = await ssh_manager.execute_command(source_check)
+        if not source_ok:
+            await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
+            error_msg = "Approved archive source prefix was not found"
+            await progress(error_msg, "error")
+            await notify_install_result(False, error_msg)
+            return GitHubPluginInstallResponse(success=False, message=error_msg)
+
+        if request.allowed_roots:
+            install_tree = f"{remote_temp_dir}/install-tree"
+            await ssh_manager.execute_command(
+                f"rm -rf -- {shlex.quote(install_tree)} && mkdir -p -- {shlex.quote(install_tree)}"
+            )
+            copied_roots: list[str] = []
+            for root in request.allowed_roots:
+                approved_root = f"{requested_source_dir}/{root}"
+                exists, _, _ = await ssh_manager.execute_command(
+                    f"test -d {shlex.quote(approved_root)}"
+                )
+                if not exists:
+                    continue
+                copied, _, copy_error = await ssh_manager.execute_command(
+                    f"cp -a --no-dereference -- {shlex.quote(approved_root)} "
+                    f"{shlex.quote(install_tree)}/"
+                )
+                if not copied:
+                    await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
+                    error_msg = f"Failed to stage approved {root}/ tree: {copy_error}"
+                    await progress(error_msg, "error")
+                    await notify_install_result(False, error_msg)
+                    return GitHubPluginInstallResponse(success=False, message=error_msg)
+                copied_roots.append(root)
+            if "addons" not in copied_roots:
+                await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
+                error_msg = "Approved archive mapping did not contain addons/"
+                await progress(error_msg, "error")
+                await notify_install_result(False, error_msg)
+                return GitHubPluginInstallResponse(success=False, message=error_msg)
+            requested_source_dir = install_tree
+
+        backup_root: str | None = None
+
+        async def prepare_rollback(source: str, target: str) -> None:
+            nonlocal backup_root
+            if not request.installation_plan_hash:
+                return
+            backup_root = posix_backup = (
+                f"{server.game_directory.rstrip('/')}/.upkk/backups/github/"
+                f"{request.installation_plan_hash[:16]}-{uuid.uuid4().hex[:12]}"
+            )
+            await progress("Backing up files affected by the approved plan...")
+            backed_up, backup_output, backup_error = await ssh_manager.execute_command(
+                _build_backup_command(source, target, posix_backup), timeout=120
+            )
+            if not backed_up:
+                raise RuntimeError(
+                    backup_error or backup_output or "Unable to create the installation backup"
+                )
+
+        async def rollback_install(target: str) -> str | None:
+            if backup_root is None:
+                return None
+            rolled_back, rollback_output, rollback_error = await ssh_manager.execute_command(
+                _build_rollback_command(target, backup_root), timeout=120
+            )
+            if rolled_back:
+                return "The affected files were restored from backup"
+            return f"Rollback failed: {rollback_error or rollback_output}"
+
         # Check if addons directory exists in extracted content
-        addons_check = f"test -d {extract_dir}/addons && echo 'addons_found'"
+        addons_check = (
+            f"test -d {shlex.quote(f'{requested_source_dir}/addons')} && echo 'addons_found'"
+        )
         success, addons_output, _ = await ssh_manager.execute_command(addons_check)
         has_addons = "addons_found" in addons_output
 
         # Determine source directory for copy
         if has_addons:
             # Archive has proper structure (addons/, cfg/, etc.)
-            source_dir = extract_dir
+            source_dir = requested_source_dir
             await progress("Found addons/ directory at root level")
         else:
             # Check if there's a single subdirectory that contains addons
-            find_cmd = f"find {extract_dir} -maxdepth 2 -type d -name 'addons' | head -1"
+            find_cmd = (
+                f"find {shlex.quote(requested_source_dir)} -maxdepth 2 "
+                "-type d -name 'addons' | head -1"
+            )
             success, find_output, _ = await ssh_manager.execute_command(find_cmd)
 
             if find_output.strip():
@@ -522,6 +687,7 @@ async def install_github_plugin(
                 target_custom_dir = f"{csgo_dir}/{safe_custom_path}"
                 mkdir_cmd = f"mkdir -p {target_custom_dir}"
                 await ssh_manager.execute_command(mkdir_cmd)
+                await prepare_rollback(requested_source_dir, target_custom_dir)
 
                 # Copy with exclusions
                 rsync_check = "command -v rsync"
@@ -532,7 +698,7 @@ async def install_github_plugin(
                     if exclude_raw_patterns:
                         await progress(f"Applying {len(exclude_raw_patterns)} exclusion pattern(s)")
                     copy_cmd = _build_plugin_copy_command(
-                        extract_dir,
+                        requested_source_dir,
                         target_custom_dir,
                         exclude_raw_patterns,
                         use_rsync=True,
@@ -544,7 +710,7 @@ async def install_github_plugin(
                             f"Using tar with {len(exclude_raw_patterns)} exclusion pattern(s)"
                         )
                     copy_cmd = _build_plugin_copy_command(
-                        extract_dir,
+                        requested_source_dir,
                         target_custom_dir,
                         exclude_raw_patterns,
                         use_rsync=False,
@@ -554,8 +720,11 @@ async def install_github_plugin(
                 success, _, stderr = await ssh_manager.execute_command(copy_cmd)
 
                 if not success:
+                    rollback_message = await rollback_install(target_custom_dir)
                     await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
                     error_msg = f"Failed to copy files to custom path: {stderr}"
+                    if rollback_message:
+                        error_msg = f"{error_msg}. {rollback_message}"
                     await progress(error_msg, "error")
                     await notify_install_result(False, error_msg)
                     return GitHubPluginInstallResponse(success=False, message=error_msg)
@@ -622,6 +791,7 @@ async def install_github_plugin(
         count_before = int(count_before.strip()) if count_before.strip().isdigit() else 0
 
         await progress("Installing plugin files...")
+        await prepare_rollback(source_dir, csgo_dir)
 
         # Copy files using rsync for better control
         rsync_check = "command -v rsync"
@@ -658,18 +828,23 @@ async def install_github_plugin(
 
         installed_files = count_after - count_before if count_after > count_before else 0
 
-        # Cleanup - use the correct temp directory
-        await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
-        await progress("Cleanup complete")
-
         if not success:
-            await progress(f"Failed to copy files: {stderr}", "error")
-            await notify_install_result(False, f"Failed to copy files: {stderr}", installed_files)
+            rollback_message = await rollback_install(csgo_dir)
+            failure_message = f"Failed to copy files: {stderr}"
+            if rollback_message:
+                failure_message = f"{failure_message}. {rollback_message}"
+            await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+            await progress(failure_message, "error")
+            await notify_install_result(False, failure_message, installed_files)
             return GitHubPluginInstallResponse(
                 success=False,
-                message=f"Failed to copy files: {stderr}",
+                message=failure_message,
                 installed_files=installed_files,
             )
+
+        # Cleanup - use the correct temp directory. Persistent backups are kept under .upkk.
+        await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+        await progress("Cleanup complete")
 
         success_msg = f"Plugin installed successfully! {installed_files} files installed. Restart server to apply changes."
         await progress(success_msg, "complete")

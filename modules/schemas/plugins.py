@@ -79,6 +79,14 @@ class GitHubPluginInstallRequest(SQLModel):
     display_name: Optional[str] = Field(default=None, max_length=255)
     record_installation: bool = True
     suppress_notification: bool = False
+    source_prefix: Optional[str] = Field(default=None, max_length=500)
+    allowed_roots: List[Literal["addons", "cfg"]] = Field(default_factory=list)
+    expected_archive_sha256: Optional[str] = Field(default=None, min_length=64, max_length=64)
+    installation_plan_hash: Optional[str] = Field(default=None, min_length=64, max_length=64)
+    config_policy: Literal["preserve", "overwrite"] = "preserve"
+    install_mode: Literal["install", "upgrade"] = "install"
+    acknowledge_warning_rule_ids: List[int] = Field(default_factory=list)
+    acknowledge_unknown_compatibility: bool = False
 
     @field_validator("download_url")
     @classmethod
@@ -96,6 +104,18 @@ class GitHubPluginInstallRequest(SQLModel):
         value = v.strip().rstrip("/")
         if not re.match(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", value):
             raise ValueError("repo_url must be a GitHub repository URL")
+        return value
+
+    @field_validator("source_prefix")
+    @classmethod
+    def validate_source_prefix(cls, v):
+        if v is None:
+            return v
+        value = v.replace("\\", "/").strip("/")
+        if not value or value == ".":
+            return None
+        if ".." in value.split("/") or "\x00" in value:
+            raise ValueError("source_prefix must remain inside the archive")
         return value
 
     @field_validator("exclude_dirs")
@@ -432,3 +452,102 @@ class MetamodStatusResponse(SQLModel):
     path: Optional[str] = None
     message: Optional[str] = None
     error: Optional[str] = None
+
+
+class PluginDiagnosticPlanRequest(SQLModel):
+    scope: Literal["metamod", "counterstrikesharp", "both"] = "both"
+
+
+class PluginDiagnosticExecuteRequest(PluginDiagnosticPlanRequest):
+    expected_plan_hash: str = Field(min_length=64, max_length=64)
+
+
+class PluginDiagnosticPlanResponse(SQLModel):
+    server_id: int
+    scope: str
+    plan_hash: str
+    candidates: List[Dict] = Field(default_factory=list)
+    candidate_groups: List[Dict] = Field(default_factory=list)
+    estimated_max_starts: int
+    health_policy: Dict = Field(default_factory=dict)
+    warnings: List[str] = Field(default_factory=list)
+
+
+class PluginDiagnosticRunResponse(SQLModel):
+    id: str
+    server_id: int
+    requested_by: int
+    scope: str
+    status: str
+    plan_hash: str
+    culprit_keys: List[str] = Field(default_factory=list)
+    start_attempts: int = 0
+    error: Optional[str] = None
+    steps: List[Dict] = Field(default_factory=list)
+    quarantine: List[Dict] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class GitHubPluginInspectRequest(SQLModel):
+    repo_url: str = Field(min_length=1, max_length=500)
+    mode: Literal["install", "upgrade"] = "install"
+
+
+class GitHubPluginSearchResponse(SQLModel):
+    query: str
+    candidates: List[Dict] = Field(default_factory=list)
+    recommended_repo_url: Optional[str] = None
+
+
+class GitHubPluginInspectResponse(SQLModel):
+    repo_url: str
+    repository: Dict = Field(default_factory=dict)
+    release: Dict = Field(default_factory=dict)
+    selected_asset: Optional[Dict] = None
+    documentation: Dict = Field(default_factory=dict)
+    warnings: List[str] = Field(default_factory=list)
+
+
+class GitHubPluginInstallPlanRequest(GitHubPluginInspectRequest):
+    asset_name: Optional[str] = Field(default=None, max_length=500)
+    config_policy: Literal["preserve", "overwrite"] = "preserve"
+    recipe_id: Optional[int] = Field(default=None, gt=0)
+
+
+class GitHubPluginInstallExecuteRequest(GitHubPluginInstallPlanRequest):
+    expected_plan_hash: str = Field(min_length=64, max_length=64)
+    acknowledge_warning_rule_ids: List[int] = Field(default_factory=list)
+    acknowledge_unknown_compatibility: bool = False
+
+
+class GitHubPluginInstallPlanResponse(SQLModel):
+    server_id: int
+    repo_url: str
+    mode: str
+    config_policy: str
+    plan_hash: str
+    release: Dict = Field(default_factory=dict)
+    asset: Dict = Field(default_factory=dict)
+    archive_sha256: str
+    mapping: List[Dict] = Field(default_factory=list)
+    files: List[Dict] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    mapping_required: bool = False
+    plugin_metadata: Dict = Field(default_factory=dict)
+    dependencies: List[Dict] = Field(default_factory=list)
+    already_installed: List[int] = Field(default_factory=list)
+    hard_conflicts: List[Dict] = Field(default_factory=list)
+    conflict_warnings: List[Dict] = Field(default_factory=list)
+    compatibility_unknown: bool = False
+
+
+class GitHubInstallRecipeCreate(SQLModel):
+    repo_url: str = Field(min_length=1, max_length=500)
+    display_name: str = Field(min_length=1, max_length=255)
+    source_prefix: str = Field(max_length=500)
+    target_prefix: Literal["addons", "cfg"]
+    framework: Optional[Literal["metamod", "counterstrikesharp"]] = None
+    config_globs: List[str] = Field(default_factory=list, max_length=50)
+    required_repositories: List[str] = Field(default_factory=list, max_length=20)
+    documentation_commit: Optional[str] = Field(default=None, max_length=64)

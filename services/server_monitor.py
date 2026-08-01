@@ -326,8 +326,18 @@ class ServerMonitor:
                         f"Exception logging status check to Redis: server={server_id}, error={e}"
                     )
 
-                # Handle down server
-                if is_down and server.auto_restart_on_crash:
+                # Handle down server. An interrupted diagnostic may have files
+                # intentionally outside loader roots, so never race it with an
+                # automatic restart.
+                from services.plugin_diagnostic_service import has_diagnostic_blocker
+
+                diagnostic_blocked = is_down and await has_diagnostic_blocker(server_id, db)
+                if diagnostic_blocked:
+                    logger.warning(
+                        "Server %s auto-restart paused by plugin diagnostic quarantine",
+                        server_id,
+                    )
+                elif is_down and server.auto_restart_on_crash:
                     # Check if we can restart (respecting restart limits)
                     can_restart, reason = self.can_restart(server_id)
 
@@ -415,8 +425,9 @@ class ServerMonitor:
                                         "Health Check": check_message,
                                     },
                                 )
-                                # Reset restart history and A2S failure counter after successful restart
-                                self.reset_restart_history(server_id)
+                                # Keep the attempt in the rolling window. A start command can
+                                # succeed immediately before the game crashes again; clearing
+                                # here would defeat restart-loop protection after game updates.
 
                                 # Log successful restart to Redis
                                 try:

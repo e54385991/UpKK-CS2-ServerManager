@@ -16,11 +16,16 @@ from .identity import (
     User,
 )
 from .plugins import (
+    GitHubInstallRecipe,
     ManagedPlugin,
+    ManagedPluginFile,
     MarketPlugin,
     PluginCategory,
     PluginConfigSource,
     PluginConflictRule,
+    PluginDiagnosticRun,
+    PluginDiagnosticStep,
+    PluginQuarantineEntry,
 )
 from .servers import (
     AuthType,

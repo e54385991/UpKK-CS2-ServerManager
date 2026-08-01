@@ -340,6 +340,13 @@
             else newConversation();
         });
         element('ai-server-select')?.addEventListener('change', newConversation);
+        element('ai-example-prompts')?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-ai-prompt]');
+            if (!button) return;
+            const input = element('ai-message-input');
+            input.value = translate(button.dataset.aiPrompt, button.textContent.trim());
+            input.focus();
+        });
         window.addEventListener('authReady', (event) => initialize(event.detail.user));
         if (localStorage.getItem('access_token')) {
             fetch('/api/auth/me', { headers: getAuthHeaders() })

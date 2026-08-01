@@ -22,6 +22,7 @@ def test_migration_step_order_preserves_the_legacy_sequence():
         "commands",
         "system_settings",
         "ai",
+        "ai_agents",
     )
 
 

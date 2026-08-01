@@ -6,6 +6,21 @@
                         <span data-i18n="serverDetail.monitoringPriorityInfo">If A2S Monitoring is enabled, it takes priority and Panel Monitoring (SSH process check) will not be used. A2S queries are more lightweight and accurate for detecting server status.</span>
                     </div>
 
+                    <div class="alert alert-danger mb-4"
+                        x-show="diagnosticRecommendation?.recommended" x-cloak role="alert">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <i class="bi bi-bug-fill"></i>
+                                <strong data-i18n="serverDetail.pluginDiagnosticSuggestedTitle">Plugin crash diagnosis suggested</strong>
+                                <span data-i18n="serverDetail.pluginDiagnosticSuggestedInfo">Repeated startup failures were detected after an update or restart-loop protection was triggered. Review an isolation plan before making changes.</span>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-light"
+                                data-bs-toggle="offcanvas" data-bs-target="#ai-assistant-panel"
+                                @click="openDiagnosticAssistant()"
+                                data-i18n="serverDetail.openDiagnosticAssistant">Open AI diagnosis</button>
+                        </div>
+                    </div>
+
                     <!-- A2S Query & Monitoring Card -->
                     <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">

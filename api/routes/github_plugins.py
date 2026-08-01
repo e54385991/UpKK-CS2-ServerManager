@@ -4,19 +4,30 @@ Provides endpoints for fetching GitHub releases and installing plugins from them
 """
 
 import logging
+import os
+import posixpath
 import re
 import shlex
 from typing import Optional
+from urllib.parse import unquote, urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import anyio
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import locked_server_operation
 from modules import (
     ArchiveAnalysisResponse,
     ArchiveContentItem,
+    GitHubInstallRecipeCreate,
+    GitHubPluginInspectRequest,
+    GitHubPluginInspectResponse,
+    GitHubPluginInstallExecuteRequest,
+    GitHubPluginInstallPlanRequest,
+    GitHubPluginInstallPlanResponse,
     GitHubPluginInstallRequest,
     GitHubPluginInstallResponse,
+    GitHubPluginSearchResponse,
     GitHubRelease,
     GitHubReleaseAsset,
     GitHubReleasesResponse,
@@ -29,8 +40,24 @@ from modules import (
 )
 from modules.http_helper import http_helper
 from services import SSHManager
+from services.ai_access import AgentAccessDenied, enforce_agent_rate_limit
 from services.github_credentials import get_effective_github_token
-from services.plugin_installation import install_github_plugin as install_github_plugin_service
+from services.github_plugin_plan_service import (
+    GitHubPlanError,
+    _archive_entries,
+    _download_release_asset,
+    _validate_download_url,
+    _validate_release_contents,
+    build_github_install_plan,
+    create_install_recipe,
+    execute_github_install_plan,
+)
+from services.github_plugin_plan_service import (
+    inspect_github_plugin as inspect_github_plugin_service,
+)
+from services.github_plugin_plan_service import (
+    search_github_plugins as search_github_plugins_service,
+)
 
 router = APIRouter(prefix="/api/github-plugins", tags=["github-plugins"])
 
@@ -43,6 +70,182 @@ GITHUB_REPO_PATTERN = re.compile(
 
 # Progress update interval (percent) for panel proxy downloads/uploads
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every 10%
+
+
+async def _secure_archive_analysis(
+    db: AsyncSession,
+    user: User,
+    server_id: int,
+    download_url: str,
+) -> ArchiveAnalysisResponse:
+    """Inspect an official release asset locally with the plan-service limits."""
+    from services.ai_access import authorized_server
+
+    try:
+        await authorized_server(db, user, server_id)
+        await enforce_agent_rate_limit(user.id, "github_archive_analysis", limit=5)
+        _validate_download_url(download_url)
+        archive_path, _digest, compressed_size = await _download_release_asset(download_url)
+        try:
+            asset_name = unquote(posixpath.basename(urlsplit(download_url).path))
+            try:
+                entries = await anyio.to_thread.run_sync(
+                    _archive_entries,
+                    archive_path,
+                    asset_name,
+                    compressed_size,
+                )
+            except GitHubPlanError:
+                raise
+            except Exception as exc:
+                raise GitHubPlanError("Release archive could not be safely inspected") from exc
+            _validate_release_contents(entries)
+        finally:
+            try:
+                os.unlink(archive_path)
+            except OSError:
+                pass
+    except (AgentAccessDenied, GitHubPlanError) as exc:
+        return ArchiveAnalysisResponse(success=False, error=str(exc))
+
+    directories: set[str] = set()
+    files: list[ArchiveContentItem] = []
+    top_level: dict[str, bool] = {}
+    for item in entries:
+        path = item["path"]
+        parts = path.split("/")
+        top_level[parts[0]] = top_level.get(parts[0], False) or len(parts) > 1 or item["is_dir"]
+        for index in range(1, len(parts)):
+            directories.add("/".join(parts[:index]))
+        if item["is_dir"]:
+            directories.add(path)
+        else:
+            files.append(ArchiveContentItem(path=path, is_dir=False, size=item["size"]))
+    root_dirs = sorted({path.split("/", 1)[0] for path in directories})
+    lowered = asset_name.casefold()
+    archive_type = next(
+        (
+            extension.lstrip(".")
+            for extension in (".tar.gz", ".tgz", ".tar", ".zip", ".7z")
+            if lowered.endswith(extension)
+        ),
+        None,
+    )
+    return ArchiveAnalysisResponse(
+        success=True,
+        has_addons_dir=any(
+            item["path"] == "addons" or item["path"].startswith("addons/") for item in entries
+        ),
+        root_dirs=root_dirs,
+        all_dirs=sorted(directories),
+        all_files=files,
+        top_level_items=[
+            ArchiveContentItem(path=path, is_dir=is_dir)
+            for path, is_dir in sorted(top_level.items())
+        ],
+        archive_type=archive_type,
+    )
+
+
+def _safe_github_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, AgentAccessDenied):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+    if isinstance(exc, PermissionError):
+        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+@router.get("/search", response_model=GitHubPluginSearchResponse)
+async def search_github_cs2_plugins(
+    q: str = Query(min_length=1, max_length=120),
+    limit: int = Query(default=3, ge=1, le=3),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    try:
+        await enforce_agent_rate_limit(current_user.id, "github_search", limit=10)
+        return await search_github_plugins_service(db, current_user, q, limit=limit)
+    except (AgentAccessDenied, GitHubPlanError) as exc:
+        raise _safe_github_error(exc) from exc
+
+
+@router.post("/inspect", response_model=GitHubPluginInspectResponse)
+async def inspect_github_plugin(
+    request: GitHubPluginInspectRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    try:
+        await enforce_agent_rate_limit(current_user.id, "github_inspect", limit=15)
+        return await inspect_github_plugin_service(db, current_user, request.repo_url, request.mode)
+    except (AgentAccessDenied, GitHubPlanError) as exc:
+        raise _safe_github_error(exc) from exc
+
+
+@router.post("/servers/{server_id}/install-plan", response_model=GitHubPluginInstallPlanResponse)
+async def plan_github_plugin_install(
+    server_id: int,
+    request: GitHubPluginInstallPlanRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    try:
+        await enforce_agent_rate_limit(current_user.id, "github_plan", limit=5)
+        return await build_github_install_plan(db, current_user, server_id, request)
+    except (AgentAccessDenied, GitHubPlanError) as exc:
+        raise _safe_github_error(exc) from exc
+
+
+@router.post("/servers/{server_id}/install-plan/execute")
+async def apply_github_plugin_install(
+    server_id: int,
+    request: GitHubPluginInstallExecuteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    try:
+        await enforce_agent_rate_limit(
+            current_user.id, "github_install", limit=2, window_seconds=300
+        )
+        plan_request = GitHubPluginInstallPlanRequest.model_validate(
+            request.model_dump(
+                exclude={
+                    "expected_plan_hash",
+                    "acknowledge_warning_rule_ids",
+                    "acknowledge_unknown_compatibility",
+                }
+            )
+        )
+        return await execute_github_install_plan(
+            db,
+            current_user,
+            server_id,
+            plan_request,
+            request.expected_plan_hash,
+            set(request.acknowledge_warning_rule_ids),
+            request.acknowledge_unknown_compatibility,
+        )
+    except (AgentAccessDenied, GitHubPlanError) as exc:
+        raise _safe_github_error(exc) from exc
+
+
+@router.post("/recipes")
+async def create_github_install_recipe(
+    request: GitHubInstallRecipeCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    try:
+        recipe = await create_install_recipe(db, current_user, request.model_dump())
+        return {
+            "id": recipe.id,
+            "repo_url": recipe.repo_url,
+            "revision": recipe.revision,
+            "source_prefix": recipe.source_prefix,
+            "target_prefix": recipe.target_prefix,
+        }
+    except (PermissionError, GitHubPlanError) as exc:
+        raise _safe_github_error(exc) from exc
 
 
 def _build_plugin_copy_command(
@@ -152,11 +355,13 @@ async def get_github_releases(
     except ValueError as e:
         return GitHubReleasesResponse(success=False, error=str(e), releases=[])
 
-    # Get server's GitHub proxy if server_id is provided
+    # A server context is authorization-only. GitHub credentials are never sent
+    # through a user-configured proxy.
     github_proxy = None
     if server_id:
-        server = await get_server_and_verify_ownership(db, server_id, current_user)
-        github_proxy = server.github_proxy
+        from services.ai_access import authorized_server
+
+        await authorized_server(db, current_user, server_id)
 
     # Limit count to prevent abuse
     count = min(count, 10)
@@ -267,6 +472,11 @@ async def analyze_archive(
     Returns:
         Analysis of archive contents
     """
+    return await _secure_archive_analysis(db, current_user, server_id, download_url)
+
+    # The legacy remote analyzer is intentionally unreachable. It remains below
+    # temporarily to keep this compatibility route's historical response code
+    # easy to compare while all callers migrate to install-plan.
     # Validate URL
     if (
         not download_url.startswith("https://github.com/")
@@ -502,7 +712,6 @@ async def install_github_plugin(
     request: GitHubPluginInstallRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    _operation_server: Server = Depends(locked_server_operation),
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from a GitHub release asset with WebSocket progress updates.
@@ -520,11 +729,36 @@ async def install_github_plugin(
     Returns:
         Installation result
     """
-    return await install_github_plugin_service(
-        server_id,
-        request,
-        db,
-        current_user,
+    if not request.repo_url or not request.installation_plan_hash:
+        return GitHubPluginInstallResponse(
+            success=False,
+            message=(
+                "A current GitHub install plan and plan hash are required; use the "
+                "install-plan endpoint before confirming"
+            ),
+        )
+    plan_request = GitHubPluginInstallPlanRequest(
+        repo_url=request.repo_url,
+        mode=request.install_mode,
+        asset_name=request.asset_name,
+        config_policy=request.config_policy,
+    )
+    try:
+        result = await execute_github_install_plan(
+            db,
+            current_user,
+            server_id,
+            plan_request,
+            request.installation_plan_hash,
+            set(request.acknowledge_warning_rule_ids),
+            request.acknowledge_unknown_compatibility,
+        )
+    except (AgentAccessDenied, GitHubPlanError) as exc:
+        return GitHubPluginInstallResponse(success=False, message=str(exc))
+    return GitHubPluginInstallResponse(
+        success=bool(result.get("success")),
+        message=str(result.get("message") or "GitHub installation finished"),
+        installed_files=int(result.get("installed_files") or 0),
     )
 
 

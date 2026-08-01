@@ -135,5 +135,6 @@ class AIToolRunResponse(SQLModel):
     requires_approval: bool
     result: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+    approval_expires_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

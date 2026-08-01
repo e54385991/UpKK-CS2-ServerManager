@@ -128,6 +128,17 @@
                     </button>
                 </div>
             </div>
+            <div class="px-3 py-2 border-bottom">
+                <div class="small text-muted mb-2" data-i18n="ai.examples">Examples</div>
+                <div class="d-flex flex-wrap gap-1" id="ai-example-prompts">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-ai-prompt="ai.examplePrompts.cssLogs" data-i18n="ai.exampleLabels.cssLogs">Analyze CSS errors</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-ai-prompt="ai.examplePrompts.crashIsolation" data-i18n="ai.exampleLabels.crashIsolation">Diagnose plugin crash</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-ai-prompt="ai.examplePrompts.marketInstall" data-i18n="ai.exampleLabels.marketInstall">Install from market</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-ai-prompt="ai.examplePrompts.githubInstall" data-i18n="ai.exampleLabels.githubInstall">Install GitHub link</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-ai-prompt="ai.examplePrompts.githubSearch" data-i18n="ai.exampleLabels.githubSearch">Find maintained plugin</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-ai-prompt="ai.examplePrompts.workshop" data-i18n="ai.exampleLabels.workshop">Add Workshop map</button>
+                </div>
+            </div>
             <div id="ai-message-list" class="ai-message-list flex-grow-1 p-3" aria-live="polite"></div>
             <div id="ai-run-status" class="small text-muted px-3 py-2 border-top d-none"></div>
             <form id="ai-message-form" class="p-3 border-top">

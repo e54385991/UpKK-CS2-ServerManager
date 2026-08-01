@@ -506,6 +506,13 @@ class PluginAutoUpdateService:
                 log=f"{run_label} started",
             )
             async with async_session_maker() as db:
+                from services.plugin_diagnostic_service import has_diagnostic_blocker
+
+                if await has_diagnostic_blocker(server_id, db):
+                    return {
+                        "success": False,
+                        "message": "Plugin diagnostic quarantine requires attention",
+                    }
                 server = await db.get(Server, server_id)
                 if not server:
                     await self._publish_status(

@@ -22,6 +22,10 @@ botocore==1.43.56
     # via
     #   boto3
     #   s3transfer
+brotli==1.2.0 ; platform_python_implementation == 'CPython'
+    # via py7zr
+brotlicffi==1.2.0.1 ; platform_python_implementation == 'PyPy'
+    # via py7zr
 captcha==0.7.1
     # via cs2-server-manager
 certifi==2026.7.22
@@ -29,8 +33,10 @@ certifi==2026.7.22
     #   httpcore
     #   httpx
     #   requests
-cffi==2.1.0 ; platform_python_implementation != 'PyPy'
-    # via cryptography
+cffi==2.1.0
+    # via
+    #   brotlicffi
+    #   cryptography
 charset-normalizer==3.4.9
     # via requests
 click==8.4.2
@@ -40,6 +46,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
 cryptography==49.0.0
     # via
     #   asyncssh
+    #   cs2-server-manager
     #   google-auth
     #   pyjwt
 dnspython==2.8.0
@@ -89,6 +96,8 @@ idna==3.18
     #   email-validator
     #   httpx
     #   requests
+inflate64==1.0.4
+    # via py7zr
 jinja2==3.1.6
     # via cs2-server-manager
 jmespath==1.1.0
@@ -97,6 +106,8 @@ jmespath==1.1.0
     #   botocore
 markupsafe==3.0.3
     # via jinja2
+multivolumefile==0.2.3
+    # via py7zr
 oauthlib==3.3.1
     # via requests-oauthlib
 pillow==12.3.0
@@ -108,12 +119,20 @@ protobuf==7.35.1
     #   google-api-core
     #   googleapis-common-protos
     #   proto-plus
+psutil==7.2.2 ; sys_platform != 'cygwin'
+    # via py7zr
+py7zr==1.1.3
+    # via cs2-server-manager
 pyasn1==0.6.4
     # via pyasn1-modules
 pyasn1-modules==0.4.2
     # via google-auth
-pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+pybcj==1.0.8
+    # via py7zr
+pycparser==3.0 ; implementation_name != 'PyPy'
     # via cffi
+pycryptodomex==3.23.0
+    # via py7zr
 pydantic==2.13.4
     # via
     #   cs2-server-manager
@@ -130,6 +149,8 @@ pymysql==1.2.0
     # via aiomysql
 pyparsing==3.3.2
     # via httplib2
+pyppmd==1.3.1
+    # via py7zr
 python-a2s==1.4.2
     # via cs2-server-manager
 python-dateutil==2.9.0.post0
@@ -166,6 +187,8 @@ starlette==1.3.1
     # via
     #   cs2-server-manager
     #   fastapi
+texttable==1.7.0
+    # via py7zr
 typing-extensions==4.16.0
     # via
     #   asyncssh

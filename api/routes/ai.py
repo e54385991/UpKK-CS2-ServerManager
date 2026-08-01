@@ -38,14 +38,15 @@ from modules import (
     get_current_admin_user,
     get_db,
 )
-from modules.config import settings
 from modules.utils import get_current_time
+from services.ai_access import audit_security_event
 from services.ai_events import ai_event_hub
 from services.ai_orchestrator import ACTIVE_RUN_STATUSES, process_ai_run
 from services.ai_provider import test_provider
 from services.ai_security import (
     AIConfigurationError,
     AIProviderConfig,
+    credential_encryption_available,
     decrypt_credential,
     encrypt_credential,
     get_effective_provider,
@@ -170,7 +171,7 @@ async def update_system_ai_settings(
             and item.api_key_encrypted
             and item.provider_tested
             and item.tool_calling_tested
-            and settings.AI_CREDENTIAL_ENCRYPTION_KEY
+            and credential_encryption_available()
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -336,8 +337,14 @@ async def _server_for_user(db: AsyncSession, user: User, server_id: int) -> Serv
 async def _conversation_for_user(
     db: AsyncSession, user: User, conversation_id: str
 ) -> AIConversation:
-    conversation = await db.get(AIConversation, conversation_id)
-    if conversation is None or conversation.user_id != user.id:
+    result = await db.execute(
+        select(AIConversation).where(
+            AIConversation.id == conversation_id,
+            AIConversation.user_id == user.id,
+        )
+    )
+    conversation = result.scalar_one_or_none()
+    if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     return conversation
 
@@ -481,8 +488,9 @@ async def send_ai_message(
 
 
 async def _run_for_user(db: AsyncSession, user: User, run_id: str) -> AIRun:
-    run = await db.get(AIRun, run_id)
-    if run is None or run.user_id != user.id:
+    result = await db.execute(select(AIRun).where(AIRun.id == run_id, AIRun.user_id == user.id))
+    run = result.scalar_one_or_none()
+    if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
     return run
 
@@ -517,24 +525,74 @@ async def decide_ai_tool(
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, str]:
     run = await _run_for_user(db, current_user, run_id)
-    item = await db.get(AIToolRun, tool_run_id)
+    item_result = await db.execute(
+        select(AIToolRun).where(AIToolRun.id == tool_run_id, AIToolRun.run_id == run.id)
+    )
+    item = item_result.scalar_one_or_none()
     if (
         item is None
         or item.run_id != run.id
         or item.status != "pending_approval"
         or not item.requires_approval
     ):
+        audit_security_event(
+            "approval_not_pending",
+            user_id=current_user.id,
+            server_id=run.server_id,
+            operation=item.tool_name if item is not None else None,
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Tool approval is no longer pending",
         )
     if item.arguments_hash != request.arguments_hash:
+        audit_security_event(
+            "approval_arguments_mismatch",
+            user_id=current_user.id,
+            server_id=run.server_id,
+            operation=item.tool_name,
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Tool arguments changed; reload the approval card",
         )
+    approval_now = get_current_time()
+    if item.approval_expires_at is not None and item.approval_expires_at.tzinfo is None:
+        approval_now = approval_now.replace(tzinfo=None)
+    if item.approval_expires_at is None or item.approval_expires_at <= approval_now:
+        audit_security_event(
+            "approval_expired",
+            user_id=current_user.id,
+            server_id=run.server_id,
+            operation=item.tool_name,
+        )
+        item.status = "expired"
+        item.completed_at = get_current_time()
+        db.add(item)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tool approval expired; request a fresh plan",
+        )
     if run.server_id is not None:
         await _server_for_user(db, current_user, run.server_id)
+    if request.decision == "approve":
+        active_write_result = await db.execute(
+            select(func.count())
+            .select_from(AIToolRun)
+            .join(AIRun, AIRun.id == AIToolRun.run_id)
+            .where(
+                AIRun.user_id == current_user.id,
+                AIToolRun.id != item.id,
+                AIToolRun.risk == "write",
+                AIToolRun.status.in_(("approved", "running")),
+            )
+        )
+        if int(active_write_result.scalar_one()):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This user already has an active AI write task",
+            )
     item.status = "approved" if request.decision == "approve" else "rejected"
     item.approved_by = current_user.id
     item.approved_at = get_current_time()
@@ -564,8 +622,11 @@ async def ai_run_events(
     if user is None:
         return
     async with async_session_maker() as db:
-        run = await db.get(AIRun, run_id)
-        if run is None or run.user_id != user.id:
+        run_result = await db.execute(
+            select(AIRun).where(AIRun.id == run_id, AIRun.user_id == user.id)
+        )
+        run = run_result.scalar_one_or_none()
+        if run is None:
             await websocket.close(code=4404, reason="Run not found")
             return
     await websocket.accept()

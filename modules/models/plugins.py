@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+import uuid
+
 from .common import *
 
 
@@ -206,6 +208,15 @@ class ManagedPlugin(SQLModel, table=True):
     latest_version: Optional[str] = Field(default=None, max_length=100)
     asset_glob: Optional[str] = Field(default=None, max_length=500)
     custom_install_path: Optional[str] = Field(default=None, max_length=255)
+    install_recipe_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, ForeignKey("github_install_recipes.id", ondelete="SET NULL"), nullable=True
+        ),
+    )
+    installed_asset_name: Optional[str] = Field(default=None, max_length=500)
+    archive_sha256: Optional[str] = Field(default=None, max_length=64)
+    config_policy: str = Field(default="preserve", max_length=32)
     exclude_dirs: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     exclude_files: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     auto_update_enabled: bool = Field(default=False)
@@ -222,6 +233,158 @@ class ManagedPlugin(SQLModel, table=True):
         default=None,
         sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
     )
+
+
+class GitHubInstallRecipe(SQLModel, table=True):
+    """Admin-approved declarative mapping for an otherwise ambiguous release archive."""
+
+    __tablename__ = "github_install_recipes"
+    __table_args__ = (UniqueConstraint("repo_url", "revision", name="uq_github_recipe_revision"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    repo_url: str = Field(max_length=500, index=True)
+    display_name: str = Field(max_length=255)
+    source_prefix: str = Field(max_length=500)
+    target_prefix: str = Field(max_length=500)
+    framework: Optional[str] = Field(default=None, max_length=32)
+    config_globs: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    required_repositories: List[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False)
+    )
+    documentation_commit: Optional[str] = Field(default=None, max_length=64)
+    revision: str = Field(max_length=64)
+    is_enabled: bool = Field(default=True)
+    created_by: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+    )
+    created_at: Optional[datetime] = Field(
+        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+    )
+
+
+class ManagedPluginFile(SQLModel, table=True):
+    """Revisioned file inventory used for safe upgrades and configuration preservation."""
+
+    __tablename__ = "managed_plugin_files"
+    __table_args__ = (
+        UniqueConstraint("managed_plugin_id", "relative_path", name="uq_managed_plugin_file"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    managed_plugin_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("managed_plugins.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    relative_path: str = Field(max_length=1000)
+    sha256: str = Field(max_length=64)
+    file_role: str = Field(default="data", max_length=32)
+    preserved: bool = Field(default=False)
+    created_at: Optional[datetime] = Field(
+        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    )
+
+
+class PluginDiagnosticRun(SQLModel, table=True):
+    """Persistent, user-attributed plugin isolation state machine."""
+
+    __tablename__ = "plugin_diagnostic_runs"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, max_length=36)
+    server_id: int = Field(
+        sa_column=Column(
+            Integer, ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True
+        )
+    )
+    requested_by: int = Field(
+        sa_column=Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    )
+    server_owner_id: int = Field(sa_column=Column(Integer, nullable=False))
+    ai_run_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(36), ForeignKey("ai_runs.id", ondelete="SET NULL"), nullable=True),
+    )
+    scope: str = Field(max_length=32)
+    status: str = Field(default="planned", max_length=40, index=True)
+    plan_hash: str = Field(max_length=64)
+    candidate_snapshot: List[dict] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False)
+    )
+    original_server_running: bool = Field(default=False)
+    health_policy: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    culprit_keys: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    start_attempts: int = Field(default=0)
+    error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: Optional[datetime] = Field(
+        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+    )
+    completed_at: Optional[datetime] = Field(default=None)
+
+
+class PluginDiagnosticStep(SQLModel, table=True):
+    __tablename__ = "plugin_diagnostic_steps"
+    __table_args__ = (
+        UniqueConstraint("diagnostic_run_id", "sequence", name="uq_diagnostic_step_sequence"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    diagnostic_run_id: str = Field(
+        max_length=36,
+        sa_column=Column(
+            String(36),
+            ForeignKey("plugin_diagnostic_runs.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
+    sequence: int = Field(ge=1)
+    phase: str = Field(max_length=64)
+    candidate_keys: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    healthy: Optional[bool] = Field(default=None)
+    evidence: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    created_at: Optional[datetime] = Field(
+        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    )
+
+
+class PluginQuarantineEntry(SQLModel, table=True):
+    __tablename__ = "plugin_quarantine_entries"
+    __table_args__ = (
+        UniqueConstraint("diagnostic_run_id", "candidate_key", name="uq_quarantine_candidate"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    diagnostic_run_id: str = Field(
+        max_length=36,
+        sa_column=Column(
+            String(36),
+            ForeignKey("plugin_diagnostic_runs.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+    )
+    candidate_key: str = Field(max_length=500)
+    source_relative_path: str = Field(max_length=1000)
+    quarantine_relative_path: str = Field(max_length=1000)
+    source_revision: str = Field(max_length=128)
+    is_quarantined: bool = Field(default=False, index=True)
+    is_culprit: bool = Field(default=False)
+    created_at: Optional[datetime] = Field(
+        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    )
+    restored_at: Optional[datetime] = Field(default=None)
 
 
 class PluginConfigSource(SQLModel, table=True):
