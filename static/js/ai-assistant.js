@@ -195,27 +195,27 @@
         if (!list) return;
         list.replaceChildren();
         if (!tasks.length) {
-            const empty = document.createElement('div');
-            empty.className = 'small text-muted';
-            empty.textContent = translate('ai.noBackgroundTasks', 'No AI tasks yet');
-            list.appendChild(empty);
+            list.replaceChildren();
             return;
         }
         tasks.forEach((task) => {
+            const activeTools = (task.tools || []).filter((tool) =>
+                ['queued', 'running', 'pending_approval'].includes(tool.status)
+            );
+            if (!activeTools.length) return;
             const card = document.createElement('div');
             card.className = 'ai-background-task small';
             const header = document.createElement('div');
             header.className = 'd-flex align-items-center justify-content-between gap-2';
             const label = document.createElement('span');
             label.className = 'fw-semibold text-truncate';
-            label.textContent = task.tools?.map((tool) => tool.tool_name).join(', ') || task.id;
+            label.textContent = activeTools.map((tool) => tool.tool_name).join(', ');
             header.appendChild(label);
             appendBackgroundTaskStatus(header, task.status);
             card.appendChild(header);
-
             const tools = document.createElement('div');
             tools.className = 'ai-background-task-tools mt-2';
-            (task.tools || []).forEach((tool) => {
+            activeTools.forEach((tool) => {
                 const row = document.createElement('div');
                 row.className = 'd-flex align-items-center justify-content-between gap-2 text-muted';
                 const name = document.createElement('span');
@@ -224,20 +224,8 @@
                 row.appendChild(name);
                 appendBackgroundTaskStatus(row, tool.status);
                 tools.appendChild(row);
-                if (tool.error) {
-                    const error = document.createElement('div');
-                    error.className = 'text-danger';
-                    error.textContent = tool.error;
-                    tools.appendChild(error);
-                }
             });
             if (tools.childElementCount) card.appendChild(tools);
-            if (task.error) {
-                const error = document.createElement('div');
-                error.className = 'text-danger mt-2';
-                error.textContent = task.error;
-                card.appendChild(error);
-            }
             list.appendChild(card);
         });
     }

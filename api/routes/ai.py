@@ -597,14 +597,17 @@ async def get_ai_run(
 
 @router.get("/api/ai/tasks", response_model=list[AIBackgroundTaskResponse])
 async def list_ai_background_tasks(
-    limit: int = Query(default=30, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> list[AIBackgroundTaskResponse]:
-    """Return the caller's recent AI tasks and their non-sensitive tool progress."""
+    """Return the caller's active and recently finished AI tasks."""
     run_result = await db.execute(
         select(AIRun)
-        .where(AIRun.user_id == current_user.id)
+        .where(
+            AIRun.user_id == current_user.id,
+            AIRun.status.in_(ACTIVE_RUN_STATUSES),
+        )
         .order_by(AIRun.updated_at.desc(), AIRun.created_at.desc())
         .limit(limit)
     )

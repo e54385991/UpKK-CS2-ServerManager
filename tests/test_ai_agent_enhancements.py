@@ -446,7 +446,7 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
         async def execute(self, _statement):
             return self.results.pop(0)
 
-    tasks = await ai_routes.list_ai_background_tasks(30, DB(), SimpleNamespace(id=8))
+    tasks = await ai_routes.list_ai_background_tasks(20, DB(), SimpleNamespace(id=8))
 
     assert len(tasks) == 1
     assert tasks[0].id == run.id

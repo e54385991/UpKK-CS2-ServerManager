@@ -9028,7 +9028,7 @@
     },
     "/api/ai/tasks": {
       "get": {
-        "description": "Return the caller's recent AI tasks and their non-sensitive tool progress.",
+        "description": "Return the caller's active and recently finished AI tasks.",
         "operationId": "list_ai_background_tasks_api_ai_tasks_get",
         "parameters": [
           {
@@ -9036,7 +9036,7 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "default": 30,
+              "default": 20,
               "maximum": 100,
               "minimum": 1,
               "title": "Limit",
