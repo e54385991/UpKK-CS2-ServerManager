@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import ValidationError
 from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from modules.database import async_session_maker
@@ -44,7 +45,7 @@ from services.ai_tools import (
 from services.maintenance_lock import maintenance_lock_service
 
 logger = logging.getLogger(__name__)
-MAX_PROVIDER_ROUNDS = 8
+MAX_PROVIDER_ROUNDS = 12
 MAX_TOOL_CALLS_PER_ROUND = 5
 MAX_REPEATED_CALLS = 3
 ACTIVE_RUN_STATUSES = ("queued", "running", "waiting_approval")
@@ -342,6 +343,10 @@ async def process_ai_run(run_id: str) -> None:
             )
 
             while rounds_used < MAX_PROVIDER_ROUNDS:
+                await db.refresh(run)
+                if run.status == "interrupted":
+                    await _emit(run.id, "run_interrupted", {"error": run.error or "Interrupted"})
+                    return
                 messages = await _load_provider_messages(
                     db, conversation, user, server, provider.admin_prompt
                 )
@@ -550,7 +555,9 @@ async def process_ai_run(run_id: str) -> None:
                     await _emit(run.id, "run_waiting_approval", {"status": run.status})
                     return
 
-            raise AIProviderError(f"Provider round limit exceeded ({MAX_PROVIDER_ROUNDS})")
+            raise AIProviderError(
+                f"The assistant reached the maximum number of reasoning rounds ({MAX_PROVIDER_ROUNDS}). Send another message to continue with the remaining tasks."
+            )
         except Exception as exc:
             logger.warning("AI run %s failed: %s", run.id, exc)
             await _fail_run(db, run, str(exc))
@@ -568,3 +575,27 @@ async def interrupt_active_ai_runs() -> int:
             db.add(run)
         await db.commit()
         return len(runs)
+
+
+async def interrupt_conversation_run(
+    db: AsyncSession, user: User, conversation_id: str
+) -> dict[str, Any]:
+    """Force-stop the active AI run for a conversation so the user can send a new message."""
+    result = await db.execute(
+        select(AIRun).where(
+            AIRun.conversation_id == conversation_id,
+            AIRun.status.in_(ACTIVE_RUN_STATUSES),
+        )
+    )
+    run = result.scalar_one_or_none()
+    if run is None:
+        return {"interrupted": False, "message": "No active run found for this conversation"}
+    if run.user_id != user.id and not user.is_admin:
+        raise PermissionError("Only the conversation owner or an admin can interrupt this run")
+    run.status = "interrupted"
+    run.error = "Interrupted by user"
+    run.completed_at = get_current_time()
+    db.add(run)
+    await db.commit()
+    await _emit(run.id, "run_interrupted", {"error": "Interrupted by user"})
+    return {"interrupted": True, "run_id": run.id}

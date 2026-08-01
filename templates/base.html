@@ -156,9 +156,15 @@
             <form id="ai-message-form" class="p-3 border-top">
                 <textarea id="ai-message-input" class="form-control mb-2" rows="3" maxlength="16000"
                           data-i18n-placeholder="ai.placeholder" placeholder="Ask about this CS2 server…"></textarea>
-                <button id="ai-send-button" class="btn btn-primary w-100" type="submit">
-                    <i class="bi bi-send"></i> <span data-i18n="ai.send">Send</span>
-                </button>
+                <div class="d-flex gap-2">
+                    <button id="ai-send-button" class="btn btn-primary flex-grow-1" type="submit">
+                        <i class="bi bi-send"></i> <span data-i18n="ai.send">Send</span>
+                    </button>
+                    <button id="ai-stop-button" class="btn btn-outline-danger d-none" type="button"
+                            data-i18n-title="ai.stop" title="Stop">
+                        <i class="bi bi-stop-fill"></i>
+                    </button>
+                </div>
             </form>
         </div>
     </aside>

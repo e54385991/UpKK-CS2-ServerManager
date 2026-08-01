@@ -54,7 +54,7 @@ from modules.schemas.ai import AIBackgroundTaskResponse, AIBackgroundTaskToolRes
 from modules.utils import get_current_time
 from services.ai_access import audit_security_event
 from services.ai_events import ai_event_hub
-from services.ai_orchestrator import ACTIVE_RUN_STATUSES, process_ai_run
+from services.ai_orchestrator import ACTIVE_RUN_STATUSES, interrupt_conversation_run, process_ai_run
 from services.ai_provider import test_provider
 from services.ai_security import (
     AIConfigurationError,
@@ -564,6 +564,20 @@ async def send_ai_message(
     await db.refresh(run)
     ai_task_registry.create(process_ai_run(run.id))
     return run
+
+
+@router.post("/api/ai/conversations/{conversation_id}/interrupt")
+async def interrupt_conversation(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    conversation = await _conversation_for_user(db, current_user, conversation_id)
+    try:
+        result = await interrupt_conversation_run(db, current_user, conversation.id)
+        return result
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
 async def _run_for_user(db: AsyncSession, user: User, run_id: str) -> AIRun:

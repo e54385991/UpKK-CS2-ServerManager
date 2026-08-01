@@ -15,6 +15,7 @@
         loadingBackgroundTasks: false,
         lastSequence: '0',
         streamedMessages: new Map(),
+        suppressReload: false,
     };
 
     const element = (id) => document.getElementById(id);
@@ -56,6 +57,27 @@
         target.classList.remove('ai-status-active');
         const dots = target.querySelector('.ai-status-dots');
         if (dots) dots.remove();
+    }
+
+    function showStopButton() {
+        element('ai-stop-button')?.classList.remove('d-none');
+    }
+
+    function hideStopButton() {
+        element('ai-stop-button')?.classList.add('d-none');
+    }
+
+    async function interruptActiveRun() {
+        if (!state.conversationId) return false;
+        try {
+            await authFetch(`/api/ai/conversations/${state.conversationId}/interrupt`, { method: 'POST' });
+            stopRunWatch();
+            hideStopButton();
+            return true;
+        } catch (error) {
+            setStatus(error.message, true);
+            return false;
+        }
     }
 
     function clearStatus() {
@@ -490,10 +512,34 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ content }),
             });
+            if (response.status === 409) {
+                state.suppressReload = true;
+                const stopped = await interruptActiveRun();
+                if (!stopped) {
+                    state.suppressReload = false;
+                    throw new Error('Cannot stop the active run');
+                }
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                const retry = await authFetch(`/api/ai/conversations/${conversationId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content }),
+                });
+                state.suppressReload = false;
+                const run = await jsonResponse(retry);
+                state.runId = run.id;
+                state.lastSequence = '0';
+                setStatus(translate('ai.running', 'AI task is running…'));
+                showStopButton();
+                connectEvents();
+                pollRun();
+                return;
+            }
             const run = await jsonResponse(response);
             state.runId = run.id;
             state.lastSequence = '0';
             setStatus(translate('ai.running', 'AI task is running…'));
+            showStopButton();
             connectEvents();
             pollRun();
         } catch (error) {
@@ -641,9 +687,10 @@
     async function finishRun(message, isError = false) {
         const conversationId = state.conversationId;
         stopRunWatch();
+        hideStopButton();
         setStatus(message, isError);
         element('ai-send-button').disabled = !state.enabled;
-        if (conversationId) {
+        if (conversationId && !state.suppressReload) {
             try {
                 await openConversation(conversationId);
                 await loadConversations(conversationId);
@@ -677,6 +724,7 @@
 
     function bind() {
         element('ai-message-form')?.addEventListener('submit', sendMessage);
+        element('ai-stop-button')?.addEventListener('click', () => interruptActiveRun());
         element('ai-new-conversation')?.addEventListener('click', newConversation);
         element('ai-refresh-background-tasks')?.addEventListener('click', refreshBackgroundTasks);
         element('ai-conversation-select')?.addEventListener('change', (event) => {
