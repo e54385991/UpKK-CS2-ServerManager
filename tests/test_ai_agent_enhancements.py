@@ -14,6 +14,7 @@ from sqlalchemy.schema import CreateTable
 
 from modules.models import AIToolRun, ManagedPluginFile, MarketPlugin
 from modules.utils import get_current_time
+from services.ai_prompt import CORE_RULES
 from services.ai_tools import TOOLS_BY_NAME, _safe_css_log_name
 from services.github_plugin_plan_service import (
     GitHubPlanError,
@@ -264,6 +265,11 @@ def test_write_approval_and_rollback_are_revision_bound():
     assert "--no-dereference" in backup
     assert "manifest.tsv" in rollback
     assert "--remove-destination" in rollback
+
+
+def test_requested_changes_create_a_panel_approval_instead_of_only_text():
+    assert "call the apply tool in the same run" in CORE_RULES
+    assert "Never replace that tool call with text" in CORE_RULES
 
 
 def test_managed_plugin_file_unique_key_uses_fixed_size_path_digest():
