@@ -348,6 +348,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "GET"
+    ],
+    "name": "list_ai_background_tasks",
+    "path": "/api/ai/tasks"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "decide_ai_tool",

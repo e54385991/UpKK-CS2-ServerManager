@@ -12,8 +12,11 @@ import pytest
 from sqlalchemy.dialects import mysql
 from sqlalchemy.schema import CreateTable
 
+from api.routes import ai as ai_routes
 from modules.models import AIToolRun, ManagedPluginFile, MarketPlugin
+from modules.schemas.ai import AIToolDecisionRequest
 from modules.utils import get_current_time
+from services import ai_orchestrator
 from services.ai_prompt import CORE_RULES
 from services.ai_tools import TOOLS_BY_NAME, _safe_css_log_name
 from services.github_plugin_plan_service import (
@@ -270,6 +273,185 @@ def test_write_approval_and_rollback_are_revision_bound():
 def test_requested_changes_create_a_panel_approval_instead_of_only_text():
     assert "call the apply tool in the same run" in CORE_RULES
     assert "Never replace that tool call with text" in CORE_RULES
+
+
+@pytest.mark.asyncio
+async def test_write_approval_is_queued_instead_of_rejected_while_another_runs(monkeypatch):
+    run = SimpleNamespace(id="run-1", server_id=None)
+    item = SimpleNamespace(
+        id="tool-1",
+        run_id=run.id,
+        tool_name="apply_plugin_plan",
+        arguments={},
+        arguments_hash="a" * 64,
+        risk="write",
+        status="pending_approval",
+        requires_approval=True,
+        approval_expires_at=get_current_time() + timedelta(minutes=5),
+        approved_by=None,
+        approved_at=None,
+    )
+
+    class Result:
+        def __init__(self, value):
+            self.value = value
+
+        def scalar_one_or_none(self):
+            return self.value
+
+        def scalar_one(self):
+            return self.value
+
+    class DB:
+        def __init__(self):
+            self.results = [Result(item), Result(0)]
+
+        async def execute(self, _statement):
+            return self.results.pop(0)
+
+        def add(self, _item):
+            pass
+
+        async def commit(self):
+            pass
+
+    async def run_for_user(_db, _user, _run_id):
+        return run
+
+    def schedule(coroutine):
+        coroutine.close()
+
+    monkeypatch.setattr(ai_routes, "_run_for_user", run_for_user)
+    monkeypatch.setattr(ai_routes.ai_task_registry, "create", schedule)
+
+    result = await ai_routes.decide_ai_tool(
+        run.id,
+        item.id,
+        AIToolDecisionRequest(decision="approve", arguments_hash=item.arguments_hash),
+        DB(),
+        SimpleNamespace(id=8),
+    )
+
+    assert result == {"status": "queued"}
+    assert item.status == "queued"
+
+
+@pytest.mark.asyncio
+async def test_queued_write_emits_queue_then_execution_status(monkeypatch):
+    _serialized, arguments_hash = ai_orchestrator.canonical_arguments({})
+    user = SimpleNamespace(id=8, is_active=True)
+    run = SimpleNamespace(id="run-2", conversation_id="conversation-2")
+    tool = SimpleNamespace(
+        id="tool-2",
+        tool_name="apply_plugin_plan",
+        arguments={},
+        arguments_hash=arguments_hash,
+        risk="write",
+        requires_approval=True,
+        approved_by=user.id,
+        approved_at=get_current_time() - timedelta(minutes=20),
+        approval_expires_at=get_current_time() - timedelta(minutes=5),
+        status="queued",
+        result=None,
+        error=None,
+        completed_at=None,
+        tool_call_id="call-2",
+    )
+    events = []
+    lock_calls = []
+
+    class DB:
+        async def get(self, _model, _id):
+            return user
+
+        def add(self, _item):
+            pass
+
+        async def commit(self):
+            pass
+
+    class Lock:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return None
+
+    class LockService:
+        def get(self, *args, **kwargs):
+            lock_calls.append((args, kwargs))
+            return Lock()
+
+    async def emit(_run_id, event_type, _payload):
+        events.append(event_type)
+
+    monkeypatch.setattr(ai_orchestrator, "maintenance_lock_service", LockService())
+    monkeypatch.setattr(ai_orchestrator, "_emit", emit)
+    monkeypatch.setattr(ai_orchestrator, "execute_tool", AsyncMock(return_value={"success": True}))
+
+    await ai_orchestrator._execute_tool_run(DB(), run, tool, user, None)
+
+    assert lock_calls == [
+        (
+            (-(user.id + 1),),
+            {
+                "operation": "ai_user_write",
+                "wait": True,
+                "wait_timeout": ai_orchestrator.AI_WRITE_QUEUE_WAIT_SECONDS,
+                "ttl": 30 * 60,
+            },
+        )
+    ]
+    assert events == ["tool_queued", "tool_started", "tool_completed"]
+    assert tool.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_background_task_view_returns_only_non_sensitive_task_progress():
+    run = SimpleNamespace(
+        id="run-3",
+        conversation_id="conversation-3",
+        server_id=4,
+        status="running",
+        error=None,
+        created_at=None,
+        updated_at=None,
+        completed_at=None,
+    )
+    tool = SimpleNamespace(
+        id="tool-3",
+        run_id=run.id,
+        tool_name="apply_plugin_plan",
+        risk="write",
+        status="running",
+        error=None,
+        created_at=None,
+        completed_at=None,
+    )
+
+    class Result:
+        def __init__(self, items):
+            self.items = items
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.items
+
+    class DB:
+        def __init__(self):
+            self.results = [Result([run]), Result([tool])]
+
+        async def execute(self, _statement):
+            return self.results.pop(0)
+
+    tasks = await ai_routes.list_ai_background_tasks(30, DB(), SimpleNamespace(id=8))
+
+    assert len(tasks) == 1
+    assert tasks[0].id == run.id
+    assert tasks[0].tools[0].tool_name == tool.tool_name
+    assert not hasattr(tasks[0].tools[0], "arguments")
 
 
 def test_managed_plugin_file_unique_key_uses_fixed_size_path_digest():

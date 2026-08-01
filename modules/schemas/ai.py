@@ -181,3 +181,29 @@ class AIToolRunResponse(SQLModel):
     approval_expires_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class AIBackgroundTaskToolResponse(SQLModel):
+    id: str
+    tool_name: str
+    risk: str
+    status: str
+    error: Optional[str] = None
+    created_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class AIBackgroundTaskResponse(SQLModel):
+    id: str
+    conversation_id: str
+    server_id: Optional[int] = None
+    status: str
+    error: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    tools: list[AIBackgroundTaskToolResponse] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}

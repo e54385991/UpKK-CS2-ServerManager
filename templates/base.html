@@ -128,6 +128,18 @@
                     </button>
                 </div>
             </div>
+            <section class="p-3 border-bottom ai-task-viewer" aria-labelledby="ai-background-tasks-title">
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                    <h6 id="ai-background-tasks-title" class="mb-0 small fw-semibold">
+                        <i class="bi bi-list-task"></i> <span data-i18n="ai.backgroundTasks">Background tasks</span>
+                    </h6>
+                    <button id="ai-refresh-background-tasks" class="btn btn-sm btn-outline-secondary" type="button"
+                            data-i18n-title="ai.refreshTasks" title="Refresh tasks">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                <div id="ai-background-task-list" class="ai-background-task-list" aria-live="polite"></div>
+            </section>
             <div class="px-3 py-2 border-bottom">
                 <div class="small text-muted mb-2" data-i18n="ai.examples">Examples</div>
                 <div class="d-flex flex-wrap gap-1" id="ai-example-prompts">

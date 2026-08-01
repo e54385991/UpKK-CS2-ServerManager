@@ -11,6 +11,8 @@
         eventAbortController: null,
         reconnectTimer: null,
         pollTimer: null,
+        taskViewerTimer: null,
+        loadingBackgroundTasks: false,
         lastSequence: '0',
         streamedMessages: new Map(),
     };
@@ -39,6 +41,22 @@
 
     function clearStatus() {
         element('ai-run-status')?.classList.add('d-none');
+    }
+
+    function operationStatusLabel(status) {
+        return translate(`ai.operation.${status}`, String(status || '').replaceAll('_', ' '));
+    }
+
+    function operationStatusClass(status) {
+        const classes = {
+            queued: 'text-bg-info',
+            running: 'text-bg-primary',
+            completed: 'text-bg-success',
+            failed: 'text-bg-danger',
+            waiting_approval: 'text-bg-warning',
+            rejected: 'text-bg-secondary'
+        };
+        return classes[status] || 'text-bg-secondary';
     }
 
     function renderAssistantMarkdown(target, content) {
@@ -133,15 +151,98 @@
             element('ai-message-list').appendChild(card);
         }
         const badge = card.querySelector('.ai-operation-status');
-        const classes = {
-            running: 'text-bg-primary', completed: 'text-bg-success',
-            failed: 'text-bg-danger', rejected: 'text-bg-secondary'
-        };
-        badge.className = `badge ai-operation-status ${classes[status] || 'text-bg-secondary'}`;
-        badge.textContent = translate(`ai.operation.${status}`, status);
+        badge.className = `badge ai-operation-status ${operationStatusClass(status)}`;
+        badge.textContent = operationStatusLabel(status);
         if (message) card.querySelector('.ai-operation-detail').textContent = message;
         const list = element('ai-message-list');
         list.scrollTop = list.scrollHeight;
+    }
+
+    function appendBackgroundTaskStatus(parent, status) {
+        const badge = document.createElement('span');
+        badge.className = `badge ${operationStatusClass(status)}`;
+        badge.textContent = operationStatusLabel(status);
+        parent.appendChild(badge);
+    }
+
+    function renderBackgroundTasks(tasks) {
+        const list = element('ai-background-task-list');
+        if (!list) return;
+        list.replaceChildren();
+        if (!tasks.length) {
+            const empty = document.createElement('div');
+            empty.className = 'small text-muted';
+            empty.textContent = translate('ai.noBackgroundTasks', 'No AI tasks yet');
+            list.appendChild(empty);
+            return;
+        }
+        tasks.forEach((task) => {
+            const card = document.createElement('div');
+            card.className = 'ai-background-task small';
+            const header = document.createElement('div');
+            header.className = 'd-flex align-items-center justify-content-between gap-2';
+            const label = document.createElement('span');
+            label.className = 'fw-semibold text-truncate';
+            label.textContent = task.tools?.map((tool) => tool.tool_name).join(', ') || task.id;
+            header.appendChild(label);
+            appendBackgroundTaskStatus(header, task.status);
+            card.appendChild(header);
+
+            const tools = document.createElement('div');
+            tools.className = 'ai-background-task-tools mt-2';
+            (task.tools || []).forEach((tool) => {
+                const row = document.createElement('div');
+                row.className = 'd-flex align-items-center justify-content-between gap-2 text-muted';
+                const name = document.createElement('span');
+                name.className = 'text-truncate';
+                name.textContent = tool.tool_name;
+                row.appendChild(name);
+                appendBackgroundTaskStatus(row, tool.status);
+                tools.appendChild(row);
+                if (tool.error) {
+                    const error = document.createElement('div');
+                    error.className = 'text-danger';
+                    error.textContent = tool.error;
+                    tools.appendChild(error);
+                }
+            });
+            if (tools.childElementCount) card.appendChild(tools);
+            if (task.error) {
+                const error = document.createElement('div');
+                error.className = 'text-danger mt-2';
+                error.textContent = task.error;
+                card.appendChild(error);
+            }
+            list.appendChild(card);
+        });
+    }
+
+    async function refreshBackgroundTasks() {
+        if (state.loadingBackgroundTasks) return;
+        state.loadingBackgroundTasks = true;
+        try {
+            const tasks = await jsonResponse(await authFetch('/api/ai/tasks'));
+            renderBackgroundTasks(tasks);
+        } catch (error) {
+            const list = element('ai-background-task-list');
+            if (list) {
+                list.replaceChildren();
+                const message = document.createElement('div');
+                message.className = 'small text-danger';
+                message.textContent = error.message;
+                list.appendChild(message);
+            }
+        } finally {
+            state.loadingBackgroundTasks = false;
+        }
+    }
+
+    function scheduleBackgroundTaskRefresh() {
+        clearTimeout(state.taskViewerTimer);
+        state.taskViewerTimer = setTimeout(async () => {
+            await refreshBackgroundTasks();
+            scheduleBackgroundTaskRefresh();
+        }, 2000);
     }
 
     function approvalTarget(summary) {
@@ -236,13 +337,19 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ decision, arguments_hash: argumentsHash }),
             });
-            await jsonResponse(response);
+            const result = await jsonResponse(response);
             card.querySelector('.fw-semibold').textContent =
-                decision === 'approve'
+                result.status === 'queued'
+                    ? translate('ai.queued', 'Queued')
+                    : decision === 'approve'
                     ? translate('ai.approved', 'Approved')
                     : translate('ai.rejected', 'Rejected');
             card.querySelector('.d-flex')?.remove();
-            setStatus(translate('ai.running', 'AI task is running…'));
+            setStatus(
+                result.status === 'queued'
+                    ? translate('ai.queued', 'Queued')
+                    : translate('ai.running', 'AI task is running…')
+            );
             pollRun();
         } catch (error) {
             setStatus(error.message, true);
@@ -456,19 +563,32 @@
         if (event.type === 'assistant_delta') appendAssistantDelta(payload);
         if (event.type === 'assistant_message') finalizeAssistantMessage(payload);
         if (event.type === 'tool_approval_required') appendToolCard(payload);
+        if (event.type === 'tool_queued') {
+            setStatus(`${translate('ai.queued', 'Queued')}: ${payload.tool_name}`);
+            upsertToolStatus(payload, 'queued');
+            refreshBackgroundTasks();
+        }
         if (event.type === 'tool_started') {
             setStatus(`${translate('ai.runningTool', 'Running tool')}: ${payload.tool_name}`);
             upsertToolStatus(payload, 'running');
+            refreshBackgroundTasks();
         }
         if (event.type === 'tool_progress' && payload.message) {
             setStatus(payload.message);
             upsertToolStatus(payload, 'running', payload.message);
         }
-        if (event.type === 'tool_completed') upsertToolStatus(payload, 'completed');
+        if (event.type === 'tool_completed') {
+            upsertToolStatus(payload, 'completed');
+            refreshBackgroundTasks();
+        }
         if (event.type === 'tool_failed') {
             upsertToolStatus(payload, 'failed', payload.error || payload.result?.error || '');
+            refreshBackgroundTasks();
         }
-        if (event.type === 'tool_rejected') upsertToolStatus(payload, 'rejected');
+        if (event.type === 'tool_rejected') {
+            upsertToolStatus(payload, 'rejected');
+            refreshBackgroundTasks();
+        }
         if (event.type === 'run_waiting_approval') {
             setStatus(translate('ai.waitingApproval', 'Waiting for your approval'));
         }
@@ -485,6 +605,9 @@
             run.tools
                 .filter((tool) => tool.status === 'pending_approval')
                 .forEach(appendToolCard);
+            run.tools
+                .filter((tool) => ['queued', 'running', 'completed', 'failed', 'rejected'].includes(tool.status))
+                .forEach((tool) => upsertToolStatus(tool, tool.status, tool.error || ''));
             if (['completed', 'failed', 'interrupted'].includes(run.status)) {
                 finishRun(run.error || translate('ai.completed', 'Completed'), run.status !== 'completed');
                 return;
@@ -524,8 +647,9 @@
         state.user = user;
         element('ai-assistant-toggle').classList.remove('d-none');
         try {
-            await Promise.all([loadProviderStatus(), loadServers()]);
+            await Promise.all([loadProviderStatus(), loadServers(), refreshBackgroundTasks()]);
             await loadConversations();
+            scheduleBackgroundTaskRefresh();
         } catch (error) {
             setStatus(error.message, true);
         }
@@ -534,6 +658,7 @@
     function bind() {
         element('ai-message-form')?.addEventListener('submit', sendMessage);
         element('ai-new-conversation')?.addEventListener('click', newConversation);
+        element('ai-refresh-background-tasks')?.addEventListener('click', refreshBackgroundTasks);
         element('ai-conversation-select')?.addEventListener('change', (event) => {
             if (event.target.value) openConversation(event.target.value).catch((error) => setStatus(error.message, true));
             else newConversation();

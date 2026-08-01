@@ -402,6 +402,25 @@ body {
     border-left: .25rem solid var(--bs-primary);
 }
 
+.ai-background-task-list {
+    display: grid;
+    gap: .45rem;
+    max-height: 13rem;
+    overflow-y: auto;
+}
+
+.ai-background-task {
+    padding: .5rem .6rem;
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: .4rem;
+    background: var(--bs-body-bg, #fff);
+}
+
+.ai-background-task-tools {
+    display: grid;
+    gap: .2rem;
+}
+
 .ai-tool-arguments {
     max-height: 12rem;
     overflow: auto;

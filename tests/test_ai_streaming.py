@@ -79,3 +79,22 @@ def test_pending_write_tools_open_a_yes_no_approval_prompt():
     assert "'approve', card" in script
     assert "'reject', card" in script
     assert '"approvalPromptTitle": "确认服务器变更"' in chinese
+
+
+def test_write_tool_queue_states_are_rendered_live():
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    chinese = (PROJECT_ROOT / "static" / "locales" / "zh-CN.json").read_text(encoding="utf-8")
+
+    assert "event.type === 'tool_queued'" in script
+    assert "upsertToolStatus(payload, 'queued')" in script
+    assert "result.status === 'queued'" in script
+    assert '"queued": "已排队，等待执行"' in chinese
+
+
+def test_background_task_viewer_refreshes_from_the_task_api():
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    base = (PROJECT_ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+
+    assert "/api/ai/tasks" in script
+    assert "scheduleBackgroundTaskRefresh" in script
+    assert "ai-background-task-list" in base

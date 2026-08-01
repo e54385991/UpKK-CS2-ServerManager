@@ -49,6 +49,7 @@ MAX_TOOL_CALLS_PER_ROUND = 5
 MAX_REPEATED_CALLS = 3
 ACTIVE_RUN_STATUSES = ("queued", "running", "waiting_approval")
 AI_DELTA_EVENT_CHARS = 96
+AI_WRITE_QUEUE_WAIT_SECONDS = 30 * 60
 
 
 async def _emit(run_id: str, event_type: str, payload: dict[str, Any]) -> None:
@@ -131,15 +132,6 @@ async def _execute_tool_run(
     user: User,
     server: Server | None,
 ) -> None:
-    tool_run.status = "running"
-    db.add(tool_run)
-    await db.commit()
-    await _emit(
-        run.id,
-        "tool_started",
-        {"tool_run_id": tool_run.id, "tool_name": tool_run.tool_name},
-    )
-
     async def tool_event(event_type: str, payload: dict[str, Any]) -> None:
         await _emit(
             run.id,
@@ -148,6 +140,17 @@ async def _execute_tool_run(
         )
 
     context = ToolContext(db=db, user=user, server=server, emit=tool_event)
+
+    async def mark_running() -> None:
+        tool_run.status = "running"
+        db.add(tool_run)
+        await db.commit()
+        await _emit(
+            run.id,
+            "tool_started",
+            {"tool_run_id": tool_run.id, "tool_name": tool_run.tool_name},
+        )
+
     try:
         current_user = await db.get(User, user.id)
         if current_user is None or not current_user.is_active:
@@ -158,31 +161,33 @@ async def _execute_tool_run(
                 raise PermissionError("Tool arguments changed after approval")
             if tool_run.approved_by != user.id or tool_run.approved_at is None:
                 raise PermissionError("Tool approval is not bound to the current user")
-            approval_now = get_current_time()
-            if (
-                tool_run.approval_expires_at is not None
-                and tool_run.approval_expires_at.tzinfo is None
-            ):
-                approval_now = approval_now.replace(tzinfo=None)
-            if tool_run.approval_expires_at is None or tool_run.approval_expires_at <= approval_now:
-                raise PermissionError("Tool approval expired before execution")
         if server is not None and server.id is not None:
             server = await authorized_server(db, current_user, server.id)
             context.server = server
         context.user = current_user
         context.run_id = run.id
         if tool_run.risk == "write":
+            await _emit(
+                run.id,
+                "tool_queued",
+                {"tool_run_id": tool_run.id, "tool_name": tool_run.tool_name},
+            )
             # Positive IDs are server locks. A reserved negative namespace gives
             # each principal one cross-process AI write lease without nesting the
-            # same server lock used by the underlying business service.
+            # same server lock used by the underlying business service. The tool
+            # remains queued until it owns the lease, so later approvals wait
+            # instead of failing with an active-write conflict.
             async with maintenance_lock_service.get(
                 -(current_user.id + 1),
                 operation="ai_user_write",
-                wait=False,
+                wait=True,
+                wait_timeout=AI_WRITE_QUEUE_WAIT_SECONDS,
                 ttl=30 * 60,
             ):
+                await mark_running()
                 result = await execute_tool(tool_run.tool_name, tool_run.arguments, context)
         else:
+            await mark_running()
             result = await execute_tool(tool_run.tool_name, tool_run.arguments, context)
     except Exception as exc:
         safe_error = redact_sensitive_text(str(exc), limit=2000)
@@ -230,13 +235,13 @@ async def _resume_decided_tools(db, run: AIRun, user: User, server: Server | Non
         select(AIToolRun)
         .where(
             AIToolRun.run_id == run.id,
-            AIToolRun.status.in_(("approved", "rejected", "pending_approval")),
+            AIToolRun.status.in_(("approved", "queued", "rejected", "pending_approval")),
         )
         .order_by(AIToolRun.created_at.asc(), AIToolRun.id.asc())
     )
     items = list(result.scalars().all())
     for item in items:
-        if item.status == "approved":
+        if item.status in ("approved", "queued"):
             await _execute_tool_run(db, run, item, user, server)
         elif item.status == "rejected":
             if item.completed_at is not None:

@@ -50,6 +50,7 @@ from modules import (
     get_current_admin_user,
     get_db,
 )
+from modules.schemas.ai import AIBackgroundTaskResponse, AIBackgroundTaskToolResponse
 from modules.utils import get_current_time
 from services.ai_access import audit_security_event
 from services.ai_events import ai_event_hub
@@ -594,6 +595,57 @@ async def get_ai_run(
     }
 
 
+@router.get("/api/ai/tasks", response_model=list[AIBackgroundTaskResponse])
+async def list_ai_background_tasks(
+    limit: int = Query(default=30, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list[AIBackgroundTaskResponse]:
+    """Return the caller's recent AI tasks and their non-sensitive tool progress."""
+    run_result = await db.execute(
+        select(AIRun)
+        .where(AIRun.user_id == current_user.id)
+        .order_by(AIRun.updated_at.desc(), AIRun.created_at.desc())
+        .limit(limit)
+    )
+    runs = list(run_result.scalars().all())
+    if not runs:
+        return []
+    run_ids = [run.id for run in runs]
+    tool_result = await db.execute(
+        select(AIToolRun)
+        .where(AIToolRun.run_id.in_(run_ids))
+        .order_by(AIToolRun.created_at.asc(), AIToolRun.id.asc())
+    )
+    tools_by_run: dict[str, list[AIBackgroundTaskToolResponse]] = {}
+    for tool in tool_result.scalars().all():
+        tools_by_run.setdefault(tool.run_id, []).append(
+            AIBackgroundTaskToolResponse(
+                id=tool.id,
+                tool_name=tool.tool_name,
+                risk=tool.risk,
+                status=tool.status,
+                error=tool.error,
+                created_at=tool.created_at,
+                completed_at=tool.completed_at,
+            )
+        )
+    return [
+        AIBackgroundTaskResponse(
+            id=run.id,
+            conversation_id=run.conversation_id,
+            server_id=run.server_id,
+            status=run.status,
+            error=run.error,
+            created_at=run.created_at,
+            updated_at=run.updated_at,
+            completed_at=run.completed_at,
+            tools=tools_by_run.get(run.id, []),
+        )
+        for run in runs
+    ]
+
+
 @router.post("/api/ai/runs/{run_id}/tools/{tool_run_id}")
 async def decide_ai_tool(
     run_id: str,
@@ -654,24 +706,13 @@ async def decide_ai_tool(
         )
     if run.server_id is not None:
         await _server_for_user(db, current_user, run.server_id)
-    if request.decision == "approve":
-        active_write_result = await db.execute(
-            select(func.count())
-            .select_from(AIToolRun)
-            .join(AIRun, AIRun.id == AIToolRun.run_id)
-            .where(
-                AIRun.user_id == current_user.id,
-                AIToolRun.id != item.id,
-                AIToolRun.risk == "write",
-                AIToolRun.status.in_(("approved", "running")),
-            )
-        )
-        if int(active_write_result.scalar_one()):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="This user already has an active AI write task",
-            )
-    item.status = "approved" if request.decision == "approve" else "rejected"
+    item.status = (
+        "queued"
+        if request.decision == "approve" and item.risk == "write"
+        else "approved"
+        if request.decision == "approve"
+        else "rejected"
+    )
     item.approved_by = current_user.id
     item.approved_at = get_current_time()
     db.add(item)
