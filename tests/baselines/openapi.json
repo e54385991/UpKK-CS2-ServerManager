@@ -241,6 +241,32 @@
             ],
             "title": "Base Url"
           },
+          "frequency_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": -2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Penalty"
+          },
+          "max_completion_tokens": {
+            "anyOf": [
+              {
+                "maximum": 32768.0,
+                "minimum": 256.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Completion Tokens"
+          },
           "model": {
             "anyOf": [
               {
@@ -252,6 +278,109 @@
               }
             ],
             "title": "Model"
+          },
+          "parallel_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parallel Tool Calls"
+          },
+          "presence_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": -2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence Penalty"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max",
+                  "ultra"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "token_limit_parameter": {
+            "anyOf": [
+              {
+                "enum": [
+                  "max_completion_tokens",
+                  "max_tokens",
+                  "omit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Limit Parameter"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top P"
+          },
+          "verbosity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verbosity"
           }
         },
         "title": "AIProviderTestRequest",
@@ -262,6 +391,10 @@
           "message": {
             "title": "Message",
             "type": "string"
+          },
+          "streaming_ok": {
+            "title": "Streaming Ok",
+            "type": "boolean"
           },
           "success": {
             "title": "Success",
@@ -280,6 +413,7 @@
           "success",
           "text_response_ok",
           "tool_calling_ok",
+          "streaming_ok",
           "message"
         ],
         "title": "AIProviderTestResponse",
@@ -387,8 +521,23 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "frequency_penalty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Penalty"
+          },
           "history_retention_days": {
             "title": "History Retention Days",
+            "type": "integer"
+          },
+          "max_completion_tokens": {
+            "title": "Max Completion Tokens",
             "type": "integer"
           },
           "model": {
@@ -402,6 +551,28 @@
             ],
             "title": "Model"
           },
+          "parallel_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parallel Tool Calls"
+          },
+          "presence_penalty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence Penalty"
+          },
           "private_endpoint_allowlist": {
             "items": {
               "type": "string"
@@ -413,22 +584,97 @@
             "title": "Provider Tested",
             "type": "boolean"
           },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max",
+                  "ultra"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
           "request_timeout_seconds": {
             "title": "Request Timeout Seconds",
             "type": "integer"
           },
+          "streaming_tested": {
+            "title": "Streaming Tested",
+            "type": "boolean"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "token_limit_parameter": {
+            "enum": [
+              "max_completion_tokens",
+              "max_tokens",
+              "omit"
+            ],
+            "title": "Token Limit Parameter",
+            "type": "string"
+          },
           "tool_calling_tested": {
             "title": "Tool Calling Tested",
             "type": "boolean"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top P"
+          },
+          "verbosity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verbosity"
           }
         },
         "required": [
           "enabled",
           "api_key_configured",
+          "max_completion_tokens",
+          "token_limit_parameter",
           "request_timeout_seconds",
           "history_retention_days",
           "provider_tested",
-          "tool_calling_tested"
+          "tool_calling_tested",
+          "streaming_tested"
         ],
         "title": "AISystemSettingsResponse",
         "type": "object"
@@ -487,10 +733,23 @@
             ],
             "title": "Enabled"
           },
+          "frequency_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": -2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Penalty"
+          },
           "history_retention_days": {
             "anyOf": [
               {
-                "maximum": 365.0,
+                "maximum": 7.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -499,6 +758,19 @@
               }
             ],
             "title": "History Retention Days"
+          },
+          "max_completion_tokens": {
+            "anyOf": [
+              {
+                "maximum": 32768.0,
+                "minimum": 256.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Completion Tokens"
           },
           "model": {
             "anyOf": [
@@ -511,6 +783,30 @@
               }
             ],
             "title": "Model"
+          },
+          "parallel_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parallel Tool Calls"
+          },
+          "presence_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": -2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence Penalty"
           },
           "private_endpoint_allowlist": {
             "anyOf": [
@@ -526,6 +822,27 @@
             ],
             "title": "Private Endpoint Allowlist"
           },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max",
+                  "ultra"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
           "request_timeout_seconds": {
             "anyOf": [
               {
@@ -538,6 +855,64 @@
               }
             ],
             "title": "Request Timeout Seconds"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "token_limit_parameter": {
+            "anyOf": [
+              {
+                "enum": [
+                  "max_completion_tokens",
+                  "max_tokens",
+                  "omit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Limit Parameter"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top P"
+          },
+          "verbosity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verbosity"
           }
         },
         "title": "AISystemSettingsUpdate",
@@ -7472,6 +7847,21 @@
             "title": "Effective Source",
             "type": "string"
           },
+          "frequency_penalty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Penalty"
+          },
+          "max_completion_tokens": {
+            "title": "Max Completion Tokens",
+            "type": "integer"
+          },
           "mode": {
             "enum": [
               "global",
@@ -7491,20 +7881,117 @@
             ],
             "title": "Model"
           },
+          "parallel_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parallel Tool Calls"
+          },
+          "presence_penalty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence Penalty"
+          },
           "provider_tested": {
             "title": "Provider Tested",
             "type": "boolean"
           },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max",
+                  "ultra"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "streaming_tested": {
+            "title": "Streaming Tested",
+            "type": "boolean"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "token_limit_parameter": {
+            "enum": [
+              "max_completion_tokens",
+              "max_tokens",
+              "omit"
+            ],
+            "title": "Token Limit Parameter",
+            "type": "string"
+          },
           "tool_calling_tested": {
             "title": "Tool Calling Tested",
             "type": "boolean"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top P"
+          },
+          "verbosity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verbosity"
           }
         },
         "required": [
           "mode",
           "api_key_configured",
+          "max_completion_tokens",
+          "token_limit_parameter",
           "provider_tested",
           "tool_calling_tested",
+          "streaming_tested",
           "effective_enabled",
           "effective_source"
         ],
@@ -7542,6 +8029,32 @@
             "title": "Clear Api Key",
             "type": "boolean"
           },
+          "frequency_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": -2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Penalty"
+          },
+          "max_completion_tokens": {
+            "anyOf": [
+              {
+                "maximum": 32768.0,
+                "minimum": 256.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Completion Tokens"
+          },
           "mode": {
             "default": "global",
             "enum": [
@@ -7562,6 +8075,109 @@
               }
             ],
             "title": "Model"
+          },
+          "parallel_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parallel Tool Calls"
+          },
+          "presence_penalty": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": -2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence Penalty"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max",
+                  "ultra"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "token_limit_parameter": {
+            "anyOf": [
+              {
+                "enum": [
+                  "max_completion_tokens",
+                  "max_tokens",
+                  "omit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Limit Parameter"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top P"
+          },
+          "verbosity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verbosity"
           }
         },
         "title": "UserAISettingsUpdate",
@@ -8128,6 +8744,62 @@
           }
         ],
         "summary": "Get Ai Run",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/ai/runs/{run_id}/events/stream": {
+      "get": {
+        "operationId": "ai_run_event_stream_api_ai_runs__run_id__events_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Ai Run Event Stream",
         "tags": [
           "ai-assistant"
         ]

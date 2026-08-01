@@ -354,6 +354,14 @@
     "path": "/api/ai/runs/{run_id}/tools/{tool_run_id}"
   },
   {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "ai_run_event_stream",
+    "path": "/api/ai/runs/{run_id}/events/stream"
+  },
+  {
     "kind": "APIWebSocketRoute",
     "methods": [],
     "name": "ai_run_events",

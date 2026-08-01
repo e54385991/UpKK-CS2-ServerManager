@@ -11,6 +11,8 @@ const assets = [
   ["node_modules/bootstrap-icons/font/fonts/bootstrap-icons.woff", "static/fonts/bootstrap-icons.woff"],
   ["node_modules/bootstrap-icons/font/fonts/bootstrap-icons.woff2", "static/fonts/bootstrap-icons.woff2"],
   ["node_modules/alpinejs/dist/cdn.min.js", "static/js/alpine.min.js"],
+  ["node_modules/marked/lib/marked.umd.js", "static/js/marked.umd.js"],
+  ["node_modules/dompurify/dist/purify.min.js", "static/js/purify.min.js"],
   ["node_modules/@xterm/xterm/css/xterm.css", "static/xterm/xterm.css"],
   ["node_modules/@xterm/xterm/css/xterm.css", "static/css/xterm.css"],
   ["node_modules/@xterm/xterm/lib/xterm.js", "static/xterm/xterm.js"],

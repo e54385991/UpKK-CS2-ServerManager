@@ -243,6 +243,73 @@
                                     <label class="form-check-label" for="profile-ai-clear-key" data-i18n="ai.clearKey">Remove saved key</label>
                                 </div>
                             </div>
+                            <div class="col-12">
+                                <details class="border rounded p-3">
+                                    <summary class="fw-semibold" data-i18n="ai.advancedParameters">Advanced model parameters</summary>
+                                    <div class="row g-3 mt-1">
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="profile-ai-reasoning" data-i18n="ai.reasoningEffort">Reasoning effort</label>
+                                            <select class="form-select" id="profile-ai-reasoning">
+                                                <option value="" data-i18n="ai.providerDefault">Provider/model default</option>
+                                                <option value="none">none</option>
+                                                <option value="minimal">minimal</option>
+                                                <option value="low">low</option>
+                                                <option value="medium">medium</option>
+                                                <option value="high">high</option>
+                                                <option value="xhigh">xhigh</option>
+                                                <option value="max">max</option>
+                                                <option value="ultra">ultra</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="profile-ai-verbosity" data-i18n="ai.verbosity">Response verbosity</label>
+                                            <select class="form-select" id="profile-ai-verbosity">
+                                                <option value="" data-i18n="ai.providerDefault">Provider/model default</option>
+                                                <option value="low">low</option>
+                                                <option value="medium">medium</option>
+                                                <option value="high">high</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="profile-ai-max-tokens" data-i18n="ai.maxCompletionTokens">Maximum completion tokens</label>
+                                            <input class="form-control" id="profile-ai-max-tokens" type="number" min="256" max="32768" value="2048">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="profile-ai-token-field" data-i18n="ai.tokenLimitParameter">Token limit field</label>
+                                            <select class="form-select" id="profile-ai-token-field">
+                                                <option value="max_completion_tokens">max_completion_tokens</option>
+                                                <option value="max_tokens">max_tokens (legacy)</option>
+                                                <option value="omit" data-i18n="ai.omitParameter">Do not send</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="profile-ai-temperature" data-i18n="ai.temperature">Temperature</label>
+                                            <input class="form-control" id="profile-ai-temperature" type="number" min="0" max="2" step="0.1" placeholder="Default">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="profile-ai-top-p">top_p</label>
+                                            <input class="form-control" id="profile-ai-top-p" type="number" min="0" max="1" step="0.05" placeholder="Default">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="profile-ai-parallel-tools" data-i18n="ai.parallelToolCalls">Parallel tool calls</label>
+                                            <select class="form-select" id="profile-ai-parallel-tools">
+                                                <option value="" data-i18n="ai.providerDefault">Provider/model default</option>
+                                                <option value="true" data-i18n="ai.enabledOption">Enabled</option>
+                                                <option value="false" data-i18n="ai.disabledOption">Disabled</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label" for="profile-ai-frequency-penalty" data-i18n="ai.frequencyPenalty">Frequency penalty</label>
+                                            <input class="form-control" id="profile-ai-frequency-penalty" type="number" min="-2" max="2" step="0.1" placeholder="Default">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label" for="profile-ai-presence-penalty" data-i18n="ai.presencePenalty">Presence penalty</label>
+                                            <input class="form-control" id="profile-ai-presence-penalty" type="number" min="-2" max="2" step="0.1" placeholder="Default">
+                                        </div>
+                                        <div class="col-12 form-text" data-i18n="ai.modelParametersHint">Unsupported parameters are omitted when left at default. Set either temperature or top_p, not both. ultra is a compatibility extension and is not supported by official OpenAI models.</div>
+                                    </div>
+                                </details>
+                            </div>
                         </div>
                     </div>
                     <div class="d-flex gap-2 mt-3">
@@ -382,6 +449,16 @@ function showProfileAIResult(message, success) {
     target.className = `alert ${success ? 'alert-success' : 'alert-danger'}`;
 }
 
+function profileAIOptionalNumber(id) {
+    const value = document.getElementById(id).value.trim();
+    return value === '' ? null : Number(value);
+}
+
+function profileAIOptionalBoolean(id) {
+    const value = document.getElementById(id).value;
+    return value === '' ? null : value === 'true';
+}
+
 function updateProfileAIMode() {
     const custom = document.getElementById('profile-ai-mode').value === 'custom';
     document.getElementById('profile-ai-custom-fields').style.display = custom ? 'block' : 'none';
@@ -395,13 +472,23 @@ async function loadUserAISettings() {
     document.getElementById('profile-ai-mode').value = data.mode;
     document.getElementById('profile-ai-base-url').value = data.base_url || '';
     document.getElementById('profile-ai-model').value = data.model || '';
+    document.getElementById('profile-ai-reasoning').value = data.reasoning_effort || '';
+    document.getElementById('profile-ai-temperature').value = data.temperature ?? '';
+    document.getElementById('profile-ai-top-p').value = data.top_p ?? '';
+    document.getElementById('profile-ai-max-tokens').value = data.max_completion_tokens || 2048;
+    document.getElementById('profile-ai-token-field').value = data.token_limit_parameter || 'max_completion_tokens';
+    document.getElementById('profile-ai-frequency-penalty').value = data.frequency_penalty ?? '';
+    document.getElementById('profile-ai-presence-penalty').value = data.presence_penalty ?? '';
+    document.getElementById('profile-ai-verbosity').value = data.verbosity || '';
+    document.getElementById('profile-ai-parallel-tools').value = data.parallel_tool_calls == null
+        ? '' : String(data.parallel_tool_calls);
     document.getElementById('profile-ai-key').value = '';
     document.getElementById('profile-ai-clear-key').checked = false;
     document.getElementById('profile-ai-key-status').textContent = data.api_key_configured
         ? (window.i18n?.t('ai.keyConfigured') || 'A key is configured')
         : (window.i18n?.t('ai.keyMissing') || 'No key configured');
     document.getElementById('profile-ai-test-state').textContent =
-        `Text: ${data.provider_tested ? '✓' : '—'} · tool_calls: ${data.tool_calling_tested ? '✓' : '—'} · ` +
+        `SSE: ${data.streaming_tested ? '✓' : '—'} · Text: ${data.provider_tested ? '✓' : '—'} · tool_calls: ${data.tool_calling_tested ? '✓' : '—'} · ` +
         (data.effective_enabled ? (window.i18n?.t('ai.providerReady') || 'Provider ready') : (window.i18n?.t('ai.providerUnavailable') || 'Unavailable'));
     updateProfileAIMode();
 }
@@ -413,6 +500,15 @@ document.getElementById('profile-ai-form').addEventListener('submit', async (eve
         mode: document.getElementById('profile-ai-mode').value,
         base_url: document.getElementById('profile-ai-base-url').value.trim() || null,
         model: document.getElementById('profile-ai-model').value.trim() || null,
+        reasoning_effort: document.getElementById('profile-ai-reasoning').value || null,
+        temperature: profileAIOptionalNumber('profile-ai-temperature'),
+        top_p: profileAIOptionalNumber('profile-ai-top-p'),
+        max_completion_tokens: Number(document.getElementById('profile-ai-max-tokens').value),
+        token_limit_parameter: document.getElementById('profile-ai-token-field').value,
+        frequency_penalty: profileAIOptionalNumber('profile-ai-frequency-penalty'),
+        presence_penalty: profileAIOptionalNumber('profile-ai-presence-penalty'),
+        verbosity: document.getElementById('profile-ai-verbosity').value || null,
+        parallel_tool_calls: profileAIOptionalBoolean('profile-ai-parallel-tools'),
         clear_api_key: document.getElementById('profile-ai-clear-key').checked,
     };
     const key = document.getElementById('profile-ai-key').value.trim();

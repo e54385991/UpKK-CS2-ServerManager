@@ -15,6 +15,7 @@ from modules.utils import get_current_time
 from services.ai_orchestrator import interrupt_active_ai_runs
 
 logger = logging.getLogger(__name__)
+MAX_AI_HISTORY_RETENTION_DAYS = 7
 
 
 class AIRetentionService:
@@ -55,7 +56,11 @@ class AIRetentionService:
     async def cleanup_once(self) -> int:
         async with async_session_maker() as db:
             settings = await AISystemSettings.get_or_create(db)
-            cutoff = get_current_time() - timedelta(days=settings.history_retention_days)
+            retention_days = min(
+                max(1, settings.history_retention_days),
+                MAX_AI_HISTORY_RETENTION_DAYS,
+            )
+            cutoff = get_current_time() - timedelta(days=retention_days)
             result = await db.execute(
                 select(AIConversation).where(AIConversation.updated_at < cutoff)
             )

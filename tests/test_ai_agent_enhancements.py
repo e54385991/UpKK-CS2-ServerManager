@@ -9,8 +9,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.dialects import mysql
+from sqlalchemy.schema import CreateTable
 
-from modules.models import AIToolRun, MarketPlugin
+from modules.models import AIToolRun, ManagedPluginFile, MarketPlugin
 from modules.utils import get_current_time
 from services.ai_tools import TOOLS_BY_NAME, _safe_css_log_name
 from services.github_plugin_plan_service import (
@@ -262,3 +264,10 @@ def test_write_approval_and_rollback_are_revision_bound():
     assert "--no-dereference" in backup
     assert "manifest.tsv" in rollback
     assert "--remove-destination" in rollback
+
+
+def test_managed_plugin_file_unique_key_uses_fixed_size_path_digest():
+    ddl = str(CreateTable(ManagedPluginFile.__table__).compile(dialect=mysql.dialect()))
+
+    assert "UNIQUE (managed_plugin_id, path_hash)" in ddl
+    assert "UNIQUE (managed_plugin_id, relative_path)" not in ddl

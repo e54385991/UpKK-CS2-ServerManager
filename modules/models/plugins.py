@@ -272,7 +272,7 @@ class ManagedPluginFile(SQLModel, table=True):
 
     __tablename__ = "managed_plugin_files"
     __table_args__ = (
-        UniqueConstraint("managed_plugin_id", "relative_path", name="uq_managed_plugin_file"),
+        UniqueConstraint("managed_plugin_id", "path_hash", name="uq_managed_plugin_file"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -285,6 +285,7 @@ class ManagedPluginFile(SQLModel, table=True):
         )
     )
     relative_path: str = Field(max_length=1000)
+    path_hash: str = Field(max_length=64)
     sha256: str = Field(max_length=64)
     file_role: str = Field(default="data", max_length=32)
     preserved: bool = Field(default=False)

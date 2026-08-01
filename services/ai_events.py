@@ -15,12 +15,14 @@ from services.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
 AI_EVENT_TTL_SECONDS = 24 * 60 * 60
-AI_EVENT_LIMIT = 500
+AI_EVENT_LIMIT = 2000
+AI_SUBSCRIBER_QUEUE_LIMIT = 256
 
 
 class AIEventHub:
     def __init__(self) -> None:
         self._clients: dict[str, set[WebSocket]] = defaultdict(set)
+        self._queues: dict[str, set[asyncio.Queue]] = defaultdict(set)
         self._lock = asyncio.Lock()
 
     async def subscribe(self, run_id: str, websocket: WebSocket) -> None:
@@ -36,11 +38,26 @@ class AIEventHub:
             if not clients:
                 self._clients.pop(run_id, None)
 
+    async def subscribe_queue(self, run_id: str) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=AI_SUBSCRIBER_QUEUE_LIMIT)
+        async with self._lock:
+            self._queues[run_id].add(queue)
+        return queue
+
+    async def unsubscribe_queue(self, run_id: str, queue: asyncio.Queue) -> None:
+        async with self._lock:
+            queues = self._queues.get(run_id)
+            if queues is None:
+                return
+            queues.discard(queue)
+            if not queues:
+                self._queues.pop(run_id, None)
+
     async def emit(
         self, run_id: str, event_type: str, payload: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         event = {
-            "sequence": time.time_ns(),
+            "sequence": str(time.time_ns()),
             "run_id": run_id,
             "type": event_type,
             "payload": payload or {},
@@ -58,6 +75,17 @@ class AIEventHub:
 
         async with self._lock:
             clients = list(self._clients.get(run_id, set()))
+            queues = list(self._queues.get(run_id, set()))
+        for queue in queues:
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                logger.warning("AI SSE subscriber for run %s is not keeping up", run_id)
         failed: list[WebSocket] = []
         for client in clients:
             try:

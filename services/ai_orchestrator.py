@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections import Counter
 from datetime import timedelta
 from typing import Any
@@ -47,10 +48,38 @@ MAX_PROVIDER_ROUNDS = 8
 MAX_TOOL_CALLS_PER_ROUND = 5
 MAX_REPEATED_CALLS = 3
 ACTIVE_RUN_STATUSES = ("queued", "running", "waiting_approval")
+AI_DELTA_EVENT_CHARS = 96
 
 
 async def _emit(run_id: str, event_type: str, payload: dict[str, Any]) -> None:
     await ai_event_hub.emit(run_id, event_type, payload)
+
+
+class _AssistantDeltaEmitter:
+    """Coalesce provider tokens into bounded, responsive browser events."""
+
+    def __init__(self, run_id: str, round_index: int) -> None:
+        self.run_id = run_id
+        self.round_index = round_index
+        self.buffer = ""
+        self.last_emit = time.monotonic()
+
+    async def add(self, delta: str) -> None:
+        self.buffer += delta
+        now = time.monotonic()
+        if len(self.buffer) >= AI_DELTA_EVENT_CHARS or now - self.last_emit >= 0.1:
+            await self.flush()
+
+    async def flush(self) -> None:
+        if not self.buffer:
+            return
+        delta, self.buffer = self.buffer, ""
+        self.last_emit = time.monotonic()
+        await _emit(
+            self.run_id,
+            "assistant_delta",
+            {"round": self.round_index, "delta": delta},
+        )
 
 
 async def _fail_run(db, run: AIRun, message: str) -> None:
@@ -311,11 +340,18 @@ async def process_ai_run(run_id: str) -> None:
                 messages = await _load_provider_messages(
                     db, conversation, user, server, provider.admin_prompt
                 )
-                response = await create_chat_completion(
-                    provider,
-                    messages,
-                    tools=tool_definitions(server_selected=server is not None),
-                )
+                round_index = rounds_used + 1
+                delta_emitter = _AssistantDeltaEmitter(run.id, round_index)
+                try:
+                    response = await create_chat_completion(
+                        provider,
+                        messages,
+                        tools=tool_definitions(server_selected=server is not None),
+                        stream=True,
+                        on_text_delta=delta_emitter.add,
+                    )
+                finally:
+                    await delta_emitter.flush()
                 rounds_used += 1
                 content = redact_sensitive_text(str(response.get("content") or ""), limit=20_000)
                 calls = response.get("tool_calls")
@@ -339,7 +375,11 @@ async def process_ai_run(run_id: str) -> None:
                     await _emit(
                         run.id,
                         "assistant_message",
-                        {"message_id": assistant.id, "content": content},
+                        {
+                            "message_id": assistant.id,
+                            "round": round_index,
+                            "content": content,
+                        },
                     )
                     await _emit(run.id, "run_completed", {"status": run.status})
                     return
@@ -388,15 +428,14 @@ async def process_ai_run(run_id: str) -> None:
                         raise AIProviderError(f"Repeated tool-call loop detected for {name}")
                     normalized_calls.append((raw_call, name, clean_arguments, arguments_hash))
 
-                db.add(
-                    AIMessage(
-                        conversation_id=conversation.id,
-                        role="assistant",
-                        content=content or None,
-                        tool_calls=calls,
-                        visible=bool(content.strip()),
-                    )
+                assistant_turn = AIMessage(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=content or None,
+                    tool_calls=calls,
+                    visible=bool(content.strip()),
                 )
+                db.add(assistant_turn)
                 created: list[AIToolRun] = []
                 for raw_call, name, arguments, arguments_hash in normalized_calls:
                     spec = TOOLS_BY_NAME[name]
@@ -418,8 +457,19 @@ async def process_ai_run(run_id: str) -> None:
                     db.add(item)
                     created.append(item)
                 await db.commit()
+                await db.refresh(assistant_turn)
                 for item in created:
                     await db.refresh(item)
+                if content.strip():
+                    await _emit(
+                        run.id,
+                        "assistant_message",
+                        {
+                            "message_id": assistant_turn.id,
+                            "round": round_index,
+                            "content": content,
+                        },
+                    )
 
                 for item in created:
                     if item.requires_approval:

@@ -953,6 +953,7 @@ async def _execute_github_install_plan_locked(
                 ManagedPluginFile(
                     managed_plugin_id=managed.id,
                     relative_path=path,
+                    path_hash=hashlib.sha256(path.encode("utf-8")).hexdigest(),
                     sha256=(
                         item["target_revision"]
                         if preserved

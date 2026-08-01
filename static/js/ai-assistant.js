@@ -8,10 +8,11 @@
         fixedServerId: null,
         conversationId: null,
         runId: null,
-        socket: null,
+        eventAbortController: null,
         reconnectTimer: null,
         pollTimer: null,
-        lastSequence: 0,
+        lastSequence: '0',
+        streamedMessages: new Map(),
     };
 
     const element = (id) => document.getElementById(id);
@@ -40,13 +41,106 @@
         element('ai-run-status')?.classList.add('d-none');
     }
 
-    function appendMessage(role, content) {
-        if (!content) return;
+    function renderAssistantMarkdown(target, content) {
+        target._aiMarkdownSource = content;
+        if (!window.marked || !window.DOMPurify) {
+            target.textContent = content;
+            return;
+        }
+        const rendered = window.marked.parse(content, { gfm: true, breaks: true });
+        target.innerHTML = window.DOMPurify.sanitize(rendered, {
+            USE_PROFILES: { html: true },
+            FORBID_TAGS: [
+                'style', 'iframe', 'object', 'embed', 'form', 'input', 'button',
+                'textarea', 'select', 'img', 'video', 'audio', 'source', 'svg', 'math'
+            ],
+            FORBID_ATTR: ['style', 'srcset'],
+        });
+        target.querySelectorAll('a').forEach((link) => {
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer nofollow';
+        });
+    }
+
+    function appendMessage(role, content, allowEmpty = false) {
+        if (!content && !allowEmpty) return null;
         const list = element('ai-message-list');
         const item = document.createElement('div');
         item.className = `ai-message ai-message-${role}`;
-        item.textContent = content;
+        if (role === 'assistant') renderAssistantMarkdown(item, content || '');
+        else item.textContent = content;
         list.appendChild(item);
+        list.scrollTop = list.scrollHeight;
+        return item;
+    }
+
+    function streamKey(payload) {
+        return `${state.runId || 'run'}:${payload.round || 0}`;
+    }
+
+    function appendAssistantDelta(payload) {
+        if (typeof payload.delta !== 'string' || !payload.delta) return;
+        const key = streamKey(payload);
+        let streamed = state.streamedMessages.get(key);
+        if (!streamed) {
+            const item = appendMessage('assistant', '', true);
+            item.classList.add('ai-message-streaming');
+            streamed = { item, content: '' };
+            state.streamedMessages.set(key, streamed);
+        }
+        streamed.content += payload.delta;
+        renderAssistantMarkdown(streamed.item, streamed.content);
+        const list = element('ai-message-list');
+        list.scrollTop = list.scrollHeight;
+    }
+
+    function finalizeAssistantMessage(payload) {
+        const content = typeof payload.content === 'string' ? payload.content : '';
+        const key = streamKey(payload);
+        const streamed = state.streamedMessages.get(key);
+        if (!streamed) {
+            appendMessage('assistant', content);
+            return;
+        }
+        streamed.content = content;
+        renderAssistantMarkdown(streamed.item, content);
+        streamed.item.classList.remove('ai-message-streaming');
+        state.streamedMessages.delete(key);
+    }
+
+    function upsertToolStatus(payload, status, message = '') {
+        const id = payload.tool_run_id || payload.id;
+        if (!id) return;
+        let card = element(`ai-operation-${id}`);
+        if (!card) {
+            card = document.createElement('div');
+            card.id = `ai-operation-${id}`;
+            card.className = 'card ai-operation-card mb-2';
+            const body = document.createElement('div');
+            body.className = 'card-body p-2';
+            const header = document.createElement('div');
+            header.className = 'd-flex justify-content-between gap-2 small';
+            const name = document.createElement('span');
+            name.className = 'fw-semibold ai-operation-name';
+            name.textContent = payload.tool_name || translate('ai.runningTool', 'Running tool');
+            const badge = document.createElement('span');
+            badge.className = 'badge ai-operation-status';
+            header.append(name, badge);
+            const detail = document.createElement('div');
+            detail.className = 'small text-muted mt-1 ai-operation-detail';
+            body.append(header, detail);
+            card.appendChild(body);
+            element('ai-message-list').appendChild(card);
+        }
+        const badge = card.querySelector('.ai-operation-status');
+        const classes = {
+            running: 'text-bg-primary', completed: 'text-bg-success',
+            failed: 'text-bg-danger', rejected: 'text-bg-secondary'
+        };
+        badge.className = `badge ai-operation-status ${classes[status] || 'text-bg-secondary'}`;
+        badge.textContent = translate(`ai.operation.${status}`, status);
+        if (message) card.querySelector('.ai-operation-detail').textContent = message;
+        const list = element('ai-message-list');
         list.scrollTop = list.scrollHeight;
     }
 
@@ -185,6 +279,7 @@
         }
         const list = element('ai-message-list');
         list.replaceChildren();
+        state.streamedMessages.clear();
         conversation.messages.forEach((message) => appendMessage(message.role, message.content));
         clearStatus();
     }
@@ -194,6 +289,7 @@
         state.conversationId = null;
         element('ai-conversation-select').value = '';
         element('ai-message-list').replaceChildren();
+        state.streamedMessages.clear();
         clearStatus();
     }
 
@@ -229,7 +325,7 @@
             });
             const run = await jsonResponse(response);
             state.runId = run.id;
-            state.lastSequence = 0;
+            state.lastSequence = '0';
             setStatus(translate('ai.running', 'AI task is running…'));
             connectEvents();
             pollRun();
@@ -239,39 +335,98 @@
         }
     }
 
-    function connectEvents() {
-        if (!state.runId) return;
-        state.socket?.close();
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const socket = new WebSocket(
-            `${protocol}//${window.location.host}/api/ai/runs/${state.runId}/events?after=${state.lastSequence}`
-        );
-        state.socket = socket;
-        socket.addEventListener('message', (event) => {
-            const message = JSON.parse(event.data);
-            state.lastSequence = Math.max(state.lastSequence, Number(message.sequence || 0));
-            handleRunEvent(message);
+    function rememberSequence(value) {
+        const sequence = String(value || '0');
+        try {
+            if (BigInt(sequence) > BigInt(state.lastSequence)) state.lastSequence = sequence;
+        } catch (_error) {
+            // Ignore malformed sequence values from an incompatible intermediary.
+        }
+    }
+
+    function parseSSEBlock(block) {
+        const data = [];
+        block.split(/\r?\n/).forEach((line) => {
+            if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
         });
-        socket.addEventListener('close', () => {
-            if (state.runId) {
+        if (!data.length) return;
+        const event = JSON.parse(data.join('\n'));
+        rememberSequence(event.sequence);
+        handleRunEvent(event);
+    }
+
+    async function consumeSSE(response, signal) {
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('Streaming response body is unavailable');
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (!signal.aborted) {
+            const { value, done } = await reader.read();
+            buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+            let match = buffer.match(/\r?\n\r?\n/);
+            while (match && match.index != null) {
+                const block = buffer.slice(0, match.index);
+                buffer = buffer.slice(match.index + match[0].length);
+                if (block) parseSSEBlock(block);
+                match = buffer.match(/\r?\n\r?\n/);
+            }
+            if (done) break;
+        }
+    }
+
+    async function connectEvents() {
+        if (!state.runId) return;
+        state.eventAbortController?.abort();
+        const controller = new AbortController();
+        const watchedRunId = state.runId;
+        state.eventAbortController = controller;
+        try {
+            const response = await authFetch(
+                `/api/ai/runs/${watchedRunId}/events/stream?after=${encodeURIComponent(state.lastSequence)}`,
+                { headers: { Accept: 'text/event-stream' }, signal: controller.signal }
+            );
+            if (!response.ok) await jsonResponse(response);
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('text/event-stream')) {
+                throw new Error('Server did not return an SSE event stream');
+            }
+            await consumeSSE(response, controller.signal);
+        } catch (error) {
+            if (error.name !== 'AbortError' && state.runId === watchedRunId) {
+                setStatus(error.message, true);
+            }
+        } finally {
+            if (state.eventAbortController === controller) state.eventAbortController = null;
+            if (!controller.signal.aborted && state.runId === watchedRunId) {
                 clearTimeout(state.reconnectTimer);
                 state.reconnectTimer = setTimeout(connectEvents, 1500);
             }
-        });
+        }
     }
 
     function handleRunEvent(event) {
         const payload = event.payload || {};
-        if (event.type === 'assistant_message') appendMessage('assistant', payload.content);
+        if (event.type === 'assistant_delta') appendAssistantDelta(payload);
+        if (event.type === 'assistant_message') finalizeAssistantMessage(payload);
         if (event.type === 'tool_approval_required') appendToolCard(payload);
         if (event.type === 'tool_started') {
             setStatus(`${translate('ai.runningTool', 'Running tool')}: ${payload.tool_name}`);
+            upsertToolStatus(payload, 'running');
         }
-        if (event.type === 'tool_progress' && payload.message) setStatus(payload.message);
+        if (event.type === 'tool_progress' && payload.message) {
+            setStatus(payload.message);
+            upsertToolStatus(payload, 'running', payload.message);
+        }
+        if (event.type === 'tool_completed') upsertToolStatus(payload, 'completed');
+        if (event.type === 'tool_failed') {
+            upsertToolStatus(payload, 'failed', payload.error || payload.result?.error || '');
+        }
+        if (event.type === 'tool_rejected') upsertToolStatus(payload, 'rejected');
         if (event.type === 'run_waiting_approval') {
             setStatus(translate('ai.waitingApproval', 'Waiting for your approval'));
         }
         if (event.type === 'run_failed') finishRun(payload.error, true);
+        if (event.type === 'run_interrupted') finishRun(payload.error || 'Interrupted', true);
         if (event.type === 'run_completed') finishRun(translate('ai.completed', 'Completed'));
     }
 
@@ -312,11 +467,8 @@
         state.runId = null;
         clearTimeout(state.reconnectTimer);
         clearTimeout(state.pollTimer);
-        if (state.socket) {
-            state.socket.onclose = null;
-            state.socket.close();
-            state.socket = null;
-        }
+        state.eventAbortController?.abort();
+        state.eventAbortController = null;
     }
 
     async function initialize(user) {

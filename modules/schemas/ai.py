@@ -5,8 +5,30 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from sqlmodel import Field, SQLModel
+
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
+Verbosity = Literal["low", "medium", "high"]
+TokenLimitParameter = Literal["max_completion_tokens", "max_tokens", "omit"]
+
+
+class AIModelParameters(SQLModel):
+    reasoning_effort: Optional[ReasoningEffort] = None
+    temperature: Optional[float] = Field(default=None, ge=0, le=2)
+    top_p: Optional[float] = Field(default=None, ge=0, le=1)
+    max_completion_tokens: Optional[int] = Field(default=None, ge=256, le=32768)
+    token_limit_parameter: Optional[TokenLimitParameter] = None
+    frequency_penalty: Optional[float] = Field(default=None, ge=-2, le=2)
+    presence_penalty: Optional[float] = Field(default=None, ge=-2, le=2)
+    verbosity: Optional[Verbosity] = None
+    parallel_tool_calls: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def use_one_sampling_control(self) -> "AIModelParameters":
+        if self.temperature is not None and self.top_p is not None:
+            raise ValueError("Set temperature or top_p, not both")
+        return self
 
 
 class AISystemSettingsResponse(SQLModel):
@@ -16,13 +38,23 @@ class AISystemSettingsResponse(SQLModel):
     api_key_configured: bool
     admin_prompt: Optional[str] = None
     private_endpoint_allowlist: list[str] = Field(default_factory=list)
+    reasoning_effort: Optional[ReasoningEffort] = None
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_completion_tokens: int
+    token_limit_parameter: TokenLimitParameter
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    verbosity: Optional[Verbosity] = None
+    parallel_tool_calls: Optional[bool] = None
     request_timeout_seconds: int
     history_retention_days: int
     provider_tested: bool
     tool_calling_tested: bool
+    streaming_tested: bool
 
 
-class AISystemSettingsUpdate(SQLModel):
+class AISystemSettingsUpdate(AIModelParameters):
     enabled: Optional[bool] = None
     base_url: Optional[str] = Field(default=None, max_length=500)
     model: Optional[str] = Field(default=None, max_length=255)
@@ -31,7 +63,7 @@ class AISystemSettingsUpdate(SQLModel):
     admin_prompt: Optional[str] = Field(default=None, max_length=8000)
     private_endpoint_allowlist: Optional[list[str]] = None
     request_timeout_seconds: Optional[int] = Field(default=None, ge=5, le=120)
-    history_retention_days: Optional[int] = Field(default=None, ge=1, le=365)
+    history_retention_days: Optional[int] = Field(default=None, ge=1, le=7)
 
 
 class UserAISettingsResponse(SQLModel):
@@ -39,13 +71,23 @@ class UserAISettingsResponse(SQLModel):
     base_url: Optional[str] = None
     model: Optional[str] = None
     api_key_configured: bool
+    reasoning_effort: Optional[ReasoningEffort] = None
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_completion_tokens: int
+    token_limit_parameter: TokenLimitParameter
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    verbosity: Optional[Verbosity] = None
+    parallel_tool_calls: Optional[bool] = None
     provider_tested: bool
     tool_calling_tested: bool
+    streaming_tested: bool
     effective_enabled: bool
     effective_source: Literal["global", "custom", "none"]
 
 
-class UserAISettingsUpdate(SQLModel):
+class UserAISettingsUpdate(AIModelParameters):
     mode: Literal["global", "custom"] = "global"
     base_url: Optional[str] = Field(default=None, max_length=500)
     model: Optional[str] = Field(default=None, max_length=255)
@@ -53,7 +95,7 @@ class UserAISettingsUpdate(SQLModel):
     clear_api_key: bool = False
 
 
-class AIProviderTestRequest(SQLModel):
+class AIProviderTestRequest(AIModelParameters):
     base_url: Optional[str] = Field(default=None, max_length=500)
     model: Optional[str] = Field(default=None, max_length=255)
     api_key: Optional[str] = Field(default=None, max_length=4096)
@@ -63,6 +105,7 @@ class AIProviderTestResponse(SQLModel):
     success: bool
     text_response_ok: bool
     tool_calling_ok: bool
+    streaming_ok: bool
     message: str
 
 

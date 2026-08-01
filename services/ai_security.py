@@ -41,6 +41,15 @@ class AIProviderConfig:
     allowlist: tuple[str, ...]
     source: str
     admin_prompt: str = ""
+    reasoning_effort: str | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    max_completion_tokens: int = 2048
+    token_limit_parameter: str = "max_completion_tokens"
+    frequency_penalty: float | None = None
+    presence_penalty: float | None = None
+    verbosity: str | None = None
+    parallel_tool_calls: bool | None = None
 
 
 def _read_key_file(path: Path) -> str:
@@ -317,7 +326,9 @@ async def get_effective_provider(
         return None
     personal = await db.get(UserAISettings, user.id)
     if personal is not None and personal.mode == "custom":
-        if require_tested and not (personal.provider_tested and personal.tool_calling_tested):
+        if require_tested and not (
+            personal.provider_tested and personal.tool_calling_tested and personal.streaming_tested
+        ):
             return None
         if not personal.base_url or not personal.model:
             return None
@@ -329,8 +340,19 @@ async def get_effective_provider(
             allowlist=tuple(system.private_endpoint_allowlist or []),
             source="custom",
             admin_prompt=(system.admin_prompt or "").strip(),
+            reasoning_effort=personal.reasoning_effort,
+            temperature=personal.temperature,
+            top_p=personal.top_p,
+            max_completion_tokens=personal.max_completion_tokens,
+            token_limit_parameter=personal.token_limit_parameter,
+            frequency_penalty=personal.frequency_penalty,
+            presence_penalty=personal.presence_penalty,
+            verbosity=personal.verbosity,
+            parallel_tool_calls=personal.parallel_tool_calls,
         )
-    if require_tested and not (system.provider_tested and system.tool_calling_tested):
+    if require_tested and not (
+        system.provider_tested and system.tool_calling_tested and system.streaming_tested
+    ):
         return None
     if not system.base_url or not system.model:
         return None
@@ -342,4 +364,13 @@ async def get_effective_provider(
         allowlist=tuple(system.private_endpoint_allowlist or []),
         source="global",
         admin_prompt=(system.admin_prompt or "").strip(),
+        reasoning_effort=system.reasoning_effort,
+        temperature=system.temperature,
+        top_p=system.top_p,
+        max_completion_tokens=system.max_completion_tokens,
+        token_limit_parameter=system.token_limit_parameter,
+        frequency_penalty=system.frequency_penalty,
+        presence_penalty=system.presence_penalty,
+        verbosity=system.verbosity,
+        parallel_tool_calls=system.parallel_tool_calls,
     )

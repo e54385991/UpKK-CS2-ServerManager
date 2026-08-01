@@ -328,13 +328,80 @@
                                 <label class="form-check-label" for="ai-admin-clear-key" data-i18n="ai.clearKey">Remove saved key</label>
                             </div>
                         </div>
+                        <div class="col-12">
+                            <details class="border rounded p-3">
+                                <summary class="fw-semibold" data-i18n="ai.advancedParameters">Advanced model parameters</summary>
+                                <div class="row g-3 mt-1">
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="ai-admin-reasoning" data-i18n="ai.reasoningEffort">Reasoning effort</label>
+                                        <select class="form-select" id="ai-admin-reasoning">
+                                            <option value="" data-i18n="ai.providerDefault">Provider/model default</option>
+                                            <option value="none">none</option>
+                                            <option value="minimal">minimal</option>
+                                            <option value="low">low</option>
+                                            <option value="medium">medium</option>
+                                            <option value="high">high</option>
+                                            <option value="xhigh">xhigh</option>
+                                            <option value="max">max</option>
+                                            <option value="ultra">ultra</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="ai-admin-verbosity" data-i18n="ai.verbosity">Response verbosity</label>
+                                        <select class="form-select" id="ai-admin-verbosity">
+                                            <option value="" data-i18n="ai.providerDefault">Provider/model default</option>
+                                            <option value="low">low</option>
+                                            <option value="medium">medium</option>
+                                            <option value="high">high</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="ai-admin-max-tokens" data-i18n="ai.maxCompletionTokens">Maximum completion tokens</label>
+                                        <input class="form-control" id="ai-admin-max-tokens" type="number" min="256" max="32768" value="2048">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="ai-admin-token-field" data-i18n="ai.tokenLimitParameter">Token limit field</label>
+                                        <select class="form-select" id="ai-admin-token-field">
+                                            <option value="max_completion_tokens">max_completion_tokens</option>
+                                            <option value="max_tokens">max_tokens (legacy)</option>
+                                            <option value="omit" data-i18n="ai.omitParameter">Do not send</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="ai-admin-temperature" data-i18n="ai.temperature">Temperature</label>
+                                        <input class="form-control" id="ai-admin-temperature" type="number" min="0" max="2" step="0.1" placeholder="Default">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="ai-admin-top-p">top_p</label>
+                                        <input class="form-control" id="ai-admin-top-p" type="number" min="0" max="1" step="0.05" placeholder="Default">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="ai-admin-parallel-tools" data-i18n="ai.parallelToolCalls">Parallel tool calls</label>
+                                        <select class="form-select" id="ai-admin-parallel-tools">
+                                            <option value="" data-i18n="ai.providerDefault">Provider/model default</option>
+                                            <option value="true" data-i18n="ai.enabledOption">Enabled</option>
+                                            <option value="false" data-i18n="ai.disabledOption">Disabled</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="ai-admin-frequency-penalty" data-i18n="ai.frequencyPenalty">Frequency penalty</label>
+                                        <input class="form-control" id="ai-admin-frequency-penalty" type="number" min="-2" max="2" step="0.1" placeholder="Default">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="ai-admin-presence-penalty" data-i18n="ai.presencePenalty">Presence penalty</label>
+                                        <input class="form-control" id="ai-admin-presence-penalty" type="number" min="-2" max="2" step="0.1" placeholder="Default">
+                                    </div>
+                                    <div class="col-12 form-text" data-i18n="ai.modelParametersHint">Unsupported parameters are omitted when left at default. Set either temperature or top_p, not both. ultra is a compatibility extension and is not supported by official OpenAI models.</div>
+                                </div>
+                            </details>
+                        </div>
                         <div class="col-md-6">
                             <label class="form-label" for="ai-admin-timeout" data-i18n="ai.timeout">Request timeout (seconds)</label>
                             <input class="form-control" id="ai-admin-timeout" type="number" min="5" max="120">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="ai-admin-retention" data-i18n="ai.retention">History retention (days)</label>
-                            <input class="form-control" id="ai-admin-retention" type="number" min="1" max="365">
+                            <input class="form-control" id="ai-admin-retention" type="number" min="1" max="7">
                         </div>
                         <div class="col-12">
                             <label class="form-label" for="ai-admin-allowlist" data-i18n="ai.allowlist">Private endpoint allowlist</label>
@@ -453,6 +520,16 @@ function aiAdminFetch(url, options = {}) {
     });
 }
 
+function aiAdminOptionalNumber(id) {
+    const value = document.getElementById(id).value.trim();
+    return value === '' ? null : Number(value);
+}
+
+function aiAdminOptionalBoolean(id) {
+    const value = document.getElementById(id).value;
+    return value === '' ? null : value === 'true';
+}
+
 async function loadAISettings() {
     const response = await aiAdminFetch('/api/system/ai-settings');
     const data = await response.json();
@@ -460,6 +537,16 @@ async function loadAISettings() {
     document.getElementById('ai-admin-enabled').checked = data.enabled;
     document.getElementById('ai-admin-base-url').value = data.base_url || '';
     document.getElementById('ai-admin-model').value = data.model || '';
+    document.getElementById('ai-admin-reasoning').value = data.reasoning_effort || '';
+    document.getElementById('ai-admin-temperature').value = data.temperature ?? '';
+    document.getElementById('ai-admin-top-p').value = data.top_p ?? '';
+    document.getElementById('ai-admin-max-tokens').value = data.max_completion_tokens || 2048;
+    document.getElementById('ai-admin-token-field').value = data.token_limit_parameter || 'max_completion_tokens';
+    document.getElementById('ai-admin-frequency-penalty').value = data.frequency_penalty ?? '';
+    document.getElementById('ai-admin-presence-penalty').value = data.presence_penalty ?? '';
+    document.getElementById('ai-admin-verbosity').value = data.verbosity || '';
+    document.getElementById('ai-admin-parallel-tools').value = data.parallel_tool_calls == null
+        ? '' : String(data.parallel_tool_calls);
     document.getElementById('ai-admin-timeout').value = data.request_timeout_seconds;
     document.getElementById('ai-admin-retention').value = data.history_retention_days;
     document.getElementById('ai-admin-allowlist').value = (data.private_endpoint_allowlist || []).join('\n');
@@ -470,7 +557,7 @@ async function loadAISettings() {
         ? (window.i18n?.t('ai.keyConfigured') || 'A key is configured')
         : (window.i18n?.t('ai.keyMissing') || 'No key configured');
     document.getElementById('ai-admin-test-state').textContent =
-        `Text: ${data.provider_tested ? '✓' : '—'} · tool_calls: ${data.tool_calling_tested ? '✓' : '—'}`;
+        `SSE: ${data.streaming_tested ? '✓' : '—'} · Text: ${data.provider_tested ? '✓' : '—'} · tool_calls: ${data.tool_calling_tested ? '✓' : '—'}`;
 }
 
 document.getElementById('ai-admin-form').addEventListener('submit', async (event) => {
@@ -479,6 +566,15 @@ document.getElementById('ai-admin-form').addEventListener('submit', async (event
         enabled: document.getElementById('ai-admin-enabled').checked,
         base_url: document.getElementById('ai-admin-base-url').value.trim() || null,
         model: document.getElementById('ai-admin-model').value.trim() || null,
+        reasoning_effort: document.getElementById('ai-admin-reasoning').value || null,
+        temperature: aiAdminOptionalNumber('ai-admin-temperature'),
+        top_p: aiAdminOptionalNumber('ai-admin-top-p'),
+        max_completion_tokens: Number(document.getElementById('ai-admin-max-tokens').value),
+        token_limit_parameter: document.getElementById('ai-admin-token-field').value,
+        frequency_penalty: aiAdminOptionalNumber('ai-admin-frequency-penalty'),
+        presence_penalty: aiAdminOptionalNumber('ai-admin-presence-penalty'),
+        verbosity: document.getElementById('ai-admin-verbosity').value || null,
+        parallel_tool_calls: aiAdminOptionalBoolean('ai-admin-parallel-tools'),
         clear_api_key: document.getElementById('ai-admin-clear-key').checked,
         admin_prompt: document.getElementById('ai-admin-prompt').value,
         private_endpoint_allowlist: document.getElementById('ai-admin-allowlist').value

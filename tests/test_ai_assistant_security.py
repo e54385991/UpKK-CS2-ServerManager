@@ -15,6 +15,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from modules.models import AISystemSettings, MarketPlugin, UserAISettings
+from modules.schemas.ai import AISystemSettingsUpdate
 from services import ai_provider, ai_security
 from services.ai_provider import (
     AIProviderError,
@@ -42,6 +43,16 @@ from services.plugin_conflict_service import (
     validate_plugin_plan_acknowledgements,
 )
 from services.workshop_map_service import WorkshopPlanError, fetch_workshop_details
+
+
+def _sse_response(*chunks: dict) -> httpx.Response:
+    body = "".join(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n" for chunk in chunks)
+    body += "data: [DONE]\n\n"
+    return httpx.Response(
+        200,
+        headers={"content-type": "text/event-stream; charset=utf-8"},
+        content=body.encode(),
+    )
 
 
 def test_credentials_are_encrypted_and_never_round_trip_as_plaintext(monkeypatch):
@@ -172,25 +183,48 @@ async def test_standard_chat_completions_tool_call_probe(monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
+        assert payload["stream"] is True
+        assert payload["stream_options"] == {"include_usage": True}
         if payload.get("tools"):
             nonce = payload["messages"][0]["content"].rsplit(" ", 1)[-1].rstrip(".")
-            message = {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [
-                    {
-                        "id": "probe",
-                        "type": "function",
-                        "function": {
-                            "name": "ai_capability_probe",
-                            "arguments": json.dumps({"nonce": nonce}),
-                        },
-                    }
-                ],
-            }
-        else:
-            message = {"role": "assistant", "content": "OK"}
-        return httpx.Response(200, json={"choices": [{"message": message}]})
+            arguments = json.dumps({"nonce": nonce})
+            return _sse_response(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "probe",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "ai_capability_probe",
+                                            "arguments": arguments[:8],
+                                        },
+                                    }
+                                ],
+                            }
+                        }
+                    ]
+                },
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {"index": 0, "function": {"arguments": arguments[8:]}}
+                                ]
+                            }
+                        }
+                    ]
+                },
+            )
+        return _sse_response(
+            {"choices": [{"delta": {"role": "assistant", "content": "O"}}]},
+            {"choices": [{"delta": {"content": "K"}}]},
+        )
 
     def client_factory(**kwargs):
         return original_client(transport=httpx.MockTransport(handler), **kwargs)
@@ -213,8 +247,55 @@ async def test_standard_chat_completions_tool_call_probe(monkeypatch):
     assert await probe_provider(config) == (
         True,
         True,
-        "Provider text and tool-calling tests passed",
+        True,
+        "Provider SSE text and streamed tool-calling tests passed",
     )
+
+
+@pytest.mark.asyncio
+async def test_streaming_completion_emits_markdown_deltas(monkeypatch):
+    original_client = httpx.AsyncClient
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return _sse_response(
+            {"choices": [{"delta": {"role": "assistant", "content": "# Status"}}]},
+            {"choices": [{"delta": {"content": "\n\nRunning"}}]},
+            {"choices": [], "usage": {"total_tokens": 12}},
+        )
+
+    def client_factory(**kwargs):
+        return original_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(ai_provider.httpx, "AsyncClient", client_factory)
+    monkeypatch.setattr(
+        ai_provider,
+        "validate_provider_endpoint",
+        AsyncMock(return_value="https://provider.example/v1"),
+    )
+    deltas = []
+
+    async def receive_delta(delta: str) -> None:
+        deltas.append(delta)
+
+    message = await create_chat_completion(
+        AIProviderConfig(
+            base_url="https://provider.example/v1",
+            model="test-model",
+            api_key=None,
+            timeout_seconds=10,
+            allowlist=(),
+            source="global",
+        ),
+        [{"role": "user", "content": "status"}],
+        stream=True,
+        on_text_delta=receive_delta,
+    )
+
+    assert captured["stream"] is True
+    assert deltas == ["# Status", "\n\nRunning"]
+    assert message["content"] == "# Status\n\nRunning"
 
 
 @pytest.mark.asyncio
@@ -246,6 +327,71 @@ async def test_provider_refuses_redirects(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_provider_sends_validated_optional_model_parameters(monkeypatch):
+    captured = {}
+    original_client = httpx.AsyncClient
+
+    def handler(request):
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"role": "assistant", "content": "OK"}}]},
+        )
+
+    def client_factory(**kwargs):
+        return original_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(ai_provider.httpx, "AsyncClient", client_factory)
+    monkeypatch.setattr(
+        ai_provider,
+        "validate_provider_endpoint",
+        AsyncMock(return_value="https://provider.example/v1"),
+    )
+    config = AIProviderConfig(
+        base_url="https://provider.example/v1",
+        model="reasoning-model",
+        api_key=None,
+        timeout_seconds=10,
+        allowlist=(),
+        source="global",
+        reasoning_effort="xhigh",
+        temperature=0,
+        max_completion_tokens=4096,
+        token_limit_parameter="max_completion_tokens",
+        frequency_penalty=0.3,
+        presence_penalty=-0.2,
+        verbosity="high",
+        parallel_tool_calls=False,
+    )
+
+    await create_chat_completion(
+        config,
+        [{"role": "user", "content": "hello"}],
+        tools=[{"type": "function", "function": {"name": "probe", "parameters": {}}}],
+    )
+
+    assert captured["reasoning_effort"] == "xhigh"
+    assert captured["temperature"] == 0
+    assert captured["max_completion_tokens"] == 4096
+    assert captured["frequency_penalty"] == 0.3
+    assert captured["presence_penalty"] == -0.2
+    assert captured["verbosity"] == "high"
+    assert captured["parallel_tool_calls"] is False
+    assert "top_p" not in captured
+    assert "max_tokens" not in captured
+
+
+def test_model_parameter_schema_supports_extensions_and_rejects_ambiguous_sampling():
+    request = AISystemSettingsUpdate(reasoning_effort="ultra", max_completion_tokens=32768)
+    assert request.reasoning_effort == "ultra"
+
+    with pytest.raises(ValueError, match="temperature or top_p"):
+        AISystemSettingsUpdate(temperature=0.2, top_p=0.9)
+    with pytest.raises(ValueError):
+        AISystemSettingsUpdate(history_retention_days=8)
+
+
+@pytest.mark.asyncio
 async def test_personal_provider_takes_precedence(monkeypatch):
     monkeypatch.setattr(
         ai_security.settings,
@@ -262,6 +408,7 @@ async def test_personal_provider_takes_precedence(monkeypatch):
         admin_prompt="rules",
         provider_tested=True,
         tool_calling_tested=True,
+        streaming_tested=True,
     )
     personal = UserAISettings(
         user_id=7,
@@ -269,8 +416,11 @@ async def test_personal_provider_takes_precedence(monkeypatch):
         base_url="https://personal.example/v1",
         model="personal",
         api_key_encrypted=encrypt_credential("personal-key"),
+        reasoning_effort="high",
+        max_completion_tokens=8192,
         provider_tested=True,
         tool_calling_tested=True,
+        streaming_tested=True,
     )
     monkeypatch.setattr(AISystemSettings, "get_or_create", AsyncMock(return_value=system))
 
@@ -283,6 +433,8 @@ async def test_personal_provider_takes_precedence(monkeypatch):
     assert config.source == "custom"
     assert config.model == "personal"
     assert config.api_key == "personal-key"
+    assert config.reasoning_effort == "high"
+    assert config.max_completion_tokens == 8192
 
 
 def test_dependency_parser_and_warning_acknowledgements():
