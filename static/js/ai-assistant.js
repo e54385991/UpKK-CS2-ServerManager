@@ -144,6 +144,52 @@
         list.scrollTop = list.scrollHeight;
     }
 
+    function approvalTarget(summary) {
+        const target = summary?.target;
+        if (typeof target === 'string') return target;
+        if (target && typeof target === 'object') {
+            return target.title || target.name || target.display_name || '';
+        }
+        return '';
+    }
+
+    function approvalStep(step) {
+        if (typeof step === 'string') return step;
+        if (!step || typeof step !== 'object') return '';
+        return step.title || step.action || step.name || '';
+    }
+
+    function approvalPromptMessage(tool) {
+        const summary = tool.summary || {};
+        const lines = [translate(
+            'ai.approvalPromptIntro',
+            'Review the plan below before allowing this operation to change the server.'
+        )];
+        const target = approvalTarget(summary);
+        if (target) {
+            lines.push(translate('ai.approvalPromptTarget', 'Target: {target}').replace('{target}', target));
+        }
+        const steps = Array.isArray(summary.steps)
+            ? summary.steps.map(approvalStep).filter(Boolean)
+            : [];
+        if (steps.length) {
+            lines.push(translate('ai.approvalPromptSteps', 'Planned steps:'));
+            steps.forEach((step) => lines.push(`• ${step}`));
+        }
+        if (summary.risk) lines.push(summary.risk);
+        return lines.join('\n\n');
+    }
+
+    function showApprovalPrompt(tool, card) {
+        if (typeof window.showConfirm !== 'function') return;
+        window.showConfirm(
+            approvalPromptMessage(tool),
+            () => decideTool(tool.id || tool.tool_run_id, tool.arguments_hash, 'approve', card),
+            () => decideTool(tool.id || tool.tool_run_id, tool.arguments_hash, 'reject', card),
+            translate('ai.approvalPromptTitle', 'Confirm server change')
+        );
+    }
+
     function appendToolCard(tool) {
         if (element(`ai-tool-${tool.id || tool.tool_run_id}`)) return;
         const id = tool.id || tool.tool_run_id;
@@ -179,6 +225,7 @@
         card.appendChild(body);
         element('ai-message-list').appendChild(card);
         element('ai-message-list').scrollTop = element('ai-message-list').scrollHeight;
+        showApprovalPrompt(tool, card);
     }
 
     async function decideTool(toolId, argumentsHash, decision, card) {

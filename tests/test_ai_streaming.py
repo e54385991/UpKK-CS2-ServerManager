@@ -68,3 +68,14 @@ def test_browser_stream_uses_sanitized_markdown_and_authenticated_sse():
     assert "new WebSocket" not in script
     assert "marked.umd.js" in base
     assert "purify.min.js" in base
+
+
+def test_pending_write_tools_open_a_yes_no_approval_prompt():
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    chinese = (PROJECT_ROOT / "static" / "locales" / "zh-CN.json").read_text(encoding="utf-8")
+
+    assert "window.showConfirm(" in script
+    assert "showApprovalPrompt(tool, card);" in script
+    assert "'approve', card" in script
+    assert "'reject', card" in script
+    assert '"approvalPromptTitle": "确认服务器变更"' in chinese
