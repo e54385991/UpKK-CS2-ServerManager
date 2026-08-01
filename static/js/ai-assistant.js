@@ -34,9 +34,28 @@
     function setStatus(message, isError = false) {
         const target = element('ai-run-status');
         if (!target) return;
-        target.textContent = message;
+        target.innerHTML = '';
+        const span = document.createElement('span');
+        span.textContent = message;
+        target.appendChild(span);
+        const dots = document.createElement('span');
+        dots.className = 'ai-status-dots';
+        target.appendChild(dots);
         target.classList.remove('d-none', 'text-danger', 'text-muted');
-        target.classList.add(isError ? 'text-danger' : 'text-muted');
+        target.classList.remove('ai-status-active');
+        if (isError) {
+            target.classList.add('text-danger');
+        } else {
+            target.classList.add('text-muted', 'ai-status-active');
+        }
+    }
+
+    function clearActiveStatus() {
+        const target = element('ai-run-status');
+        if (!target) return;
+        target.classList.remove('ai-status-active');
+        const dots = target.querySelector('.ai-status-dots');
+        if (dots) dots.remove();
     }
 
     function clearStatus() {
@@ -154,6 +173,12 @@
         badge.className = `badge ai-operation-status ${operationStatusClass(status)}`;
         badge.textContent = operationStatusLabel(status);
         if (message) card.querySelector('.ai-operation-detail').textContent = message;
+        card.classList.toggle('ai-operation-active', status === 'running' || status === 'queued');
+        if (status === 'queued' || status === 'running') {
+            badge.setAttribute('aria-live', 'polite');
+        } else {
+            badge.removeAttribute('aria-live');
+        }
         const list = element('ai-message-list');
         list.scrollTop = list.scrollHeight;
     }
@@ -577,6 +602,10 @@
             setStatus(payload.message);
             upsertToolStatus(payload, 'running', payload.message);
         }
+        if (event.type === 'diagnostic_progress' && payload.message) {
+            setStatus(payload.message);
+            upsertToolStatus(payload, 'running', payload.message);
+        }
         if (event.type === 'tool_completed') {
             upsertToolStatus(payload, 'completed');
             refreshBackgroundTasks();
@@ -595,6 +624,9 @@
         if (event.type === 'run_failed') finishRun(payload.error, true);
         if (event.type === 'run_interrupted') finishRun(payload.error || 'Interrupted', true);
         if (event.type === 'run_completed') finishRun(translate('ai.completed', 'Completed'));
+        if (event.type === 'run_completed') clearActiveStatus();
+        if (event.type === 'run_failed') clearActiveStatus();
+        if (event.type === 'run_interrupted') clearActiveStatus();
     }
 
     async function pollRun() {

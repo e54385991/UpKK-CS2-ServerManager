@@ -34,6 +34,7 @@ from modules.schemas.plugins import GitHubPluginInstallPlanRequest, GitHubPlugin
 from services.ai_access import authorized_server
 from services.github_credentials import get_effective_github_token
 from services.maintenance_lock import maintenance_lock_service
+from services.plugin_conflict_service import ProgressCallback
 from services.plugin_installation import install_github_plugin
 from services.ssh_manager import SSHManager
 
@@ -794,6 +795,7 @@ async def execute_github_install_plan(
     expected_plan_hash: str,
     acknowledged_warning_rule_ids: set[int] | None = None,
     acknowledge_unknown_compatibility: bool = False,
+    progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     async with maintenance_lock_service.get(
         server_id,
@@ -809,6 +811,7 @@ async def execute_github_install_plan(
             expected_plan_hash,
             acknowledged_warning_rule_ids,
             acknowledge_unknown_compatibility,
+            progress,
         )
 
 
@@ -820,6 +823,7 @@ async def _execute_github_install_plan_locked(
     expected_plan_hash: str,
     acknowledged_warning_rule_ids: set[int] | None = None,
     acknowledge_unknown_compatibility: bool = False,
+    progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     server = await authorized_server(db, user, server_id)
     plan = await build_github_install_plan(db, user, server_id, request)
@@ -912,7 +916,7 @@ async def _execute_github_install_plan_locked(
         installation_plan_hash=plan["plan_hash"],
         config_policy=request.config_policy,
     )
-    result = await install_github_plugin(server.id, install_request, db, user)
+    result = await install_github_plugin(server.id, install_request, db, user, ai_progress=progress)
     if not result.success:
         return {
             "success": False,

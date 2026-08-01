@@ -402,6 +402,45 @@ body {
     border-left: .25rem solid var(--bs-primary);
 }
 
+.ai-operation-card.ai-operation-active {
+    border-left-color: var(--bs-info);
+    animation: ai-card-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes ai-card-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(102, 126, 234, 0); }
+    50% { box-shadow: 0 0 0 .2rem rgba(102, 126, 234, .18); }
+}
+
+.ai-status-bar.ai-status-active::before {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    margin-right: .4rem;
+    vertical-align: -.15em;
+    content: "";
+    border: .15rem solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: ai-spinner .7s linear infinite;
+}
+
+@keyframes ai-spinner {
+    to { transform: rotate(360deg); }
+}
+
+.ai-status-dots::after {
+    content: "·";
+    animation: ai-dots 1.4s steps(4) infinite;
+}
+
+@keyframes ai-dots {
+    0% { content: "·"; }
+    25% { content: "··"; }
+    50% { content: "···"; }
+    75% { content: " "; }
+}
+
 .ai-background-task-list {
     display: grid;
     gap: .45rem;
@@ -419,6 +458,15 @@ body {
 .ai-background-task-tools {
     display: grid;
     gap: .2rem;
+}
+
+.ai-background-task .badge[aria-live="polite"] {
+    animation: ai-badge-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes ai-badge-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .55; }
 }
 
 .ai-tool-arguments {

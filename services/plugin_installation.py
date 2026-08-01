@@ -8,6 +8,7 @@ import shlex
 import shutil
 import tempfile
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Optional
 
 from anyio import to_thread
@@ -136,6 +137,7 @@ async def install_github_plugin(
     request: GitHubPluginInstallRequest,
     db: AsyncSession,
     current_user: User,
+    ai_progress: Callable[[str, str], Awaitable[None]] | None = None,
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from a GitHub release asset with WebSocket progress updates.
@@ -159,6 +161,11 @@ async def install_github_plugin(
     async def progress(msg: str, msg_type: str = "status"):
         """Send progress update via WebSocket"""
         await send_deployment_update(server_id, msg_type, msg)
+        if ai_progress is not None:
+            try:
+                await ai_progress(msg, msg_type)
+            except Exception:
+                pass
 
     async def notify_install_result(
         success: bool,

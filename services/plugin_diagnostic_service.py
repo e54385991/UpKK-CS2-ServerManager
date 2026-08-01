@@ -406,6 +406,7 @@ async def _health_attempt(
     await db.commit()
     offset = await _console_size(manager, server)
     if progress:
+        await _emit_readable_progress(progress, phase, enabled_keys)
         await progress(
             "diagnostic_progress",
             {"phase": phase, "attempt": run.start_attempts, "enabled": enabled_keys},
@@ -441,6 +442,30 @@ async def _health_attempt(
     }
     await _record_step(db, run, phase, enabled_keys, healthy, evidence)
     return healthy
+
+
+_DIAGNOSTIC_PHASE_MESSAGES = {
+    "preflight_versions_and_health": "Checking server health and plugin versions",
+    "baseline_without_third_party": "Testing baseline health without third-party plugins",
+    "group_isolation": "Isolating plugin groups to narrow down the crash",
+    "individual_confirmation": "Confirming the suspected crash-causing plugin",
+    "final_restored_state": "Verifying server stability after restoring safe plugins",
+    "strict_individual_fallback": "Testing remaining plugins individually as fallback",
+    "multi_fault_final_state": "Verifying final state after multi-fault isolation",
+    "safe_all_plugins_quarantined": "Checking stability with all candidates quarantined",
+}
+
+
+async def _emit_readable_progress(progress, phase, enabled_keys):
+    if progress is None:
+        return
+    message = _DIAGNOSTIC_PHASE_MESSAGES.get(phase, phase)
+    if enabled_keys:
+        message += ": " + ", ".join(enabled_keys)
+    await progress(
+        "diagnostic_progress",
+        {"phase": phase, "enabled": enabled_keys, "message": message},
+    )
 
 
 async def execute_diagnostic_plan(
@@ -494,6 +519,8 @@ async def execute_diagnostic_plan(
         await db.commit()
         await db.refresh(run)
         _blocked_servers.add(server.id)
+        if progress:
+            await _emit_readable_progress(progress, "preflight_versions_and_health", [])
         await _record_step(
             db,
             run,
@@ -542,6 +569,8 @@ async def execute_diagnostic_plan(
         keys = list(entries)
         try:
             await authorized_server(db, user, server.id)
+            if progress:
+                await _emit_readable_progress(progress, "baseline_without_third_party", [])
             await manager.stop_server(server)
             await _set_candidates(db, manager, server, user, entries, keys, quarantine=True)
             baseline_healthy = await _health_attempt(

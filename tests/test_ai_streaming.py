@@ -98,3 +98,41 @@ def test_background_task_viewer_refreshes_from_the_task_api():
     assert "/api/ai/tasks" in script
     assert "scheduleBackgroundTaskRefresh" in script
     assert "ai-background-task-list" in base
+
+
+def test_status_bar_shows_spinner_and_dots_while_active():
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    css = (PROJECT_ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
+
+    assert "ai-status-active" in script
+    assert "ai-status-dots" in script
+    assert "ai-card-pulse" in css
+    assert "ai-spinner" in css
+    assert "ai-dots" in css
+
+
+def test_install_progress_is_forwarded_to_ai_assistant():
+    install_code = (PROJECT_ROOT / "services" / "plugin_installation.py").read_text(
+        encoding="utf-8"
+    )
+    conflict_code = (PROJECT_ROOT / "services" / "plugin_conflict_service.py").read_text(
+        encoding="utf-8"
+    )
+    github_code = (PROJECT_ROOT / "services" / "github_plugin_plan_service.py").read_text(
+        encoding="utf-8"
+    )
+    assert "ai_progress" in install_code
+    assert "await ai_progress" in install_code
+    assert "ai_progress=progress" in conflict_code
+    assert "ai_progress=progress" in github_code
+
+
+def test_diagnostic_progress_shows_readable_phase_messages():
+    diag_code = (PROJECT_ROOT / "services" / "plugin_diagnostic_service.py").read_text(
+        encoding="utf-8"
+    )
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    assert "_DIAGNOSTIC_PHASE_MESSAGES" in diag_code
+    assert "_emit_readable_progress" in diag_code
+    assert "Isolating plugin groups" in diag_code
+    assert "diagnostic_progress" in script

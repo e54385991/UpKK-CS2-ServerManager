@@ -38,6 +38,7 @@
     "noBackgroundTasks": "No AI tasks yet",
     "taskTools": "Tools",
     "running": "AI task is running…",
+    "thinking": "Thinking",
     "runningTool": "Running tool",
     "waitingApproval": "Waiting for your approval",
     "approvalRequired": "Approval required",

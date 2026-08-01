@@ -253,6 +253,7 @@ async def _install_one(
     plugin: MarketPlugin,
     server: Server,
     user: User,
+    progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     download_url, release_id, release_tag, asset_name = await _latest_release_asset(
         db, plugin, server, user
@@ -263,7 +264,7 @@ async def _install_one(
         record_installation=False,
         suppress_notification=False,
     )
-    result = await install_github_plugin(server.id, request, db, user)
+    result = await install_github_plugin(server.id, request, db, user, ai_progress=progress)
     if not result.success:
         return {"success": False, "plugin_id": plugin.id, "message": result.message}
 
@@ -349,7 +350,7 @@ async def execute_plugin_install_plan(
             if progress:
                 await progress(f"Installing {plugin.title}", "status")
             try:
-                result = await _install_one(db, plugin, refreshed_server, user)
+                result = await _install_one(db, plugin, refreshed_server, user, progress)
             except Exception as exc:
                 result = {
                     "success": False,

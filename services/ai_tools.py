@@ -692,6 +692,9 @@ async def apply_github_plugin_install(ctx: ToolContext, data: GitHubApplyInput) 
         data.expected_plan_hash,
         set(data.acknowledge_warning_rule_ids),
         data.acknowledge_unknown_compatibility,
+        progress=lambda message, message_type: ctx.emit(
+            "tool_progress", {"message": message, "message_type": message_type}
+        ),
     )
 
 

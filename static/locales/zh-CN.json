@@ -38,6 +38,7 @@
     "noBackgroundTasks": "暂无 AI 任务",
     "taskTools": "工具",
     "running": "AI 任务运行中…",
+    "thinking": "思考中",
     "runningTool": "正在执行工具",
     "waitingApproval": "等待你的确认",
     "approvalRequired": "需要确认",
