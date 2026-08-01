@@ -62,7 +62,6 @@ BLOCKED_RELEASE_SUFFIXES = {
     ".exp",
     ".ilk",
     ".lib",
-    ".pdb",
     ".ps1",
     ".sh",
     ".sln",
@@ -191,6 +190,10 @@ async def inspect_github_plugin(
             item for item in assets if ("upgrade" in item["name"].casefold()) == (mode == "upgrade")
         ]
         candidates = preferred or assets
+        if len(candidates) > 1:
+            linux_named = [item for item in candidates if "linux" in item["name"].casefold()]
+            if linux_named:
+                candidates = linux_named
         if len(candidates) == 1:
             selected = candidates[0]
         else:
@@ -537,6 +540,26 @@ def _detect_mapping(
         safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", repo_name).strip(".-")
         target = f"addons/counterstrikesharp/plugins/{safe_name}"
         return None, [{"source": ".", "target": target}], False
+
+    root_dirs = {
+        item["path"].strip("/").split("/")[0]
+        for item in entries
+        if item["path"].strip("/") and "/" not in item["path"].strip("/") and item["is_dir"]
+    }
+    if "metamod" in root_dirs and any(
+        path.casefold().startswith("metamod/") and path.casefold().endswith(".vdf")
+        for path in paths
+    ):
+        return None, [{"source": ".", "target": "addons"}], False
+    if "plugins" in root_dirs and any(
+        path.casefold().startswith("plugins/") and path.casefold().endswith(".dll")
+        for path in paths
+    ):
+        return (
+            "plugins",
+            [{"source": "plugins", "target": "addons/counterstrikesharp/plugins"}],
+            False,
+        )
     return None, [], True
 
 
@@ -887,7 +910,9 @@ async def _execute_github_install_plan_locked(
     target_prefixes = sorted({item["target"].split("/", 1)[0] for item in mapping})
     custom_target = None
     if len(mapping) == 1 and (
-        mapping[0]["target"] not in {"addons", "cfg"} or plan["recipe_id"] is not None
+        mapping[0]["target"] not in {"addons", "cfg"}
+        or plan["recipe_id"] is not None
+        or (mapping[0].get("source", ".") in {".", ""} and mapping[0]["target"] == "addons")
     ):
         custom_target = mapping[0]["target"]
     config_exclusions = []

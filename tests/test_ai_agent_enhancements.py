@@ -131,11 +131,54 @@ def test_stable_linux_asset_filter_prefers_installable_release_archives():
 
 @pytest.mark.parametrize(
     "path",
-    ("addons/plugin/install.sh", "addons/plugin/debug.pdb", "src/plugin.csproj"),
+    ("addons/plugin/install.sh", "addons/plugin/build.vcxproj", "src/plugin.csproj"),
 )
 def test_release_content_rejects_scripts_builds_and_debug_artifacts(path):
     with pytest.raises(GitHubPlanError, match="source-build"):
         _validate_release_contents([{"path": path, "is_dir": False}])
+
+
+def test_release_content_allows_pdb_files_common_in_cs2_plugin_releases():
+    # .pdb files are commonly shipped in CS2 plugin releases as debug symbols
+    _validate_release_contents(
+        [{"path": "addons/counterstrikesharp/plugins/Plugin/Plugin.pdb", "is_dir": False}]
+    )
+
+
+def test_metamod_layout_detection_maps_root_metamod_dir_to_addons():
+    entries = [
+        {"path": "cleanercs2/", "size": 0, "is_dir": True},
+        {"path": "cleanercs2/cleanercs2.so", "size": 100, "is_dir": False},
+        {"path": "cleanercs2/config.cfg", "size": 50, "is_dir": False},
+        {"path": "metamod/", "size": 0, "is_dir": True},
+        {"path": "metamod/cleanercs2.vdf", "size": 80, "is_dir": False},
+    ]
+    prefix, mapping, required = _detect_mapping(entries, "CleanerCS2")
+    assert required is False
+    assert mapping == [{"source": ".", "target": "addons"}]
+    mapped = _mapped_files(entries, mapping)
+    targets = {item["target_path"] for item in mapped}
+    assert "addons/metamod/cleanercs2.vdf" in targets
+    assert "addons/cleanercs2/cleanercs2.so" in targets
+    assert "addons/cleanercs2/config.cfg" in targets
+
+
+def test_plugins_root_dir_maps_to_counterstrikesharp_plugins():
+    entries = [
+        {"path": "plugins/", "size": 0, "is_dir": True},
+        {"path": "plugins/Killfeed_Icons/", "size": 0, "is_dir": True},
+        {"path": "plugins/Killfeed_Icons/Killfeed_Icons.dll", "size": 12288, "is_dir": False},
+    ]
+    prefix, mapping, required = _detect_mapping(entries, "killfeed-icons")
+    assert required is False
+    assert prefix == "plugins"
+    assert mapping == [{"source": "plugins", "target": "addons/counterstrikesharp/plugins"}]
+    mapped = _mapped_files(entries, mapping)
+    assert len(mapped) == 1
+    assert (
+        mapped[0]["target_path"]
+        == "addons/counterstrikesharp/plugins/Killfeed_Icons/Killfeed_Icons.dll"
+    )
 
 
 def test_new_agent_tool_schemas_cannot_select_identity_server_or_paths():
