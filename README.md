@@ -31,6 +31,32 @@ the whole repository manually, use `uv run pre-commit run --all-files`.
 Git hook 会在每次提交前检查变更的 Python 文件。若要手动检查整个仓库，请运行
 `uv run pre-commit run --all-files`。
 
+### AI assistant configuration / AI 助手配置
+
+The AI assistant is disabled by default. Generate a dedicated Fernet key for
+`AI_CREDENTIAL_ENCRYPTION_KEY`, restart the panel, then save and test an
+OpenAI-compatible `/v1/chat/completions` provider in **System Settings**. Both
+the text-response and standard `tool_calls` tests must pass before an
+administrator can enable the assistant. API keys are encrypted at rest and are
+never returned by the settings APIs.
+
+AI 助手默认关闭。请先为 `AI_CREDENTIAL_ENCRYPTION_KEY` 生成独立的 Fernet 密钥，
+重启面板后在“系统设置”中保存并测试兼容 `/v1/chat/completions` 的提供商。普通文本
+和标准 `tool_calls` 两项测试都通过后，管理员才能启用助手；设置接口只返回密钥
+是否已配置，不会返回密钥内容。
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Public provider endpoints must use HTTPS. Private HTTP/HTTPS providers require
+an administrator allowlist entry matching the exact `scheme://host:port`
+origin. User-specific providers still obey that administrator-controlled
+allowlist.
+
+公网提供商必须使用 HTTPS；内网 HTTP/HTTPS 提供商必须由管理员按精确的
+`scheme://host:port` 加入白名单，个人提供商同样受此白名单约束。
+
 ---
 
 ## ⚠️ 重要网络要求（部署前必读）

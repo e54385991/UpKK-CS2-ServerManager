@@ -24,6 +24,9 @@ from modules import (
     MarketPluginResponse,
     MarketPluginUpdate,
     PluginCategory,
+    PluginConflictRule,
+    PluginConflictRuleResponse,
+    PluginConflictRulesUpdate,
     PluginUninstallRequest,
     Server,
     User,
@@ -33,6 +36,11 @@ from modules import (
 )
 from modules.http_helper import http_helper
 from services.github_credentials import get_effective_github_token
+from services.plugin_conflict_service import (
+    PluginPlanError,
+    build_plugin_install_plan,
+    validate_plugin_plan_acknowledgements,
+)
 from services.plugin_installation import install_github_plugin
 
 router = APIRouter(prefix="/api/plugin-market", tags=["plugin-market"])
@@ -583,6 +591,105 @@ CONFIG_FILE_EXTENSIONS = [
 ]
 
 
+@router.get("/plugins/{plugin_id}/install-preflight")
+async def plugin_install_preflight(
+    plugin_id: int,
+    server_id: int = Query(..., description="Target server ID"),
+    install_dependencies: bool = Query(default=True),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Resolve dependencies and conflicts without changing the server."""
+    await get_server_for_user(server_id, db, current_user)
+    try:
+        return await build_plugin_install_plan(
+            db,
+            server_id,
+            plugin_id,
+            include_dependencies=install_dependencies,
+        )
+    except PluginPlanError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.get(
+    "/plugins/{plugin_id}/conflicts",
+    response_model=list[PluginConflictRuleResponse],
+)
+async def get_plugin_conflict_rules(
+    plugin_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list[PluginConflictRule]:
+    if await MarketPlugin.get_by_id(db, plugin_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+    result = await db.execute(
+        select(PluginConflictRule).where(
+            (PluginConflictRule.plugin_a_id == plugin_id)
+            | (PluginConflictRule.plugin_b_id == plugin_id)
+        )
+    )
+    return list(result.scalars().all())
+
+
+@router.put(
+    "/plugins/{plugin_id}/conflicts",
+    response_model=list[PluginConflictRuleResponse],
+)
+async def replace_plugin_conflict_rules(
+    plugin_id: int,
+    request: PluginConflictRulesUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+) -> list[PluginConflictRule]:
+    """Atomically replace every conflict rule attached to one plugin."""
+    if await MarketPlugin.get_by_id(db, plugin_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+    other_ids = [item.other_plugin_id for item in request.rules]
+    if plugin_id in other_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A plugin cannot conflict with itself",
+        )
+    if len(set(other_ids)) != len(other_ids):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Duplicate conflict pair",
+        )
+    found = await MarketPlugin.get_by_ids(db, other_ids)
+    if {item.id for item in found} != set(other_ids):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="One or more conflict plugins do not exist",
+        )
+
+    existing_result = await db.execute(
+        select(PluginConflictRule).where(
+            (PluginConflictRule.plugin_a_id == plugin_id)
+            | (PluginConflictRule.plugin_b_id == plugin_id)
+        )
+    )
+    for existing in existing_result.scalars().all():
+        await db.delete(existing)
+    await db.flush()
+    created: list[PluginConflictRule] = []
+    for item in request.rules:
+        plugin_a_id, plugin_b_id = sorted((plugin_id, item.other_plugin_id))
+        rule = PluginConflictRule(
+            plugin_a_id=plugin_a_id,
+            plugin_b_id=plugin_b_id,
+            severity=item.severity,
+            reason=item.reason.strip(),
+            is_enabled=item.is_enabled,
+        )
+        db.add(rule)
+        created.append(rule)
+    await db.commit()
+    for rule in created:
+        await db.refresh(rule)
+    return created
+
+
 @router.post("/plugins/{plugin_id}/install", response_model=GitHubPluginInstallResponse)
 async def install_plugin(
     plugin_id: int,
@@ -599,6 +706,9 @@ async def install_plugin(
     # updates the managed item selected by the server owner.
     install_dependencies: bool = Query(
         default=False, description="Whether to install dependencies"
+    ),
+    acknowledge_warning_rule_ids: list[int] = Query(
+        default=[], description="Current soft-conflict rule IDs explicitly acknowledged"
     ),
     upgrade_mode: bool = Query(
         default=False, description="Enable upgrade mode to auto-exclude config files"
@@ -658,6 +768,21 @@ async def install_plugin(
     # Verify server ownership and keep the detached connection settings for install work.
     server = await get_server_for_user(server_id, db, current_user)
 
+    # The same server-side planner is used by the web UI and AI tools. Hard
+    # conflicts cannot be overridden; warning acknowledgements are rule-ID
+    # specific and therefore become stale as soon as an administrator changes
+    # the rules.
+    try:
+        install_plan = await build_plugin_install_plan(
+            db,
+            server_id,
+            plugin_id,
+            include_dependencies=install_dependencies,
+        )
+        validate_plugin_plan_acknowledgements(install_plan, acknowledge_warning_rule_ids)
+    except PluginPlanError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
     # CRITICAL: Check SSH connectivity BEFORE any database modifications
     # This prevents database locks when SSH connection hangs or fails
     from services import SSHManager
@@ -674,36 +799,69 @@ async def install_plugin(
 
     # Install dependencies first if requested and present
     installed_deps = []
-    if install_dependencies and plugin.dependencies:
+    if install_dependencies and install_plan["dependencies"]:
         try:
-            dep_ids = parse_dependency_ids(plugin.dependencies)
+            dep_ids = [
+                item
+                for item in install_plan["installation_order"]
+                if item != plugin_id and item not in install_plan["already_installed"]
+            ]
             dependencies = await MarketPlugin.get_by_ids(db, dep_ids)
             dependencies_by_id = {dependency.id: dependency for dependency in dependencies}
             for dep_id in dep_ids:
                 dep_plugin = dependencies_by_id.get(dep_id)
                 if dep_plugin:
                     logger.info(f"Installing dependency: {dep_plugin.title}")
-                    # Recursively install dependency (without its own dependencies to avoid infinite loops)
-                    # Pass upgrade_mode to protect config files in dependencies too
-                    dep_result = await install_plugin(
-                        dep_id,
-                        server_id,
-                        download_url=None,  # Always use latest version for dependencies to avoid version conflicts
-                        exclude_dirs=exclude_dirs,
-                        exclude_files=exclude_files,
-                        install_dependencies=False,  # Don't recursively install dependencies of dependencies
-                        upgrade_mode=upgrade_mode,  # Preserve config files in dependencies when upgrading
-                        db=db,
-                        current_user=current_user,
-                    )
+                    # The planner already recursively topologically sorted all
+                    # dependencies, so each item is installed exactly once.
+                    try:
+                        dep_result = await install_plugin(
+                            dep_id,
+                            server_id,
+                            download_url=None,  # Always use latest version for dependencies to avoid version conflicts
+                            exclude_dirs=exclude_dirs,
+                            exclude_files=exclude_files,
+                            install_dependencies=False,  # Don't recursively install dependencies of dependencies
+                            acknowledge_warning_rule_ids=acknowledge_warning_rule_ids,
+                            upgrade_mode=upgrade_mode,  # Preserve config files in dependencies when upgrading
+                            db=db,
+                            current_user=current_user,
+                            _operation_server=_operation_server,
+                        )
+                    except HTTPException as exc:
+                        return GitHubPluginInstallResponse(
+                            success=False,
+                            message=(
+                                f"Dependency {dep_plugin.title} stopped: {exc.detail}. "
+                                f"Completed dependencies: {', '.join(installed_deps) or 'none'}"
+                            ),
+                        )
                     if dep_result.success:
                         installed_deps.append(dep_plugin.title)
                     else:
-                        logger.warning(
-                            f"Failed to install dependency {dep_plugin.title}: {dep_result.message}"
+                        return GitHubPluginInstallResponse(
+                            success=False,
+                            message=(
+                                f"Dependency {dep_plugin.title} failed: {dep_result.message}. "
+                                f"Completed dependencies: {', '.join(installed_deps) or 'none'}"
+                            ),
                         )
         except ValueError as e:
             logger.error(f"Error parsing dependencies: {e}")
+
+    try:
+        latest_target_plan = await build_plugin_install_plan(
+            db, server_id, plugin_id, include_dependencies=False
+        )
+        validate_plugin_plan_acknowledgements(latest_target_plan, acknowledge_warning_rule_ids)
+    except PluginPlanError as exc:
+        return GitHubPluginInstallResponse(
+            success=False,
+            message=(
+                f"Plugin rules changed before the target install: {exc}. "
+                f"Completed dependencies: {', '.join(installed_deps) or 'none'}"
+            ),
+        )
 
     # Increment download count in a separate short transaction to avoid locks
     try:

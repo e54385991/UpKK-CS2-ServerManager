@@ -252,6 +252,116 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "GET"
+    ],
+    "name": "get_system_ai_settings",
+    "path": "/api/system/ai-settings"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "update_system_ai_settings",
+    "path": "/api/system/ai-settings"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "test_system_ai_settings",
+    "path": "/api/system/ai-settings/test"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_user_ai_settings",
+    "path": "/api/auth/ai-settings"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "update_user_ai_settings",
+    "path": "/api/auth/ai-settings"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "test_user_ai_settings",
+    "path": "/api/auth/ai-settings/test"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_ai_conversation",
+    "path": "/api/ai/conversations"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_ai_conversations",
+    "path": "/api/ai/conversations"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_ai_conversation",
+    "path": "/api/ai/conversations/{conversation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_ai_conversation",
+    "path": "/api/ai/conversations/{conversation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "send_ai_message",
+    "path": "/api/ai/conversations/{conversation_id}/messages"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_ai_run",
+    "path": "/api/ai/runs/{run_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "decide_ai_tool",
+    "path": "/api/ai/runs/{run_id}/tools/{tool_run_id}"
+  },
+  {
+    "kind": "APIWebSocketRoute",
+    "methods": [],
+    "name": "ai_run_events",
+    "path": "/api/ai/runs/{run_id}/events"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "create_server",
@@ -944,6 +1054,30 @@
     ],
     "name": "get_plugin_releases",
     "path": "/api/plugin-market/plugins/{plugin_id}/releases"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "plugin_install_preflight",
+    "path": "/api/plugin-market/plugins/{plugin_id}/install-preflight"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_plugin_conflict_rules",
+    "path": "/api/plugin-market/plugins/{plugin_id}/conflicts"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "replace_plugin_conflict_rules",
+    "path": "/api/plugin-market/plugins/{plugin_id}/conflicts"
   },
   {
     "kind": "APIRoute",

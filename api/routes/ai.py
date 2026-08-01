@@ -1,0 +1,581 @@
+"""AI provider settings, conversations, runs, approvals, and events."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+
+from modules import (
+    AIConversation,
+    AIConversationCreate,
+    AIConversationDetail,
+    AIConversationResponse,
+    AIMessage,
+    AIMessageCreate,
+    AIMessageResponse,
+    AIProviderTestRequest,
+    AIProviderTestResponse,
+    AIRun,
+    AIRunResponse,
+    AISystemSettings,
+    AISystemSettingsResponse,
+    AISystemSettingsUpdate,
+    AIToolDecisionRequest,
+    AIToolRun,
+    AIToolRunResponse,
+    Server,
+    User,
+    UserAISettings,
+    UserAISettingsResponse,
+    UserAISettingsUpdate,
+    async_session_maker,
+    authenticate_websocket,
+    get_current_active_user,
+    get_current_admin_user,
+    get_db,
+)
+from modules.config import settings
+from modules.utils import get_current_time
+from services.ai_events import ai_event_hub
+from services.ai_orchestrator import ACTIVE_RUN_STATUSES, process_ai_run
+from services.ai_provider import test_provider
+from services.ai_security import (
+    AIConfigurationError,
+    AIProviderConfig,
+    decrypt_credential,
+    encrypt_credential,
+    get_effective_provider,
+    normalize_allowlist,
+    normalize_base_url,
+)
+from services.task_registry import ai_task_registry
+
+router = APIRouter(tags=["ai-assistant"])
+
+
+def _system_response(item: AISystemSettings) -> AISystemSettingsResponse:
+    return AISystemSettingsResponse(
+        enabled=item.enabled,
+        base_url=item.base_url,
+        model=item.model,
+        api_key_configured=bool(item.api_key_encrypted),
+        admin_prompt=item.admin_prompt,
+        private_endpoint_allowlist=item.private_endpoint_allowlist or [],
+        request_timeout_seconds=item.request_timeout_seconds,
+        history_retention_days=item.history_retention_days,
+        provider_tested=item.provider_tested,
+        tool_calling_tested=item.tool_calling_tested,
+    )
+
+
+async def _user_response(
+    db: AsyncSession, user: User, item: UserAISettings
+) -> UserAISettingsResponse:
+    source = "none"
+    enabled = False
+    try:
+        effective = await get_effective_provider(db, user)
+    except AIConfigurationError:
+        effective = None
+    if effective is not None:
+        source = effective.source
+        enabled = True
+    return UserAISettingsResponse(
+        mode=item.mode,
+        base_url=item.base_url,
+        model=item.model,
+        api_key_configured=bool(item.api_key_encrypted),
+        provider_tested=item.provider_tested,
+        tool_calling_tested=item.tool_calling_tested,
+        effective_enabled=enabled,
+        effective_source=source,
+    )
+
+
+async def _get_user_settings(db: AsyncSession, user_id: int) -> UserAISettings:
+    item = await db.get(UserAISettings, user_id)
+    if item is None:
+        item = UserAISettings(user_id=user_id)
+        db.add(item)
+        await db.commit()
+        await db.refresh(item)
+    return item
+
+
+def _configuration_error(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+
+@router.get("/api/system/ai-settings", response_model=AISystemSettingsResponse)
+async def get_system_ai_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+) -> AISystemSettingsResponse:
+    return _system_response(await AISystemSettings.get_or_create(db))
+
+
+@router.put("/api/system/ai-settings", response_model=AISystemSettingsResponse)
+async def update_system_ai_settings(
+    request: AISystemSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+) -> AISystemSettingsResponse:
+    item = await AISystemSettings.get_or_create(db)
+    changed_provider = False
+    try:
+        if "base_url" in request.model_fields_set:
+            normalized = normalize_base_url(request.base_url) if request.base_url else None
+            changed_provider |= normalized != item.base_url
+            item.base_url = normalized
+        if "model" in request.model_fields_set:
+            model = (request.model or "").strip() or None
+            changed_provider |= model != item.model
+            item.model = model
+        if request.api_key:
+            item.api_key_encrypted = encrypt_credential(request.api_key)
+            changed_provider = True
+        elif request.clear_api_key:
+            item.api_key_encrypted = None
+            changed_provider = True
+        if request.private_endpoint_allowlist is not None:
+            allowlist = normalize_allowlist(request.private_endpoint_allowlist)
+            changed_provider |= allowlist != item.private_endpoint_allowlist
+            item.private_endpoint_allowlist = allowlist
+    except (AIConfigurationError, ValueError) as exc:
+        raise _configuration_error(exc) from exc
+
+    if request.admin_prompt is not None:
+        item.admin_prompt = request.admin_prompt.strip() or None
+    if request.request_timeout_seconds is not None:
+        item.request_timeout_seconds = request.request_timeout_seconds
+    if request.history_retention_days is not None:
+        item.history_retention_days = request.history_retention_days
+    if changed_provider:
+        item.provider_tested = False
+        item.tool_calling_tested = False
+        item.enabled = False
+    if request.enabled is not None:
+        if request.enabled and changed_provider:
+            # Saving a changed endpoint always disables execution until the
+            # new provider passes both tests. The requested enabled flag is
+            # intentionally ignored for this one update.
+            item.enabled = False
+        elif request.enabled and not (
+            item.base_url
+            and item.model
+            and item.api_key_encrypted
+            and item.provider_tested
+            and item.tool_calling_tested
+            and settings.AI_CREDENTIAL_ENCRYPTION_KEY
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Configure encryption, URL, model, and API key, then pass both "
+                    "provider tests before enabling AI"
+                ),
+            )
+        else:
+            item.enabled = request.enabled
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return _system_response(item)
+
+
+@router.post("/api/system/ai-settings/test", response_model=AIProviderTestResponse)
+async def test_system_ai_settings(
+    request: AIProviderTestRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+) -> AIProviderTestResponse:
+    item = await AISystemSettings.get_or_create(db)
+    try:
+        base_url = normalize_base_url(request.base_url or item.base_url or "")
+        model = (request.model or item.model or "").strip()
+        api_key = request.api_key or decrypt_credential(item.api_key_encrypted)
+        if not model or not api_key:
+            raise AIConfigurationError("Base URL, model, and API key are required")
+        candidate = AIProviderConfig(
+            base_url=base_url,
+            model=model,
+            api_key=api_key,
+            timeout_seconds=item.request_timeout_seconds,
+            allowlist=tuple(item.private_endpoint_allowlist or []),
+            source="global",
+            admin_prompt=item.admin_prompt or "",
+        )
+        text_ok, tool_ok, message = await test_provider(candidate)
+    except (AIConfigurationError, ValueError) as exc:
+        text_ok, tool_ok, message = False, False, str(exc)
+    saved_configuration = not any(
+        value is not None for value in (request.base_url, request.model, request.api_key)
+    )
+    if saved_configuration:
+        item.provider_tested = text_ok
+        item.tool_calling_tested = tool_ok
+        if not (text_ok and tool_ok):
+            item.enabled = False
+        db.add(item)
+        await db.commit()
+    return AIProviderTestResponse(
+        success=text_ok and tool_ok,
+        text_response_ok=text_ok,
+        tool_calling_ok=tool_ok,
+        message=message,
+    )
+
+
+@router.get("/api/auth/ai-settings", response_model=UserAISettingsResponse)
+async def get_user_ai_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> UserAISettingsResponse:
+    return await _user_response(db, current_user, await _get_user_settings(db, current_user.id))
+
+
+@router.put("/api/auth/ai-settings", response_model=UserAISettingsResponse)
+async def update_user_ai_settings(
+    request: UserAISettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> UserAISettingsResponse:
+    item = await _get_user_settings(db, current_user.id)
+    changed_provider = request.mode != item.mode
+    item.mode = request.mode
+    try:
+        if "base_url" in request.model_fields_set:
+            normalized = normalize_base_url(request.base_url) if request.base_url else None
+            changed_provider |= normalized != item.base_url
+            item.base_url = normalized
+        if "model" in request.model_fields_set:
+            model = (request.model or "").strip() or None
+            changed_provider |= model != item.model
+            item.model = model
+        if request.api_key:
+            item.api_key_encrypted = encrypt_credential(request.api_key)
+            changed_provider = True
+        elif request.clear_api_key:
+            item.api_key_encrypted = None
+            changed_provider = True
+    except (AIConfigurationError, ValueError) as exc:
+        raise _configuration_error(exc) from exc
+    if changed_provider:
+        item.provider_tested = False
+        item.tool_calling_tested = False
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return await _user_response(db, current_user, item)
+
+
+@router.post("/api/auth/ai-settings/test", response_model=AIProviderTestResponse)
+async def test_user_ai_settings(
+    request: AIProviderTestRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> AIProviderTestResponse:
+    item = await _get_user_settings(db, current_user.id)
+    system = await AISystemSettings.get_or_create(db)
+    if item.mode != "custom":
+        return AIProviderTestResponse(
+            success=False,
+            text_response_ok=False,
+            tool_calling_ok=False,
+            message="Switch to a custom provider before testing personal settings",
+        )
+    try:
+        base_url = normalize_base_url(request.base_url or item.base_url or "")
+        model = (request.model or item.model or "").strip()
+        api_key = request.api_key or decrypt_credential(item.api_key_encrypted)
+        if not model or not api_key:
+            raise AIConfigurationError("Base URL, model, and API key are required")
+        candidate = AIProviderConfig(
+            base_url=base_url,
+            model=model,
+            api_key=api_key,
+            timeout_seconds=system.request_timeout_seconds,
+            allowlist=tuple(system.private_endpoint_allowlist or []),
+            source="custom",
+            admin_prompt=system.admin_prompt or "",
+        )
+        text_ok, tool_ok, message = await test_provider(candidate)
+    except (AIConfigurationError, ValueError) as exc:
+        text_ok, tool_ok, message = False, False, str(exc)
+    saved_configuration = not any(
+        value is not None for value in (request.base_url, request.model, request.api_key)
+    )
+    if saved_configuration:
+        item.provider_tested = text_ok
+        item.tool_calling_tested = tool_ok
+        db.add(item)
+        await db.commit()
+    return AIProviderTestResponse(
+        success=text_ok and tool_ok,
+        text_response_ok=text_ok,
+        tool_calling_ok=tool_ok,
+        message=message,
+    )
+
+
+async def _server_for_user(db: AsyncSession, user: User, server_id: int) -> Server:
+    server = (
+        await Server.get_by_id(db, server_id)
+        if user.is_admin
+        else await Server.get_by_id_and_user(db, server_id, user.id)
+    )
+    if server is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+    return server
+
+
+async def _conversation_for_user(
+    db: AsyncSession, user: User, conversation_id: str
+) -> AIConversation:
+    conversation = await db.get(AIConversation, conversation_id)
+    if conversation is None or conversation.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    return conversation
+
+
+@router.post("/api/ai/conversations", response_model=AIConversationResponse)
+async def create_ai_conversation(
+    request: AIConversationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> AIConversation:
+    if await get_effective_provider(db, current_user) is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No tested AI provider is enabled",
+        )
+    if request.server_id is not None:
+        await _server_for_user(db, current_user, request.server_id)
+    item = AIConversation(
+        user_id=current_user.id,
+        server_id=request.server_id,
+        title=(request.title or "New conversation").strip() or "New conversation",
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@router.get("/api/ai/conversations", response_model=list[AIConversationResponse])
+async def list_ai_conversations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list[AIConversation]:
+    result = await db.execute(
+        select(AIConversation)
+        .where(AIConversation.user_id == current_user.id)
+        .order_by(AIConversation.updated_at.desc())
+        .limit(100)
+    )
+    return list(result.scalars().all())
+
+
+@router.get("/api/ai/conversations/{conversation_id}", response_model=AIConversationDetail)
+async def get_ai_conversation(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> AIConversationDetail:
+    conversation = await _conversation_for_user(db, current_user, conversation_id)
+    result = await db.execute(
+        select(AIMessage)
+        .where(
+            AIMessage.conversation_id == conversation.id,
+            AIMessage.visible.is_(True),
+        )
+        .order_by(AIMessage.id.asc())
+    )
+    return AIConversationDetail(
+        **AIConversationResponse.model_validate(conversation).model_dump(),
+        messages=[AIMessageResponse.model_validate(item) for item in result.scalars().all()],
+    )
+
+
+@router.delete("/api/ai/conversations/{conversation_id}", status_code=204)
+async def delete_ai_conversation(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    conversation = await _conversation_for_user(db, current_user, conversation_id)
+    active_result = await db.execute(
+        select(func.count())
+        .select_from(AIRun)
+        .where(
+            AIRun.conversation_id == conversation.id,
+            AIRun.status.in_(ACTIVE_RUN_STATUSES),
+        )
+    )
+    if int(active_result.scalar_one()):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete a conversation with an active run",
+        )
+    await db.delete(conversation)
+    await db.commit()
+
+
+@router.post(
+    "/api/ai/conversations/{conversation_id}/messages",
+    response_model=AIRunResponse,
+)
+async def send_ai_message(
+    conversation_id: str,
+    request: AIMessageCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> AIRun:
+    conversation = await _conversation_for_user(db, current_user, conversation_id)
+    if await get_effective_provider(db, current_user) is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No tested AI provider is enabled",
+        )
+    if conversation.server_id is not None:
+        await _server_for_user(db, current_user, conversation.server_id)
+    active_result = await db.execute(
+        select(func.count())
+        .select_from(AIRun)
+        .where(
+            AIRun.conversation_id == conversation.id,
+            AIRun.status.in_(ACTIVE_RUN_STATUSES),
+        )
+    )
+    if int(active_result.scalar_one()):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This conversation already has an active run",
+        )
+    message = AIMessage(
+        conversation_id=conversation.id,
+        role="user",
+        content=request.content,
+        visible=True,
+    )
+    run = AIRun(
+        conversation_id=conversation.id,
+        user_id=current_user.id,
+        server_id=conversation.server_id,
+        status="queued",
+    )
+    if conversation.title == "New conversation":
+        conversation.title = request.content[:80]
+    conversation.updated_at = get_current_time()
+    db.add(message)
+    db.add(run)
+    db.add(conversation)
+    await db.commit()
+    await db.refresh(run)
+    ai_task_registry.create(process_ai_run(run.id))
+    return run
+
+
+async def _run_for_user(db: AsyncSession, user: User, run_id: str) -> AIRun:
+    run = await db.get(AIRun, run_id)
+    if run is None or run.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    return run
+
+
+@router.get("/api/ai/runs/{run_id}")
+async def get_ai_run(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict[str, Any]:
+    run = await _run_for_user(db, current_user, run_id)
+    result = await db.execute(
+        select(AIToolRun)
+        .where(AIToolRun.run_id == run.id)
+        .order_by(AIToolRun.created_at.asc(), AIToolRun.id.asc())
+    )
+    return {
+        **AIRunResponse.model_validate(run).model_dump(mode="json"),
+        "tools": [
+            AIToolRunResponse.model_validate(item).model_dump(mode="json")
+            for item in result.scalars().all()
+        ],
+    }
+
+
+@router.post("/api/ai/runs/{run_id}/tools/{tool_run_id}")
+async def decide_ai_tool(
+    run_id: str,
+    tool_run_id: str,
+    request: AIToolDecisionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict[str, str]:
+    run = await _run_for_user(db, current_user, run_id)
+    item = await db.get(AIToolRun, tool_run_id)
+    if (
+        item is None
+        or item.run_id != run.id
+        or item.status != "pending_approval"
+        or not item.requires_approval
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tool approval is no longer pending",
+        )
+    if item.arguments_hash != request.arguments_hash:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tool arguments changed; reload the approval card",
+        )
+    if run.server_id is not None:
+        await _server_for_user(db, current_user, run.server_id)
+    item.status = "approved" if request.decision == "approve" else "rejected"
+    item.approved_by = current_user.id
+    item.approved_at = get_current_time()
+    db.add(item)
+    await db.commit()
+
+    pending_result = await db.execute(
+        select(func.count())
+        .select_from(AIToolRun)
+        .where(
+            AIToolRun.run_id == run.id,
+            AIToolRun.status == "pending_approval",
+        )
+    )
+    if not int(pending_result.scalar_one()):
+        ai_task_registry.create(process_ai_run(run.id))
+    return {"status": item.status}
+
+
+@router.websocket("/api/ai/runs/{run_id}/events")
+async def ai_run_events(
+    websocket: WebSocket,
+    run_id: str,
+    after: int = Query(default=0, ge=0),
+) -> None:
+    user, _ = await authenticate_websocket(websocket)
+    if user is None:
+        return
+    async with async_session_maker() as db:
+        run = await db.get(AIRun, run_id)
+        if run is None or run.user_id != user.id:
+            await websocket.close(code=4404, reason="Run not found")
+            return
+    await websocket.accept()
+    await ai_event_hub.subscribe(run_id, websocket)
+    try:
+        for event in await ai_event_hub.replay(run_id, after):
+            await websocket.send_json(event)
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await ai_event_hub.unsubscribe(run_id, websocket)

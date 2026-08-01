@@ -62,6 +62,12 @@ def test_route_registration_order_matches_the_pre_refactor_baseline():
     assert [route for route in actual if route["kind"] == "APIWebSocketRoute"] == [
         {
             "kind": "APIWebSocketRoute",
+            "path": "/api/ai/runs/{run_id}/events",
+            "name": "ai_run_events",
+            "methods": [],
+        },
+        {
+            "kind": "APIWebSocketRoute",
             "path": "/servers/{server_id}/deployment-status",
             "name": "deployment_status_websocket",
             "methods": [],

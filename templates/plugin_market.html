@@ -1972,6 +1972,41 @@ async function submitInstallPlugin() {
         alert(msg);
         return;
     }
+
+    const installDependencies = document.getElementById('install-dependencies-checkbox').checked;
+    let acknowledgedWarningRuleIds = [];
+    try {
+        const preflightParams = new URLSearchParams({
+            server_id: serverId,
+            install_dependencies: installDependencies,
+        });
+        const preflightResponse = await fetch(
+            `/api/plugin-market/plugins/${currentPluginId}/install-preflight?${preflightParams}`,
+            { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') } }
+        );
+        const preflight = await preflightResponse.json();
+        if (!preflightResponse.ok) {
+            throw new Error(preflight.detail || 'Plugin preflight failed');
+        }
+        if (preflight.blocked) {
+            const details = preflight.hard_conflicts
+                .map((item) => `#${item.rule_id}: ${item.reason}`).join('\n');
+            alert(`${window.i18n?.t('pluginMarket.hardConflict') || 'Installation blocked by a hard conflict'}\n${details}`);
+            return;
+        }
+        if (preflight.warnings.length) {
+            const details = preflight.warnings
+                .map((item) => `#${item.rule_id}: ${item.reason}`).join('\n');
+            const accepted = confirm(
+                `${window.i18n?.t('pluginMarket.softConflict') || 'Compatibility warnings require confirmation'}\n${details}`
+            );
+            if (!accepted) return;
+            acknowledgedWarningRuleIds = preflight.warnings.map((item) => item.rule_id);
+        }
+    } catch (error) {
+        alert(error.message);
+        return;
+    }
     
     // Store server ID for WebSocket connection
     currentInstallServerId = serverId;
@@ -2033,8 +2068,6 @@ async function submitInstallPlugin() {
     }
     
     // Get dependency installation preference from checkbox
-    const installDependencies = document.getElementById('install-dependencies-checkbox').checked;
-    
     // Check if upgrade mode is enabled
     const upgradeMode = document.getElementById('upgrade-mode-checkbox').checked;
     
@@ -2059,6 +2092,9 @@ async function submitInstallPlugin() {
         // Add exclude_files if any (can be combined with upgrade_mode)
         excludeFiles.forEach(file => {
             params.append('exclude_files', file);
+        });
+        acknowledgedWarningRuleIds.forEach(ruleId => {
+            params.append('acknowledge_warning_rule_ids', ruleId);
         });
         
         const response = await fetch(`/api/plugin-market/plugins/${currentPluginId}/install?${params}`, {

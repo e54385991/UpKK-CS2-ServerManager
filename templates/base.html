@@ -100,6 +100,46 @@
         {% block content %}{% endblock %}
     </main>
 
+    <button id="ai-assistant-toggle" class="btn btn-primary ai-assistant-toggle d-none"
+            type="button" data-bs-toggle="offcanvas" data-bs-target="#ai-assistant-panel"
+            aria-controls="ai-assistant-panel" data-i18n-title="ai.open" title="Open AI assistant">
+        <i class="bi bi-stars"></i>
+    </button>
+
+    <aside class="offcanvas offcanvas-end ai-assistant-panel" tabindex="-1"
+           id="ai-assistant-panel" aria-labelledby="ai-assistant-title">
+        <div class="offcanvas-header border-bottom">
+            <div>
+                <h5 class="offcanvas-title" id="ai-assistant-title">
+                    <i class="bi bi-stars"></i> <span data-i18n="ai.title">CS2 AI Assistant</span>
+                </h5>
+                <small id="ai-provider-status" class="text-muted" data-i18n="ai.checkingProvider">Checking provider…</small>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body d-flex flex-column p-0">
+            <div class="p-3 border-bottom ai-assistant-controls">
+                <label for="ai-server-select" class="form-label small mb-1" data-i18n="ai.serverContext">Server context</label>
+                <select id="ai-server-select" class="form-select form-select-sm mb-2"></select>
+                <div class="d-flex gap-2">
+                    <select id="ai-conversation-select" class="form-select form-select-sm" aria-label="Conversation history"></select>
+                    <button id="ai-new-conversation" class="btn btn-sm btn-outline-primary text-nowrap" type="button">
+                        <i class="bi bi-plus-lg"></i> <span data-i18n="ai.newChat">New</span>
+                    </button>
+                </div>
+            </div>
+            <div id="ai-message-list" class="ai-message-list flex-grow-1 p-3" aria-live="polite"></div>
+            <div id="ai-run-status" class="small text-muted px-3 py-2 border-top d-none"></div>
+            <form id="ai-message-form" class="p-3 border-top">
+                <textarea id="ai-message-input" class="form-control mb-2" rows="3" maxlength="16000"
+                          data-i18n-placeholder="ai.placeholder" placeholder="Ask about this CS2 server…"></textarea>
+                <button id="ai-send-button" class="btn btn-primary w-100" type="submit">
+                    <i class="bi bi-send"></i> <span data-i18n="ai.send">Send</span>
+                </button>
+            </form>
+        </div>
+    </aside>
+
     <!-- Footer -->
     <footer class="footer mt-auto">
         <div class="container text-center">
@@ -118,6 +158,7 @@
     <script src="{{ static_url('js/bootstrap.bundle.min.js') }}"></script>
     <!-- Dialog Manager -->
     <script src="{{ static_url('js/dialog.js') }}"></script>
+    <script src="{{ static_url('js/ai-assistant.js') }}"></script>
     <!-- Local Alpine.js -->
     <script src="{{ static_url('js/alpine.min.js') }}" defer></script>
     
@@ -223,6 +264,8 @@
                         } else {
                             systemSettingsNav.style.display = 'none';
                         }
+
+                        window.dispatchEvent(new CustomEvent('authReady', { detail: { user } }));
                         
                         return true;
                     } else {
@@ -241,6 +284,7 @@
             profileNav.style.display = 'none';
             logoutNav.style.display = 'none';
             systemSettingsNav.style.display = 'none';
+            window.dispatchEvent(new CustomEvent('authReady', { detail: { user: null } }));
             return false;
         }
         

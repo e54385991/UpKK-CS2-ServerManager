@@ -3,6 +3,7 @@
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from .accounts import migrate_accounts
+from .ai import migrate_ai
 from .bootstrap import migrate_bootstrap
 from .commands import migrate_commands
 from .common import MigrationStep, column_exists, table_exists
@@ -19,6 +20,7 @@ MIGRATION_STEPS = (
     MigrationStep("accounts", migrate_accounts),
     MigrationStep("commands", migrate_commands),
     MigrationStep("system_settings", migrate_system_settings),
+    MigrationStep("ai", migrate_ai),
 )
 
 

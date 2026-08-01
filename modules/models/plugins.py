@@ -17,6 +17,44 @@ class PluginCategory(str, enum.Enum):
     OTHER = "other"
 
 
+class PluginConflictRule(SQLModel, table=True):
+    """A symmetric compatibility rule between two market plugins."""
+
+    __tablename__ = "plugin_conflict_rules"
+    __table_args__ = (
+        UniqueConstraint("plugin_a_id", "plugin_b_id", name="uq_plugin_conflict_pair"),
+        CheckConstraint("plugin_a_id < plugin_b_id", name="ck_plugin_conflict_canonical_pair"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    plugin_a_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("market_plugins.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    plugin_b_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("market_plugins.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    severity: str = Field(default="hard", max_length=16)
+    reason: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    is_enabled: bool = Field(default=True)
+    created_at: Optional[datetime] = Field(
+        default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP"), "onupdate": func.now()},
+    )
+
+
 class MarketPlugin(SQLModel, table=True):
     """Plugin market model - stores plugins available for installation"""
 

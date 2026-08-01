@@ -209,6 +209,51 @@
             </div>
         </div>
 
+        <!-- AI Provider Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-stars"></i> <span data-i18n="ai.userSettings">AI Assistant Provider</span></h5>
+            </div>
+            <div class="card-body">
+                <div id="profile-ai-result" class="alert d-none"></div>
+                <form id="profile-ai-form">
+                    <div class="mb-3">
+                        <label class="form-label" for="profile-ai-mode" data-i18n="ai.providerMode">Provider source</label>
+                        <select class="form-select" id="profile-ai-mode">
+                            <option value="global" data-i18n="ai.useGlobal">Use administrator provider</option>
+                            <option value="custom" data-i18n="ai.useCustom">Use my provider</option>
+                        </select>
+                    </div>
+                    <div id="profile-ai-custom-fields">
+                        <div class="row g-3">
+                            <div class="col-md-7">
+                                <label class="form-label" for="profile-ai-base-url" data-i18n="ai.baseUrl">OpenAI-compatible Base URL</label>
+                                <input class="form-control" id="profile-ai-base-url" type="url" placeholder="https://api.example.com/v1">
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label" for="profile-ai-model" data-i18n="ai.model">Model</label>
+                                <input class="form-control" id="profile-ai-model" maxlength="255">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="profile-ai-key" data-i18n="ai.apiKey">API key</label>
+                                <input class="form-control" id="profile-ai-key" type="password" autocomplete="new-password" placeholder="Leave blank to keep the saved key">
+                                <div id="profile-ai-key-status" class="form-text"></div>
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" id="profile-ai-clear-key" type="checkbox">
+                                    <label class="form-check-label" for="profile-ai-clear-key" data-i18n="ai.clearKey">Remove saved key</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-primary" type="submit"><i class="bi bi-save"></i> <span data-i18n="ai.save">Save AI settings</span></button>
+                        <button class="btn btn-outline-primary" id="profile-ai-test" type="button"><i class="bi bi-wifi"></i> <span data-i18n="ai.test">Test text + tools</span></button>
+                    </div>
+                    <div id="profile-ai-test-state" class="form-text mt-2"></div>
+                </form>
+            </div>
+        </div>
+
         <!-- Reset Password Card -->
         <div class="card shadow-sm mb-4">
             <div class="card-header">
@@ -323,6 +368,87 @@
 </div>
 
 <script>
+function profileAIFetch(url, options = {}) {
+    const token = localStorage.getItem('access_token');
+    return fetch(url, {
+        ...options,
+        headers: { ...options.headers, 'Authorization': `Bearer ${token}` }
+    });
+}
+
+function showProfileAIResult(message, success) {
+    const target = document.getElementById('profile-ai-result');
+    target.textContent = message;
+    target.className = `alert ${success ? 'alert-success' : 'alert-danger'}`;
+}
+
+function updateProfileAIMode() {
+    const custom = document.getElementById('profile-ai-mode').value === 'custom';
+    document.getElementById('profile-ai-custom-fields').style.display = custom ? 'block' : 'none';
+    document.getElementById('profile-ai-test').style.display = custom ? 'inline-block' : 'none';
+}
+
+async function loadUserAISettings() {
+    const response = await profileAIFetch('/api/auth/ai-settings');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Unable to load AI settings');
+    document.getElementById('profile-ai-mode').value = data.mode;
+    document.getElementById('profile-ai-base-url').value = data.base_url || '';
+    document.getElementById('profile-ai-model').value = data.model || '';
+    document.getElementById('profile-ai-key').value = '';
+    document.getElementById('profile-ai-clear-key').checked = false;
+    document.getElementById('profile-ai-key-status').textContent = data.api_key_configured
+        ? (window.i18n?.t('ai.keyConfigured') || 'A key is configured')
+        : (window.i18n?.t('ai.keyMissing') || 'No key configured');
+    document.getElementById('profile-ai-test-state').textContent =
+        `Text: ${data.provider_tested ? '✓' : '—'} · tool_calls: ${data.tool_calling_tested ? '✓' : '—'} · ` +
+        (data.effective_enabled ? (window.i18n?.t('ai.providerReady') || 'Provider ready') : (window.i18n?.t('ai.providerUnavailable') || 'Unavailable'));
+    updateProfileAIMode();
+}
+
+document.getElementById('profile-ai-mode').addEventListener('change', updateProfileAIMode);
+document.getElementById('profile-ai-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = {
+        mode: document.getElementById('profile-ai-mode').value,
+        base_url: document.getElementById('profile-ai-base-url').value.trim() || null,
+        model: document.getElementById('profile-ai-model').value.trim() || null,
+        clear_api_key: document.getElementById('profile-ai-clear-key').checked,
+    };
+    const key = document.getElementById('profile-ai-key').value.trim();
+    if (key) payload.api_key = key;
+    try {
+        const response = await profileAIFetch('/api/auth/ai-settings', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Unable to save AI settings');
+        showProfileAIResult(window.i18n?.t('ai.saved') || 'AI settings saved', true);
+        await loadUserAISettings();
+    } catch (error) {
+        showProfileAIResult(error.message, false);
+    }
+});
+
+document.getElementById('profile-ai-test').addEventListener('click', async () => {
+    const button = document.getElementById('profile-ai-test');
+    button.disabled = true;
+    try {
+        const response = await profileAIFetch('/api/auth/ai-settings/test', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.detail || data.message || 'Provider test failed');
+        showProfileAIResult(data.message, true);
+        await loadUserAISettings();
+    } catch (error) {
+        showProfileAIResult(error.message, false);
+        await loadUserAISettings().catch(() => {});
+    } finally {
+        button.disabled = false;
+    }
+});
+
 // Load user information
 async function loadUserInfo() {
     try {
@@ -991,5 +1117,6 @@ loadPasswordCaptcha();
 loadS3Captcha();
 loadApiKeyCaptcha();
 loadApiKey();
+loadUserAISettings().catch((error) => showProfileAIResult(error.message, false));
 </script>
 {% endblock %}

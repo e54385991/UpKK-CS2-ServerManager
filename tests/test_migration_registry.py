@@ -21,6 +21,7 @@ def test_migration_step_order_preserves_the_legacy_sequence():
         "accounts",
         "commands",
         "system_settings",
+        "ai",
     )
 
 

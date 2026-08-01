@@ -2,6 +2,22 @@
 
 # ruff: noqa: F401,F403
 
+from .ai import (
+    AIConversationCreate,
+    AIConversationDetail,
+    AIConversationResponse,
+    AIMessageCreate,
+    AIMessageResponse,
+    AIProviderTestRequest,
+    AIProviderTestResponse,
+    AIRunResponse,
+    AISystemSettingsResponse,
+    AISystemSettingsUpdate,
+    AIToolDecisionRequest,
+    AIToolRunResponse,
+    UserAISettingsResponse,
+    UserAISettingsUpdate,
+)
 from .auth import (
     ApiKeyGenerate,
     ApiKeyResponse,
@@ -51,6 +67,9 @@ from .plugins import (
     MetamodStatusResponse,
     PluginAutoUpdateResponse,
     PluginAutoUpdateSettings,
+    PluginConflictRuleInput,
+    PluginConflictRuleResponse,
+    PluginConflictRulesUpdate,
     PluginUninstallRequest,
     PluginUninstallResponse,
 )

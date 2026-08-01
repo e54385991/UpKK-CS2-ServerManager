@@ -171,6 +171,30 @@ class DependencyInfo(SQLModel):
     title: str
 
 
+class PluginConflictRuleInput(SQLModel):
+    """One symmetric conflict rule managed from either plugin endpoint."""
+
+    other_plugin_id: int = Field(gt=0)
+    severity: Literal["hard", "warning"]
+    reason: str = Field(min_length=1, max_length=2000)
+    is_enabled: bool = True
+
+
+class PluginConflictRuleResponse(SQLModel):
+    id: int
+    plugin_a_id: int
+    plugin_b_id: int
+    severity: Literal["hard", "warning"]
+    reason: Optional[str] = None
+    is_enabled: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PluginConflictRulesUpdate(SQLModel):
+    rules: List[PluginConflictRuleInput] = Field(default_factory=list, max_length=200)
+
+
 class MarketPluginResponse(SQLModel):
     """Schema for market plugin response"""
 

@@ -107,6 +107,7 @@ class ApplicationLifecycle:
                 logger.exception("Failed to clear old A2S cache")
 
             from services.a2s_cache_service import a2s_cache_service
+            from services.ai_retention_service import ai_retention_service
             from services.auto_update_service import auto_update_service
             from services.plugin_auto_update_service import plugin_auto_update_service
             from services.scheduled_task_service import scheduled_task_service
@@ -117,6 +118,11 @@ class ApplicationLifecycle:
                 "A2S cache service",
                 a2s_cache_service.start,
                 a2s_cache_service.stop,
+            )
+            await self._start_service(
+                "AI retention service",
+                ai_retention_service.start,
+                ai_retention_service.stop,
             )
             await self._start_service(
                 "steam.inf cache service",

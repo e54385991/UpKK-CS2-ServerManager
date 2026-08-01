@@ -319,3 +319,64 @@ body {
 [x-cloak] {
     display: none !important;
 }
+/* Global CS2 AI assistant */
+.ai-assistant-toggle {
+    position: fixed;
+    right: 1.5rem;
+    bottom: 1.5rem;
+    z-index: 1035;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 50%;
+    box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .22);
+}
+
+.ai-assistant-panel {
+    width: min(460px, 100vw) !important;
+}
+
+.ai-message-list {
+    min-height: 12rem;
+    overflow-y: auto;
+    background: var(--bs-tertiary-bg, #f8f9fa);
+}
+
+.ai-message {
+    max-width: 92%;
+    margin-bottom: .75rem;
+    padding: .65rem .8rem;
+    border-radius: .75rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.ai-message-user {
+    margin-left: auto;
+    color: #fff;
+    background: var(--bs-primary);
+}
+
+.ai-message-assistant {
+    margin-right: auto;
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    background: var(--bs-body-bg, #fff);
+}
+
+.ai-tool-card {
+    margin-bottom: .75rem;
+    border-left: .25rem solid var(--bs-warning);
+}
+
+.ai-tool-arguments {
+    max-height: 12rem;
+    overflow: auto;
+    font-size: .75rem;
+    white-space: pre-wrap;
+}
+
+@media (max-width: 575.98px) {
+    .ai-assistant-toggle {
+        right: 1rem;
+        bottom: 1rem;
+    }
+}

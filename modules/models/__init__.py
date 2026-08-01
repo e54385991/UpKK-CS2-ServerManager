@@ -2,6 +2,14 @@
 
 # ruff: noqa: F401,F403
 
+from .ai import (
+    AIConversation,
+    AIMessage,
+    AIRun,
+    AISystemSettings,
+    AIToolRun,
+    UserAISettings,
+)
 from .common import *
 from .identity import (
     PasswordResetToken,
@@ -12,6 +20,7 @@ from .plugins import (
     MarketPlugin,
     PluginCategory,
     PluginConfigSource,
+    PluginConflictRule,
 )
 from .servers import (
     AuthType,

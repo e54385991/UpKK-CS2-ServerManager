@@ -29,6 +29,7 @@ dependencies = [
     "google-api-python-client>=2.198.0",
     "requests>=2.34.2,<3.0.0",
     "boto3>=1.43.56",
+    "cryptography>=49.0.0",
 ]
 
 [tool.uv]

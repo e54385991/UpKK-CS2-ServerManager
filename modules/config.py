@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int
 
+    # Optional Fernet key used only for AI provider credentials.  The
+    # application can start without it, but AI provider settings cannot be
+    # enabled or persisted until a valid key is configured.
+    AI_CREDENTIAL_ENCRYPTION_KEY: Optional[str] = None
+
     # SSH Authentication Configuration
     # Options: "password", "key", "both"
     # "password" - Only password authentication allowed

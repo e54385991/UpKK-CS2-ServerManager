@@ -1,6 +1,572 @@
 {
   "components": {
     "schemas": {
+      "AIConversationCreate": {
+        "properties": {
+          "server_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "AIConversationCreate",
+        "type": "object"
+      },
+      "AIConversationDetail": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AIMessageResponse"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "AIConversationDetail",
+        "type": "object"
+      },
+      "AIConversationResponse": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "AIConversationResponse",
+        "type": "object"
+      },
+      "AIMessageCreate": {
+        "properties": {
+          "content": {
+            "maxLength": 16000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "AIMessageCreate",
+        "type": "object"
+      },
+      "AIMessageResponse": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "visible": {
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "visible"
+        ],
+        "title": "AIMessageResponse",
+        "type": "object"
+      },
+      "AIProviderTestRequest": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "title": "AIProviderTestRequest",
+        "type": "object"
+      },
+      "AIProviderTestResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "text_response_ok": {
+            "title": "Text Response Ok",
+            "type": "boolean"
+          },
+          "tool_calling_ok": {
+            "title": "Tool Calling Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "text_response_ok",
+          "tool_calling_ok",
+          "message"
+        ],
+        "title": "AIProviderTestResponse",
+        "type": "object"
+      },
+      "AIRunResponse": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "status"
+        ],
+        "title": "AIRunResponse",
+        "type": "object"
+      },
+      "AISystemSettingsResponse": {
+        "properties": {
+          "admin_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Prompt"
+          },
+          "api_key_configured": {
+            "title": "Api Key Configured",
+            "type": "boolean"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "history_retention_days": {
+            "title": "History Retention Days",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "private_endpoint_allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Private Endpoint Allowlist",
+            "type": "array"
+          },
+          "provider_tested": {
+            "title": "Provider Tested",
+            "type": "boolean"
+          },
+          "request_timeout_seconds": {
+            "title": "Request Timeout Seconds",
+            "type": "integer"
+          },
+          "tool_calling_tested": {
+            "title": "Tool Calling Tested",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "api_key_configured",
+          "request_timeout_seconds",
+          "history_retention_days",
+          "provider_tested",
+          "tool_calling_tested"
+        ],
+        "title": "AISystemSettingsResponse",
+        "type": "object"
+      },
+      "AISystemSettingsUpdate": {
+        "properties": {
+          "admin_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Prompt"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "history_retention_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History Retention Days"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "private_endpoint_allowlist": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Private Endpoint Allowlist"
+          },
+          "request_timeout_seconds": {
+            "anyOf": [
+              {
+                "maximum": 120.0,
+                "minimum": 5.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Timeout Seconds"
+          }
+        },
+        "title": "AISystemSettingsUpdate",
+        "type": "object"
+      },
+      "AIToolDecisionRequest": {
+        "properties": {
+          "arguments_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Arguments Hash",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "arguments_hash"
+        ],
+        "title": "AIToolDecisionRequest",
+        "type": "object"
+      },
       "ActionResponse": {
         "description": "Schema for action response",
         "properties": {
@@ -764,25 +1330,6 @@
         "title": "CustomCommandUpdate",
         "type": "object"
       },
-      "DependencyInfo": {
-        "description": "Schema for dependency information",
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title"
-        ],
-        "title": "DependencyInfo",
-        "type": "object"
-      },
       "CustomMapSyncRunRequest": {
         "properties": {
           "expected_revision": {
@@ -822,6 +1369,25 @@
           "url"
         ],
         "title": "CustomMapSyncUpdateRequest",
+        "type": "object"
+      },
+      "DependencyInfo": {
+        "description": "Schema for dependency information",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DependencyInfo",
         "type": "object"
       },
       "DeploymentLogResponse": {
@@ -3057,6 +3623,104 @@
           "values"
         ],
         "title": "PluginConfigUpdateRequest",
+        "type": "object"
+      },
+      "PluginConflictRuleInput": {
+        "description": "One symmetric conflict rule managed from either plugin endpoint.",
+        "properties": {
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "other_plugin_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Other Plugin Id",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "hard",
+              "warning"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "other_plugin_id",
+          "severity",
+          "reason"
+        ],
+        "title": "PluginConflictRuleInput",
+        "type": "object"
+      },
+      "PluginConflictRuleResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "plugin_a_id": {
+            "title": "Plugin A Id",
+            "type": "integer"
+          },
+          "plugin_b_id": {
+            "title": "Plugin B Id",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "severity": {
+            "enum": [
+              "hard",
+              "warning"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "plugin_a_id",
+          "plugin_b_id",
+          "severity",
+          "is_enabled"
+        ],
+        "title": "PluginConflictRuleResponse",
+        "type": "object"
+      },
+      "PluginConflictRulesUpdate": {
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PluginConflictRuleInput"
+            },
+            "maxItems": 200,
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "title": "PluginConflictRulesUpdate",
         "type": "object"
       },
       "PluginUninstallRequest": {
@@ -6068,6 +6732,131 @@
         "title": "Token",
         "type": "object"
       },
+      "UserAISettingsResponse": {
+        "properties": {
+          "api_key_configured": {
+            "title": "Api Key Configured",
+            "type": "boolean"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "effective_enabled": {
+            "title": "Effective Enabled",
+            "type": "boolean"
+          },
+          "effective_source": {
+            "enum": [
+              "global",
+              "custom",
+              "none"
+            ],
+            "title": "Effective Source",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "global",
+              "custom"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider_tested": {
+            "title": "Provider Tested",
+            "type": "boolean"
+          },
+          "tool_calling_tested": {
+            "title": "Tool Calling Tested",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode",
+          "api_key_configured",
+          "provider_tested",
+          "tool_calling_tested",
+          "effective_enabled",
+          "effective_source"
+        ],
+        "title": "UserAISettingsResponse",
+        "type": "object"
+      },
+      "UserAISettingsUpdate": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "global",
+            "enum": [
+              "global",
+              "custom"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "title": "UserAISettingsUpdate",
+        "type": "object"
+      },
       "UserCreate": {
         "description": "Schema for user registration",
         "properties": {
@@ -6366,6 +7155,457 @@
         "summary": "Test A2S Cache",
         "tags": [
           "cache"
+        ]
+      }
+    },
+    "/api/ai/conversations": {
+      "get": {
+        "operationId": "list_ai_conversations_api_ai_conversations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AIConversationResponse"
+                  },
+                  "title": "Response List Ai Conversations Api Ai Conversations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Ai Conversations",
+        "tags": [
+          "ai-assistant"
+        ]
+      },
+      "post": {
+        "operationId": "create_ai_conversation_api_ai_conversations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIConversationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIConversationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Ai Conversation",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/ai/conversations/{conversation_id}": {
+      "delete": {
+        "operationId": "delete_ai_conversation_api_ai_conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Ai Conversation",
+        "tags": [
+          "ai-assistant"
+        ]
+      },
+      "get": {
+        "operationId": "get_ai_conversation_api_ai_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIConversationDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Ai Conversation",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/ai/conversations/{conversation_id}/messages": {
+      "post": {
+        "operationId": "send_ai_message_api_ai_conversations__conversation_id__messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIMessageCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Send Ai Message",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/ai/runs/{run_id}": {
+      "get": {
+        "operationId": "get_ai_run_api_ai_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Ai Run Api Ai Runs  Run Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Ai Run",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/ai/runs/{run_id}/tools/{tool_run_id}": {
+      "post": {
+        "operationId": "decide_ai_tool_api_ai_runs__run_id__tools__tool_run_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool_run_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIToolDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Decide Ai Tool Api Ai Runs  Run Id  Tools  Tool Run Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Decide Ai Tool",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/auth/ai-settings": {
+      "get": {
+        "operationId": "get_user_ai_settings_api_auth_ai_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAISettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get User Ai Settings",
+        "tags": [
+          "ai-assistant"
+        ]
+      },
+      "put": {
+        "operationId": "update_user_ai_settings_api_auth_ai_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserAISettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAISettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update User Ai Settings",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/auth/ai-settings/test": {
+      "post": {
+        "operationId": "test_user_ai_settings_api_auth_ai_settings_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIProviderTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIProviderTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Test User Ai Settings",
+        "tags": [
+          "ai-assistant"
         ]
       }
     },
@@ -8186,6 +9426,117 @@
         ]
       }
     },
+    "/api/plugin-market/plugins/{plugin_id}/conflicts": {
+      "get": {
+        "operationId": "get_plugin_conflict_rules_api_plugin_market_plugins__plugin_id__conflicts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PluginConflictRuleResponse"
+                  },
+                  "title": "Response Get Plugin Conflict Rules Api Plugin Market Plugins  Plugin Id  Conflicts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Plugin Conflict Rules",
+        "tags": [
+          "plugin-market"
+        ]
+      },
+      "put": {
+        "description": "Atomically replace every conflict rule attached to one plugin.",
+        "operationId": "replace_plugin_conflict_rules_api_plugin_market_plugins__plugin_id__conflicts_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginConflictRulesUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PluginConflictRuleResponse"
+                  },
+                  "title": "Response Replace Plugin Conflict Rules Api Plugin Market Plugins  Plugin Id  Conflicts Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Replace Plugin Conflict Rules",
+        "tags": [
+          "plugin-market"
+        ]
+      }
+    },
     "/api/plugin-market/plugins/{plugin_id}/install": {
       "post": {
         "description": "Install a plugin from the market to a server.\n\nThis endpoint:\n1. Checks SSH connectivity to server first\n2. Fetches the plugin from market\n3. Installs dependencies first (if any and install_dependencies=True)\n4. Gets the specified release or latest release from GitHub\n5. Installs using the existing GitHub plugin installation logic\n\nArgs:\n    plugin_id: Plugin ID from market\n    server_id: Server ID to install on\n    download_url: Optional specific release download URL (if not provided, uses latest)\n    exclude_dirs: Optional directories to exclude from extraction (deprecated)\n    exclude_files: Optional files to exclude from extraction\n    install_dependencies: Whether to automatically install dependencies\n    upgrade_mode: When enabled, auto-excludes common config files (.ini, .cfg, .json, etc.)\n\nReturns:\n    Installation result",
@@ -8270,6 +9621,21 @@
             }
           },
           {
+            "description": "Current soft-conflict rule IDs explicitly acknowledged",
+            "in": "query",
+            "name": "acknowledge_warning_rule_ids",
+            "required": false,
+            "schema": {
+              "default": [],
+              "description": "Current soft-conflict rule IDs explicitly acknowledged",
+              "items": {
+                "type": "integer"
+              },
+              "title": "Acknowledge Warning Rule Ids",
+              "type": "array"
+            }
+          },
+          {
             "description": "Enable upgrade mode to auto-exclude config files",
             "in": "query",
             "name": "upgrade_mode",
@@ -8310,6 +9676,77 @@
           }
         ],
         "summary": "Install Plugin",
+        "tags": [
+          "plugin-market"
+        ]
+      }
+    },
+    "/api/plugin-market/plugins/{plugin_id}/install-preflight": {
+      "get": {
+        "description": "Resolve dependencies and conflicts without changing the server.",
+        "operationId": "plugin_install_preflight_api_plugin_market_plugins__plugin_id__install_preflight_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Target server ID",
+            "in": "query",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "description": "Target server ID",
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "install_dependencies",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Install Dependencies",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Plugin Install Preflight Api Plugin Market Plugins  Plugin Id  Install Preflight Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Plugin Install Preflight",
         "tags": [
           "plugin-market"
         ]
@@ -9529,6 +10966,122 @@
         "summary": "Get Initialized Server",
         "tags": [
           "setup"
+        ]
+      }
+    },
+    "/api/system/ai-settings": {
+      "get": {
+        "operationId": "get_system_ai_settings_api_system_ai_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AISystemSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get System Ai Settings",
+        "tags": [
+          "ai-assistant"
+        ]
+      },
+      "put": {
+        "operationId": "update_system_ai_settings_api_system_ai_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISystemSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AISystemSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update System Ai Settings",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/system/ai-settings/test": {
+      "post": {
+        "operationId": "test_system_ai_settings_api_system_ai_settings_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIProviderTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIProviderTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Test System Ai Settings",
+        "tags": [
+          "ai-assistant"
         ]
       }
     },

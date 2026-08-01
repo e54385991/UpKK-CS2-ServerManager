@@ -9,6 +9,7 @@ from api.lifecycle import application_lifespan
 from api.metadata import APP_DESCRIPTION, APP_TITLE, APP_VERSION
 from api.routes import (
     actions,
+    ai,
     auth,
     captcha,
     file_manager,
@@ -36,6 +37,7 @@ API_ROUTERS = (
     public.router,
     captcha.router,
     auth.router,
+    ai.router,
     servers.router,
     actions.router,
     setup.router,
