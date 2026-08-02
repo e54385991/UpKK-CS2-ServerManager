@@ -378,6 +378,53 @@ body {
     overflow-wrap: normal;
 }
 
+.ai-token-usage {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    color: var(--bs-secondary-color, #6c757d);
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.ai-token-activity-icon {
+    color: var(--bs-warning);
+    opacity: .45;
+}
+
+.ai-token-activity-icon.ai-token-activity-active {
+    animation: ai-token-flash 1s ease-in-out infinite;
+}
+
+@keyframes ai-token-flash {
+    0%, 100% { opacity: .35; transform: scale(.9) rotate(-5deg); }
+    50% { opacity: 1; transform: scale(1.12) rotate(5deg); }
+}
+
+.ai-token-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    white-space: nowrap;
+}
+
+.ai-token-value {
+    display: inline-block;
+    min-width: 3ch;
+    color: var(--bs-body-color);
+    text-align: right;
+}
+
+.ai-token-value.ai-token-value-pulse {
+    animation: ai-token-pop .32s ease-out;
+}
+
+@keyframes ai-token-pop {
+    0% { transform: scale(.88); opacity: .55; }
+    65% { transform: scale(1.08); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
 .ai-message-streaming::after {
     display: inline-block;
     width: .5rem;

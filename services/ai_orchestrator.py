@@ -252,6 +252,56 @@ class _AssistantDeltaEmitter:
         )
 
 
+def _token_count(value: Any) -> int:
+    """Return a bounded, provider-independent token estimate for fallback display."""
+    if value is None:
+        return 0
+    if isinstance(value, str):
+        text = value
+    else:
+        try:
+            text = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+        except TypeError, ValueError:
+            text = str(value)
+    return max(0, (len(text) + 3) // 4)
+
+
+def _estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
+    return max(1, sum(_token_count(message) for message in messages))
+
+
+def _estimate_response_tokens(response: dict[str, Any]) -> int:
+    return max(
+        1,
+        _token_count(response.get("content")) + _token_count(response.get("tool_calls")),
+    )
+
+
+def _provider_token_usage(response: dict[str, Any]) -> tuple[int, int] | None:
+    usage = response.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    def first_int(*keys: str) -> int:
+        for key in keys:
+            value = usage.get(key)
+            if isinstance(value, bool):
+                continue
+            try:
+                parsed = int(value)
+            except TypeError, ValueError:
+                continue
+            if parsed >= 0:
+                return min(parsed, 10_000_000)
+        return 0
+
+    input_tokens = first_int("prompt_tokens", "input_tokens")
+    output_tokens = first_int("completion_tokens", "output_tokens")
+    if not input_tokens and not output_tokens:
+        output_tokens = first_int("total_tokens")
+    return input_tokens, output_tokens
+
+
 def _retry_delay_seconds(retry_attempt: int) -> int:
     return AI_RETRY_BASE_SECONDS * (2 ** (retry_attempt - 1))
 
@@ -740,6 +790,8 @@ async def process_ai_run(run_id: str) -> None:
             signatures = Counter(
                 (item.tool_name, item.arguments_hash) for item in tool_result.scalars().all()
             )
+            session_input_tokens = 0
+            session_output_tokens = 0
 
             while rounds_used < max_rounds:
                 await db.refresh(run)
@@ -750,6 +802,20 @@ async def process_ai_run(run_id: str) -> None:
                     db, conversation, user, server, provider.admin_prompt
                 )
                 round_index = rounds_used + 1
+                estimated_input_tokens = _estimate_message_tokens(messages)
+                await _emit(
+                    run.id,
+                    "token_usage",
+                    {
+                        "round": round_index,
+                        "input_tokens": session_input_tokens + estimated_input_tokens,
+                        "output_tokens": session_output_tokens,
+                        "total_tokens": session_input_tokens
+                        + session_output_tokens
+                        + estimated_input_tokens,
+                        "estimated": True,
+                    },
+                )
                 response = await _create_provider_response_with_retry(
                     provider,
                     messages,
@@ -758,6 +824,26 @@ async def process_ai_run(run_id: str) -> None:
                     server_selected=server is not None,
                 )
                 rounds_used += 1
+                provider_usage = _provider_token_usage(response)
+                if provider_usage is None:
+                    session_input_tokens += estimated_input_tokens
+                    session_output_tokens += _estimate_response_tokens(response)
+                    usage_estimated = True
+                else:
+                    session_input_tokens += provider_usage[0]
+                    session_output_tokens += provider_usage[1]
+                    usage_estimated = False
+                await _emit(
+                    run.id,
+                    "token_usage",
+                    {
+                        "round": round_index,
+                        "input_tokens": session_input_tokens,
+                        "output_tokens": session_output_tokens,
+                        "total_tokens": session_input_tokens + session_output_tokens,
+                        "estimated": usage_estimated,
+                    },
+                )
                 content = redact_sensitive_text(str(response.get("content") or ""), limit=20_000)
                 calls = response.get("tool_calls")
                 if not calls:

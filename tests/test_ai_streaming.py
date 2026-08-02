@@ -180,6 +180,27 @@ def test_ai_reasoning_and_tool_call_limits_are_configurable():
     assert '"maxToolCallsPerRound": "每轮最大工具调用数"' in chinese
 
 
+def test_token_usage_is_streamed_and_animated_in_the_current_session():
+    provider = (PROJECT_ROOT / "services" / "ai_provider.py").read_text(encoding="utf-8")
+    orchestrator = (PROJECT_ROOT / "services" / "ai_orchestrator.py").read_text(encoding="utf-8")
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    base = (PROJECT_ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+    css = (PROJECT_ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
+
+    assert 'raw_usage = chunk.get("usage")' in provider
+    assert 'message["usage"] = usage' in provider
+    assert '"token_usage"' in orchestrator
+    assert "_provider_token_usage(response)" in orchestrator
+    assert "event.type === 'token_usage'" in script
+    assert "requestAnimationFrame" in script
+    assert "ai-input-token-count" in base
+    assert "ai-output-token-count" in base
+    assert "ai-token-value-pulse" in css
+    assert "bi-lightning-charge-fill" in base
+    assert "ai-token-activity-active" in script
+    assert "ai-token-flash" in css
+
+
 def test_finished_background_tasks_have_a_manual_delete_action():
     script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
     chinese = (PROJECT_ROOT / "static" / "locales" / "zh-CN.json").read_text(encoding="utf-8")

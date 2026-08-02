@@ -152,6 +152,23 @@
                 </div>
             </div>
             <div id="ai-message-list" class="ai-message-list flex-grow-1 p-3" aria-live="polite"></div>
+            <div id="ai-token-usage" class="ai-token-usage px-3 py-2 border-top d-none" aria-live="polite">
+                <i id="ai-token-activity-icon"
+                   class="bi bi-lightning-charge-fill ai-token-activity-icon"
+                   data-i18n-title="ai.tokenActivity"
+                   title="Token stream active"
+                   aria-hidden="true"></i>
+                <span class="ai-token-stat" data-i18n-title="ai.inputTokens" title="Input">
+                    <i class="bi bi-arrow-down-left" aria-hidden="true"></i>
+                    <span data-i18n="ai.inputTokens">Input</span>
+                    <strong id="ai-input-token-count" class="ai-token-value">0</strong>
+                </span>
+                <span class="ai-token-stat" data-i18n-title="ai.outputTokens" title="Output">
+                    <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+                    <span data-i18n="ai.outputTokens">Output</span>
+                    <strong id="ai-output-token-count" class="ai-token-value">0</strong>
+                </span>
+            </div>
             <div id="ai-run-status" class="small text-muted px-3 py-2 border-top d-none"></div>
             <form id="ai-message-form" class="p-3 border-top">
                 <textarea id="ai-message-input" class="form-control mb-2" rows="3" maxlength="16000"

@@ -24,6 +24,7 @@
         streamedMessages: new Map(),
         suppressReload: false,
         lastFailedMessage: null,
+        tokenUsage: { input: 0, output: 0, estimated: false },
     };
 
     const element = (id) => document.getElementById(id);
@@ -102,6 +103,92 @@
 
     function clearStatus() {
         element('ai-run-status')?.classList.add('d-none');
+    }
+
+    function formatTokenCount(value) {
+        return new Intl.NumberFormat().format(Math.max(0, Math.round(Number(value) || 0)));
+    }
+
+    function setTokenActivity(active) {
+        element('ai-token-activity-icon')?.classList.toggle(
+            'ai-token-activity-active',
+            active
+        );
+    }
+
+    function animateTokenCount(target, value) {
+        if (!target) return;
+        const next = Math.max(0, Math.round(Number(value) || 0));
+        const current = Number(target._aiTokenValue || 0);
+        cancelAnimationFrame(target._aiTokenAnimationFrame || 0);
+        if (current === next) {
+            target.textContent = formatTokenCount(next);
+            target._aiTokenValue = next;
+            return;
+        }
+        const started = performance.now();
+        const duration = 320;
+        const step = (now) => {
+            const progress = Math.min(1, (now - started) / duration);
+            const eased = 1 - ((1 - progress) ** 3);
+            const displayed = Math.round(current + ((next - current) * eased));
+            target.textContent = formatTokenCount(displayed);
+            target._aiTokenValue = displayed;
+            if (progress < 1) {
+                target._aiTokenAnimationFrame = requestAnimationFrame(step);
+            } else {
+                target.classList.remove('ai-token-value-pulse');
+                void target.offsetWidth;
+                target.classList.add('ai-token-value-pulse');
+            }
+        };
+        target._aiTokenAnimationFrame = requestAnimationFrame(step);
+    }
+
+    function renderTokenUsage(usage = {}) {
+        const container = element('ai-token-usage');
+        if (!container) return;
+        const inputTokens = Math.max(0, Number(usage.input_tokens ?? state.tokenUsage.input) || 0);
+        const outputTokens = Math.max(0, Number(usage.output_tokens ?? state.tokenUsage.output) || 0);
+        state.tokenUsage = {
+            input: inputTokens,
+            output: outputTokens,
+            estimated: Boolean(usage.estimated),
+        };
+        container.classList.remove('d-none');
+        setTokenActivity(Boolean(state.runId));
+        container.title = state.tokenUsage.estimated
+            ? translate('ai.tokenEstimate', 'Live token estimate')
+            : translate('ai.tokenUsage', 'Token usage');
+        animateTokenCount(element('ai-input-token-count'), inputTokens);
+        animateTokenCount(element('ai-output-token-count'), outputTokens);
+    }
+
+    function resetTokenUsage() {
+        state.tokenUsage = { input: 0, output: 0, estimated: false };
+        setTokenActivity(false);
+        const container = element('ai-token-usage');
+        if (container) container.classList.add('d-none');
+        animateTokenCount(element('ai-input-token-count'), 0);
+        animateTokenCount(element('ai-output-token-count'), 0);
+    }
+
+    function resetTokenOutputEstimate() {
+        renderTokenUsage({
+            input_tokens: state.tokenUsage.input,
+            output_tokens: 0,
+            estimated: true,
+        });
+    }
+
+    function addOutputTokenEstimate(delta) {
+        const characters = Array.from(String(delta || '')).length;
+        if (!characters) return;
+        renderTokenUsage({
+            input_tokens: state.tokenUsage.input,
+            output_tokens: state.tokenUsage.output + Math.max(1, Math.ceil(characters / 4)),
+            estimated: true,
+        });
     }
 
     function operationStatusLabel(status) {
@@ -216,6 +303,7 @@
             state.streamedMessages.set(key, streamed);
         }
         streamed.content += payload.delta;
+        addOutputTokenEstimate(payload.delta);
         renderAssistantMarkdown(streamed.item, streamed.content);
         const list = element('ai-message-list');
         list.scrollTop = list.scrollHeight;
@@ -787,8 +875,9 @@
         }
     }
 
-    async function openConversation(conversationId) {
+    async function openConversation(conversationId, preserveTokenUsage = false) {
         stopRunWatch();
+        if (!preserveTokenUsage) resetTokenUsage();
         renderBackgroundTasks([]);
         const conversation = await jsonResponse(
             await authFetch(`/api/ai/conversations/${conversationId}`)
@@ -814,6 +903,7 @@
 
     function newConversation() {
         stopRunWatch();
+        resetTokenUsage();
         state.conversationId = null;
         state.lastFailedMessage = null;
         element('ai-conversation-select').value = '';
@@ -850,6 +940,7 @@
                 element('ai-send-button').disabled = !state.enabled;
                 return;
             }
+            resetTokenUsage();
             const conversationId = await ensureConversation();
             appendMessage('user', content);
             input.value = '';
@@ -994,8 +1085,10 @@
         const payload = event.payload || {};
         if (event.type === 'assistant_delta') appendAssistantDelta(payload);
         if (event.type === 'assistant_message') finalizeAssistantMessage(payload);
+        if (event.type === 'token_usage') renderTokenUsage(payload);
         if (event.type === 'run_retrying') {
             resetAssistantStream(payload);
+            resetTokenOutputEstimate();
             setStatus(retryMessage(
                 'ai.providerRetrying',
                 'AI provider failed. Retry {attempt}/{max} in {seconds}s: {error}',
@@ -1112,8 +1205,8 @@
             setStatus(message, isError);
             if (conversationId && !state.suppressReload) {
                 try {
-                    await openConversation(conversationId);
-                    await loadConversations(conversationId);
+                    await openConversation(conversationId, true);
+                    await loadConversations(conversationId, false);
                 } catch (error) {
                     setStatus(error.message, true);
                 }
@@ -1131,6 +1224,7 @@
 
     function stopRunWatch() {
         state.runId = null;
+        setTokenActivity(false);
         state.sseRetryCount = 0;
         state.pollRetryCount = 0;
         clearTimeout(state.reconnectTimer);

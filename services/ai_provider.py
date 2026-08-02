@@ -119,6 +119,7 @@ async def _consume_chat_completion_stream(
     content_parts: list[str] = []
     content_chars = 0
     tool_fragments: dict[int, dict[str, Any]] = {}
+    usage: dict[str, Any] | None = None
     saw_chunk = False
     async for payload in _iter_sse_data(response):
         if payload.strip() == "[DONE]":
@@ -130,6 +131,9 @@ async def _consume_chat_completion_stream(
         if isinstance(chunk, dict) and chunk.get("error"):
             detail = redact_sensitive_text(str(chunk["error"]), limit=500)
             raise AIProviderError(f"AI provider SSE stream failed: {detail}")
+        raw_usage = chunk.get("usage") if isinstance(chunk, dict) else None
+        if isinstance(raw_usage, dict):
+            usage = raw_usage
         choices = chunk.get("choices") if isinstance(chunk, dict) else None
         if not isinstance(choices, list) or not choices:
             continue
@@ -186,6 +190,8 @@ async def _consume_chat_completion_stream(
     message: dict[str, Any] = {"role": role, "content": content or None}
     if tool_fragments:
         message["tool_calls"] = [tool_fragments[index] for index in sorted(tool_fragments)]
+    if usage is not None:
+        message["usage"] = usage
     return message
 
 
@@ -235,6 +241,9 @@ async def create_chat_completion(
         raise AIProviderError("AI provider returned an invalid Chat Completions response") from exc
     if not isinstance(message, dict):
         raise AIProviderError("AI provider response message is invalid")
+    usage = data.get("usage")
+    if isinstance(usage, dict):
+        message = {**message, "usage": usage}
     return _validate_message_payload(message)
 
 

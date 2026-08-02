@@ -262,7 +262,10 @@ async def test_streaming_completion_emits_markdown_deltas(monkeypatch):
         return _sse_response(
             {"choices": [{"delta": {"role": "assistant", "content": "# Status"}}]},
             {"choices": [{"delta": {"content": "\n\nRunning"}}]},
-            {"choices": [], "usage": {"total_tokens": 12}},
+            {
+                "choices": [],
+                "usage": {"prompt_tokens": 7, "completion_tokens": 5, "total_tokens": 12},
+            },
         )
 
     def client_factory(**kwargs):
@@ -296,6 +299,11 @@ async def test_streaming_completion_emits_markdown_deltas(monkeypatch):
     assert captured["stream"] is True
     assert deltas == ["# Status", "\n\nRunning"]
     assert message["content"] == "# Status\n\nRunning"
+    assert message["usage"] == {
+        "prompt_tokens": 7,
+        "completion_tokens": 5,
+        "total_tokens": 12,
+    }
 
 
 @pytest.mark.asyncio
