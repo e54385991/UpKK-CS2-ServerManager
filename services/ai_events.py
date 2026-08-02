@@ -107,7 +107,7 @@ class AIEventHub:
         for value in values:
             try:
                 event = json.loads(value)
-            except TypeError, json.JSONDecodeError:
+            except (TypeError, json.JSONDecodeError):
                 continue
             if int(event.get("sequence") or 0) > after_sequence:
                 events.append(event)
