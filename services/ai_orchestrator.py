@@ -97,6 +97,122 @@ async def _fail_run(db, run: AIRun, message: str) -> None:
     await _emit(run.id, "run_failed", {"error": safe_message})
 
 
+def _approval_is_expired(item: AIToolRun, now) -> bool:
+    expires_at = item.approval_expires_at
+    if expires_at is None:
+        return True
+    comparable_now = now.replace(tzinfo=None) if expires_at.tzinfo is None else now
+    return expires_at <= comparable_now
+
+
+async def _close_unexecuted_tools(
+    db,
+    run: AIRun,
+    tools: list[AIToolRun],
+    *,
+    expired_ids: set[str],
+    cancellation_error: str = "Cancelled because another approval in the same run expired",
+    cancellation_status: str = "cancelled",
+) -> None:
+    now = get_current_time()
+    for item in tools:
+        expired = item.id in expired_ids
+        error = "Approval expired before execution" if expired else cancellation_error
+        item.status = "expired" if expired else cancellation_status
+        item.error = error
+        item.result = {"success": False, "error": error}
+        item.completed_at = now
+        db.add(item)
+        db.add(
+            AIMessage(
+                conversation_id=run.conversation_id,
+                role="tool",
+                content=json.dumps(item.result),
+                tool_call_id=item.tool_call_id,
+                tool_name=item.tool_name,
+                visible=False,
+            )
+        )
+
+
+async def reconcile_waiting_approval_runs(
+    db,
+    *,
+    user_id: int | None = None,
+    conversation_id: str | None = None,
+    run_id: str | None = None,
+) -> set[str]:
+    """Finish expired or legacy multi-write approval batches without executing them."""
+    filters = [AIRun.status == "waiting_approval"]
+    if user_id is not None:
+        filters.append(AIRun.user_id == user_id)
+    if conversation_id is not None:
+        filters.append(AIRun.conversation_id == conversation_id)
+    if run_id is not None:
+        filters.append(AIRun.id == run_id)
+    run_result = await db.execute(select(AIRun).where(*filters).with_for_update())
+    runs = list(run_result.scalars().all())
+    if not runs:
+        return set()
+
+    tool_result = await db.execute(
+        select(AIToolRun)
+        .where(
+            AIToolRun.run_id.in_([run.id for run in runs]),
+            AIToolRun.status.in_(("pending_approval", "approved", "queued")),
+        )
+        .with_for_update()
+    )
+    tools_by_run: dict[str, list[AIToolRun]] = {}
+    for item in tool_result.scalars().all():
+        tools_by_run.setdefault(item.run_id, []).append(item)
+
+    now = get_current_time()
+    terminal_run_ids: set[str] = set()
+    for run in runs:
+        tools = tools_by_run.get(run.id, [])
+        invalid_batch = sum(item.risk == "write" for item in tools) > 1
+        expired_ids = {
+            item.id
+            for item in tools
+            if item.status == "pending_approval" and _approval_is_expired(item, now)
+        }
+        if not expired_ids and not invalid_batch:
+            continue
+        if invalid_batch:
+            run.status = "cancelled"
+            run.error = (
+                "Cancelled a legacy approval batch containing multiple server changes; "
+                "request a fresh plan"
+            )
+            await _close_unexecuted_tools(
+                db,
+                run,
+                tools,
+                expired_ids=set(),
+                cancellation_error=run.error,
+            )
+        else:
+            run.status = "expired"
+            run.error = "One or more tool approvals expired before execution"
+            await _close_unexecuted_tools(db, run, tools, expired_ids=expired_ids)
+        run.completed_at = now
+        db.add(run)
+        terminal_run_ids.add(run.id)
+    if terminal_run_ids:
+        await db.commit()
+    return terminal_run_ids
+
+
+def _validate_write_tool_batch(tool_names: list[str]) -> None:
+    write_tools = [name for name in tool_names if TOOLS_BY_NAME[name].risk == "write"]
+    if len(write_tools) > 1:
+        raise AIProviderError(
+            "The assistant requested multiple write tools in one round; "
+            "server changes must be planned and approved one at a time"
+        )
+
+
 async def _load_provider_messages(
     db, conversation: AIConversation, user: User, server: Server | None, admin_prompt: str
 ) -> list[dict[str, Any]]:
@@ -444,6 +560,8 @@ async def process_ai_run(run_id: str) -> None:
                         raise AIProviderError(f"Repeated tool-call loop detected for {name}")
                     normalized_calls.append((raw_call, name, clean_arguments, arguments_hash))
 
+                _validate_write_tool_batch([item[1] for item in normalized_calls])
+
                 assistant_turn = AIMessage(
                     conversation_id=conversation.id,
                     role="assistant",
@@ -575,6 +693,27 @@ async def interrupt_active_ai_runs() -> int:
         result = await db.execute(select(AIRun).where(AIRun.status.in_(ACTIVE_RUN_STATUSES)))
         runs = list(result.scalars().all())
         user_ids = {run.user_id for run in runs}
+        if runs:
+            tool_result = await db.execute(
+                select(AIToolRun).where(
+                    AIToolRun.run_id.in_([run.id for run in runs]),
+                    AIToolRun.status.in_(
+                        ("pending", "pending_approval", "approved", "queued", "running")
+                    ),
+                )
+            )
+            tools_by_run: dict[str, list[AIToolRun]] = {}
+            for item in tool_result.scalars().all():
+                tools_by_run.setdefault(item.run_id, []).append(item)
+            for run in runs:
+                await _close_unexecuted_tools(
+                    db,
+                    run,
+                    tools_by_run.get(run.id, []),
+                    expired_ids=set(),
+                    cancellation_error="Application restarted before this tool completed",
+                    cancellation_status="interrupted",
+                )
         for run in runs:
             run.status = "interrupted"
             run.error = "Application restarted before this run completed"
@@ -606,6 +745,20 @@ async def interrupt_conversation_run(
         return {"interrupted": False, "message": "No active run found for this conversation"}
     if run.user_id != user.id and not user.is_admin:
         raise PermissionError("Only the conversation owner or an admin can interrupt this run")
+    if run.status == "waiting_approval":
+        tool_result = await db.execute(
+            select(AIToolRun).where(
+                AIToolRun.run_id == run.id,
+                AIToolRun.status.in_(("pending_approval", "approved", "queued")),
+            )
+        )
+        await _close_unexecuted_tools(
+            db,
+            run,
+            list(tool_result.scalars().all()),
+            expired_ids=set(),
+            cancellation_error="Interrupted by user before approval execution",
+        )
     run.status = "interrupted"
     run.error = "Interrupted by user"
     run.completed_at = get_current_time()

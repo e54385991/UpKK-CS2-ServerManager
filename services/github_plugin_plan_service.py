@@ -771,7 +771,9 @@ async def build_github_install_plan(
     else:
         from services.plugin_conflict_service import build_plugin_install_plan
 
-        market_plan = await build_plugin_install_plan(db, server.id, market_plugin.id)
+        market_plan = await build_plugin_install_plan(
+            db, server.id, market_plugin.id, server=server
+        )
     if mapping_required:
         warnings.append("Archive layout is ambiguous; an administrator-approved recipe is required")
     plan_core = {
@@ -880,7 +882,9 @@ async def _execute_github_install_plan_locked(
                     {"plugin_id": dependency_id, "success": True, "skipped": True}
                 )
                 continue
-            dependency_plan = await build_plugin_install_plan(db, server.id, dependency_id)
+            dependency_plan = await build_plugin_install_plan(
+                db, server.id, dependency_id, server=server
+            )
             dependency_result = await execute_plugin_install_plan(
                 db,
                 server,

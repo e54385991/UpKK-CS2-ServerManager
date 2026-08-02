@@ -54,7 +54,12 @@ from modules.schemas.ai import AIBackgroundTaskResponse, AIBackgroundTaskToolRes
 from modules.utils import get_current_time
 from services.ai_access import audit_security_event
 from services.ai_events import ai_event_hub
-from services.ai_orchestrator import ACTIVE_RUN_STATUSES, interrupt_conversation_run, process_ai_run
+from services.ai_orchestrator import (
+    ACTIVE_RUN_STATUSES,
+    interrupt_conversation_run,
+    process_ai_run,
+    reconcile_waiting_approval_runs,
+)
 from services.ai_provider import test_provider
 from services.ai_security import (
     AIConfigurationError,
@@ -497,6 +502,7 @@ async def delete_ai_conversation(
     current_user: User = Depends(get_current_active_user),
 ) -> None:
     conversation = await _conversation_for_user(db, current_user, conversation_id)
+    await reconcile_waiting_approval_runs(db, conversation_id=conversation.id)
     active_result = await db.execute(
         select(func.count())
         .select_from(AIRun)
@@ -532,6 +538,7 @@ async def send_ai_message(
         )
     if conversation.server_id is not None:
         await _server_for_user(db, current_user, conversation.server_id)
+    await reconcile_waiting_approval_runs(db, conversation_id=conversation.id)
     active_result = await db.execute(
         select(func.count())
         .select_from(AIRun)
@@ -598,6 +605,7 @@ async def get_ai_run(
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, Any]:
     run = await _run_for_user(db, current_user, run_id)
+    await reconcile_waiting_approval_runs(db, run_id=run.id)
     result = await db.execute(
         select(AIToolRun)
         .where(AIToolRun.run_id == run.id)
@@ -619,6 +627,7 @@ async def list_ai_background_tasks(
     current_user: User = Depends(get_current_active_user),
 ) -> list[AIBackgroundTaskResponse]:
     """Return the caller's active and recently finished AI tasks."""
+    await reconcile_waiting_approval_runs(db, user_id=current_user.id)
     run_result = await db.execute(
         select(AIRun)
         .where(
@@ -675,6 +684,12 @@ async def decide_ai_tool(
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, str]:
     run = await _run_for_user(db, current_user, run_id)
+    terminal_runs = await reconcile_waiting_approval_runs(db, run_id=run.id)
+    if run.id in terminal_runs:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tool approval expired or was cancelled; request a fresh plan",
+        )
     item_result = await db.execute(
         select(AIToolRun).where(AIToolRun.id == tool_run_id, AIToolRun.run_id == run.id)
     )
@@ -716,10 +731,7 @@ async def decide_ai_tool(
             server_id=run.server_id,
             operation=item.tool_name,
         )
-        item.status = "expired"
-        item.completed_at = get_current_time()
-        db.add(item)
-        await db.commit()
+        await reconcile_waiting_approval_runs(db, run_id=run.id)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Tool approval expired; request a fresh plan",

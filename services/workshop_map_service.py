@@ -197,7 +197,7 @@ async def build_workshop_map_plan(
     mapchooser = await _find_mapchooser(db)
     plugin_plan: dict[str, Any] | None = None
     if not state.get("mapchooser") and mapchooser and mapchooser.id:
-        plugin_plan = await build_plugin_install_plan(db, server.id, mapchooser.id)
+        plugin_plan = await build_plugin_install_plan(db, server.id, mapchooser.id, server=server)
 
     steps: list[dict[str, Any]] = []
     if not state.get("metamod"):

@@ -13,7 +13,7 @@ from sqlalchemy.dialects import mysql
 from sqlalchemy.schema import CreateTable
 
 from api.routes import ai as ai_routes
-from modules.models import AIToolRun, ManagedPluginFile, MarketPlugin
+from modules.models import AIMessage, AIToolRun, ManagedPluginFile, MarketPlugin
 from modules.schemas.ai import AIToolDecisionRequest
 from modules.utils import get_current_time
 from services import ai_orchestrator
@@ -35,6 +35,7 @@ from services.plugin_diagnostic_service import (
     get_diagnostic_recommendation,
 )
 from services.plugin_installation import _build_backup_command, _build_rollback_command
+from services.plugin_inventory_service import installation_evidence
 
 
 @pytest.mark.parametrize(
@@ -316,6 +317,243 @@ def test_write_approval_and_rollback_are_revision_bound():
 def test_requested_changes_create_a_panel_approval_instead_of_only_text():
     assert "call the apply tool in the same run" in CORE_RULES
     assert "Never replace that tool call with text" in CORE_RULES
+    assert "at most one write tool" in CORE_RULES
+
+
+def test_remote_plugin_evidence_does_not_trust_tracking_metadata_alone():
+    inventory = {
+        "frameworks": {"metamod": False, "counterstrikesharp": False},
+        "plugins": [
+            {
+                "key": "counterstrikesharp:mapchooser",
+                "kind": "counterstrikesharp",
+                "name": "MapChooser",
+                "relative_path": ("cs2/game/csgo/addons/counterstrikesharp/plugins/MapChooser"),
+            },
+            {
+                "key": "metamod:cs2kz.vdf",
+                "kind": "metamod",
+                "name": "cs2kz.vdf",
+                "relative_path": "cs2/game/csgo/addons/metamod/cs2kz.vdf",
+            },
+        ],
+        "truncated": False,
+    }
+
+    mapchooser = SimpleNamespace(
+        display_name="CS2-Upkk-PanelPLG-Mapchooser",
+        repo_url="https://github.com/UpKK-Xnet-Cloud/CS2-Upkk-PanelPLG-Mapchooser",
+        framework_key=None,
+        custom_install_path=None,
+    )
+    cs2kz = SimpleNamespace(
+        display_name="cs2kz-metamod",
+        repo_url="https://github.com/KZGlobalTeam/cs2kz-metamod",
+        framework_key=None,
+        custom_install_path=None,
+    )
+    stale = SimpleNamespace(
+        display_name="MultiAddonManager",
+        repo_url="https://github.com/Source2ZE/MultiAddonManager",
+        framework_key=None,
+        custom_install_path=None,
+    )
+
+    assert installation_evidence(mapchooser, inventory)[0]["name"] == "MapChooser"
+    assert installation_evidence(cs2kz, inventory)[0]["name"] == "cs2kz.vdf"
+    assert installation_evidence(stale, inventory) == []
+
+
+@pytest.mark.asyncio
+async def test_plugin_plan_does_not_skip_stale_tracking_record(monkeypatch):
+    from services import plugin_conflict_service
+
+    target = MarketPlugin(
+        id=7,
+        github_url="https://github.com/example/MapChooser",
+        title="MapChooser",
+    )
+    tracked = SimpleNamespace(
+        market_plugin_id=7,
+        display_name="MapChooser",
+        repo_url=target.github_url,
+        framework_key=None,
+        custom_install_path=None,
+    )
+
+    class Result:
+        def __init__(self, values):
+            self.values = values
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.values
+
+    class DB:
+        def __init__(self):
+            self.results = [Result([tracked]), Result([])]
+
+        async def execute(self, _statement):
+            return self.results.pop(0)
+
+    monkeypatch.setattr(
+        plugin_conflict_service,
+        "_resolve_dependency_order",
+        AsyncMock(return_value=([], target)),
+    )
+    monkeypatch.setattr(
+        plugin_conflict_service,
+        "inspect_remote_plugin_inventory",
+        AsyncMock(
+            return_value={
+                "frameworks": {"metamod": False, "counterstrikesharp": False},
+                "plugins": [],
+                "truncated": False,
+            }
+        ),
+    )
+
+    plan = await plugin_conflict_service.build_plugin_install_plan(
+        DB(), 4, 7, server=SimpleNamespace(id=4)
+    )
+
+    assert plan["already_installed"] == []
+    assert plan["steps"][0]["status"] == "install"
+    assert plan["steps"][0]["reason"] == "tracking_record_without_remote_evidence"
+
+
+def test_multiple_write_tools_are_rejected_before_approval_rows_are_created():
+    with pytest.raises(ai_orchestrator.AIProviderError, match="multiple write tools"):
+        ai_orchestrator._validate_write_tool_batch(["apply_workshop_map", "apply_plugin_plan"])
+
+    ai_orchestrator._validate_write_tool_batch(["list_installed_plugins", "apply_workshop_map"])
+
+
+@pytest.mark.asyncio
+async def test_legacy_multi_write_approval_batch_is_cancelled(monkeypatch):
+    now = get_current_time()
+    run = SimpleNamespace(
+        id="run-legacy",
+        conversation_id="conversation-legacy",
+        status="waiting_approval",
+        error=None,
+        completed_at=None,
+    )
+    tools = [
+        SimpleNamespace(
+            id="tool-plugin",
+            run_id=run.id,
+            tool_call_id="call-plugin",
+            tool_name="apply_plugin_plan",
+            risk="write",
+            status="queued",
+            approval_expires_at=now + timedelta(minutes=5),
+            error=None,
+            result=None,
+            completed_at=None,
+        ),
+        SimpleNamespace(
+            id="tool-workshop",
+            run_id=run.id,
+            tool_call_id="call-workshop",
+            tool_name="apply_workshop_map",
+            risk="write",
+            status="pending_approval",
+            approval_expires_at=now + timedelta(minutes=5),
+            error=None,
+            result=None,
+            completed_at=None,
+        ),
+    ]
+
+    class Result:
+        def __init__(self, values):
+            self.values = values
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.values
+
+    class DB:
+        def __init__(self):
+            self.results = [Result([run]), Result(tools)]
+            self.added = []
+            self.commits = 0
+
+        async def execute(self, _statement):
+            return self.results.pop(0)
+
+        def add(self, item):
+            self.added.append(item)
+
+        async def commit(self):
+            self.commits += 1
+
+    db = DB()
+    terminal = await ai_orchestrator.reconcile_waiting_approval_runs(db, user_id=8)
+
+    assert terminal == {run.id}
+    assert run.status == "cancelled"
+    assert {item.status for item in tools} == {"cancelled"}
+    assert len([item for item in db.added if isinstance(item, AIMessage)]) == 2
+    assert db.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_expired_approval_closes_run_and_tool():
+    run = SimpleNamespace(
+        id="run-expired",
+        conversation_id="conversation-expired",
+        status="waiting_approval",
+        error=None,
+        completed_at=None,
+    )
+    tool = SimpleNamespace(
+        id="tool-expired",
+        run_id=run.id,
+        tool_call_id="call-expired",
+        tool_name="apply_plugin_plan",
+        risk="write",
+        status="pending_approval",
+        approval_expires_at=get_current_time() - timedelta(seconds=1),
+        error=None,
+        result=None,
+        completed_at=None,
+    )
+
+    class Result:
+        def __init__(self, values):
+            self.values = values
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.values
+
+    class DB:
+        def __init__(self):
+            self.results = [Result([run]), Result([tool])]
+
+        async def execute(self, _statement):
+            return self.results.pop(0)
+
+        def add(self, _item):
+            pass
+
+        async def commit(self):
+            pass
+
+    terminal = await ai_orchestrator.reconcile_waiting_approval_runs(DB(), run_id=run.id)
+
+    assert terminal == {run.id}
+    assert run.status == "expired"
+    assert tool.status == "expired"
+    assert tool.completed_at is not None
 
 
 @pytest.mark.asyncio
@@ -365,6 +603,11 @@ async def test_write_approval_is_queued_instead_of_rejected_while_another_runs(m
         coroutine.close()
 
     monkeypatch.setattr(ai_routes, "_run_for_user", run_for_user)
+    monkeypatch.setattr(
+        ai_routes,
+        "reconcile_waiting_approval_runs",
+        AsyncMock(return_value=set()),
+    )
     monkeypatch.setattr(ai_routes.ai_task_registry, "create", schedule)
 
     result = await ai_routes.decide_ai_tool(
@@ -484,7 +727,7 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
 
     class DB:
         def __init__(self):
-            self.results = [Result([run]), Result([tool])]
+            self.results = [Result([]), Result([run]), Result([tool])]
 
         async def execute(self, _statement):
             return self.results.pop(0)

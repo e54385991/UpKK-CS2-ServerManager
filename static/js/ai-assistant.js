@@ -96,7 +96,9 @@
             completed: 'text-bg-success',
             failed: 'text-bg-danger',
             waiting_approval: 'text-bg-warning',
-            rejected: 'text-bg-secondary'
+            rejected: 'text-bg-secondary',
+            expired: 'text-bg-secondary',
+            cancelled: 'text-bg-secondary'
         };
         return classes[status] || 'text-bg-secondary';
     }
@@ -707,9 +709,9 @@
                 .filter((tool) => tool.status === 'pending_approval')
                 .forEach(appendToolCard);
             run.tools
-                .filter((tool) => ['queued', 'running', 'completed', 'failed', 'rejected'].includes(tool.status))
+                .filter((tool) => ['queued', 'running', 'completed', 'failed', 'rejected', 'expired', 'cancelled'].includes(tool.status))
                 .forEach((tool) => upsertToolStatus(tool, tool.status, tool.error || ''));
-            if (['completed', 'failed', 'interrupted'].includes(run.status)) {
+            if (['completed', 'failed', 'interrupted', 'expired', 'cancelled'].includes(run.status)) {
                 finishRun(run.error || translate('ai.completed', 'Completed'), run.status !== 'completed');
                 return;
             }

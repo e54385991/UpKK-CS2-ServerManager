@@ -59,7 +59,9 @@
       "completed": "已完成",
       "failed": "失败",
       "waiting_approval": "等待确认",
-      "rejected": "已拒绝"
+      "rejected": "已拒绝",
+      "expired": "已过期",
+      "cancelled": "已取消"
     },
     "adminSettings": "AI 助手提供商",
     "userSettings": "AI 助手提供商",

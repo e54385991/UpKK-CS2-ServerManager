@@ -26,6 +26,12 @@ from services.github_credentials import get_effective_github_token
 from services.maintenance_lock import maintenance_lock_service
 from services.plugin_auto_update_service import derive_asset_glob, upsert_managed_plugin
 from services.plugin_installation import install_github_plugin
+from services.plugin_inventory_service import (
+    PluginInventoryError,
+    inspect_remote_plugin_inventory,
+    installation_evidence,
+    verified_market_plugin_ids,
+)
 
 ProgressCallback = Callable[[str, str], Awaitable[None]]
 
@@ -95,6 +101,7 @@ async def build_plugin_install_plan(
     plugin_id: int,
     *,
     include_dependencies: bool = True,
+    server: Server | None = None,
 ) -> dict[str, Any]:
     """Return a deterministic, recursively resolved installation preflight."""
     dependencies, target = await _resolve_dependency_order(db, plugin_id)
@@ -107,10 +114,28 @@ async def build_plugin_install_plan(
         select(ManagedPlugin).where(ManagedPlugin.server_id == server_id)
     )
     managed = list(managed_result.scalars().all())
-    installed_ids = {
-        int(item.market_plugin_id) for item in managed if item.market_plugin_id is not None
+    current_server = server or await Server.get_by_id(db, server_id)
+    if current_server is None or current_server.id != server_id:
+        raise PluginPlanError("Server was not found while verifying installed plugins")
+    try:
+        inventory = await inspect_remote_plugin_inventory(current_server)
+    except PluginInventoryError as exc:
+        raise PluginPlanError(f"Unable to verify installed plugins: {exc}") from exc
+    installed_ids = verified_market_plugin_ids(managed, ordered, inventory)
+    unverified_tracking = sorted(
+        item.display_name for item in managed if not installation_evidence(item, inventory)
+    )
+    matched_remote_keys = {
+        evidence["key"]
+        for item in [*managed, *ordered]
+        for evidence in installation_evidence(item, inventory)
+        if evidence.get("key")
     }
-    installed_unknown = [item.display_name for item in managed if item.market_plugin_id is None]
+    installed_unknown = sorted(
+        str(item["name"])
+        for item in inventory["plugins"]
+        if item.get("key") not in matched_remote_keys
+    )
 
     relevant_ids = planned_ids | installed_ids
     rules: list[PluginConflictRule] = []
@@ -153,6 +178,7 @@ async def build_plugin_install_plan(
     steps = []
     for index, plugin in enumerate(ordered, start=1):
         installed = plugin.id in installed_ids
+        has_tracking_record = any(item.market_plugin_id == plugin.id for item in managed)
         steps.append(
             {
                 "order": index,
@@ -160,6 +186,15 @@ async def build_plugin_install_plan(
                 "title": plugin.title,
                 "kind": "target" if plugin.id == target.id else "dependency",
                 "status": "already_installed" if installed else "install",
+                "reason": (
+                    "remote_files_present"
+                    if installed
+                    else (
+                        "tracking_record_without_remote_evidence"
+                        if has_tracking_record
+                        else "not_found_on_server"
+                    )
+                ),
             }
         )
 
@@ -175,6 +210,7 @@ async def build_plugin_install_plan(
         ],
         "installation_order": [plugin.id for plugin in ordered],
         "already_installed": sorted(installed_ids & planned_ids),
+        "tracking_records_without_remote_evidence": unverified_tracking,
         "compatibility_unknown": sorted(installed_unknown),
         "hard_conflicts": hard_conflicts,
         "warnings": warnings,
@@ -310,7 +346,7 @@ async def execute_plugin_install_plan(
     acquire_lock: bool = True,
 ) -> dict[str, Any]:
     """Recompute and execute a plan, stopping immediately after any failure."""
-    plan = await build_plugin_install_plan(db, server.id, plugin_id)
+    plan = await build_plugin_install_plan(db, server.id, plugin_id, server=server)
     if expected_plan_hash and plan["plan_hash"] != expected_plan_hash:
         raise PluginPlanError("Plugin plan changed; review and approve the new plan")
     validate_plugin_plan_acknowledgements(plan, acknowledged_warning_rule_ids)
@@ -326,7 +362,9 @@ async def execute_plugin_install_plan(
         )
         if refreshed_server is None:
             raise PluginPlanError("Server permission changed before execution")
-        refreshed_plan = await build_plugin_install_plan(db, server.id, plugin_id)
+        refreshed_plan = await build_plugin_install_plan(
+            db, server.id, plugin_id, server=refreshed_server
+        )
         if expected_plan_hash and refreshed_plan["plan_hash"] != expected_plan_hash:
             raise PluginPlanError("Plugin plan changed; review and approve the new plan")
         validate_plugin_plan_acknowledgements(refreshed_plan, acknowledged_warning_rule_ids)
@@ -335,7 +373,9 @@ async def execute_plugin_install_plan(
         by_id = {plugin.id: plugin for plugin in plugins}
 
         for current_id in refreshed_plan["installation_order"]:
-            latest_plan = await build_plugin_install_plan(db, server.id, plugin_id)
+            latest_plan = await build_plugin_install_plan(
+                db, server.id, plugin_id, server=refreshed_server
+            )
             validate_plugin_plan_acknowledgements(latest_plan, acknowledged_warning_rule_ids)
             if latest_plan["installation_order"] != refreshed_plan["installation_order"]:
                 raise PluginPlanError(

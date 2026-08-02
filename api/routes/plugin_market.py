@@ -600,13 +600,14 @@ async def plugin_install_preflight(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Resolve dependencies and conflicts without changing the server."""
-    await get_server_for_user(server_id, db, current_user)
+    server = await get_server_for_user(server_id, db, current_user)
     try:
         return await build_plugin_install_plan(
             db,
             server_id,
             plugin_id,
             include_dependencies=install_dependencies,
+            server=server,
         )
     except PluginPlanError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -778,6 +779,7 @@ async def install_plugin(
             server_id,
             plugin_id,
             include_dependencies=install_dependencies,
+            server=server,
         )
         validate_plugin_plan_acknowledgements(install_plan, acknowledge_warning_rule_ids)
     except PluginPlanError as exc:
@@ -851,7 +853,7 @@ async def install_plugin(
 
     try:
         latest_target_plan = await build_plugin_install_plan(
-            db, server_id, plugin_id, include_dependencies=False
+            db, server_id, plugin_id, include_dependencies=False, server=server
         )
         validate_plugin_plan_acknowledgements(latest_target_plan, acknowledge_warning_rule_ids)
     except PluginPlanError as exc:

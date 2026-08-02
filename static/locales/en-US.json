@@ -59,7 +59,9 @@
       "completed": "Completed",
       "failed": "Failed",
       "waiting_approval": "Waiting for approval",
-      "rejected": "Rejected"
+      "rejected": "Rejected",
+      "expired": "Expired",
+      "cancelled": "Cancelled"
     },
     "adminSettings": "AI Assistant Provider",
     "userSettings": "AI Assistant Provider",

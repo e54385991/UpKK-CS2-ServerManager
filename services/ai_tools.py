@@ -22,6 +22,11 @@ from services.ai_access import authorized_server, enforce_agent_rate_limit
 from services.ai_knowledge import KNOWLEDGE_TOPICS, lookup_knowledge
 from services.ai_security import redact_sensitive_text, sanitize_tool_result
 from services.maintenance_lock import maintenance_lock_service
+from services.plugin_inventory_service import (
+    PluginInventoryError,
+    inspect_remote_plugin_inventory,
+    installation_evidence,
+)
 from services.ssh_manager import SSHManager
 
 
@@ -596,19 +601,51 @@ async def search_plugin_market(ctx: ToolContext, data: PluginSearchInput) -> dic
 async def list_installed_plugins(ctx: ToolContext, _: EmptyInput) -> dict[str, Any]:
     server = await _require_current_server(ctx)
     result = await ctx.db.execute(select(ManagedPlugin).where(ManagedPlugin.server_id == server.id))
-    plugins = result.scalars().all()
+    tracked = list(result.scalars().all())
+    try:
+        inventory = await inspect_remote_plugin_inventory(server)
+        remote_inspection: dict[str, Any] = {
+            "status": "success",
+            **inventory,
+            "note": "Filesystem presence is verified; runtime loading is not verified.",
+        }
+    except PluginInventoryError as exc:
+        inventory = {"frameworks": {}, "plugins": [], "truncated": False}
+        remote_inspection = {
+            "status": "unavailable",
+            "error": str(exc),
+            "frameworks": {},
+            "plugins": [],
+            "truncated": False,
+        }
     return {
-        "plugins": [
+        "remote_inspection": remote_inspection,
+        "tracking_records": [
             {
                 "id": plugin.id,
                 "name": plugin.display_name,
                 "source_type": plugin.source_type,
                 "market_plugin_id": plugin.market_plugin_id,
                 "framework": plugin.framework_key,
-                "version": plugin.installed_version,
+                "recorded_version": plugin.installed_version,
+                "remote_status": (
+                    "files_present"
+                    if installation_evidence(plugin, inventory)
+                    else (
+                        "not_found_by_inventory"
+                        if remote_inspection["status"] == "success"
+                        else "unknown"
+                    )
+                ),
+                "remote_evidence": installation_evidence(plugin, inventory),
             }
-            for plugin in plugins
-        ]
+            for plugin in tracked
+        ],
+        "warning": (
+            "tracking_records are panel metadata, not proof of installation. "
+            "Only remote_inspection contains current filesystem evidence, and recorded_version "
+            "is not a remotely verified version."
+        ),
     }
 
 
@@ -616,7 +653,7 @@ async def plan_plugin_install(ctx: ToolContext, data: PluginPlanInput) -> dict[s
     server = await _require_current_server(ctx)
     from services.plugin_conflict_service import build_plugin_install_plan
 
-    return await build_plugin_install_plan(ctx.db, server.id, data.plugin_id)
+    return await build_plugin_install_plan(ctx.db, server.id, data.plugin_id, server=server)
 
 
 async def plan_workshop_map(ctx: ToolContext, data: WorkshopPlanInput) -> dict[str, Any]:
@@ -947,7 +984,7 @@ TOOL_SPECS = (
     ),
     ToolSpec(
         "list_installed_plugins",
-        "List plugins and frameworks tracked on the selected server.",
+        "Inspect current remote plugin files and separately list non-authoritative panel tracking records.",
         "read",
         EmptyInput,
         list_installed_plugins,
@@ -1138,7 +1175,7 @@ async def build_approval_summary(
         data = ApplyPluginPlanInput.model_validate(arguments)
         from services.plugin_conflict_service import build_plugin_install_plan
 
-        plan = await build_plugin_install_plan(context.db, server.id, data.plugin_id)
+        plan = await build_plugin_install_plan(context.db, server.id, data.plugin_id, server=server)
         if plan["plan_hash"] != data.expected_plan_hash:
             raise ValueError("Plugin plan changed before approval")
         return {
