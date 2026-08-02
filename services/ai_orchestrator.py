@@ -48,8 +48,9 @@ from services.maintenance_lock import maintenance_lock_service
 from services.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
-DEFAULT_MAX_PROVIDER_ROUNDS = 30
-MAX_TOOL_CALLS_PER_ROUND = 5
+DEFAULT_MAX_PROVIDER_ROUNDS = 200
+DEFAULT_MAX_TOOL_CALLS_PER_ROUND = 200
+MAX_CONFIGURED_AI_LIMIT = 1000
 MAX_REPEATED_CALLS = 3
 ACTIVE_RUN_STATUSES = ("queued", "running", "waiting_approval")
 AI_DELTA_EVENT_CHARS = 96
@@ -690,7 +691,20 @@ async def process_ai_run(run_id: str) -> None:
             return
 
         settings = await AISystemSettings.get_or_create(db)
-        max_rounds = settings.max_provider_rounds or DEFAULT_MAX_PROVIDER_ROUNDS
+        max_rounds = min(
+            max(int(getattr(settings, "max_provider_rounds", 0) or DEFAULT_MAX_PROVIDER_ROUNDS), 1),
+            MAX_CONFIGURED_AI_LIMIT,
+        )
+        max_tool_calls_per_round = min(
+            max(
+                int(
+                    getattr(settings, "max_tool_calls_per_round", 0)
+                    or DEFAULT_MAX_TOOL_CALLS_PER_ROUND
+                ),
+                1,
+            ),
+            MAX_CONFIGURED_AI_LIMIT,
+        )
 
         run.status = "running"
         run.error = None
@@ -774,9 +788,9 @@ async def process_ai_run(run_id: str) -> None:
                     )
                     await _emit(run.id, "run_completed", {"status": run.status})
                     return
-                if not isinstance(calls, list) or len(calls) > MAX_TOOL_CALLS_PER_ROUND:
+                if not isinstance(calls, list) or len(calls) > max_tool_calls_per_round:
                     raise AIProviderError(
-                        f"Tool-call limit exceeded ({MAX_TOOL_CALLS_PER_ROUND} per round)"
+                        f"Tool-call limit exceeded ({max_tool_calls_per_round} per round)"
                     )
 
                 normalized_calls: list[tuple[dict[str, Any], str, dict[str, Any], str]] = []

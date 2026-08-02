@@ -405,7 +405,11 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label" for="ai-admin-rounds" data-i18n="ai.maxProviderRounds">Max reasoning rounds</label>
-                            <input class="form-control" id="ai-admin-rounds" type="number" min="1" max="60" value="30">
+                            <input class="form-control" id="ai-admin-rounds" type="number" min="1" max="1000" value="200">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="ai-admin-tool-calls" data-i18n="ai.maxToolCallsPerRound">Max tool calls per round</label>
+                            <input class="form-control" id="ai-admin-tool-calls" type="number" min="1" max="1000" value="200">
                         </div>
                         <div class="col-12">
                             <label class="form-label" for="ai-admin-allowlist" data-i18n="ai.allowlist">Private endpoint allowlist</label>
@@ -554,6 +558,7 @@ async function loadAISettings() {
     document.getElementById('ai-admin-timeout').value = data.request_timeout_seconds;
     document.getElementById('ai-admin-retention').value = data.history_retention_days;
     document.getElementById('ai-admin-rounds').value = data.max_provider_rounds;
+    document.getElementById('ai-admin-tool-calls').value = data.max_tool_calls_per_round ?? 200;
     document.getElementById('ai-admin-allowlist').value = (data.private_endpoint_allowlist || []).join('\n');
     document.getElementById('ai-admin-prompt').value = data.admin_prompt || '';
     document.getElementById('ai-admin-key').value = '';
@@ -587,6 +592,7 @@ document.getElementById('ai-admin-form').addEventListener('submit', async (event
         request_timeout_seconds: Number(document.getElementById('ai-admin-timeout').value),
         history_retention_days: Number(document.getElementById('ai-admin-retention').value),
         max_provider_rounds: Number(document.getElementById('ai-admin-rounds').value),
+        max_tool_calls_per_round: Number(document.getElementById('ai-admin-tool-calls').value),
     };
     const key = document.getElementById('ai-admin-key').value.trim();
     if (key) payload.api_key = key;

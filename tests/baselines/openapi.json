@@ -731,6 +731,10 @@
             "title": "Max Provider Rounds",
             "type": "integer"
           },
+          "max_tool_calls_per_round": {
+            "title": "Max Tool Calls Per Round",
+            "type": "integer"
+          },
           "model": {
             "anyOf": [
               {
@@ -864,6 +868,7 @@
           "request_timeout_seconds",
           "history_retention_days",
           "max_provider_rounds",
+          "max_tool_calls_per_round",
           "provider_tested",
           "tool_calling_tested",
           "streaming_tested"
@@ -967,7 +972,7 @@
           "max_provider_rounds": {
             "anyOf": [
               {
-                "maximum": 60.0,
+                "maximum": 1000.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -976,6 +981,19 @@
               }
             ],
             "title": "Max Provider Rounds"
+          },
+          "max_tool_calls_per_round": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tool Calls Per Round"
           },
           "model": {
             "anyOf": [

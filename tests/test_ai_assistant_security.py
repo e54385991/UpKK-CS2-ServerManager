@@ -382,13 +382,30 @@ async def test_provider_sends_validated_optional_model_parameters(monkeypatch):
 
 
 def test_model_parameter_schema_supports_extensions_and_rejects_ambiguous_sampling():
-    request = AISystemSettingsUpdate(reasoning_effort="ultra", max_completion_tokens=32768)
+    request = AISystemSettingsUpdate(
+        reasoning_effort="ultra",
+        max_completion_tokens=32768,
+        max_provider_rounds=1000,
+        max_tool_calls_per_round=1000,
+    )
     assert request.reasoning_effort == "ultra"
+    assert request.max_provider_rounds == 1000
+    assert request.max_tool_calls_per_round == 1000
 
     with pytest.raises(ValueError, match="temperature or top_p"):
         AISystemSettingsUpdate(temperature=0.2, top_p=0.9)
     with pytest.raises(ValueError):
         AISystemSettingsUpdate(history_retention_days=8)
+    with pytest.raises(ValueError):
+        AISystemSettingsUpdate(max_provider_rounds=1001)
+    with pytest.raises(ValueError):
+        AISystemSettingsUpdate(max_tool_calls_per_round=1001)
+
+
+def test_ai_execution_limits_default_to_200():
+    settings = AISystemSettings()
+    assert settings.max_provider_rounds == 200
+    assert settings.max_tool_calls_per_round == 200
 
 
 @pytest.mark.asyncio

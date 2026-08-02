@@ -50,6 +50,7 @@ class AISystemSettingsResponse(SQLModel):
     request_timeout_seconds: int
     history_retention_days: int
     max_provider_rounds: int
+    max_tool_calls_per_round: int
     provider_tested: bool
     tool_calling_tested: bool
     streaming_tested: bool
@@ -65,7 +66,8 @@ class AISystemSettingsUpdate(AIModelParameters):
     private_endpoint_allowlist: Optional[list[str]] = None
     request_timeout_seconds: Optional[int] = Field(default=None, ge=5, le=120)
     history_retention_days: Optional[int] = Field(default=None, ge=1, le=7)
-    max_provider_rounds: Optional[int] = Field(default=None, ge=1, le=60)
+    max_provider_rounds: Optional[int] = Field(default=None, ge=1, le=1000)
+    max_tool_calls_per_round: Optional[int] = Field(default=None, ge=1, le=1000)
 
 
 class UserAISettingsResponse(SQLModel):

@@ -33,7 +33,33 @@ async def migrate_ai(conn: AsyncConnection) -> None:
             await _add_column(conn, table, column, definition)
         if table == "ai_system_settings" and not had_streaming_test:
             await conn.execute(text("UPDATE ai_system_settings SET enabled = FALSE"))
-    await _add_column(conn, "ai_system_settings", "max_provider_rounds", "INT NOT NULL DEFAULT 30")
+    had_tool_call_limit = await column_exists(
+        conn, "ai_system_settings", "max_tool_calls_per_round"
+    )
+    await _add_column(conn, "ai_system_settings", "max_provider_rounds", "INT NOT NULL DEFAULT 200")
+    await _add_column(
+        conn,
+        "ai_system_settings",
+        "max_tool_calls_per_round",
+        "INT NOT NULL DEFAULT 200",
+    )
+    if not had_tool_call_limit:
+        # The previous application default was 30 rounds. Migrate that old
+        # default once while preserving other custom limits.
+        await conn.execute(
+            text(
+                "UPDATE ai_system_settings "
+                "SET max_provider_rounds = 200 "
+                "WHERE max_provider_rounds = 30"
+            )
+        )
+    await conn.execute(
+        text(
+            "UPDATE ai_system_settings "
+            "SET max_provider_rounds = 1000 "
+            "WHERE max_provider_rounds > 1000"
+        )
+    )
     await conn.execute(
         text(
             "UPDATE ai_system_settings "

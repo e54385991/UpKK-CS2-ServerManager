@@ -101,6 +101,7 @@
     "timeout": "Request timeout (seconds)",
     "retention": "History retention (days)",
     "maxProviderRounds": "Max reasoning rounds",
+    "maxToolCallsPerRound": "Max tool calls per round",
     "allowlist": "Private endpoint allowlist",
     "allowlistHint": "One exact scheme://host:port origin per line. Public endpoints must use HTTPS.",
     "adminPrompt": "Administrator prompt additions",

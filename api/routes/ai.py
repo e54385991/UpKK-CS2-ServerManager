@@ -143,6 +143,7 @@ def _system_response(item: AISystemSettings) -> AISystemSettingsResponse:
         request_timeout_seconds=item.request_timeout_seconds,
         history_retention_days=item.history_retention_days,
         max_provider_rounds=item.max_provider_rounds,
+        max_tool_calls_per_round=getattr(item, "max_tool_calls_per_round", 200),
         provider_tested=item.provider_tested,
         tool_calling_tested=item.tool_calling_tested,
         streaming_tested=item.streaming_tested,
@@ -234,6 +235,8 @@ async def update_system_ai_settings(
         item.request_timeout_seconds = request.request_timeout_seconds
     if request.max_provider_rounds is not None:
         item.max_provider_rounds = request.max_provider_rounds
+    if request.max_tool_calls_per_round is not None:
+        item.max_tool_calls_per_round = request.max_tool_calls_per_round
     if request.history_retention_days is not None:
         item.history_retention_days = request.history_retention_days
     if changed_provider:

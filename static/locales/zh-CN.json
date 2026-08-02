@@ -101,6 +101,7 @@
     "timeout": "请求超时（秒）",
     "retention": "历史保留天数",
     "maxProviderRounds": "最大推理轮数",
+    "maxToolCallsPerRound": "每轮最大工具调用数",
     "allowlist": "私有地址白名单",
     "allowlistHint": "每行一个精确的 scheme://host:port；公网地址必须使用 HTTPS。",
     "adminPrompt": "管理员追加提示词",

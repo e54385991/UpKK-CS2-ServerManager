@@ -163,6 +163,23 @@ def test_sse_and_poll_failures_use_five_exponential_retries():
     assert '"pollRetrying"' in chinese
 
 
+def test_ai_reasoning_and_tool_call_limits_are_configurable():
+    orchestrator = (PROJECT_ROOT / "services" / "ai_orchestrator.py").read_text(encoding="utf-8")
+    schema = (PROJECT_ROOT / "modules" / "schemas" / "ai.py").read_text(encoding="utf-8")
+    template = (PROJECT_ROOT / "templates" / "system_settings.html").read_text(encoding="utf-8")
+    chinese = (PROJECT_ROOT / "static" / "locales" / "zh-CN.json").read_text(encoding="utf-8")
+
+    assert "DEFAULT_MAX_PROVIDER_ROUNDS = 200" in orchestrator
+    assert "DEFAULT_MAX_TOOL_CALLS_PER_ROUND = 200" in orchestrator
+    assert "max_tool_calls_per_round" in orchestrator
+    assert "MAX_CONFIGURED_AI_LIMIT = 1000" in orchestrator
+    assert "max_provider_rounds: Optional[int] = Field(default=None, ge=1, le=1000)" in schema
+    assert "max_tool_calls_per_round: Optional[int] = Field(default=None, ge=1, le=1000)" in schema
+    assert 'id="ai-admin-rounds" type="number" min="1" max="1000" value="200"' in template
+    assert 'id="ai-admin-tool-calls" type="number" min="1" max="1000" value="200"' in template
+    assert '"maxToolCallsPerRound": "每轮最大工具调用数"' in chinese
+
+
 def test_finished_background_tasks_have_a_manual_delete_action():
     script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
     chinese = (PROJECT_ROOT / "static" / "locales" / "zh-CN.json").read_text(encoding="utf-8")
