@@ -2,6 +2,12 @@
 
 # ruff: noqa: F403,F405
 
+from services.server_startup_arguments import (
+    normalize_additional_parameters,
+    normalize_default_map,
+    resolved_game_mode,
+)
+
 from .common import *
 
 discord_router = APIRouter(prefix="/servers", tags=["servers"])
@@ -232,38 +238,18 @@ async def get_startup_command(
     server = await get_server_with_permission(server_id, current_user, db)
 
     # Config with safe defaults (mirrors start_server logic)
-    default_map = server.default_map or "de_dust2"
+    try:
+        default_map = normalize_default_map(server.default_map or "de_dust2")
+        game_mode_str = server.game_mode or "competitive"
+        game_type, game_mode = resolved_game_mode(game_mode_str, server.game_type)
+        additional_parameters = normalize_additional_parameters(server.additional_parameters)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid startup configuration: {exc}",
+        ) from exc
     max_players = server.max_players or 32
     server_name = server.server_name or f"CS2 Server {server.id}"
-
-    # Game mode mapping
-    game_mode_str = server.game_mode or "competitive"
-    mode_mapping = {
-        "casual": ("0", "0"),
-        "competitive": ("0", "1"),
-        "wingman": ("0", "2"),
-        "arms_race": ("1", "0"),
-        "armsrace": ("1", "0"),
-        "demolition": ("1", "1"),
-        "deathmatch": ("2", "0"),
-        "custom": ("3", "0"),
-    }
-
-    if game_mode_str:
-        game_mode_lower = game_mode_str.lower()
-        if game_mode_lower in mode_mapping:
-            mapped_game_type, mapped_game_mode = mode_mapping[game_mode_lower]
-            game_mode = mapped_game_mode
-            game_type = server.game_type if server.game_type else mapped_game_type
-        elif game_mode_str.isdigit():
-            game_mode = game_mode_str
-            game_type = server.game_type or "0"
-        else:
-            game_mode = "1"
-            game_type = "0"
-    else:
-        game_mode = "1"
-        game_type = server.game_type or "0"
 
     # Build parameters (same as start_server)
     params = [
@@ -307,8 +293,8 @@ async def get_startup_command(
             ]
         )
 
-    if server.additional_parameters:
-        params.append(server.additional_parameters.strip())
+    if additional_parameters:
+        params.append(additional_parameters)
 
     params_str = " ".join(params)
 

@@ -101,8 +101,15 @@ def _approval_step_id(tool_name: str, step: Any, index: int) -> str:
                     return "install_counterstrikesharp"
             if action == "install_market_plugin":
                 return "install_mapchooser"
-            if action in {"patch_plugin_config", "append_map", "verify"}:
+            if action in {"restart_server", "patch_plugin_config", "append_map", "verify"}:
                 return action
+        if tool_name == "apply_server_startup_update" and action in {
+            "validate_startup_revision",
+            "save_startup_settings",
+            "restart_server",
+            "verify_server",
+        }:
+            return action
         if action:
             return f"step:{index + 1}:{action}"
     return f"step:{index + 1}"
@@ -118,6 +125,14 @@ def _approval_step_label(step: Any) -> str:
         return f"Install {step.get('framework') or 'framework'}"
     if action == "install_market_plugin":
         return f"Install {step.get('title') or 'plugin'}"
+    if action == "restart_server":
+        return "Restart server"
+    if action == "validate_startup_revision":
+        return "Validate startup configuration revision"
+    if action == "save_startup_settings":
+        return "Save startup settings"
+    if action == "verify_server":
+        return "Verify process and A2S"
     if action == "patch_plugin_config":
         return "Update MapChooser configuration"
     if action == "append_map":

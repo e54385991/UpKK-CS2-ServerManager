@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from modules import MarketPlugin, Server, User
+from modules import MarketPlugin, Server, ServerStatus, User
 from modules.http_helper import http_helper
 from services.maintenance_lock import maintenance_lock_service
 from services.map_management_service import (
@@ -213,6 +213,13 @@ async def build_workshop_map_plan(
                 "title": MAPCHOOSER_MARKET_TITLE,
             }
         )
+    if not state.get("metamod") or not state.get("css") or not state.get("mapchooser"):
+        steps.append(
+            {
+                "action": "restart_server",
+                "reason": "load_new_plugins_and_generate_configs",
+            }
+        )
     if config.get("ChangeMapUse_host_workshop_map") is not True:
         steps.append(
             {
@@ -401,6 +408,45 @@ async def execute_workshop_map_plan(
                     raise WorkshopPlanError(plugin_result["message"])
                 await report("install_mapchooser", "completed", "Installed MapChooser")
 
+            if any(step.get("action") == "restart_server" for step in plan["steps"]):
+                await report(
+                    "restart_server",
+                    "running",
+                    "Restarting server to load plugins and generate configuration files",
+                )
+
+                async def restart_progress(message: str) -> None:
+                    await report("restart_server", "running", message)
+
+                restart_manager = SSHManager()
+                stopped, stop_message = await restart_manager.stop_server(current_server)
+                if not stopped:
+                    current_server.status = ServerStatus.ERROR
+                    db.add(current_server)
+                    await db.commit()
+                    raise WorkshopPlanError(
+                        f"Unable to stop server before plugin initialization: {stop_message}"
+                    )
+                started, start_message = await restart_manager.start_server(
+                    current_server, restart_progress
+                )
+                if not started:
+                    current_server.status = ServerStatus.ERROR
+                    db.add(current_server)
+                    await db.commit()
+                    raise WorkshopPlanError(
+                        f"Unable to start server after plugin installation: {start_message}"
+                    )
+                current_server.status = ServerStatus.RUNNING
+                db.add(current_server)
+                await db.commit()
+                completed.append({"action": "restart_server", "success": True})
+                await report(
+                    "restart_server",
+                    "completed",
+                    "Restarted server and completed initial plugin load",
+                )
+
             manager = await _connect(current_server)
             try:
                 state = await _inspect(manager, current_server)
@@ -492,11 +538,19 @@ async def execute_workshop_map_plan(
         except Exception as exc:
             if current_step:
                 await report(current_step, "failed", str(exc))
+            installed_prerequisite = any(
+                str(item.get("action") or "").startswith("install_") for item in completed
+            )
+            restart_completed = any(
+                item.get("action") == "restart_server" and item.get("success") is True
+                for item in completed
+            )
             return {
                 "success": False,
                 "message": str(exc),
                 "completed": completed,
                 "partial_completion": bool(completed),
+                "restart_required": installed_prerequisite and not restart_completed,
             }
 
     return {
@@ -505,4 +559,9 @@ async def execute_workshop_map_plan(
         "workshop": plan["workshop"],
         "completed": completed,
         "predownloaded": False,
+        "restart_performed": any(
+            item.get("action") == "restart_server" and item.get("success") is True
+            for item in completed
+        ),
+        "restart_required": False,
     }

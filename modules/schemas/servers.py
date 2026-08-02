@@ -3,6 +3,12 @@
 # ruff: noqa: F403,F405
 
 from modules.models import AuthType
+from services.server_startup_arguments import (
+    normalize_additional_parameters,
+    normalize_default_map,
+    normalize_game_mode,
+    normalize_game_type,
+)
 
 from .auth import UserResponse
 from .common import *
@@ -142,6 +148,26 @@ class ServerCreate(SQLModel):
         if not re.match(r"^[\d,\-\s]+$", v):
             raise ValueError("CPU affinity must only contain digits, commas, and hyphens")
         return v.strip()
+
+    @field_validator("default_map")
+    @classmethod
+    def validate_default_map(cls, v):
+        return normalize_default_map(v)
+
+    @field_validator("game_mode")
+    @classmethod
+    def validate_game_mode(cls, v):
+        return normalize_game_mode(v)
+
+    @field_validator("game_type")
+    @classmethod
+    def validate_game_type(cls, v):
+        return normalize_game_type(v)
+
+    @field_validator("additional_parameters")
+    @classmethod
+    def validate_additional_parameters(cls, v):
+        return normalize_additional_parameters(v)
 
     @field_validator("steam_account_token")
     @classmethod
@@ -377,6 +403,26 @@ class ServerUpdate(SQLModel):
         if not re.match(r"^[\d,\-\s]+$", v):
             raise ValueError("CPU affinity must only contain digits, commas, and hyphens")
         return v.strip()
+
+    @field_validator("default_map")
+    @classmethod
+    def validate_default_map(cls, v):
+        return normalize_default_map(v) if v is not None else None
+
+    @field_validator("game_mode")
+    @classmethod
+    def validate_game_mode(cls, v):
+        return normalize_game_mode(v) if v is not None else None
+
+    @field_validator("game_type")
+    @classmethod
+    def validate_game_type(cls, v):
+        return normalize_game_type(v) if v is not None else None
+
+    @field_validator("additional_parameters")
+    @classmethod
+    def validate_additional_parameters(cls, v):
+        return normalize_additional_parameters(v)
 
     @field_validator("steam_account_token")
     @classmethod

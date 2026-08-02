@@ -9,16 +9,23 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.dialects import mysql
 from sqlalchemy.schema import CreateTable
 
 from api.routes import ai as ai_routes
 from modules.models import AIMessage, AIToolRun, ManagedPluginFile, MarketPlugin
 from modules.schemas.ai import AIToolDecisionRequest
+from modules.schemas.servers import ServerUpdate
 from modules.utils import get_current_time
 from services import ai_orchestrator
 from services.ai_prompt import CORE_RULES
-from services.ai_tools import TOOLS_BY_NAME, _safe_css_log_name
+from services.ai_tools import (
+    TOOLS_BY_NAME,
+    FilePatchInput,
+    ServerOperationInput,
+    _safe_css_log_name,
+)
 from services.github_plugin_plan_service import (
     GitHubPlanError,
     _archive_entries,
@@ -27,11 +34,13 @@ from services.github_plugin_plan_service import (
     _infer_plugin_metadata,
     _is_linux_archive,
     _mapped_files,
+    _panel_managed_framework,
     _safe_entry_name,
     _validate_release_contents,
     normalize_public_repo_url,
 )
 from services.plugin_conflict_service import (
+    _panel_framework_key,
     _plugin_plan_confirmation_payload,
     _release_asset_candidates,
 )
@@ -46,6 +55,40 @@ from services.plugin_installation import (
     _remote_plugin_temp_dir,
 )
 from services.plugin_inventory_service import installation_evidence
+from services.server_startup_arguments import normalize_additional_parameters
+from services.server_startup_service import (
+    STARTUP_REVISION_FIELDS,
+    StartupPlanError,
+    build_server_startup_plan,
+    execute_server_startup_plan,
+)
+
+
+def _startup_server():
+    values = {field: None for field in STARTUP_REVISION_FIELDS}
+    values.update(
+        {
+            "id": 32,
+            "user_id": 8,
+            "name": "KZ Server",
+            "host": "203.0.113.10",
+            "ssh_port": 22,
+            "game_port": 27015,
+            "game_directory": "/srv/cs2",
+            "server_name": "KZ Server",
+            "default_map": "de_dust2",
+            "max_players": 32,
+            "game_mode": "competitive",
+            "game_type": "0",
+            "additional_parameters": None,
+            "tv_enable": False,
+            "session_manager": "tmux",
+            "a2s_query_host": None,
+            "a2s_query_port": None,
+            "status": SimpleNamespace(value="running"),
+        }
+    )
+    return SimpleNamespace(**values)
 
 
 def test_plugin_staging_directory_isolated_per_operation():
@@ -467,6 +510,67 @@ def test_requested_changes_create_a_panel_approval_instead_of_only_text():
     assert "call the apply tool in the same run" in CORE_RULES
     assert "Never replace that tool call with text" in CORE_RULES
     assert "at most one write tool" in CORE_RULES
+    assert "panel-managed frameworks" in CORE_RULES
+    assert "When a tool result says restart_required" in CORE_RULES
+    assert "Never use values such as new" in CORE_RULES
+
+
+def test_framework_operations_and_file_revisions_have_strict_tool_contracts():
+    assert ServerOperationInput(operation="install_metamod").operation == "install_metamod"
+    assert (
+        ServerOperationInput(operation="install_counterstrikesharp").operation
+        == "install_counterstrikesharp"
+    )
+    with pytest.raises(ValidationError, match="never use 'new'"):
+        FilePatchInput(
+            relative_path="cs2/game/csgo/addons/example/config.json",
+            expected_revision="new",
+            content="{}",
+        )
+
+
+def test_panel_managed_frameworks_are_recognized_before_generic_installation():
+    metamod = MarketPlugin(
+        id=1,
+        title="Metamod:Source",
+        github_url="https://github.com/alliedmodders/metamod-source",
+    )
+    counterstrikesharp = MarketPlugin(
+        id=2,
+        title="CounterStrikeSharp",
+        github_url="https://github.com/roflmuffin/CounterStrikeSharp",
+    )
+
+    assert _panel_framework_key(metamod) == "metamod"
+    assert _panel_framework_key(counterstrikesharp) == "counterstrikesharp"
+    assert _panel_managed_framework("ALLIEDMODDERS", "metamod-source") == "Metamod:Source"
+    assert _panel_managed_framework("roflmuffin", "CounterStrikeSharp") == "CounterStrikeSharp"
+
+
+@pytest.mark.asyncio
+async def test_generic_github_plan_rejects_panel_managed_framework(monkeypatch):
+    from modules.schemas.plugins import GitHubPluginInstallPlanRequest
+    from services import github_plugin_plan_service
+
+    inspect = AsyncMock()
+    monkeypatch.setattr(
+        github_plugin_plan_service,
+        "authorized_server",
+        AsyncMock(return_value=SimpleNamespace(id=4)),
+    )
+    monkeypatch.setattr(github_plugin_plan_service, "inspect_github_plugin", inspect)
+
+    with pytest.raises(GitHubPlanError, match="panel.*run_server_operation"):
+        await github_plugin_plan_service.build_github_install_plan(
+            SimpleNamespace(),
+            SimpleNamespace(),
+            4,
+            GitHubPluginInstallPlanRequest(
+                repo_url="https://github.com/roflmuffin/CounterStrikeSharp"
+            ),
+        )
+
+    inspect.assert_not_awaited()
 
 
 def test_remote_plugin_evidence_does_not_trust_tracking_metadata_alone():
@@ -695,6 +799,40 @@ async def test_market_install_refetches_release_and_succeeds_on_third_attempt(mo
     assert upsert.await_count == 1
     assert plugin.download_count == 1
     assert plugin.install_count == 1
+
+
+@pytest.mark.asyncio
+async def test_framework_market_entry_uses_panel_native_installer(monkeypatch):
+    from services import plugin_conflict_service
+
+    native_install = AsyncMock(
+        return_value={
+            "success": True,
+            "plugin_id": 7,
+            "installation_method": "panel_native",
+            "restart_required": True,
+        }
+    )
+    github_install = AsyncMock()
+    monkeypatch.setattr(plugin_conflict_service, "_install_panel_framework", native_install)
+    monkeypatch.setattr(plugin_conflict_service, "install_github_plugin", github_install)
+    plugin = MarketPlugin(
+        id=7,
+        github_url="https://github.com/roflmuffin/CounterStrikeSharp",
+        title="CounterStrikeSharp",
+    )
+
+    result = await plugin_conflict_service._install_one(
+        SimpleNamespace(),
+        plugin,
+        SimpleNamespace(id=4),
+        SimpleNamespace(),
+    )
+
+    assert result["installation_method"] == "panel_native"
+    assert result["restart_required"] is True
+    native_install.assert_awaited_once()
+    github_install.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1050,6 +1188,7 @@ def test_approval_plan_snapshots_have_stable_workshop_and_plugin_step_ids():
                 {"action": "install_framework", "framework": "metamod"},
                 {"action": "install_framework", "framework": "counterstrikesharp"},
                 {"action": "install_market_plugin", "title": "MapChooser"},
+                {"action": "restart_server"},
                 {"action": "patch_plugin_config"},
                 {"action": "append_map", "name": "kz_variety_x"},
                 {"action": "verify"},
@@ -1061,11 +1200,12 @@ def test_approval_plan_snapshots_have_stable_workshop_and_plugin_step_ids():
         "install_metamod",
         "install_counterstrikesharp",
         "install_mapchooser",
+        "restart_server",
         "patch_plugin_config",
         "append_map",
         "verify",
     ]
-    assert workshop_progress["total"] == 6
+    assert workshop_progress["total"] == 7
     assert workshop_progress["message"] == "Waiting for approval"
 
     plugin_plan, plugin_progress = ai_orchestrator._build_plan_snapshots(
@@ -1459,3 +1599,278 @@ def test_managed_plugin_file_unique_key_uses_fixed_size_path_digest():
 
     assert "UNIQUE (managed_plugin_id, path_hash)" in ddl
     assert "UNIQUE (managed_plugin_id, relative_path)" not in ddl
+
+
+def test_additional_startup_parameters_are_parsed_and_serialized_safely():
+    assert (
+        normalize_additional_parameters('+sv_hibernate_when_empty 0 +exec "practice cfg" -insecure')
+        == "+sv_hibernate_when_empty 0 +exec 'practice cfg' -insecure"
+    )
+    assert normalize_additional_parameters("") is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        "+sv_cheats 0; touch /tmp/pwned",
+        "+exec $(whoami)",
+        "+exec `whoami`",
+        "+hostname duplicate",
+        "-port 27016",
+        "+game_mode 2",
+        "bash -c whoami",
+    ),
+)
+def test_additional_startup_parameters_reject_shell_and_managed_options(value):
+    with pytest.raises(ValueError):
+        normalize_additional_parameters(value)
+    with pytest.raises(ValidationError):
+        ServerUpdate(additional_parameters=value)
+
+
+def test_startup_plan_updates_named_mode_pair_and_has_stable_steps():
+    server = _startup_server()
+
+    plan = build_server_startup_plan(
+        server,
+        {
+            "default_map": "kz_variety_x",
+            "max_players": 24,
+            "game_mode": "deathmatch",
+            "additional_parameters": "+sv_hibernate_when_empty 0 -insecure",
+        },
+    )
+
+    assert plan["blocked"] is False
+    assert plan["after"]["game_type"] == "2"
+    assert plan["after"]["game_mode"] == "deathmatch"
+    assert len(plan["plan_hash"]) == 64
+    assert [step["action"] for step in plan["steps"]] == [
+        "validate_startup_revision",
+        "save_startup_settings",
+        "restart_server",
+        "verify_server",
+    ]
+
+    approval_plan, progress = ai_orchestrator._build_plan_snapshots(
+        "apply_server_startup_update", plan
+    )
+    assert [step["id"] for step in approval_plan["steps"]] == [
+        "validate_startup_revision",
+        "save_startup_settings",
+        "restart_server",
+        "verify_server",
+    ]
+    assert progress["total"] == 4
+
+
+class _StartupLock:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, _exc_type, _exc, _traceback):
+        return None
+
+
+class _StartupDB:
+    def __init__(self, *, fail_first_commit=False):
+        self.commits = 0
+        self.rollbacks = 0
+        self.fail_first_commit = fail_first_commit
+
+    async def commit(self):
+        self.commits += 1
+        if self.fail_first_commit and self.commits == 1:
+            raise RuntimeError("database unavailable")
+
+    async def rollback(self):
+        self.rollbacks += 1
+
+
+@pytest.mark.asyncio
+async def test_stale_startup_plan_is_rejected_before_save_or_restart(monkeypatch):
+    from services import server_startup_service
+
+    server = _startup_server()
+    db = _StartupDB()
+    events = []
+    monkeypatch.setattr(
+        server_startup_service.maintenance_lock_service,
+        "get",
+        lambda *args, **kwargs: _StartupLock(),
+    )
+    monkeypatch.setattr(
+        server_startup_service,
+        "_current_server",
+        AsyncMock(return_value=server),
+    )
+
+    async def progress(message, message_type, metadata):
+        events.append((message, message_type, metadata))
+
+    with pytest.raises(StartupPlanError, match="changed before approval"):
+        await execute_server_startup_plan(
+            db,
+            SimpleNamespace(id=8, is_admin=False),
+            server.id,
+            {"max_players": 24},
+            "0" * 64,
+            progress=progress,
+        )
+
+    assert db.commits == 0
+    assert events[-1][2]["step_status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_startup_save_failure_rolls_back_without_restart(monkeypatch):
+    from services import server_startup_service
+
+    server = _startup_server()
+    request = {"max_players": 24}
+    plan = build_server_startup_plan(server, request)
+    db = _StartupDB(fail_first_commit=True)
+
+    class Manager:
+        async def check_session_manager_available(self, _server):
+            return True, "ready"
+
+        async def stop_server(self, _server):
+            raise AssertionError("restart must not run after save failure")
+
+    monkeypatch.setattr(
+        server_startup_service.maintenance_lock_service,
+        "get",
+        lambda *args, **kwargs: _StartupLock(),
+    )
+    monkeypatch.setattr(
+        server_startup_service,
+        "_current_server",
+        AsyncMock(return_value=server),
+    )
+    monkeypatch.setattr(server_startup_service, "SSHManager", Manager)
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await execute_server_startup_plan(
+            db,
+            SimpleNamespace(id=8, is_admin=False),
+            server.id,
+            request,
+            plan["plan_hash"],
+        )
+
+    assert db.rollbacks == 1
+
+
+@pytest.mark.asyncio
+async def test_restart_failure_reports_saved_startup_configuration(monkeypatch):
+    from services import server_startup_service
+
+    server = _startup_server()
+    request = {"max_players": 24, "default_map": "kz_variety_x"}
+    plan = build_server_startup_plan(server, request)
+    db = _StartupDB()
+
+    class Manager:
+        async def check_session_manager_available(self, _server):
+            return True, "ready"
+
+        async def stop_server(self, _server):
+            return True, "stopped"
+
+        async def start_server(self, _server, _progress=None):
+            return False, "map failed to load"
+
+    monkeypatch.setattr(
+        server_startup_service.maintenance_lock_service,
+        "get",
+        lambda *args, **kwargs: _StartupLock(),
+    )
+    monkeypatch.setattr(
+        server_startup_service,
+        "_current_server",
+        AsyncMock(return_value=server),
+    )
+    monkeypatch.setattr(server_startup_service, "SSHManager", Manager)
+    monkeypatch.setattr(
+        server_startup_service.redis_manager,
+        "clear_server_cache",
+        AsyncMock(return_value=True),
+    )
+
+    result = await execute_server_startup_plan(
+        db,
+        SimpleNamespace(id=8, is_admin=False),
+        server.id,
+        request,
+        plan["plan_hash"],
+    )
+
+    assert result["success"] is False
+    assert result["partial_failure"] is True
+    assert result["configuration_saved"] is True
+    assert result["restart"]["success"] is False
+    assert server.max_players == 24
+    assert server.default_map == "kz_variety_x"
+
+
+@pytest.mark.asyncio
+async def test_successful_startup_update_verifies_process_and_a2s(monkeypatch):
+    from services import server_startup_service
+
+    server = _startup_server()
+    request = {"game_mode": "deathmatch"}
+    plan = build_server_startup_plan(server, request)
+    db = _StartupDB()
+
+    class Manager:
+        async def check_session_manager_available(self, _server):
+            return True, "ready"
+
+        async def stop_server(self, _server):
+            return True, "stopped"
+
+        async def start_server(self, _server, _progress=None):
+            return True, "started"
+
+    monkeypatch.setattr(
+        server_startup_service.maintenance_lock_service,
+        "get",
+        lambda *args, **kwargs: _StartupLock(),
+    )
+    monkeypatch.setattr(
+        server_startup_service,
+        "_current_server",
+        AsyncMock(return_value=server),
+    )
+    monkeypatch.setattr(server_startup_service, "SSHManager", Manager)
+    monkeypatch.setattr(
+        server_startup_service,
+        "_verify_process",
+        AsyncMock(return_value=(True, "process running")),
+    )
+    monkeypatch.setattr(
+        server_startup_service.a2s_service,
+        "query_server_info",
+        AsyncMock(return_value=(True, {"map_name": "de_dust2", "max_players": 32})),
+    )
+    monkeypatch.setattr(
+        server_startup_service.redis_manager,
+        "clear_server_cache",
+        AsyncMock(return_value=True),
+    )
+
+    result = await execute_server_startup_plan(
+        db,
+        SimpleNamespace(id=8, is_admin=False),
+        server.id,
+        request,
+        plan["plan_hash"],
+    )
+
+    assert result["success"] is True
+    assert result["partial_failure"] is False
+    assert result["verification"]["process"] is True
+    assert result["verification"]["a2s"] is True
+    assert server.game_mode == "deathmatch"
+    assert server.game_type == "2"

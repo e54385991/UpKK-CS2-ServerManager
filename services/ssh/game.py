@@ -2,6 +2,12 @@
 
 # ruff: noqa: F403,F405
 
+from services.server_startup_arguments import (
+    normalize_additional_parameters,
+    normalize_default_map,
+    resolved_game_mode,
+)
+
 from .common import *
 
 
@@ -874,54 +880,19 @@ class GameLifecycleMixin:
             cs2_executable = "./cs2"  # Use relative path when in correct directory
 
             # Get configuration with safe defaults
-            default_map = server.default_map or "de_dust2"
+            try:
+                default_map = normalize_default_map(server.default_map or "de_dust2")
+                game_mode_str = server.game_mode or "competitive"
+                game_type, game_mode = resolved_game_mode(game_mode_str, server.game_type)
+                additional_parameters = normalize_additional_parameters(
+                    server.additional_parameters
+                )
+            except ValueError as exc:
+                message = f"Invalid startup configuration: {exc}"
+                await send_progress(message)
+                return False, message
             max_players = server.max_players or 32
             server_name = server.server_name or f"CS2 Server {server.id}"
-
-            # Game mode mapping: convert string names to numeric values
-            # Reference: https://developer.valvesoftware.com/wiki/Counter-Strike:_Global_Offensive/Game_Modes
-            # Format: (game_type, game_mode)
-            game_mode_str = server.game_mode or "competitive"
-
-            # Correct mapping from Valve documentation
-            # Each mode maps to (game_type, game_mode) tuple
-            mode_mapping = {
-                "casual": ("0", "0"),
-                "competitive": ("0", "1"),
-                "wingman": ("0", "2"),
-                "arms_race": ("1", "0"),
-                "armsrace": ("1", "0"),  # Alternative spelling
-                "demolition": ("1", "1"),
-                "deathmatch": ("2", "0"),
-                "custom": ("3", "0"),
-            }
-
-            # Convert game_mode string to numeric values
-            if game_mode_str:
-                game_mode_lower = game_mode_str.lower()
-                # Check if it's in the mapping
-                if game_mode_lower in mode_mapping:
-                    mapped_game_type, mapped_game_mode = mode_mapping[game_mode_lower]
-                    game_mode = mapped_game_mode
-                    # Use mapped game_type if user hasn't explicitly set one
-                    if not server.game_type:
-                        game_type = mapped_game_type
-                    else:
-                        game_type = server.game_type
-                # Check if it's already a numeric string
-                elif game_mode_str.isdigit():
-                    game_mode = game_mode_str
-                    game_type = server.game_type or "0"
-                else:
-                    # Unknown string value, default to competitive and log warning
-                    await send_progress(
-                        f"⚠ Warning: Unknown game_mode '{game_mode_str}', defaulting to competitive"
-                    )
-                    game_mode = "1"
-                    game_type = "0"  # Competitive uses game_type 0
-            else:
-                game_mode = "1"  # Default to competitive
-                game_type = server.game_type or "0"
 
             # Core parameters
             # Note: -tickrate is no longer supported in CS2
@@ -971,8 +942,8 @@ class GameLifecycleMixin:
                 )
 
             # Additional custom parameters
-            if server.additional_parameters:
-                params.append(server.additional_parameters.strip())
+            if additional_parameters:
+                params.append(additional_parameters)
 
             # Combine all parameters
             params_str = " ".join(params)

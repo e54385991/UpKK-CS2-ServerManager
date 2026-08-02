@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import logging
 import re
 from collections.abc import Awaitable, Callable, Iterable
 from contextlib import asynccontextmanager
@@ -39,6 +40,7 @@ from services.plugin_inventory_service import (
 )
 
 ProgressCallback = Callable[..., Awaitable[None]]
+logger = logging.getLogger(__name__)
 
 _GITHUB_REPOSITORY = re.compile(
     r"^(?:https://github\.com/|git@github\.com:)([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$"
@@ -57,6 +59,96 @@ _BLOCKED_ASSET_MARKERS = (
     "symbols",
     "debug",
 )
+_PANEL_FRAMEWORK_REPOSITORIES = {
+    ("alliedmodders", "metamod-source"): "metamod",
+    ("roflmuffin", "counterstrikesharp"): "counterstrikesharp",
+}
+
+
+def _panel_framework_key(plugin: MarketPlugin) -> str | None:
+    """Identify frameworks that must use the panel's dedicated installers."""
+    match = _GITHUB_REPOSITORY.fullmatch((plugin.github_url or "").strip().rstrip("/"))
+    if match:
+        repository_key = tuple(part.casefold() for part in match.groups())
+        if repository_key in _PANEL_FRAMEWORK_REPOSITORIES:
+            return _PANEL_FRAMEWORK_REPOSITORIES[repository_key]
+    normalized_title = re.sub(r"[^a-z0-9]+", "", (plugin.title or "").casefold())
+    if normalized_title in {"metamod", "metamodsource"}:
+        return "metamod"
+    if normalized_title == "counterstrikesharp":
+        return "counterstrikesharp"
+    return None
+
+
+async def _install_panel_framework(
+    db: AsyncSession,
+    plugin: MarketPlugin,
+    server: Server,
+    user: User,
+    framework_key: str,
+    progress: ProgressCallback | None,
+) -> dict[str, Any]:
+    """Route framework market entries through the panel-native installer."""
+    from services.plugin_auto_update_service import record_framework_installation
+    from services.ssh_manager import SSHManager
+
+    await _emit_plan_progress(
+        progress,
+        f"Using the panel-native installer for {plugin.title}",
+        step_id=f"plugin:{plugin.id}",
+        step_status="running",
+    )
+
+    async def framework_progress(message: str) -> None:
+        await _emit_plan_progress(
+            progress,
+            message,
+            step_id=f"plugin:{plugin.id}",
+            step_status="running",
+        )
+
+    manager = SSHManager()
+    if framework_key == "metamod":
+        success, message = await manager.install_metamod(server, framework_progress)
+        installed_frameworks = ("metamod",)
+    else:
+        success, message = await manager.install_counterstrikesharp(server, framework_progress)
+        installed_frameworks = ("metamod", "counterstrikesharp")
+    if not success:
+        return {"success": False, "plugin_id": plugin.id, "message": message}
+
+    tracking_failed = False
+    for installed_framework in installed_frameworks:
+        try:
+            await record_framework_installation(server, user, installed_framework)
+        except Exception as exc:
+            tracking_failed = True
+            logger.warning(
+                "Framework %s installed on server %s but tracking refresh failed: %s",
+                installed_framework,
+                server.id,
+                exc,
+            )
+    plugin.download_count += 1
+    plugin.install_count += 1
+    db.add(plugin)
+    await db.commit()
+    result: dict[str, Any] = {
+        "success": True,
+        "plugin_id": plugin.id,
+        "message": message,
+        "installation_method": "panel_native",
+        "framework": framework_key,
+        "restart_required": True,
+        "next_step": (
+            "Restart (or start) the server and wait for startup before locating generated configs."
+        ),
+    }
+    if tracking_failed:
+        result["tracking_warning"] = (
+            "The framework was installed, but panel version tracking could not be refreshed."
+        )
+    return result
 
 
 class PluginPlanError(ValueError):
@@ -426,6 +518,17 @@ async def _install_one(
     progress: ProgressCallback | None = None,
     operation_id: str | None = None,
 ) -> dict[str, Any]:
+    framework_key = _panel_framework_key(plugin)
+    if framework_key is not None:
+        return await _install_panel_framework(
+            db,
+            plugin,
+            server,
+            user,
+            framework_key,
+            progress,
+        )
+
     total_attempts = PLUGIN_INSTALL_MAX_RETRIES + 1
     failures: list[str] = []
     asset: dict[str, Any] | None = None
@@ -502,7 +605,15 @@ async def _install_one(
     plugin.install_count += 1
     db.add(plugin)
     await db.commit()
-    return {"success": True, "plugin_id": plugin.id, "message": result.message}
+    return {
+        "success": True,
+        "plugin_id": plugin.id,
+        "message": result.message,
+        "restart_required": True,
+        "next_step": (
+            "Restart (or start) the server and wait for startup before locating generated configs."
+        ),
+    }
 
 
 @asynccontextmanager
@@ -516,6 +627,18 @@ async def _optional_server_lock(
         return
     async with maintenance_lock_service.get(server_id, operation=operation, wait=False, ttl=1800):
         yield
+
+
+def _restart_payload(completed: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    if not any(bool(item.get("restart_required")) for item in completed):
+        return {"restart_required": False}
+    return {
+        "restart_required": True,
+        "next_step": (
+            "Restart (or start) the server and wait for startup before searching for, reading, "
+            "or patching generated configuration files."
+        ),
+    }
 
 
 async def execute_plugin_install_plan(
@@ -628,6 +751,7 @@ async def execute_plugin_install_plan(
                         for item in refreshed_plan["installation_order"]
                         if item not in {entry["plugin_id"] for entry in completed}
                     ],
+                    **_restart_payload(completed),
                 }
             await _emit_plan_progress(
                 progress,
@@ -641,4 +765,5 @@ async def execute_plugin_install_plan(
         "message": "Plugin installation plan completed",
         "completed": completed,
         "remaining": [],
+        **_restart_payload(completed),
     }

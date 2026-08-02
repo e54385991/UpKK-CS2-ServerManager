@@ -5,6 +5,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+import logging
 import posixpath
 import re
 import shlex
@@ -12,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -28,6 +29,8 @@ from services.plugin_inventory_service import (
     installation_evidence,
 )
 from services.ssh_manager import SSHManager
+
+logger = logging.getLogger(__name__)
 
 
 class ToolInput(BaseModel):
@@ -131,17 +134,96 @@ class WorkshopPlanInput(ToolInput):
 
 
 class ServerOperationInput(ToolInput):
-    operation: Literal["deploy", "update", "validate"]
+    operation: Literal[
+        "deploy",
+        "update",
+        "validate",
+        "install_metamod",
+        "install_counterstrikesharp",
+    ]
 
 
 class ServerControlInput(ToolInput):
     action: Literal["start", "stop", "restart"]
 
 
+class ServerStartupPlanInput(ToolInput):
+    default_map: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Default map name or Workshop map path; omit to keep the current value",
+    )
+    max_players: int | None = Field(
+        default=None,
+        ge=1,
+        le=64,
+        description="Maximum player slots; omit to keep the current value",
+    )
+    game_mode: str | None = Field(
+        default=None,
+        max_length=50,
+        description=(
+            "Named CS2 mode (casual, competitive, wingman, arms_race, demolition, "
+            "deathmatch, custom) or numeric game_mode; omit to keep the current value"
+        ),
+    )
+    game_type: str | None = Field(
+        default=None,
+        max_length=1,
+        description=(
+            "Numeric game_type from 0 to 9. Usually omit this because named game modes "
+            "synchronize it automatically"
+        ),
+    )
+    additional_parameters: str | None = Field(
+        default=None,
+        max_length=4096,
+        description=(
+            "Additional CS2 +parameter/-parameter arguments. Empty string clears existing "
+            "arguments. Shell commands and dedicated panel settings are rejected"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def require_startup_change(self):
+        editable = {
+            "default_map",
+            "max_players",
+            "game_mode",
+            "game_type",
+            "additional_parameters",
+        }
+        if not (self.model_fields_set & editable):
+            raise ValueError("At least one startup setting must be supplied")
+        return self
+
+
+class ApplyServerStartupPlanInput(ServerStartupPlanInput):
+    expected_plan_hash: str = Field(min_length=64, max_length=64)
+
+
 class FilePatchInput(ToolInput):
     relative_path: str = Field(min_length=1, max_length=500)
-    expected_revision: str = Field(min_length=64, max_length=64)
+    expected_revision: str = Field(
+        min_length=64,
+        max_length=64,
+        description=(
+            "Exact lowercase SHA-256 revision returned by read_server_text_file; "
+            "file creation is not supported"
+        ),
+    )
     content: str = Field(max_length=256_000)
+
+    @field_validator("expected_revision", mode="before")
+    @classmethod
+    def validate_expected_revision(cls, value: Any) -> Any:
+        if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError(
+                "expected_revision must be the exact SHA-256 revision returned by "
+                "read_server_text_file; restart first if the plugin has not generated its "
+                "configuration file, and never use 'new'"
+            )
+        return value
 
 
 class ApplyPluginPlanInput(PluginPlanInput):
@@ -651,7 +733,18 @@ async def list_installed_plugins(ctx: ToolContext, _: EmptyInput) -> dict[str, A
 
 async def plan_plugin_install(ctx: ToolContext, data: PluginPlanInput) -> dict[str, Any]:
     server = await _require_current_server(ctx)
-    from services.plugin_conflict_service import build_plugin_install_plan
+    from services.plugin_conflict_service import _panel_framework_key, build_plugin_install_plan
+
+    plugin = await MarketPlugin.get_by_id(ctx.db, data.plugin_id)
+    framework_key = _panel_framework_key(plugin) if plugin is not None else None
+    if framework_key is not None:
+        operation = (
+            "install_metamod" if framework_key == "metamod" else "install_counterstrikesharp"
+        )
+        raise ValueError(
+            f"{plugin.title} is a panel-managed framework. Use run_server_operation with "
+            f"operation={operation}, not a plugin-market plan."
+        )
 
     return await build_plugin_install_plan(ctx.db, server.id, data.plugin_id, server=server)
 
@@ -661,6 +754,15 @@ async def plan_workshop_map(ctx: ToolContext, data: WorkshopPlanInput) -> dict[s
     from services.workshop_map_service import build_workshop_map_plan
 
     return await build_workshop_map_plan(ctx.db, server, data.model_dump())
+
+
+async def plan_server_startup_update(
+    ctx: ToolContext, data: ServerStartupPlanInput
+) -> dict[str, Any]:
+    server = await _require_current_server(ctx)
+    from services.server_startup_service import build_server_startup_plan
+
+    return build_server_startup_plan(server, data.model_dump(exclude_unset=True))
 
 
 async def plan_plugin_crash_isolation(
@@ -764,6 +866,7 @@ async def apply_github_plugin_install(ctx: ToolContext, data: GitHubApplyInput) 
 async def run_server_operation(ctx: ToolContext, data: ServerOperationInput) -> dict[str, Any]:
     server = await _require_current_server(ctx)
     manager = SSHManager()
+    tracking_failed = False
 
     async def progress(message: str) -> None:
         await ctx.emit("tool_progress", {"message": redact_sensitive_text(message, limit=2000)})
@@ -784,12 +887,57 @@ async def run_server_operation(ctx: ToolContext, data: ServerOperationInput) -> 
                 server.last_update_time = get_current_time()
             else:
                 server.status = ServerStatus.ERROR
-        else:
+        elif data.operation == "validate":
             success, message = await manager.validate_server(server, progress)
             if not success:
                 server.status = ServerStatus.ERROR
+        else:
+            framework_key = (
+                "metamod" if data.operation == "install_metamod" else "counterstrikesharp"
+            )
+            if framework_key == "metamod":
+                success, message = await manager.install_metamod(server, progress)
+                installed_frameworks = ("metamod",)
+            else:
+                # The panel-native CounterStrikeSharp installer checks and
+                # installs Metamod itself when the prerequisite is absent.
+                success, message = await manager.install_counterstrikesharp(server, progress)
+                installed_frameworks = ("metamod", "counterstrikesharp")
+            if success:
+                from services.plugin_auto_update_service import record_framework_installation
+
+                for installed_framework in installed_frameworks:
+                    try:
+                        await record_framework_installation(server, ctx.user, installed_framework)
+                    except Exception as exc:
+                        tracking_failed = True
+                        logger.warning(
+                            "Framework %s installed on server %s but tracking refresh failed: %s",
+                            installed_framework,
+                            server.id,
+                            exc,
+                        )
         await ctx.db.commit()
-    return {"success": success, "message": redact_sensitive_text(message)}
+    result: dict[str, Any] = {
+        "success": success,
+        "message": redact_sensitive_text(message),
+    }
+    if data.operation in {"install_metamod", "install_counterstrikesharp"} and success:
+        result.update(
+            {
+                "installation_method": "panel_native",
+                "restart_required": True,
+                "next_step": (
+                    "Restart (or start) the server, wait for startup to complete, then locate "
+                    "and read generated configuration files before patching them."
+                ),
+            }
+        )
+        if tracking_failed:
+            result["tracking_warning"] = (
+                "The framework was installed, but panel version tracking could not be refreshed."
+            )
+    return result
 
 
 async def control_server(ctx: ToolContext, data: ServerControlInput) -> dict[str, Any]:
@@ -817,6 +965,26 @@ async def control_server(ctx: ToolContext, data: ServerControlInput) -> dict[str
             server.status = ServerStatus.RUNNING if success else ServerStatus.ERROR
         await ctx.db.commit()
     return {"success": success, "message": redact_sensitive_text(message)}
+
+
+async def apply_server_startup_update(
+    ctx: ToolContext, data: ApplyServerStartupPlanInput
+) -> dict[str, Any]:
+    server = await _require_current_server(ctx)
+    from services.server_startup_service import execute_server_startup_plan
+
+    return await execute_server_startup_plan(
+        ctx.db,
+        ctx.user,
+        server.id,
+        data.model_dump(exclude={"expected_plan_hash"}, exclude_unset=True),
+        data.expected_plan_hash,
+        progress=lambda message, message_type, metadata=None: ctx.emit(
+            "tool_progress",
+            {"message": message, "message_type": message_type, **(metadata or {})},
+        ),
+        lock_operation="ai:server_startup_update",
+    )
 
 
 async def patch_server_text_file(ctx: ToolContext, data: FilePatchInput) -> dict[str, Any]:
@@ -1013,6 +1181,13 @@ TOOL_SPECS = (
         plan_workshop_map,
     ),
     ToolSpec(
+        "plan_server_startup_update",
+        "Plan a revision-bound change to the selected server's default map, player slots, game mode/type, or validated additional CS2 startup parameters.",
+        "read",
+        ServerStartupPlanInput,
+        plan_server_startup_update,
+    ),
+    ToolSpec(
         "plan_plugin_crash_isolation",
         "Inventory plugin groups and create a bounded, reversible crash-isolation plan.",
         "read",
@@ -1051,7 +1226,7 @@ TOOL_SPECS = (
     ),
     ToolSpec(
         "run_server_operation",
-        "Deploy, update, or validate the selected CS2 server. Requires user approval.",
+        "Deploy, update, validate, or use the panel-native Metamod/CounterStrikeSharp installers. Framework installation requires a subsequent server restart before generated configs are inspected. Requires user approval.",
         "write",
         ServerOperationInput,
         run_server_operation,
@@ -1064,15 +1239,22 @@ TOOL_SPECS = (
         control_server,
     ),
     ToolSpec(
+        "apply_server_startup_update",
+        "Save an approved startup-settings plan, restart the selected CS2 server, and verify its process and A2S state. Requires user approval.",
+        "write",
+        ApplyServerStartupPlanInput,
+        apply_server_startup_update,
+    ),
+    ToolSpec(
         "patch_server_text_file",
-        "Replace a revision-checked text configuration file after making a timestamped backup. Requires approval.",
+        "Replace an existing text configuration file after read_server_text_file supplied its exact SHA-256 revision; this tool never creates files. Make a timestamped backup and require approval.",
         "write",
         FilePatchInput,
         patch_server_text_file,
     ),
     ToolSpec(
         "apply_plugin_plan",
-        "Install a market plugin after fresh dependency and conflict checks. Requires approval.",
+        "Install a market plugin after fresh dependency and conflict checks. Panel-managed framework dependencies use native installers. On success, restart before inspecting generated configs. Requires approval.",
         "write",
         ApplyPluginPlanInput,
         apply_plugin_plan,
@@ -1100,7 +1282,7 @@ TOOL_SPECS = (
     ),
     ToolSpec(
         "apply_github_plugin_install",
-        "Execute an immutable GitHub release plan with digest verification and configuration policy.",
+        "Execute an immutable GitHub release plan with digest verification and configuration policy. Metamod and CounterStrikeSharp are rejected because their panel-native installers must be used. Restart before inspecting generated configs.",
         "write",
         GitHubApplyInput,
         apply_github_plugin_install,
@@ -1139,7 +1321,14 @@ async def build_approval_summary(
     """Build a fresh, read-only confirmation card for a mutating tool."""
     server = await _require_current_server(context)
     base: dict[str, Any] = {
-        "server": {"id": server.id, "name": server.name},
+        "server": {
+            "id": server.id,
+            "name": server.name,
+            "host": server.host,
+            "ssh_port": server.ssh_port,
+            "game_port": server.game_port,
+            "game_directory": server.game_directory,
+        },
         "tool": name,
         "risk": "Changes remote server state",
     }
@@ -1193,7 +1382,13 @@ async def build_approval_summary(
             "steps": plan["steps"],
             "hard_conflicts": plan["hard_conflicts"],
             "warnings": plan["warnings"],
-            "expected_result": "Dependencies install in order; execution stops at the first failure",
+            "post_install": (
+                "A separate server restart/start is required before generated configs are inspected"
+            ),
+            "expected_result": (
+                "Dependencies install in order; execution stops at the first failure and reports "
+                "restart_required after any successful installation"
+            ),
         }
     if name == "apply_workshop_map":
         data = ApplyWorkshopPlanInput.model_validate(arguments)
@@ -1276,12 +1471,33 @@ async def build_approval_summary(
             "hard_conflicts": plan["hard_conflicts"],
             "conflict_warnings": plan["conflict_warnings"],
             "compatibility_unknown": plan["compatibility_unknown"],
-            "expected_result": "The verified release is staged, backed up, installed, and recorded",
+            "post_install": (
+                "A separate server restart/start is required before generated configs are inspected"
+            ),
+            "expected_result": (
+                "The verified release is staged, backed up, installed, recorded, and reports "
+                "restart_required"
+            ),
         }
     if name == "run_server_operation":
+        operation = arguments["operation"]
+        if operation in {"install_metamod", "install_counterstrikesharp"}:
+            return {
+                **base,
+                "operation": operation,
+                "installation_method": "panel_native",
+                "steps": [
+                    "install with the panel framework installer",
+                    "record framework tracking metadata",
+                    "require a separate restart before generated config inspection",
+                ],
+                "expected_result": (
+                    "The framework is installed through the panel and reports restart_required"
+                ),
+            }
         return {
             **base,
-            "operation": arguments["operation"],
+            "operation": operation,
             "expected_result": "CS2 deployment files may be downloaded or validated",
         }
     if name == "control_server":
@@ -1289,5 +1505,28 @@ async def build_approval_summary(
             **base,
             "operation": arguments["action"],
             "expected_result": "The selected server process state changes",
+        }
+    if name == "apply_server_startup_update":
+        data = ApplyServerStartupPlanInput.model_validate(arguments)
+        from services.server_startup_service import build_server_startup_plan
+
+        plan = build_server_startup_plan(
+            server,
+            data.model_dump(exclude={"expected_plan_hash"}, exclude_unset=True),
+        )
+        if plan["plan_hash"] != data.expected_plan_hash:
+            raise ValueError("Startup configuration changed before approval")
+        if plan["blocked"]:
+            raise ValueError("; ".join(plan["blocking_reasons"]))
+        return {
+            **base,
+            "target": "CS2 startup settings",
+            "configuration_revision": plan["configuration_revision"],
+            "changes": plan["changes"],
+            "steps": plan["steps"],
+            "partial_failure_policy": plan["partial_failure_policy"],
+            "expected_result": (
+                "Settings are saved, the server is restarted, and process/A2S state is verified"
+            ),
         }
     return {**base, "arguments": arguments}

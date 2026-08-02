@@ -55,6 +55,10 @@ MAX_COMPRESSION_RATIO = 200
 README_LIMIT = 8_000
 RELEASE_NOTES_LIMIT = 4_000
 PLAN_CACHE_SECONDS = 30 * 60
+PANEL_MANAGED_FRAMEWORK_REPOSITORIES = {
+    ("alliedmodders", "metamod-source"): "Metamod:Source",
+    ("roflmuffin", "counterstrikesharp"): "CounterStrikeSharp",
+}
 BLOCKED_RELEASE_SUFFIXES = {
     ".bat",
     ".cmd",
@@ -72,6 +76,27 @@ BLOCKED_RELEASE_SUFFIXES = {
 
 class GitHubPlanError(ValueError):
     pass
+
+
+def _panel_managed_framework(owner: str, repository: str) -> str | None:
+    normalized_repository = repository.casefold()
+    if normalized_repository == "counterstrikesharp":
+        return "CounterStrikeSharp"
+    if normalized_repository in {"metamod", "metamod-source"}:
+        return "Metamod:Source"
+    return PANEL_MANAGED_FRAMEWORK_REPOSITORIES.get((owner.casefold(), normalized_repository))
+
+
+def _post_install_restart_payload(required: bool) -> dict[str, Any]:
+    if not required:
+        return {"restart_required": False}
+    return {
+        "restart_required": True,
+        "next_step": (
+            "Restart (or start) the server and wait for startup before searching for, reading, "
+            "or patching generated configuration files."
+        ),
+    }
 
 
 def _github_plan_confirmation_payload(plan: dict[str, Any]) -> dict[str, Any]:
@@ -791,6 +816,20 @@ async def build_github_install_plan(
     request: GitHubPluginInstallPlanRequest,
 ) -> dict[str, Any]:
     server = await authorized_server(db, user, server_id)
+    requested_owner, requested_repo, _requested_canonical = normalize_public_repo_url(
+        request.repo_url
+    )
+    framework_name = _panel_managed_framework(requested_owner, requested_repo)
+    if framework_name is not None:
+        operation = (
+            "install_metamod"
+            if framework_name == "Metamod:Source"
+            else "install_counterstrikesharp"
+        )
+        raise GitHubPlanError(
+            f"{framework_name} is managed by the panel. Use run_server_operation with "
+            f"operation={operation}; generic GitHub installation is disabled for this framework."
+        )
     inspected = await inspect_github_plugin(db, user, request.repo_url, request.mode)
     assets = inspected["release"]["assets"]
     if request.asset_name:
@@ -971,19 +1010,27 @@ async def _execute_github_install_plan_locked(
             )
             completed_dependencies.append({"plugin_id": dependency_id, **dependency_result})
             if not dependency_result["success"]:
+                dependency_restart_required = any(
+                    bool(item.get("restart_required")) for item in completed_dependencies
+                )
                 return {
                     "success": False,
                     "message": f"Stopped after dependency {dependency_id} failed",
                     "completed_dependencies": completed_dependencies,
                     "plan_hash": plan["plan_hash"],
+                    **_post_install_restart_payload(dependency_restart_required),
                 }
         current_revisions = await _target_revisions(server, plan["files"])
         if current_revisions != plan["target_revisions"]:
+            dependency_restart_required = any(
+                bool(item.get("restart_required")) for item in completed_dependencies
+            )
             return {
                 "success": False,
                 "message": "Target files changed while installing dependencies; review a new plan",
                 "completed_dependencies": completed_dependencies,
                 "plan_hash": plan["plan_hash"],
+                **_post_install_restart_payload(dependency_restart_required),
             }
     mapping = plan["mapping"]
     target_prefixes = sorted({item["target"].split("/", 1)[0] for item in mapping})
@@ -1029,11 +1076,15 @@ async def _execute_github_install_plan_locked(
         operation_id=operation_id,
     )
     if not result.success:
+        dependency_restart_required = any(
+            bool(item.get("restart_required")) for item in completed_dependencies
+        )
         return {
             "success": False,
             "message": result.message,
             "completed_dependencies": completed_dependencies,
             "plan_hash": plan["plan_hash"],
+            **_post_install_restart_payload(dependency_restart_required),
         }
 
     managed_result = await db.execute(
@@ -1086,6 +1137,7 @@ async def _execute_github_install_plan_locked(
         "plan_hash": plan["plan_hash"],
         "archive_sha256": plan["archive_sha256"],
         "completed_dependencies": completed_dependencies,
+        **_post_install_restart_payload(True),
     }
 
 
