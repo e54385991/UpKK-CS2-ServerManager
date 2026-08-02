@@ -759,7 +759,25 @@ async def control_server(ctx: ToolContext, data: ServerControlInput) -> dict[str
 async def patch_server_text_file(ctx: ToolContext, data: FilePatchInput) -> dict[str, Any]:
     server = await _require_current_server(ctx)
     relative = _safe_relative_path(data.relative_path)
-    allowed_extensions = (".cfg", ".txt", ".json", ".jsonc", ".ini", ".yaml", ".yml", ".toml")
+    allowed_extensions = (
+        ".cfg",
+        ".txt",
+        ".json",
+        ".jsonc",
+        ".ini",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".vdf",
+        ".sp",
+        ".cs",
+        ".conf",
+        ".xml",
+        ".sh",
+        ".env",
+        ".list",
+        ".nut",
+    )
     if not relative.lower().endswith(allowed_extensions):
         raise ValueError("AI edits are restricted to recognized text configuration files")
     if "\x00" in data.content:
