@@ -903,6 +903,39 @@ async def test_failed_run_persists_a_visible_error_message(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_provider_failures_retry_five_times_with_exponential_backoff(monkeypatch):
+    attempts = 0
+
+    async def completion(*_args, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts <= ai_orchestrator.AI_RETRY_MAX_ATTEMPTS:
+            raise ai_orchestrator.AIProviderError(f"temporary failure {attempts}")
+        return {"content": "Recovered"}
+
+    emit = AsyncMock()
+    sleep = AsyncMock()
+    monkeypatch.setattr(ai_orchestrator, "create_chat_completion", completion)
+    monkeypatch.setattr(ai_orchestrator, "_emit", emit)
+    monkeypatch.setattr(ai_orchestrator.asyncio, "sleep", sleep)
+
+    result = await ai_orchestrator._create_provider_response_with_retry(
+        SimpleNamespace(),
+        [{"role": "user", "content": "status"}],
+        run_id="run-retry",
+        round_index=3,
+        server_selected=True,
+    )
+
+    assert result == {"content": "Recovered"}
+    assert attempts == 6
+    assert [call.args[0] for call in sleep.await_args_list] == [15, 30, 60, 120, 240]
+    retry_events = [call.args for call in emit.await_args_list if call.args[1] == "run_retrying"]
+    assert [args[2]["attempt"] for args in retry_events] == [1, 2, 3, 4, 5]
+    assert [args[2]["delay_seconds"] for args in retry_events] == [15, 30, 60, 120, 240]
+
+
+@pytest.mark.asyncio
 async def test_background_task_view_returns_only_non_sensitive_task_progress():
     run = SimpleNamespace(
         id="run-3",

@@ -115,6 +115,22 @@ def test_run_errors_are_preserved_and_restored_as_error_cards():
     assert "loadConversations(conversationId, false)" in script
 
 
+def test_sse_and_poll_failures_use_five_exponential_retries():
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    chinese = (PROJECT_ROOT / "static" / "locales" / "zh-CN.json").read_text(encoding="utf-8")
+
+    assert "const RETRY_MAX_ATTEMPTS = 5" in script
+    assert "const RETRY_BASE_DELAY_MS = 15000" in script
+    assert "2 ** (retryAttempt - 1)" in script
+    assert "state.reconnectTimer = setTimeout(connectEvents, delay)" in script
+    assert "state.pollTimer = setTimeout(pollRun, nextPollDelay)" in script
+    assert "event.type === 'run_retrying'" in script
+    assert "resetAssistantStream(payload)" in script
+    assert '"providerRetrying"' in chinese
+    assert '"sseRetrying"' in chinese
+    assert '"pollRetrying"' in chinese
+
+
 def test_status_bar_shows_spinner_and_dots_while_active():
     script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
     css = (PROJECT_ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")

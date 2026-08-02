@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -54,6 +55,8 @@ ACTIVE_RUN_STATUSES = ("queued", "running", "waiting_approval")
 AI_DELTA_EVENT_CHARS = 96
 AI_WRITE_QUEUE_WAIT_SECONDS = 5 * 60
 AI_WRITE_LOCK_TTL = 5 * 60
+AI_RETRY_MAX_ATTEMPTS = 5
+AI_RETRY_BASE_SECONDS = 15
 RUN_ERROR_TOOL_NAME = "__run_error__"
 STEP_STATUSES = {"pending", "running", "completed", "failed", "skipped", "interrupted"}
 TERMINAL_STEP_STATUSES = {"completed", "failed", "skipped", "interrupted"}
@@ -244,6 +247,53 @@ class _AssistantDeltaEmitter:
             "assistant_delta",
             {"round": self.round_index, "delta": delta},
         )
+
+
+def _retry_delay_seconds(retry_attempt: int) -> int:
+    return AI_RETRY_BASE_SECONDS * (2 ** (retry_attempt - 1))
+
+
+async def _create_provider_response_with_retry(
+    provider,
+    messages: list[dict[str, Any]],
+    *,
+    run_id: str,
+    round_index: int,
+    server_selected: bool,
+) -> dict[str, Any]:
+    for retry_attempt in range(AI_RETRY_MAX_ATTEMPTS + 1):
+        delta_emitter = _AssistantDeltaEmitter(run_id, round_index)
+        try:
+            response = await create_chat_completion(
+                provider,
+                messages,
+                tools=tool_definitions(server_selected=server_selected),
+                stream=True,
+                on_text_delta=delta_emitter.add,
+            )
+        except AIProviderError as exc:
+            delta_emitter.buffer = ""
+            if retry_attempt >= AI_RETRY_MAX_ATTEMPTS:
+                raise
+            next_attempt = retry_attempt + 1
+            delay = _retry_delay_seconds(next_attempt)
+            safe_error = redact_sensitive_text(str(exc), limit=2000)
+            await _emit(
+                run_id,
+                "run_retrying",
+                {
+                    "round": round_index,
+                    "attempt": next_attempt,
+                    "max_attempts": AI_RETRY_MAX_ATTEMPTS,
+                    "delay_seconds": delay,
+                    "error": safe_error,
+                },
+            )
+            await asyncio.sleep(delay)
+            continue
+        await delta_emitter.flush()
+        return response
+    raise AIProviderError("AI provider retry loop ended unexpectedly")
 
 
 async def _fail_run(db, run: AIRun, message: str) -> None:
@@ -659,17 +709,13 @@ async def process_ai_run(run_id: str) -> None:
                     db, conversation, user, server, provider.admin_prompt
                 )
                 round_index = rounds_used + 1
-                delta_emitter = _AssistantDeltaEmitter(run.id, round_index)
-                try:
-                    response = await create_chat_completion(
-                        provider,
-                        messages,
-                        tools=tool_definitions(server_selected=server is not None),
-                        stream=True,
-                        on_text_delta=delta_emitter.add,
-                    )
-                finally:
-                    await delta_emitter.flush()
+                response = await _create_provider_response_with_retry(
+                    provider,
+                    messages,
+                    run_id=run.id,
+                    round_index=round_index,
+                    server_selected=server is not None,
+                )
                 rounds_used += 1
                 content = redact_sensitive_text(str(response.get("content") or ""), limit=20_000)
                 calls = response.get("tool_calls")

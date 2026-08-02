@@ -2,6 +2,8 @@
     'use strict';
 
     const RUN_ERROR_TOOL_NAME = '__run_error__';
+    const RETRY_MAX_ATTEMPTS = 5;
+    const RETRY_BASE_DELAY_MS = 15000;
 
     const state = {
         initialized: false,
@@ -13,6 +15,8 @@
         eventAbortController: null,
         reconnectTimer: null,
         pollTimer: null,
+        sseRetryCount: 0,
+        pollRetryCount: 0,
         taskViewerTimer: null,
         loadingBackgroundTasks: false,
         lastSequence: '0',
@@ -23,6 +27,18 @@
 
     const element = (id) => document.getElementById(id);
     const translate = (key, fallback) => window.i18n?.t(key) || fallback;
+
+    function retryDelay(retryAttempt) {
+        return RETRY_BASE_DELAY_MS * (2 ** (retryAttempt - 1));
+    }
+
+    function retryMessage(key, fallback, retryAttempt, delay, error) {
+        return translate(key, fallback)
+            .replace('{attempt}', String(retryAttempt))
+            .replace('{max}', String(RETRY_MAX_ATTEMPTS))
+            .replace('{seconds}', String(Math.round(delay / 1000)))
+            .replace('{error}', error || '');
+    }
 
     async function jsonResponse(response) {
         const data = await response.json().catch(() => ({}));
@@ -180,6 +196,14 @@
         return `${state.runId || 'run'}:${payload.round || 0}`;
     }
 
+    function resetAssistantStream(payload) {
+        const key = streamKey(payload);
+        const streamed = state.streamedMessages.get(key);
+        if (!streamed) return;
+        streamed.item.remove();
+        state.streamedMessages.delete(key);
+    }
+
     function appendAssistantDelta(payload) {
         if (typeof payload.delta !== 'string' || !payload.delta) return;
         const key = streamKey(payload);
@@ -330,6 +354,8 @@
         }
         state.runId = task.id;
         state.lastSequence = '0';
+        state.sseRetryCount = 0;
+        state.pollRetryCount = 0;
         showStopButton();
         setStatus(
             task.status === 'waiting_approval'
@@ -704,6 +730,8 @@
                 const run = await jsonResponse(retry);
                 state.runId = run.id;
                 state.lastSequence = '0';
+                state.sseRetryCount = 0;
+                state.pollRetryCount = 0;
                 setStatus(translate('ai.running', 'AI task is running…'));
                 showStopButton();
                 connectEvents();
@@ -713,6 +741,8 @@
             const run = await jsonResponse(response);
             state.runId = run.id;
             state.lastSequence = '0';
+            state.sseRetryCount = 0;
+            state.pollRetryCount = 0;
             setStatus(translate('ai.running', 'AI task is running…'));
             showStopButton();
             connectEvents();
@@ -741,6 +771,7 @@
         });
         if (!data.length) return;
         const event = JSON.parse(data.join('\n'));
+        state.sseRetryCount = 0;
         rememberSequence(event.sequence);
         handleRunEvent(event);
     }
@@ -766,6 +797,7 @@
 
     async function connectEvents() {
         if (!state.runId) return;
+        clearTimeout(state.reconnectTimer);
         state.eventAbortController?.abort();
         const controller = new AbortController();
         const watchedRunId = state.runId;
@@ -781,16 +813,34 @@
                 throw new Error('Server did not return an SSE event stream');
             }
             await consumeSSE(response, controller.signal);
+            if (!controller.signal.aborted && state.runId === watchedRunId) {
+                throw new Error(translate('ai.sseClosed', 'SSE connection closed unexpectedly'));
+            }
         } catch (error) {
             if (error.name !== 'AbortError' && state.runId === watchedRunId) {
-                setStatus(error.message, true);
+                if (state.sseRetryCount >= RETRY_MAX_ATTEMPTS) {
+                    setStatus(
+                        translate(
+                            'ai.sseRetriesExhausted',
+                            'Live updates failed after {max} retries; status polling will continue.'
+                        ).replace('{max}', String(RETRY_MAX_ATTEMPTS)),
+                        true
+                    );
+                } else {
+                    state.sseRetryCount += 1;
+                    const delay = retryDelay(state.sseRetryCount);
+                    setStatus(retryMessage(
+                        'ai.sseRetrying',
+                        'Live updates failed. Retry {attempt}/{max} in {seconds}s: {error}',
+                        state.sseRetryCount,
+                        delay,
+                        error.message
+                    ));
+                    state.reconnectTimer = setTimeout(connectEvents, delay);
+                }
             }
         } finally {
             if (state.eventAbortController === controller) state.eventAbortController = null;
-            if (!controller.signal.aborted && state.runId === watchedRunId) {
-                clearTimeout(state.reconnectTimer);
-                state.reconnectTimer = setTimeout(connectEvents, 1500);
-            }
         }
     }
 
@@ -798,6 +848,16 @@
         const payload = event.payload || {};
         if (event.type === 'assistant_delta') appendAssistantDelta(payload);
         if (event.type === 'assistant_message') finalizeAssistantMessage(payload);
+        if (event.type === 'run_retrying') {
+            resetAssistantStream(payload);
+            setStatus(retryMessage(
+                'ai.providerRetrying',
+                'AI provider failed. Retry {attempt}/{max} in {seconds}s: {error}',
+                payload.attempt,
+                Number(payload.delay_seconds || 0) * 1000,
+                payload.error
+            ));
+        }
         if (event.type === 'tool_approval_required') appendToolCard(payload);
         if (event.type === 'tool_queued') {
             setStatus(`${translate('ai.queued', 'Queued')}: ${payload.tool_name}`);
@@ -843,8 +903,11 @@
     async function pollRun() {
         clearTimeout(state.pollTimer);
         if (!state.runId) return;
+        const watchedRunId = state.runId;
+        let nextPollDelay = 2000;
         try {
-            const run = await jsonResponse(await authFetch(`/api/ai/runs/${state.runId}`));
+            const run = await jsonResponse(await authFetch(`/api/ai/runs/${watchedRunId}`));
+            state.pollRetryCount = 0;
             run.tools
                 .filter((tool) => tool.status === 'pending_approval')
                 .forEach(appendToolCard);
@@ -856,9 +919,30 @@
                 return;
             }
         } catch (error) {
-            setStatus(error.message, true);
+            if (state.runId !== watchedRunId) return;
+            if (state.pollRetryCount >= RETRY_MAX_ATTEMPTS) {
+                setStatus(
+                    translate(
+                        'ai.pollRetriesExhausted',
+                        'Status checks failed after {max} retries.'
+                    ).replace('{max}', String(RETRY_MAX_ATTEMPTS)),
+                    true
+                );
+                return;
+            }
+            state.pollRetryCount += 1;
+            nextPollDelay = retryDelay(state.pollRetryCount);
+            setStatus(retryMessage(
+                'ai.pollRetrying',
+                'Status check failed. Retry {attempt}/{max} in {seconds}s: {error}',
+                state.pollRetryCount,
+                nextPollDelay,
+                error.message
+            ));
         }
-        state.pollTimer = setTimeout(pollRun, 2000);
+        if (state.runId === watchedRunId) {
+            state.pollTimer = setTimeout(pollRun, nextPollDelay);
+        }
     }
 
     async function finishRun(message, isError = false) {
@@ -901,6 +985,8 @@
 
     function stopRunWatch() {
         state.runId = null;
+        state.sseRetryCount = 0;
+        state.pollRetryCount = 0;
         clearTimeout(state.reconnectTimer);
         clearTimeout(state.pollTimer);
         state.eventAbortController?.abort();
