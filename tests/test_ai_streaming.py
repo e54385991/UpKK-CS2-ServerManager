@@ -95,7 +95,7 @@ def test_background_task_viewer_refreshes_from_the_task_api():
     script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
     base = (PROJECT_ROOT / "templates" / "base.html").read_text(encoding="utf-8")
 
-    assert "/api/ai/tasks" in script
+    assert "/api/ai/tasks?conversation_id=" in script
     assert "scheduleBackgroundTaskRefresh" in script
     assert "ai-background-task-list" in base
     assert "tool.progress_snapshot" in script
@@ -103,6 +103,8 @@ def test_background_task_viewer_refreshes_from_the_task_api():
     assert "openBackgroundTask(task)" in script
     assert "tool.risk === 'write'" in script
     assert ".slice(0, 2)" in script
+    assert "state.conversationId !== conversationId" in script
+    assert "renderBackgroundTasks([])" in script
 
 
 def test_background_task_failures_keep_existing_rows_and_show_the_error():

@@ -624,10 +624,11 @@ async def get_ai_run(
 @router.get("/api/ai/tasks", response_model=list[AIBackgroundTaskResponse])
 async def list_ai_background_tasks(
     limit: int = Query(default=20, ge=1, le=100),
+    conversation_id: str = Query(min_length=36, max_length=36),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> list[AIBackgroundTaskResponse]:
-    """Return the caller's active and recently finished AI tasks."""
+    """Return active and recent AI tasks belonging to one caller conversation."""
     await reconcile_waiting_approval_runs(db, user_id=current_user.id)
     await cleanup_expired_ai_runs(db, user_id=current_user.id)
     run_result = await db.execute(
@@ -635,6 +636,7 @@ async def list_ai_background_tasks(
         .join(AIToolRun, AIToolRun.run_id == AIRun.id)
         .where(
             AIRun.user_id == current_user.id,
+            AIRun.conversation_id == conversation_id,
             AIToolRun.risk == "write",
         )
         .distinct()

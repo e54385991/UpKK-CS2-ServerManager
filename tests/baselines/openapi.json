@@ -9808,7 +9808,7 @@
     },
     "/api/ai/tasks": {
       "get": {
-        "description": "Return the caller's active and recently finished AI tasks.",
+        "description": "Return active and recent AI tasks belonging to one caller conversation.",
         "operationId": "list_ai_background_tasks_api_ai_tasks_get",
         "parameters": [
           {
@@ -9821,6 +9821,17 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "maxLength": 36,
+              "minLength": 36,
+              "title": "Conversation Id",
+              "type": "string"
             }
           }
         ],

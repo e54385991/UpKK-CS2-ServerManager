@@ -1290,11 +1290,19 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
     class DB:
         def __init__(self):
             self.results = [Result([]), Result([]), Result([run]), Result([read_tool, tool])]
+            self.statements = []
 
-        async def execute(self, _statement):
+        async def execute(self, statement):
+            self.statements.append(str(statement))
             return self.results.pop(0)
 
-    tasks = await ai_routes.list_ai_background_tasks(20, DB(), SimpleNamespace(id=8))
+    db = DB()
+    tasks = await ai_routes.list_ai_background_tasks(
+        20,
+        run.conversation_id,
+        db,
+        SimpleNamespace(id=8),
+    )
 
     assert len(tasks) == 1
     assert tasks[0].id == run.id
@@ -1302,6 +1310,7 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
     assert len(tasks[0].tools) == 1
     assert tasks[0].tools[0].progress_snapshot["current_step"] == "plugin:17"
     assert not hasattr(tasks[0].tools[0], "arguments")
+    assert "ai_runs.conversation_id" in db.statements[2]
 
 
 @pytest.mark.asyncio

@@ -489,11 +489,20 @@
 
     async function refreshBackgroundTasks() {
         if (state.loadingBackgroundTasks) return;
+        const conversationId = state.conversationId;
+        if (!conversationId) {
+            renderBackgroundTasks([]);
+            return;
+        }
         state.loadingBackgroundTasks = true;
         try {
-            const tasks = await jsonResponse(await authFetch('/api/ai/tasks'));
+            const tasks = await jsonResponse(await authFetch(
+                `/api/ai/tasks?conversation_id=${encodeURIComponent(conversationId)}`
+            ));
+            if (state.conversationId !== conversationId) return;
             renderBackgroundTasks(tasks);
         } catch (error) {
+            if (state.conversationId !== conversationId) return;
             const list = element('ai-background-task-list');
             if (list) {
                 let message = list.querySelector('.ai-background-task-refresh-error');
@@ -695,6 +704,7 @@
 
     async function openConversation(conversationId) {
         stopRunWatch();
+        renderBackgroundTasks([]);
         const conversation = await jsonResponse(
             await authFetch(`/api/ai/conversations/${conversationId}`)
         );
@@ -714,6 +724,7 @@
             }
         });
         clearStatus();
+        await refreshBackgroundTasks();
     }
 
     function newConversation() {
@@ -722,6 +733,7 @@
         state.lastFailedMessage = null;
         element('ai-conversation-select').value = '';
         element('ai-message-list').replaceChildren();
+        renderBackgroundTasks([]);
         state.streamedMessages.clear();
         clearStatus();
     }
