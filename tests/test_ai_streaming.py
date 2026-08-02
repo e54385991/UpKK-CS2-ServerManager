@@ -81,6 +81,23 @@ def test_pending_write_tools_open_a_yes_no_approval_prompt():
     assert '"approvalPromptTitle": "确认服务器变更"' in chinese
 
 
+def test_ai_tasks_require_target_server_confirmation_before_creation():
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    chinese = (PROJECT_ROOT / "static" / "locales" / "zh-CN.json").read_text(encoding="utf-8")
+
+    assert "servers: new Map()" in script
+    assert "state.servers.set(String(server.id), server)" in script
+    assert "function confirmSelectedServer()" in script
+    assert "await confirmSelectedServer()" in script
+    assert script.index("await confirmSelectedServer()") < script.index(
+        "await ensureConversation()"
+    )
+    assert "server.ssh_port" in script
+    assert "server.game_directory" in script
+    assert "serverConfirmationTitle" in script
+    assert '"serverConfirmationTitle": "确认目标服务器"' in chinese
+
+
 def test_write_tool_queue_states_are_rendered_live():
     script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
     chinese = (PROJECT_ROOT / "static" / "locales" / "zh-CN.json").read_text(encoding="utf-8")

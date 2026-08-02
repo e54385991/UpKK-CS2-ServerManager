@@ -10,6 +10,7 @@
         user: null,
         enabled: false,
         fixedServerId: null,
+        servers: new Map(),
         conversationId: null,
         runId: null,
         eventAbortController: null,
@@ -662,6 +663,7 @@
         state.fixedServerId = match ? Number(match[1]) : null;
         const endpoint = state.user.is_admin ? '/servers/admin/all?limit=100' : '/servers?limit=100';
         const servers = await jsonResponse(await authFetch(endpoint));
+        state.servers.clear();
         const select = element('ai-server-select');
         select.replaceChildren();
         const none = document.createElement('option');
@@ -669,6 +671,7 @@
         none.textContent = translate('ai.noServer', 'No server selected');
         select.appendChild(none);
         servers.forEach((server) => {
+            state.servers.set(String(server.id), server);
             const option = document.createElement('option');
             option.value = String(server.id);
             option.textContent = server.name;
@@ -678,6 +681,88 @@
             select.value = String(state.fixedServerId);
             select.disabled = true;
         }
+    }
+
+    function serverValue(value) {
+        return value === null || value === undefined || value === '' ? '-' : String(value);
+    }
+
+    function confirmSelectedServer() {
+        const selectedId = element('ai-server-select')?.value;
+        if (!selectedId) return Promise.resolve(true);
+
+        const server = state.servers.get(String(selectedId));
+        if (!server) {
+            setStatus(
+                translate(
+                    'ai.serverConfirmationUnavailable',
+                    'The selected server details are unavailable. Reload the page and try again.'
+                ),
+                true
+            );
+            return Promise.resolve(false);
+        }
+
+        const lines = [
+            translate(
+                'ai.serverConfirmationIntro',
+                'Verify the target server before starting this AI task:'
+            ),
+            '',
+            `${translate('ai.serverName', 'Name')}: ${serverValue(server.name)}`,
+            `${translate('ai.serverHost', 'IP / host')}: ${serverValue(server.ip_address || server.host)}`,
+            `${translate('ai.serverSshPort', 'SSH port')}: ${serverValue(server.ssh_port)}`,
+            `${translate('ai.serverSshUser', 'SSH user')}: ${serverValue(server.ssh_user)}`,
+            `${translate('ai.serverGamePort', 'Game port')}: ${serverValue(server.game_port)}`,
+            `${translate('ai.serverId', 'Server ID')}: ${serverValue(server.id)}`,
+            `${translate('ai.serverGameDirectory', 'Game directory')}: ${serverValue(server.game_directory)}`,
+            '',
+            translate(
+                'ai.serverConfirmationWarning',
+                'Continue only when every detail above is correct.'
+            ),
+        ];
+        const message = lines.join('\n');
+        const dialog = window.dialogManager;
+        if (
+            typeof window.showConfirm !== 'function'
+            || !dialog
+            || typeof dialog.confirm !== 'function'
+        ) {
+            setStatus(
+                translate(
+                    'ai.serverConfirmationUnavailable',
+                    'The server confirmation dialog is unavailable. Reload the page and try again.'
+                ),
+                true
+            );
+            return Promise.resolve(false);
+        }
+
+        return new Promise((resolve) => {
+            let settled = false;
+            const modal = document.getElementById('globalDialogModal');
+            const finish = (confirmed) => {
+                if (settled) return;
+                settled = true;
+                if (modal) modal.removeEventListener('hidden.bs.modal', handleHidden);
+                const stillSelected = element('ai-server-select')?.value === selectedId;
+                resolve(confirmed && stillSelected);
+            };
+            const handleHidden = () => finish(false);
+            if (modal) modal.addEventListener('hidden.bs.modal', handleHidden, { once: true });
+            try {
+                window.showConfirm(
+                    message,
+                    () => finish(true),
+                    () => finish(false),
+                    translate('ai.serverConfirmationTitle', 'Confirm target server')
+                );
+            } catch (error) {
+                finish(false);
+                setStatus(error.message, true);
+            }
+        });
     }
 
     async function loadConversations(preferredId = null, openSelected = true) {
@@ -760,6 +845,11 @@
         if (!content) return;
         element('ai-send-button').disabled = true;
         try {
+            const serverConfirmed = await confirmSelectedServer();
+            if (!serverConfirmed) {
+                element('ai-send-button').disabled = !state.enabled;
+                return;
+            }
             const conversationId = await ensureConversation();
             appendMessage('user', content);
             input.value = '';
