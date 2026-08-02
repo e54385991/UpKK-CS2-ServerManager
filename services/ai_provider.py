@@ -22,6 +22,12 @@ class AIProviderError(RuntimeError):
     pass
 
 
+def _validate_message_payload(message: dict[str, Any]) -> dict[str, Any]:
+    if not message.get("tool_calls") and not str(message.get("content") or "").strip():
+        raise AIProviderError("AI provider returned neither text nor tool calls")
+    return message
+
+
 TextDeltaCallback = Callable[[str], Awaitable[None]]
 MAX_STREAMED_CONTENT_CHARS = 20_000
 
@@ -216,7 +222,9 @@ async def create_chat_completion(
                     if error is not None:
                         raise error
                 if stream:
-                    return await _consume_chat_completion_stream(response, on_text_delta)
+                    return _validate_message_payload(
+                        await _consume_chat_completion_stream(response, on_text_delta)
+                    )
                 response_content = await _read_limited_response(response)
     except httpx.HTTPError as exc:
         raise AIProviderError(f"AI provider request failed: {type(exc).__name__}") from exc
@@ -227,7 +235,7 @@ async def create_chat_completion(
         raise AIProviderError("AI provider returned an invalid Chat Completions response") from exc
     if not isinstance(message, dict):
         raise AIProviderError("AI provider response message is invalid")
-    return message
+    return _validate_message_payload(message)
 
 
 async def test_provider(config: AIProviderConfig) -> tuple[bool, bool, bool, str]:

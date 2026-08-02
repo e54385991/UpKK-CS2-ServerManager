@@ -273,6 +273,10 @@ async def _create_provider_response_with_retry(
                 stream=True,
                 on_text_delta=delta_emitter.add,
             )
+            response_content = str(response.get("content") or "")
+            if not response.get("tool_calls") and not response_content.strip():
+                raise AIProviderError("AI provider returned neither text nor tool calls")
+            await delta_emitter.flush()
         except AIProviderError as exc:
             delta_emitter.buffer = ""
             if retry_attempt >= AI_RETRY_MAX_ATTEMPTS:
@@ -293,7 +297,6 @@ async def _create_provider_response_with_retry(
             )
             await asyncio.sleep(delay)
             continue
-        await delta_emitter.flush()
         return response
     raise AIProviderError("AI provider retry loop ended unexpectedly")
 
