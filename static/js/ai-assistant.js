@@ -110,10 +110,10 @@
     }
 
     function setTokenActivity(active) {
-        element('ai-token-activity-icon')?.classList.toggle(
-            'ai-token-activity-active',
-            active
-        );
+        const container = element('ai-token-usage');
+        const icon = element('ai-token-activity-icon');
+        if (active) container?.classList.remove('d-none');
+        icon?.classList.toggle('ai-token-activity-active', active);
     }
 
     function animateTokenCount(target, value) {
@@ -444,6 +444,7 @@
             return;
         }
         state.runId = task.id;
+        setTokenActivity(true);
         state.lastSequence = '0';
         state.sseRetryCount = 0;
         state.pollRetryCount = 0;
@@ -966,6 +967,7 @@
                 state.suppressReload = false;
                 const run = await jsonResponse(retry);
                 state.runId = run.id;
+                setTokenActivity(true);
                 state.lastSequence = '0';
                 state.sseRetryCount = 0;
                 state.pollRetryCount = 0;
@@ -977,6 +979,7 @@
             }
             const run = await jsonResponse(response);
             state.runId = run.id;
+            setTokenActivity(true);
             state.lastSequence = '0';
             state.sseRetryCount = 0;
             state.pollRetryCount = 0;

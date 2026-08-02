@@ -388,17 +388,21 @@ body {
 }
 
 .ai-token-activity-icon {
+    display: inline-block;
+    flex: 0 0 auto;
     color: var(--bs-warning);
-    opacity: .45;
+    opacity: .55;
+    transform-origin: center;
 }
 
 .ai-token-activity-icon.ai-token-activity-active {
-    animation: ai-token-flash 1s ease-in-out infinite;
+    animation: ai-token-flash .8s ease-in-out infinite;
+    filter: drop-shadow(0 0 .25rem rgba(255, 193, 7, .85));
 }
 
 @keyframes ai-token-flash {
-    0%, 100% { opacity: .35; transform: scale(.9) rotate(-5deg); }
-    50% { opacity: 1; transform: scale(1.12) rotate(5deg); }
+    0%, 100% { opacity: .35; transform: scale(.88) rotate(-8deg); }
+    50% { opacity: 1; transform: scale(1.24) rotate(8deg); }
 }
 
 .ai-token-stat {

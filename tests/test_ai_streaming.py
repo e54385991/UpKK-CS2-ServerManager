@@ -198,6 +198,7 @@ def test_token_usage_is_streamed_and_animated_in_the_current_session():
     assert "ai-token-value-pulse" in css
     assert "bi-lightning-charge-fill" in base
     assert "ai-token-activity-active" in script
+    assert "setTokenActivity(true)" in script
     assert "ai-token-flash" in css
 
 
