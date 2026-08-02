@@ -156,23 +156,24 @@ def installation_evidence(item: Any, inventory: dict[str, Any]) -> list[dict[str
     """Return remote evidence matching a managed record or market plugin."""
     frameworks = inventory.get("frameworks") or {}
     framework_key = str(getattr(item, "framework_key", "") or "").casefold()
-    aliases: set[str] = set()
+    identity_aliases: set[str] = set()
     for value in (
         getattr(item, "display_name", None),
         getattr(item, "title", None),
         getattr(item, "repo_url", None),
         getattr(item, "github_url", None),
-        getattr(item, "custom_install_path", None),
     ):
-        aliases.update(_alias_variants(value))
+        identity_aliases.update(_alias_variants(value))
 
     if framework_key in frameworks and frameworks[framework_key]:
         return [{"kind": "framework", "name": framework_key}]
-    if frameworks.get("metamod") and "metamodsource" in aliases:
+    if frameworks.get("metamod") and "metamodsource" in identity_aliases:
         return [{"kind": "framework", "name": "metamod"}]
-    if frameworks.get("counterstrikesharp") and "counterstrikesharp" in aliases:
+    if frameworks.get("counterstrikesharp") and "counterstrikesharp" in identity_aliases:
         return [{"kind": "framework", "name": "counterstrikesharp"}]
 
+    aliases = set(identity_aliases)
+    aliases.update(_alias_variants(getattr(item, "custom_install_path", None)))
     matches: list[dict[str, str]] = []
     for plugin in inventory.get("plugins") or []:
         if _aliases_match(aliases, _alias_variants(str(plugin.get("name") or ""))):

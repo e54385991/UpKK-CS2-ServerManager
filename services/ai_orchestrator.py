@@ -601,6 +601,7 @@ async def _execute_tool_run(
     tool_run: AIToolRun,
     user: User,
     server: Server | None,
+    precomputed_result: dict[str, Any] | None = None,
 ) -> None:
     async def tool_event(event_type: str, payload: dict[str, Any]) -> None:
         if event_type in {"tool_progress", "diagnostic_progress"}:
@@ -641,7 +642,10 @@ async def _execute_tool_run(
             context.server = server
         context.user = current_user
         context.run_id = run.id
-        if tool_run.risk == "write":
+        if precomputed_result is not None:
+            await mark_running()
+            result = precomputed_result
+        elif tool_run.risk == "write":
             _update_progress_snapshot(tool_run, {"message": "Queued for execution"})
             db.add(tool_run)
             await db.commit()
@@ -847,9 +851,15 @@ async def process_ai_run(run_id: str) -> None:
             )
             rounds_used = int(count_result.scalar_one())
             tool_result = await db.execute(select(AIToolRun).where(AIToolRun.run_id == run.id))
+            existing_tool_runs = list(tool_result.scalars().all())
             signatures = Counter(
-                (item.tool_name, item.arguments_hash) for item in tool_result.scalars().all()
+                (item.tool_name, item.arguments_hash) for item in existing_tool_runs
             )
+            previous_results = {
+                (item.tool_name, item.arguments_hash): item.result
+                for item in existing_tool_runs
+                if item.result is not None
+            }
             session_input_tokens = 0
             session_output_tokens = 0
 
@@ -940,6 +950,7 @@ async def process_ai_run(run_id: str) -> None:
                     )
 
                 normalized_calls: list[tuple[dict[str, Any], str, dict[str, Any], str]] = []
+                duplicate_read_calls: dict[str, tuple[str, str]] = {}
                 seen_ids: set[str] = set()
                 for raw_call in calls:
                     if not isinstance(raw_call, dict):
@@ -976,7 +987,9 @@ async def process_ai_run(run_id: str) -> None:
                     _, arguments_hash = canonical_arguments(clean_arguments)
                     signatures[(name, arguments_hash)] += 1
                     if signatures[(name, arguments_hash)] > MAX_REPEATED_CALLS:
-                        raise AIProviderError(f"Repeated tool-call loop detected for {name}")
+                        if spec.risk != "read":
+                            raise AIProviderError(f"Repeated tool-call loop detected for {name}")
+                        duplicate_read_calls[call_id] = (name, arguments_hash)
                     normalized_calls.append((raw_call, name, clean_arguments, arguments_hash))
 
                 _validate_write_tool_batch([item[1] for item in normalized_calls])
@@ -1095,7 +1108,31 @@ async def process_ai_run(run_id: str) -> None:
                             },
                         )
                     else:
-                        await _execute_tool_run(db, run, item, user, server)
+                        signature = duplicate_read_calls.get(item.tool_call_id)
+                        if signature is None:
+                            await _execute_tool_run(db, run, item, user, server)
+                            previous_results[(item.tool_name, item.arguments_hash)] = item.result
+                            continue
+                        reused_result = {
+                            "success": True,
+                            "duplicate_call": True,
+                            "message": (
+                                "This identical read-only tool call was already completed. "
+                                "Use the previous result, change the search arguments, or answer "
+                                "the user; do not repeat the same call again."
+                            ),
+                            "previous_result": sanitize_tool_result(
+                                previous_results.get(signature)
+                            ),
+                        }
+                        await _execute_tool_run(
+                            db,
+                            run,
+                            item,
+                            user,
+                            server,
+                            precomputed_result=reused_result,
+                        )
 
                 if any(item.status == "pending_approval" for item in created):
                     run.status = "waiting_approval"

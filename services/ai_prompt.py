@@ -24,6 +24,7 @@ Non-negotiable rules:
 15. A successful plugin or framework installation may require the game process to load once before runtime-generated configuration files exist. When a tool result says restart_required, call control_server with restart (or start if the server is stopped), wait for that tool to succeed, and only then search for or read configuration files. Do not guess configuration paths before that restart.
 16. patch_server_text_file modifies an existing file only. First locate the file after the required restart, then call read_server_text_file and pass its exact 64-character SHA-256 revision. Never use values such as new, create, missing, or an invented hash for expected_revision.
 17. Change maximum players, default map, game mode/type, or additional CS2 startup arguments only through plan_server_startup_update followed by apply_server_startup_update. The apply tool owns saving, restart, and process/A2S verification under one approval. Never edit startup scripts or use additional parameters to duplicate panel-managed options.
+18. Never repeat an identical read-only tool call after it has returned a result. Reuse that evidence, change the query or path when new evidence is needed, or answer the user directly.
 """
 
 

@@ -617,6 +617,33 @@ def test_remote_plugin_evidence_does_not_trust_tracking_metadata_alone():
     assert installation_evidence(stale, inventory) == []
 
 
+def test_simple_admin_install_root_is_not_counterstrikesharp_plugin_evidence():
+    simple_admin = SimpleNamespace(
+        market_plugin_id=7,
+        display_name="CS2-SimpleAdmin",
+        repo_url="https://github.com/daffyyyy/CS2-SimpleAdmin",
+        framework_key=None,
+        custom_install_path="addons/counterstrikesharp",
+    )
+    inventory = {
+        "frameworks": {"metamod": True, "counterstrikesharp": True},
+        "plugins": [],
+        "truncated": False,
+    }
+
+    assert installation_evidence(simple_admin, inventory) == []
+
+    inventory["plugins"] = [
+        {
+            "key": "counterstrikesharp:cs2-simpleadmin",
+            "kind": "counterstrikesharp",
+            "name": "CS2-SimpleAdmin",
+            "relative_path": ("cs2/game/csgo/addons/counterstrikesharp/plugins/CS2-SimpleAdmin"),
+        }
+    ]
+    assert installation_evidence(simple_admin, inventory)[0]["name"] == "CS2-SimpleAdmin"
+
+
 @pytest.mark.asyncio
 async def test_plugin_plan_does_not_skip_stale_tracking_record(monkeypatch):
     from services import plugin_conflict_service
@@ -662,6 +689,66 @@ async def test_plugin_plan_does_not_skip_stale_tracking_record(monkeypatch):
         AsyncMock(
             return_value={
                 "frameworks": {"metamod": False, "counterstrikesharp": False},
+                "plugins": [],
+                "truncated": False,
+            }
+        ),
+    )
+
+    plan = await plugin_conflict_service.build_plugin_install_plan(
+        DB(), 4, 7, server=SimpleNamespace(id=4)
+    )
+
+    assert plan["already_installed"] == []
+    assert plan["steps"][0]["status"] == "install"
+    assert plan["steps"][0]["reason"] == "tracking_record_without_remote_evidence"
+
+
+@pytest.mark.asyncio
+async def test_plugin_plan_does_not_skip_simple_admin_when_only_framework_exists(monkeypatch):
+    from services import plugin_conflict_service
+
+    target = MarketPlugin(
+        id=7,
+        github_url="https://github.com/daffyyyy/CS2-SimpleAdmin",
+        title="CS2-SimpleAdmin",
+    )
+    tracked = SimpleNamespace(
+        market_plugin_id=7,
+        display_name="CS2-SimpleAdmin",
+        repo_url=target.github_url,
+        framework_key=None,
+        custom_install_path="addons/counterstrikesharp",
+    )
+
+    class Result:
+        def __init__(self, values):
+            self.values = values
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.values
+
+    class DB:
+        def __init__(self):
+            self.results = [Result([tracked]), Result([])]
+
+        async def execute(self, _statement):
+            return self.results.pop(0)
+
+    monkeypatch.setattr(
+        plugin_conflict_service,
+        "_resolve_dependency_order",
+        AsyncMock(return_value=([], target)),
+    )
+    monkeypatch.setattr(
+        plugin_conflict_service,
+        "inspect_remote_plugin_inventory",
+        AsyncMock(
+            return_value={
+                "frameworks": {"metamod": True, "counterstrikesharp": True},
                 "plugins": [],
                 "truncated": False,
             }
@@ -1177,6 +1264,57 @@ async def test_queued_write_emits_queue_then_execution_status(monkeypatch):
     ]
     assert events == ["tool_queued", "tool_started", "tool_completed"]
     assert tool.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_repeated_read_uses_precomputed_result_without_reexecuting_tool(monkeypatch):
+    user = SimpleNamespace(id=8, is_active=True)
+    run = SimpleNamespace(id="run-repeated-read", conversation_id="conversation-repeated-read")
+    tool = SimpleNamespace(
+        id="tool-repeated-read",
+        tool_name="search_server_files",
+        arguments={"query": "CS2-SimpleAdmin"},
+        arguments_hash="a" * 64,
+        risk="read",
+        requires_approval=False,
+        status="pending",
+        result=None,
+        error=None,
+        completed_at=None,
+        tool_call_id="call-repeated-read",
+        progress_snapshot={"steps": []},
+        progress_updated_at=None,
+    )
+    reused = {
+        "success": True,
+        "duplicate_call": True,
+        "previous_result": {"success": True, "matches": []},
+    }
+    events = []
+
+    class DB:
+        async def get(self, _model, _id):
+            return user
+
+        def add(self, _item):
+            pass
+
+        async def commit(self):
+            pass
+
+    async def emit(_run_id, event_type, _payload):
+        events.append(event_type)
+
+    execute = AsyncMock()
+    monkeypatch.setattr(ai_orchestrator, "_emit", emit)
+    monkeypatch.setattr(ai_orchestrator, "execute_tool", execute)
+
+    await ai_orchestrator._execute_tool_run(DB(), run, tool, user, None, precomputed_result=reused)
+
+    execute.assert_not_awaited()
+    assert events == ["tool_started", "tool_completed"]
+    assert tool.status == "completed"
+    assert tool.result == reused
 
 
 def test_approval_plan_snapshots_have_stable_workshop_and_plugin_step_ids():
