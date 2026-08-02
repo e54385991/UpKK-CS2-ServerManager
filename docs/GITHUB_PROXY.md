@@ -402,7 +402,8 @@ async def upload_file_with_progress(local_path, remote_path, server, progress_ca
 1. Check if `use_panel_proxy` is enabled
 2. If enabled:
    - Download to `/tmp/cs2_panel_proxy_{user_id}/{unique_id}/`
-   - Upload to `/tmp/github_plugin_{server_id}/` on remote server
+   - Upload to an operation-scoped directory such as
+     `/tmp/upkk-plugin-{server_id}-{operation_id}/` on the remote server
    - Continue with extraction and installation
 3. If disabled:
    - Use original flow (direct download on game server or via GitHub proxy)

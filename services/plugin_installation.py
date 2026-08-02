@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shlex
 import shutil
 import tempfile
@@ -39,6 +40,18 @@ _NON_RETRYABLE_INSTALL_ERRORS = (
     "approved archive source prefix was not found",
     "approved archive mapping did not contain addons",
 )
+
+
+def _operation_token(operation_id: str | None) -> str:
+    """Return a shell-safe, bounded identifier for one installation attempt."""
+    raw = str(operation_id or "").strip()
+    token = re.sub(r"[^A-Za-z0-9_.-]+", "-", raw).strip("-_.")[:80]
+    return token or uuid.uuid4().hex
+
+
+def _remote_plugin_temp_dir(server_id: int, operation_id: str | None) -> str:
+    """Build an isolated remote staging directory for one installation."""
+    return f"/tmp/upkk-plugin-{server_id}-{_operation_token(operation_id)}"
 
 
 def _build_plugin_copy_command(
@@ -148,6 +161,7 @@ async def install_github_plugin(
     db: AsyncSession,
     current_user: User,
     ai_progress: Callable[[str, str], Awaitable[None]] | None = None,
+    operation_id: str | None = None,
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from a GitHub release asset with WebSocket progress updates.
@@ -234,6 +248,10 @@ async def install_github_plugin(
         await notify_install_result(False, f"SSH connection failed: {msg}")
         return GitHubPluginInstallResponse(success=False, message=f"SSH connection failed: {msg}")
 
+    # Never share staging files by server ID alone.  A run ID is stable across
+    # retries, while direct API callers receive a fresh UUID automatically.
+    remote_temp_dir = _remote_plugin_temp_dir(server_id, operation_id)
+
     try:
         await progress("Connected to server, starting plugin installation...")
 
@@ -289,7 +307,6 @@ async def install_github_plugin(
                     await progress(error_msg, "error")
                     await notify_install_result(False, error_msg)
                     return GitHubPluginInstallResponse(success=False, message=error_msg)
-                remote_temp_dir = f"/tmp/github_plugin_{server_id}"
                 await ssh_manager.execute_command(
                     f"rm -rf -- {shlex.quote(remote_temp_dir)} && "
                     f"mkdir -p -- {shlex.quote(remote_temp_dir)}"
@@ -399,9 +416,9 @@ async def install_github_plugin(
                 await progress(f"Download complete ({size_str}), uploading to server via SFTP...")
 
                 # Upload to remote server via SFTP
-                remote_temp_dir = f"/tmp/github_plugin_{server_id}"
                 await ssh_manager.execute_command(
-                    f"rm -rf {remote_temp_dir} && mkdir -p {remote_temp_dir}"
+                    f"rm -rf -- {shlex.quote(remote_temp_dir)} && "
+                    f"mkdir -p -- {shlex.quote(remote_temp_dir)}"
                 )
                 remote_archive_path = f"{remote_temp_dir}/{archive_filename}"
 
@@ -454,9 +471,11 @@ async def install_github_plugin(
         else:
             # Original Mode: Download directly on remote server
             # Create temp directory
-            temp_dir = f"/tmp/github_plugin_{server_id}"
-            await ssh_manager.execute_command(f"rm -rf {temp_dir} && mkdir -p {temp_dir}")
-            archive_file = f"{temp_dir}/{archive_filename}"
+            await ssh_manager.execute_command(
+                f"rm -rf -- {shlex.quote(remote_temp_dir)} && "
+                f"mkdir -p -- {shlex.quote(remote_temp_dir)}"
+            )
+            archive_file = f"{remote_temp_dir}/{archive_filename}"
 
             # Download archive with progress (use GitHub proxy if configured)
             await progress(f"Downloading plugin archive ({archive_type})...")
@@ -476,20 +495,15 @@ async def install_github_plugin(
             )
 
             if not success:
-                await ssh_manager.execute_command(f"rm -rf {temp_dir}")
+                await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
                 await progress(f"Failed to download plugin: {stderr}", "error")
                 await notify_install_result(False, f"Failed to download plugin: {stderr}")
                 return GitHubPluginInstallResponse(
                     success=False, message=f"Failed to download plugin: {stderr}"
                 )
 
-        # Continue with common extraction logic
-        # Get remote temp directory based on mode
-        if server.use_panel_proxy or secure_plan_download:
-            remote_temp_dir = f"/tmp/github_plugin_{server_id}"
-        else:
-            remote_temp_dir = temp_dir
-
+        # Continue with common extraction logic. All modes use the same
+        # operation-scoped remote staging directory.
         if request.expected_archive_sha256:
             await progress("Verifying immutable release archive digest...")
             digest_cmd = f"sha256sum -- {shlex.quote(archive_file)} | awk '{{print $1}}'"
@@ -510,7 +524,7 @@ async def install_github_plugin(
             success, size_output, _ = await ssh_manager.execute_command(size_cmd)
 
             if not success or not size_output.strip():
-                await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
                 await progress("Downloaded file is invalid", "error")
                 await notify_install_result(False, "Downloaded file is invalid")
                 return GitHubPluginInstallResponse(
@@ -519,7 +533,7 @@ async def install_github_plugin(
 
             file_size = int(size_output.strip())
             if file_size < 1000:
-                await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
                 await progress("Downloaded file is too small or empty", "error")
                 await notify_install_result(False, "Downloaded file is too small or empty")
                 return GitHubPluginInstallResponse(
@@ -558,7 +572,7 @@ async def install_github_plugin(
         success, _, stderr = await ssh_manager.execute_command(extract_cmd, timeout=120)
 
         if not success:
-            await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+            await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
             await progress(f"Failed to extract archive: {stderr}", "error")
             await notify_install_result(False, f"Failed to extract archive: {stderr}")
             return GitHubPluginInstallResponse(
@@ -671,7 +685,7 @@ async def install_github_plugin(
 
                 # Validate custom path to prevent path traversal
                 if ".." in safe_custom_path or safe_custom_path.startswith("/"):
-                    await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                    await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
                     error_msg = "Invalid custom install path specified"
                     await progress(error_msg, "error")
                     await notify_install_result(False, error_msg)
@@ -738,7 +752,7 @@ async def install_github_plugin(
 
                 if not success:
                     rollback_message = await rollback_install(target_custom_dir)
-                    await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                    await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
                     error_msg = f"Failed to copy files to custom path: {stderr}"
                     if rollback_message:
                         error_msg = f"{error_msg}. {rollback_message}"
@@ -749,7 +763,7 @@ async def install_github_plugin(
                 await progress(f"Extracted to custom path: {safe_custom_path}")
 
                 # Cleanup and return success
-                await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
 
                 # Count files after installation
                 count_after_cmd = f"find {csgo_dir}/addons -type f 2>/dev/null | wc -l"
@@ -773,7 +787,7 @@ async def install_github_plugin(
                 )
             else:
                 # No addons directory found - reject installation
-                await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+                await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
                 error_msg = "No addons/ directory found in archive. This does not appear to be a valid CS2 plugin package."
                 await progress(error_msg, "error")
                 await notify_install_result(False, error_msg)
@@ -850,7 +864,7 @@ async def install_github_plugin(
             failure_message = f"Failed to copy files: {stderr}"
             if rollback_message:
                 failure_message = f"{failure_message}. {rollback_message}"
-            await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+            await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
             await progress(failure_message, "error")
             await notify_install_result(False, failure_message, installed_files)
             return GitHubPluginInstallResponse(
@@ -860,7 +874,7 @@ async def install_github_plugin(
             )
 
         # Cleanup - use the correct temp directory. Persistent backups are kept under .upkk.
-        await ssh_manager.execute_command(f"rm -rf {remote_temp_dir}")
+        await ssh_manager.execute_command(f"rm -rf -- {shlex.quote(remote_temp_dir)}")
         await progress("Cleanup complete")
 
         success_msg = f"Plugin installed successfully! {installed_files} files installed. Restart server to apply changes."
@@ -878,6 +892,16 @@ async def install_github_plugin(
         await notify_install_result(False, f"Installation error: {str(e)}")
         return GitHubPluginInstallResponse(success=False, message=f"Installation error: {str(e)}")
     finally:
+        try:
+            # The path is operation-scoped, so cleanup cannot remove another
+            # session's archive even when sessions target the same server.
+            await ssh_manager.execute_command(
+                f"rm -rf -- {shlex.quote(remote_temp_dir)}", timeout=20
+            )
+        except Exception as cleanup_error:
+            logger.warning(
+                "Failed to clean plugin staging directory %s: %s", remote_temp_dir, cleanup_error
+            )
         await ssh_manager.disconnect()
 
 
@@ -894,6 +918,7 @@ async def install_github_plugin_with_retry(
     ai_progress: Callable[[str, str], Awaitable[None]] | None = None,
     *,
     max_retries: int = PLUGIN_INSTALL_MAX_RETRIES,
+    operation_id: str | None = None,
 ) -> GitHubPluginInstallResponse:
     """Install a plugin and retry transient or package-layout failures twice."""
     total_attempts = max(1, max_retries + 1)
@@ -918,6 +943,7 @@ async def install_github_plugin_with_retry(
                 db,
                 current_user,
                 ai_progress=ai_progress,
+                operation_id=operation_id,
             )
         except LookupError, PermissionError:
             raise

@@ -59,6 +59,12 @@ AI_WRITE_LOCK_TTL = 5 * 60
 AI_RETRY_MAX_ATTEMPTS = 5
 AI_RETRY_BASE_SECONDS = 15
 AI_BACKGROUND_TASK_RETENTION_MINUTES = 10
+AI_SERVER_LOCK_OPERATION_PREFIXES = ("ai:",)
+AI_LEGACY_WRITE_TOOLS = (
+    "apply_plugin_plan",
+    "apply_github_plugin_install",
+    "apply_workshop_map",
+)
 RUN_ERROR_TOOL_NAME = "__run_error__"
 TERMINAL_RUN_STATUSES = ("completed", "failed", "interrupted", "expired", "cancelled")
 STEP_STATUSES = {"pending", "running", "completed", "failed", "skipped", "interrupted"}
@@ -492,6 +498,45 @@ async def cleanup_expired_ai_runs(
     if runs:
         await db.commit()
     return len(runs)
+
+
+async def reconcile_stale_ai_server_lock(db, server_id: int | None) -> bool:
+    """Release an AI lock only when no persisted AI run still targets it."""
+    if server_id is None:
+        return False
+    result = await db.execute(
+        select(AIRun.id)
+        .where(
+            AIRun.server_id == server_id,
+            AIRun.status.in_(ACTIVE_RUN_STATUSES),
+        )
+        .limit(1)
+    )
+    if result.scalar_one_or_none() is not None:
+        return False
+    legacy_cutoff = get_current_time() - timedelta(minutes=AI_BACKGROUND_TASK_RETENTION_MINUTES)
+    legacy_result = await db.execute(
+        select(AIToolRun.id)
+        .join(AIRun, AIToolRun.run_id == AIRun.id)
+        .where(
+            AIRun.server_id == server_id,
+            AIRun.status.in_(TERMINAL_RUN_STATUSES),
+            AIToolRun.tool_name.in_(AI_LEGACY_WRITE_TOOLS),
+            func.coalesce(AIToolRun.completed_at, AIToolRun.created_at) >= legacy_cutoff,
+        )
+        .limit(1)
+    )
+    operation_prefixes = AI_SERVER_LOCK_OPERATION_PREFIXES
+    if legacy_result.scalar_one_or_none() is not None:
+        operation_prefixes += (
+            "plugin_install_plan",
+            "github_plugin_install_plan",
+            "workshop_map_plan",
+        )
+    return await maintenance_lock_service.clear_stale_server_lock(
+        server_id,
+        operation_prefixes=operation_prefixes,
+    )
 
 
 def _validate_write_tool_batch(tool_names: list[str]) -> None:
@@ -1058,6 +1103,7 @@ async def interrupt_active_ai_runs() -> int:
         result = await db.execute(select(AIRun).where(AIRun.status.in_(ACTIVE_RUN_STATUSES)))
         runs = list(result.scalars().all())
         user_ids = {run.user_id for run in runs}
+        server_ids = {run.server_id for run in runs if run.server_id is not None}
         if runs:
             tool_result = await db.execute(
                 select(AIToolRun).where(
@@ -1093,6 +1139,8 @@ async def interrupt_active_ai_runs() -> int:
             await redis_manager.client.delete(key)
         except Exception:
             pass
+    for server_id in server_ids:
+        await maintenance_lock_service.force_release_server_lock(server_id)
     return len(runs)
 
 

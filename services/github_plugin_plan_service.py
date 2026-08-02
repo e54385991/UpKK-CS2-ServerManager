@@ -891,10 +891,12 @@ async def execute_github_install_plan(
     acknowledged_warning_rule_ids: set[int] | None = None,
     acknowledge_unknown_compatibility: bool = False,
     progress: ProgressCallback | None = None,
+    lock_operation: str = "github_plugin_install_plan",
+    operation_id: str | None = None,
 ) -> dict[str, Any]:
     async with maintenance_lock_service.get(
         server_id,
-        operation="github_plugin_install_plan",
+        operation=lock_operation,
         wait=False,
         ttl=3600,
     ):
@@ -907,6 +909,7 @@ async def execute_github_install_plan(
             acknowledged_warning_rule_ids,
             acknowledge_unknown_compatibility,
             progress,
+            operation_id,
         )
 
 
@@ -919,6 +922,7 @@ async def _execute_github_install_plan_locked(
     acknowledged_warning_rule_ids: set[int] | None = None,
     acknowledge_unknown_compatibility: bool = False,
     progress: ProgressCallback | None = None,
+    operation_id: str | None = None,
 ) -> dict[str, Any]:
     server = await authorized_server(db, user, server_id)
     plan = await build_github_install_plan(db, user, server_id, request)
@@ -963,6 +967,7 @@ async def _execute_github_install_plan_locked(
                 acknowledged,
                 expected_plan_hash=dependency_plan["plan_hash"],
                 acquire_lock=False,
+                operation_id=operation_id,
             )
             completed_dependencies.append({"plugin_id": dependency_id, **dependency_result})
             if not dependency_result["success"]:
@@ -1021,6 +1026,7 @@ async def _execute_github_install_plan_locked(
         db,
         user,
         ai_progress=progress,
+        operation_id=operation_id,
     )
     if not result.success:
         return {

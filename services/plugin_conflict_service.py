@@ -424,6 +424,7 @@ async def _install_one(
     server: Server,
     user: User,
     progress: ProgressCallback | None = None,
+    operation_id: str | None = None,
 ) -> dict[str, Any]:
     total_attempts = PLUGIN_INSTALL_MAX_RETRIES + 1
     failures: list[str] = []
@@ -454,6 +455,7 @@ async def _install_one(
                 db,
                 user,
                 ai_progress=progress,
+                operation_id=(f"{operation_id}-market-{plugin.id}" if operation_id else None),
             )
             if result.success:
                 break
@@ -504,13 +506,15 @@ async def _install_one(
 
 
 @asynccontextmanager
-async def _optional_server_lock(server_id: int, acquire_lock: bool) -> AsyncIterator[None]:
+async def _optional_server_lock(
+    server_id: int,
+    acquire_lock: bool,
+    operation: str = "plugin_install_plan",
+) -> AsyncIterator[None]:
     if not acquire_lock:
         yield
         return
-    async with maintenance_lock_service.get(
-        server_id, operation="plugin_install_plan", wait=False, ttl=1800
-    ):
+    async with maintenance_lock_service.get(server_id, operation=operation, wait=False, ttl=1800):
         yield
 
 
@@ -524,6 +528,8 @@ async def execute_plugin_install_plan(
     expected_plan_hash: str | None = None,
     progress: ProgressCallback | None = None,
     acquire_lock: bool = True,
+    lock_operation: str = "plugin_install_plan",
+    operation_id: str | None = None,
 ) -> dict[str, Any]:
     """Recompute and execute a plan, stopping immediately after any failure."""
     plan = await build_plugin_install_plan(db, server.id, plugin_id, server=server)
@@ -532,7 +538,7 @@ async def execute_plugin_install_plan(
     validate_plugin_plan_acknowledgements(plan, acknowledged_warning_rule_ids)
     completed: list[dict[str, Any]] = []
 
-    async with _optional_server_lock(server.id, acquire_lock):
+    async with _optional_server_lock(server.id, acquire_lock, lock_operation):
         # Permission and plan state are intentionally checked again immediately
         # before any remote mutation.
         refreshed_server = (
@@ -581,7 +587,14 @@ async def execute_plugin_install_plan(
                 step_status="running",
             )
             try:
-                result = await _install_one(db, plugin, refreshed_server, user, progress)
+                result = await _install_one(
+                    db,
+                    plugin,
+                    refreshed_server,
+                    user,
+                    progress,
+                    operation_id=operation_id,
+                )
             except Exception as exc:
                 result = {
                     "success": False,

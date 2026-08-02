@@ -40,8 +40,42 @@ from services.plugin_diagnostic_service import (
     _group_candidates,
     get_diagnostic_recommendation,
 )
-from services.plugin_installation import _build_backup_command, _build_rollback_command
+from services.plugin_installation import (
+    _build_backup_command,
+    _build_rollback_command,
+    _remote_plugin_temp_dir,
+)
 from services.plugin_inventory_service import installation_evidence
+
+
+def test_plugin_staging_directory_isolated_per_operation():
+    first = _remote_plugin_temp_dir(32, "run/one")
+    second = _remote_plugin_temp_dir(32, "run/two")
+
+    assert first != second
+    assert first == "/tmp/upkk-plugin-32-run-one"
+    assert second == "/tmp/upkk-plugin-32-run-two"
+    assert "github_plugin_32" not in first
+
+
+@pytest.mark.asyncio
+async def test_stale_ai_server_lock_reconciliation_keeps_active_runs(monkeypatch):
+    class DB:
+        def __init__(self, active_run_id=None):
+            self.active_run_id = active_run_id
+
+        async def execute(self, _statement):
+            return SimpleNamespace(scalar_one_or_none=lambda: self.active_run_id)
+
+    clear = AsyncMock(return_value=True)
+    monkeypatch.setattr(ai_orchestrator.maintenance_lock_service, "clear_stale_server_lock", clear)
+
+    assert await ai_orchestrator.reconcile_stale_ai_server_lock(DB(), 32) is True
+    clear.assert_awaited_once()
+
+    clear.reset_mock()
+    assert await ai_orchestrator.reconcile_stale_ai_server_lock(DB("run-32"), 32) is False
+    clear.assert_not_awaited()
 
 
 @pytest.mark.parametrize(

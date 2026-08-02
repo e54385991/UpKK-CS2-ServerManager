@@ -96,6 +96,18 @@ class RedisManager:
             logger.error("Redis lock check failed for %s: %s", key, e)
             return None
 
+    async def get_lock_token(self, key: str) -> Optional[str]:
+        """Read a lock token for guarded stale-lock reconciliation."""
+        if time.monotonic() < self._coordination_retry_after:
+            return None
+        try:
+            value = await asyncio.wait_for(self.client.get(key), timeout=0.75)
+            return str(value) if value else None
+        except Exception as e:
+            self._coordination_retry_after = time.monotonic() + 10
+            logger.error("Redis lock token read failed for %s: %s", key, e)
+            return None
+
     async def refresh_lock(self, key: str, token: str, expire: int) -> bool:
         """Extend a lock only when it is still owned by ``token``."""
         if time.monotonic() < self._coordination_retry_after:

@@ -59,6 +59,7 @@ from services.ai_orchestrator import (
     cleanup_expired_ai_runs,
     interrupt_conversation_run,
     process_ai_run,
+    reconcile_stale_ai_server_lock,
     reconcile_waiting_approval_runs,
 )
 from services.ai_provider import test_provider
@@ -453,6 +454,8 @@ async def create_ai_conversation(
         )
     if request.server_id is not None:
         await _server_for_user(db, current_user, request.server_id)
+        await reconcile_waiting_approval_runs(db, user_id=current_user.id)
+        await reconcile_stale_ai_server_lock(db, request.server_id)
     item = AIConversation(
         user_id=current_user.id,
         server_id=request.server_id,
@@ -543,6 +546,8 @@ async def send_ai_message(
     if conversation.server_id is not None:
         await _server_for_user(db, current_user, conversation.server_id)
     await reconcile_waiting_approval_runs(db, conversation_id=conversation.id)
+    if conversation.server_id is not None:
+        await reconcile_stale_ai_server_lock(db, conversation.server_id)
     active_result = await db.execute(
         select(func.count())
         .select_from(AIRun)

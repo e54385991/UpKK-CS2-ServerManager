@@ -75,6 +75,49 @@ class MaintenanceLockService:
             return True
         return bool(await redis_manager.is_lock_held(f"server_operation_lock:{server_id}"))
 
+    async def clear_stale_server_lock(
+        self,
+        server_id: int,
+        *,
+        operation_prefixes: tuple[str, ...],
+    ) -> bool:
+        """Clear an orphaned AI lock without touching live local operations.
+
+        Redis locks can outlive a crashed worker. Only locks whose operation
+        token matches the caller's explicitly allowed prefixes are eligible;
+        regular API, scheduled, and auto-update locks remain protected.
+        """
+        local_lock = self._locks.get(server_id)
+        if local_lock is not None and local_lock.locked():
+            return False
+        key = f"server_operation_lock:{server_id}"
+        token = await redis_manager.get_lock_token(key)
+        if not token:
+            return False
+        # Tokens are generated as ``<uuid>:<operation>`` and operations may
+        # themselves contain colons (for example ``ai:restart``).
+        operation = str(token).split(":", 1)[1] if ":" in str(token) else ""
+        if not any(
+            operation == prefix or (prefix.endswith(":") and operation.startswith(prefix))
+            for prefix in operation_prefixes
+        ):
+            return False
+        released = await redis_manager.release_lock(key, token)
+        if released:
+            logger.warning("Cleared stale AI server operation lock for server %s", server_id)
+        return released
+
+    async def force_release_server_lock(self, server_id: int) -> bool:
+        """Release a lock owned by work recovered as interrupted at startup."""
+        local_lock = self._locks.get(server_id)
+        if local_lock is not None and local_lock.locked():
+            return False
+        key = f"server_operation_lock:{server_id}"
+        token = await redis_manager.get_lock_token(key)
+        if not token:
+            return False
+        return await redis_manager.release_lock(key, token)
+
     @asynccontextmanager
     async def _hold(
         self,

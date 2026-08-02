@@ -756,6 +756,8 @@ async def apply_github_plugin_install(ctx: ToolContext, data: GitHubApplyInput) 
             "tool_progress",
             {"message": message, "message_type": message_type, **(metadata or {})},
         ),
+        lock_operation="ai:github_plugin_install_plan",
+        operation_id=ctx.run_id,
     )
 
 
@@ -897,6 +899,8 @@ async def apply_plugin_plan(ctx: ToolContext, data: ApplyPluginPlanInput) -> dic
             "tool_progress",
             {"message": message, "message_type": message_type, **(metadata or {})},
         ),
+        lock_operation="ai:plugin_install_plan",
+        operation_id=ctx.run_id,
     )
 
 
@@ -915,6 +919,8 @@ async def apply_workshop_map(ctx: ToolContext, data: ApplyWorkshopPlanInput) -> 
             "tool_progress",
             {"message": message, "message_type": message_type, **(metadata or {})},
         ),
+        lock_operation="ai:workshop_map_plan",
+        operation_id=ctx.run_id,
     )
 
 

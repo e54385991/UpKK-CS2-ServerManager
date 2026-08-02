@@ -308,6 +308,8 @@ async def execute_workshop_map_plan(
     *,
     expected_plan_hash: str | None = None,
     progress: ProgressCallback | None = None,
+    lock_operation: str = "workshop_map_plan",
+    operation_id: str | None = None,
 ) -> dict[str, Any]:
     """Revalidate and execute the exact confirmed plan, reporting partial work."""
     completed: list[dict[str, Any]] = []
@@ -327,7 +329,7 @@ async def execute_workshop_map_plan(
         )
 
     async with maintenance_lock_service.get(
-        server.id, operation="workshop_map_plan", wait=False, ttl=3600
+        server.id, operation=lock_operation, wait=False, ttl=3600
     ):
         current_server = (
             await Server.get_by_id(db, server.id)
@@ -392,6 +394,7 @@ async def execute_workshop_map_plan(
                     expected_plan_hash=plan["plugin_plan"]["plan_hash"],
                     progress=mapchooser_progress,
                     acquire_lock=False,
+                    operation_id=operation_id,
                 )
                 completed.append({"action": "install_mapchooser", "result": plugin_result})
                 if not plugin_result["success"]:

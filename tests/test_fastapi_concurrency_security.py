@@ -130,6 +130,37 @@ async def test_nonblocking_server_lock_reports_conflict(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stale_ai_server_lock_is_cleared_only_for_allowed_operations(monkeypatch):
+    service = MaintenanceLockService()
+    get_token = AsyncMock(return_value="orphan-token:ai:plugin_install_plan")
+    release = AsyncMock(return_value=True)
+    monkeypatch.setattr(redis_manager, "get_lock_token", get_token)
+    monkeypatch.setattr(redis_manager, "release_lock", release)
+
+    assert (
+        await service.clear_stale_server_lock(
+            32,
+            operation_prefixes=("ai:",),
+        )
+        is True
+    )
+    release.assert_awaited_once_with(
+        "server_operation_lock:32", "orphan-token:ai:plugin_install_plan"
+    )
+
+    get_token.return_value = "live-token:scheduled:restart"
+    release.reset_mock()
+    assert (
+        await service.clear_stale_server_lock(
+            32,
+            operation_prefixes=("ai:",),
+        )
+        is False
+    )
+    release.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_server_lock_registry_forgets_inactive_server_ids(monkeypatch):
     service = MaintenanceLockService()
 
