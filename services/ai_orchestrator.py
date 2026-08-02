@@ -54,12 +54,25 @@ ACTIVE_RUN_STATUSES = ("queued", "running", "waiting_approval")
 AI_DELTA_EVENT_CHARS = 96
 AI_WRITE_QUEUE_WAIT_SECONDS = 5 * 60
 AI_WRITE_LOCK_TTL = 5 * 60
+RUN_ERROR_TOOL_NAME = "__run_error__"
 STEP_STATUSES = {"pending", "running", "completed", "failed", "skipped", "interrupted"}
 TERMINAL_STEP_STATUSES = {"completed", "failed", "skipped", "interrupted"}
 
 
 async def _emit(run_id: str, event_type: str, payload: dict[str, Any]) -> None:
     await ai_event_hub.emit(run_id, event_type, payload)
+
+
+def _add_run_error_message(db, run: AIRun, message: str) -> None:
+    db.add(
+        AIMessage(
+            conversation_id=run.conversation_id,
+            role="assistant",
+            content=redact_sensitive_text(message, limit=2000),
+            tool_name=RUN_ERROR_TOOL_NAME,
+            visible=True,
+        )
+    )
 
 
 def _approval_step_id(tool_name: str, step: Any, index: int) -> str:
@@ -239,6 +252,7 @@ async def _fail_run(db, run: AIRun, message: str) -> None:
     run.error = safe_message
     run.completed_at = get_current_time()
     db.add(run)
+    _add_run_error_message(db, run, safe_message)
     await db.commit()
     await _emit(run.id, "run_failed", {"error": safe_message})
 
@@ -345,6 +359,7 @@ async def reconcile_waiting_approval_runs(
             await _close_unexecuted_tools(db, run, tools, expired_ids=expired_ids)
         run.completed_at = now
         db.add(run)
+        _add_run_error_message(db, run, run.error)
         terminal_run_ids.add(run.id)
     if terminal_run_ids:
         await db.commit()
@@ -896,6 +911,7 @@ async def interrupt_active_ai_runs() -> int:
             run.error = "Application restarted before this run completed"
             run.completed_at = get_current_time()
             db.add(run)
+            _add_run_error_message(db, run, run.error)
         await db.commit()
     # Release stale AI write locks left behind by the previous process.
     for uid in user_ids:
@@ -940,6 +956,7 @@ async def interrupt_conversation_run(
     run.error = "Interrupted by user"
     run.completed_at = get_current_time()
     db.add(run)
+    _add_run_error_message(db, run, run.error)
     await db.commit()
     await _emit(run.id, "run_interrupted", {"error": "Interrupted by user"})
     return {"interrupted": True, "run_id": run.id}

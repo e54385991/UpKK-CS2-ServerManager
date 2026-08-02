@@ -40,6 +40,7 @@
     "taskProgress": "{completed} / {total} steps",
     "openTask": "Open task",
     "running": "AI task is running…",
+    "runFailed": "AI task failed",
     "thinking": "Thinking",
     "runningTool": "Running tool",
     "waitingApproval": "Waiting for your approval",

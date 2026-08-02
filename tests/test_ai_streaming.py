@@ -101,6 +101,18 @@ def test_background_task_viewer_refreshes_from_the_task_api():
     assert "tool.progress_snapshot" in script
     assert "ai-task-steps" in script
     assert "openBackgroundTask(task)" in script
+    assert "tool.risk === 'write'" in script
+    assert ".slice(0, 2)" in script
+
+
+def test_run_errors_are_preserved_and_restored_as_error_cards():
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    orchestrator = (PROJECT_ROOT / "services" / "ai_orchestrator.py").read_text(encoding="utf-8")
+
+    assert "RUN_ERROR_TOOL_NAME = '__run_error__'" in script
+    assert 'RUN_ERROR_TOOL_NAME = "__run_error__"' in orchestrator
+    assert "message.tool_name === RUN_ERROR_TOOL_NAME" in script
+    assert "loadConversations(conversationId, false)" in script
 
 
 def test_status_bar_shows_spinner_and_dots_while_active():

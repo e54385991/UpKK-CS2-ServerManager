@@ -40,6 +40,7 @@
     "taskProgress": "{completed} / {total} 步",
     "openTask": "打开任务",
     "running": "AI 任务运行中…",
+    "runFailed": "AI 任务失败",
     "thinking": "思考中",
     "runningTool": "正在执行工具",
     "waitingApproval": "等待你的确认",

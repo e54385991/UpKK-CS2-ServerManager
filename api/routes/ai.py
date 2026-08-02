@@ -630,7 +630,12 @@ async def list_ai_background_tasks(
     await reconcile_waiting_approval_runs(db, user_id=current_user.id)
     run_result = await db.execute(
         select(AIRun)
-        .where(AIRun.user_id == current_user.id)
+        .join(AIToolRun, AIToolRun.run_id == AIRun.id)
+        .where(
+            AIRun.user_id == current_user.id,
+            AIToolRun.risk == "write",
+        )
+        .distinct()
         .order_by(AIRun.updated_at.desc(), AIRun.created_at.desc())
         .limit(limit)
     )
@@ -640,11 +645,16 @@ async def list_ai_background_tasks(
     run_ids = [run.id for run in runs]
     tool_result = await db.execute(
         select(AIToolRun)
-        .where(AIToolRun.run_id.in_(run_ids))
+        .where(
+            AIToolRun.run_id.in_(run_ids),
+            AIToolRun.risk == "write",
+        )
         .order_by(AIToolRun.created_at.asc(), AIToolRun.id.asc())
     )
     tools_by_run: dict[str, list[AIBackgroundTaskToolResponse]] = {}
     for tool in tool_result.scalars().all():
+        if tool.risk != "write":
+            continue
         tools_by_run.setdefault(tool.run_id, []).append(
             AIBackgroundTaskToolResponse(
                 id=tool.id,
@@ -672,6 +682,7 @@ async def list_ai_background_tasks(
             tools=tools_by_run.get(run.id, []),
         )
         for run in runs
+        if run.id in tools_by_run
     ]
 
 

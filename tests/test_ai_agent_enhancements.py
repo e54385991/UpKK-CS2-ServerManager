@@ -499,7 +499,10 @@ async def test_legacy_multi_write_approval_batch_is_cancelled(monkeypatch):
     assert terminal == {run.id}
     assert run.status == "cancelled"
     assert {item.status for item in tools} == {"cancelled"}
-    assert len([item for item in db.added if isinstance(item, AIMessage)]) == 2
+    messages = [item for item in db.added if isinstance(item, AIMessage)]
+    assert len(messages) == 3
+    assert messages[-1].tool_name == ai_orchestrator.RUN_ERROR_TOOL_NAME
+    assert messages[-1].visible is True
     assert db.commits == 1
 
 
@@ -859,6 +862,47 @@ async def test_unsuccessful_tool_result_is_not_marked_completed(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_failed_run_persists_a_visible_error_message(monkeypatch):
+    run = SimpleNamespace(
+        id="run-provider-failure",
+        conversation_id="conversation-provider-failure",
+        status="running",
+        error=None,
+        completed_at=None,
+    )
+
+    class DB:
+        def __init__(self):
+            self.added = []
+            self.commits = 0
+
+        def add(self, item):
+            self.added.append(item)
+
+        async def commit(self):
+            self.commits += 1
+
+    emit = AsyncMock()
+    db = DB()
+    monkeypatch.setattr(ai_orchestrator, "_emit", emit)
+
+    await ai_orchestrator._fail_run(db, run, "Provider response was malformed")
+
+    error_messages = [item for item in db.added if isinstance(item, AIMessage)]
+    assert run.status == "failed"
+    assert db.commits == 1
+    assert len(error_messages) == 1
+    assert error_messages[0].content == "Provider response was malformed"
+    assert error_messages[0].tool_name == ai_orchestrator.RUN_ERROR_TOOL_NAME
+    assert error_messages[0].visible is True
+    emit.assert_awaited_once_with(
+        run.id,
+        "run_failed",
+        {"error": "Provider response was malformed"},
+    )
+
+
+@pytest.mark.asyncio
 async def test_background_task_view_returns_only_non_sensitive_task_progress():
     run = SimpleNamespace(
         id="run-3",
@@ -889,6 +933,16 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
         created_at=None,
         completed_at=None,
     )
+    read_tool = SimpleNamespace(
+        id="tool-read",
+        run_id=run.id,
+        tool_name="search_plugin_market",
+        risk="read",
+        status="completed",
+        error=None,
+        created_at=None,
+        completed_at=None,
+    )
 
     class Result:
         def __init__(self, items):
@@ -902,7 +956,7 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
 
     class DB:
         def __init__(self):
-            self.results = [Result([]), Result([run]), Result([tool])]
+            self.results = [Result([]), Result([run]), Result([read_tool, tool])]
 
         async def execute(self, _statement):
             return self.results.pop(0)
@@ -912,6 +966,7 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
     assert len(tasks) == 1
     assert tasks[0].id == run.id
     assert tasks[0].tools[0].tool_name == tool.tool_name
+    assert len(tasks[0].tools) == 1
     assert tasks[0].tools[0].progress_snapshot["current_step"] == "plugin:17"
     assert not hasattr(tasks[0].tools[0], "arguments")
 

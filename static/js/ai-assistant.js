@@ -1,6 +1,8 @@
 (function () {
     'use strict';
 
+    const RUN_ERROR_TOOL_NAME = '__run_error__';
+
     const state = {
         initialized: false,
         user: null,
@@ -128,9 +130,13 @@
         });
     }
 
-    function appendErrorMessage(message) {
+    function appendErrorMessage(message, key = null) {
         const list = element('ai-message-list');
+        const safeKey = key ? String(key).replace(/[^A-Za-z0-9_-]/g, '-') : '';
+        const cardId = safeKey ? `ai-error-${safeKey}` : '';
+        if (cardId && element(cardId)) return element(cardId);
         const card = document.createElement('div');
+        if (cardId) card.id = cardId;
         card.className = 'ai-message ai-message-error';
         const body = document.createElement('div');
         body.className = 'card card-body p-2 bg-danger bg-opacity-10 border-danger';
@@ -334,11 +340,32 @@
         pollRun();
     }
 
+    function plannedToolLabel(tool) {
+        const target = approvalTarget(tool.plan_snapshot);
+        return target ? `${tool.tool_name}: ${target}` : tool.tool_name;
+    }
+
     function renderBackgroundTasks(tasks) {
         const list = element('ai-background-task-list');
         if (!list) return;
         list.replaceChildren();
-        const visibleTasks = tasks.filter((task) => (task.tools || []).length).slice(0, 8);
+        const plannedTasks = tasks
+            .map((task) => ({
+                ...task,
+                tools: (task.tools || []).filter((tool) =>
+                    tool.risk === 'write' && (
+                        tool.plan_snapshot ||
+                        ['pending_approval', 'queued', 'running'].includes(tool.status)
+                    )
+                )
+            }))
+            .filter((task) => task.tools.length);
+        const activeStatuses = ['queued', 'running', 'waiting_approval'];
+        const activeTasks = plannedTasks.filter((task) => activeStatuses.includes(task.status));
+        const recentTasks = plannedTasks
+            .filter((task) => !activeStatuses.includes(task.status))
+            .slice(0, 2);
+        const visibleTasks = [...activeTasks, ...recentTasks];
         if (!visibleTasks.length) {
             const empty = document.createElement('div');
             empty.className = 'small text-muted';
@@ -354,7 +381,7 @@
             header.className = 'd-flex align-items-center justify-content-between gap-2';
             const label = document.createElement('span');
             label.className = 'fw-semibold text-truncate';
-            label.textContent = taskTools.map((tool) => tool.tool_name).join(', ');
+            label.textContent = taskTools.map(plannedToolLabel).join(', ');
             const actions = document.createElement('div');
             actions.className = 'd-flex align-items-center gap-1 flex-shrink-0';
             appendBackgroundTaskStatus(actions, task.status);
@@ -380,7 +407,7 @@
                 toolHeader.className = 'd-flex align-items-center justify-content-between gap-2 text-muted';
                 const name = document.createElement('span');
                 name.className = 'text-truncate';
-                name.textContent = tool.tool_name;
+                name.textContent = plannedToolLabel(tool);
                 toolHeader.appendChild(name);
                 appendBackgroundTaskStatus(toolHeader, tool.status);
                 row.appendChild(toolHeader);
@@ -574,7 +601,7 @@
         }
     }
 
-    async function loadConversations(preferredId = null) {
+    async function loadConversations(preferredId = null, openSelected = true) {
         const conversations = await jsonResponse(await authFetch('/api/ai/conversations'));
         const select = element('ai-conversation-select');
         select.replaceChildren();
@@ -592,7 +619,7 @@
         const target = preferredId || state.conversationId;
         if (target && conversations.some((item) => item.id === target)) {
             select.value = target;
-            await openConversation(target);
+            if (openSelected) await openConversation(target);
         }
     }
 
@@ -609,7 +636,13 @@
         const list = element('ai-message-list');
         list.replaceChildren();
         state.streamedMessages.clear();
-        conversation.messages.forEach((message) => appendMessage(message.role, message.content));
+        conversation.messages.forEach((message) => {
+            if (message.tool_name === RUN_ERROR_TOOL_NAME) {
+                appendErrorMessage(message.content, `message-${message.id}`);
+            } else {
+                appendMessage(message.role, message.content);
+            }
+        });
         clearStatus();
     }
 
@@ -830,17 +863,19 @@
 
     async function finishRun(message, isError = false) {
         const conversationId = state.conversationId;
+        const runId = state.runId;
         stopRunWatch();
         hideStopButton();
         element('ai-send-button').disabled = !state.enabled;
         if (isError) {
-            appendErrorMessage(message);
-            setStatus(message, true);
+            const errorMessage = message || translate('ai.runFailed', 'AI task failed');
+            appendErrorMessage(errorMessage, runId ? `run-${runId}` : null);
+            setStatus(errorMessage, true);
             if (conversationId && !state.suppressReload) {
                 try {
-                    await loadConversations(conversationId);
+                    await loadConversations(conversationId, false);
                 } catch (error) {
-                    // ignore — error already shown inline
+                    setStatus(`${errorMessage}\n${error.message}`, true);
                 }
             }
         } else {
