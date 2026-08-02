@@ -57,7 +57,9 @@ AI_WRITE_QUEUE_WAIT_SECONDS = 5 * 60
 AI_WRITE_LOCK_TTL = 5 * 60
 AI_RETRY_MAX_ATTEMPTS = 5
 AI_RETRY_BASE_SECONDS = 15
+AI_BACKGROUND_TASK_RETENTION_MINUTES = 10
 RUN_ERROR_TOOL_NAME = "__run_error__"
+TERMINAL_RUN_STATUSES = ("completed", "failed", "interrupted", "expired", "cancelled")
 STEP_STATUSES = {"pending", "running", "completed", "failed", "skipped", "interrupted"}
 TERMINAL_STEP_STATUSES = {"completed", "failed", "skipped", "interrupted"}
 
@@ -414,6 +416,28 @@ async def reconcile_waiting_approval_runs(
     if terminal_run_ids:
         await db.commit()
     return terminal_run_ids
+
+
+async def cleanup_expired_ai_runs(
+    db,
+    *,
+    user_id: int | None = None,
+) -> int:
+    """Delete terminal run metadata after the background-task visibility window."""
+    cutoff = get_current_time() - timedelta(minutes=AI_BACKGROUND_TASK_RETENTION_MINUTES)
+    filters = [
+        AIRun.status.in_(TERMINAL_RUN_STATUSES),
+        func.coalesce(AIRun.completed_at, AIRun.updated_at, AIRun.created_at) < cutoff,
+    ]
+    if user_id is not None:
+        filters.append(AIRun.user_id == user_id)
+    result = await db.execute(select(AIRun).where(*filters))
+    runs = list(result.scalars().all())
+    for run in runs:
+        await db.delete(run)
+    if runs:
+        await db.commit()
+    return len(runs)
 
 
 def _validate_write_tool_batch(tool_names: list[str]) -> None:

@@ -39,6 +39,8 @@
     "taskTools": "Tools",
     "taskProgress": "{completed} / {total} steps",
     "openTask": "Open task",
+    "deleteTask": "Delete task",
+    "deleteTaskConfirm": "Delete this finished background task? Conversation messages will be kept.",
     "running": "AI task is running…",
     "runFailed": "AI task failed",
     "providerRetrying": "AI provider request failed. Retry {attempt}/{max} in {seconds}s: {error}",

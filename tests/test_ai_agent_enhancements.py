@@ -23,11 +23,17 @@ from services.github_plugin_plan_service import (
     GitHubPlanError,
     _archive_entries,
     _detect_mapping,
+    _github_plan_confirmation_payload,
+    _infer_plugin_metadata,
     _is_linux_archive,
     _mapped_files,
     _safe_entry_name,
     _validate_release_contents,
     normalize_public_repo_url,
+)
+from services.plugin_conflict_service import (
+    _plugin_plan_confirmation_payload,
+    _release_asset_candidates,
 )
 from services.plugin_diagnostic_service import (
     ACTIVE_DIAGNOSTIC_STATUSES,
@@ -179,6 +185,115 @@ def test_plugins_root_dir_maps_to_counterstrikesharp_plugins():
     assert (
         mapped[0]["target_path"]
         == "addons/counterstrikesharp/plugins/Killfeed_Icons/Killfeed_Icons.dll"
+    )
+
+
+def test_counterstrikesharp_tree_maps_shared_and_plugin_files_together():
+    entries = [
+        {
+            "path": "counterstrikesharp/shared/AdminApi/AdminApi.dll",
+            "size": 100,
+            "is_dir": False,
+        },
+        {
+            "path": "counterstrikesharp/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.dll",
+            "size": 200,
+            "is_dir": False,
+        },
+        {
+            "path": "counterstrikesharp/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.deps.json",
+            "size": 50,
+            "is_dir": False,
+        },
+    ]
+
+    prefix, mapping, required = _detect_mapping(entries, "CS2-SimpleAdmin")
+
+    assert required is False
+    assert prefix == "counterstrikesharp"
+    assert mapping == [{"source": "counterstrikesharp", "target": "addons/counterstrikesharp"}]
+    targets = {item["target_path"] for item in _mapped_files(entries, mapping)}
+    assert "addons/counterstrikesharp/shared/AdminApi/AdminApi.dll" in targets
+    assert "addons/counterstrikesharp/plugins/CS2-SimpleAdmin/CS2-SimpleAdmin.dll" in targets
+    metadata = _infer_plugin_metadata(entries, {"readme": ""})
+    assert metadata["framework"] == "counterstrikesharp"
+
+
+def test_single_compiled_plugin_wrapper_maps_to_repository_plugin_directory():
+    entries = [
+        {"path": "SimpleAdmin/SimpleAdmin.dll", "size": 100, "is_dir": False},
+        {"path": "SimpleAdmin/SimpleAdmin.deps.json", "size": 50, "is_dir": False},
+    ]
+
+    prefix, mapping, required = _detect_mapping(entries, "SimpleAdmin")
+
+    assert required is False
+    assert prefix == "SimpleAdmin"
+    assert mapping == [
+        {
+            "source": "SimpleAdmin",
+            "target": "addons/counterstrikesharp/plugins/SimpleAdmin",
+        }
+    ]
+
+
+def test_market_asset_filter_prefers_runtime_linux_archives():
+    release = {
+        "assets": [
+            {
+                "name": "plugin-debug-linux.zip",
+                "browser_download_url": "https://github.com/a/b/releases/download/v1/debug.zip",
+            },
+            {
+                "name": "plugin-windows.zip",
+                "browser_download_url": "https://github.com/a/b/releases/download/v1/win.zip",
+            },
+            {
+                "name": "plugin-upgrade-linux.zip",
+                "browser_download_url": "https://github.com/a/b/releases/download/v1/upgrade.zip",
+            },
+            {
+                "name": "plugin-linux.zip",
+                "browser_download_url": "https://github.com/a/b/releases/download/v1/linux.zip",
+            },
+        ]
+    }
+
+    candidates = _release_asset_candidates(release)
+
+    assert [item["name"] for item in candidates] == [
+        "plugin-linux.zip",
+        "plugin-upgrade-linux.zip",
+    ]
+
+
+def test_plugin_approval_hash_payload_ignores_live_inventory_evidence():
+    plan = {
+        "server_id": 4,
+        "plugin": {"id": 7, "title": "Plugin"},
+        "dependencies": [{"id": 2, "title": "Dependency"}],
+        "installation_order": [2, 7],
+        "already_installed": [],
+        "tracking_records_without_remote_evidence": ["Plugin"],
+        "compatibility_unknown": ["Unknown"],
+        "hard_conflicts": [],
+        "warnings": [],
+        "steps": [{"plugin_id": 7, "status": "install"}],
+        "blocked": False,
+    }
+    refreshed = {
+        **plan,
+        "already_installed": [2],
+        "tracking_records_without_remote_evidence": [],
+        "compatibility_unknown": [],
+        "steps": [{"plugin_id": 7, "status": "already_installed"}],
+    }
+
+    assert _plugin_plan_confirmation_payload(plan) == _plugin_plan_confirmation_payload(refreshed)
+    github_plan = {"server_id": 4, "repo_url": "https://github.com/a/b", "already_installed": []}
+    github_refreshed = {**github_plan, "already_installed": [2]}
+    assert _github_plan_confirmation_payload(github_plan) == _github_plan_confirmation_payload(
+        github_refreshed
     )
 
 
@@ -422,6 +537,191 @@ async def test_plugin_plan_does_not_skip_stale_tracking_record(monkeypatch):
     assert plan["already_installed"] == []
     assert plan["steps"][0]["status"] == "install"
     assert plan["steps"][0]["reason"] == "tracking_record_without_remote_evidence"
+
+
+@pytest.mark.asyncio
+async def test_market_asset_preflight_skips_invalid_first_archive(monkeypatch):
+    from services import github_plugin_plan_service, plugin_conflict_service
+
+    release = {
+        "id": 91,
+        "tag_name": "v1.0.0",
+        "assets": [
+            {
+                "id": 1,
+                "name": "a-plugin-linux.zip",
+                "browser_download_url": (
+                    "https://github.com/example/plugin/releases/download/v1/a.zip"
+                ),
+            },
+            {
+                "id": 2,
+                "name": "b-plugin-linux.zip",
+                "browser_download_url": (
+                    "https://github.com/example/plugin/releases/download/v1/b.zip"
+                ),
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        plugin_conflict_service,
+        "get_effective_github_token",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        plugin_conflict_service.http_helper,
+        "get",
+        AsyncMock(return_value=(True, release, None)),
+    )
+
+    async def inspect_layout(asset, _repo_name):
+        if asset["name"].startswith("a-"):
+            raise GitHubPlanError("archive layout is invalid")
+        return {
+            "archive_sha256": "a" * 64,
+            "source_prefix": "counterstrikesharp",
+            "mapping": [
+                {
+                    "source": "counterstrikesharp",
+                    "target": "addons/counterstrikesharp",
+                }
+            ],
+            "mapping_required": False,
+        }
+
+    monkeypatch.setattr(
+        github_plugin_plan_service,
+        "inspect_release_asset_layout",
+        inspect_layout,
+    )
+    plugin = MarketPlugin(
+        id=7,
+        github_url="https://github.com/example/plugin",
+        title="Plugin",
+    )
+
+    selected = await plugin_conflict_service._latest_release_asset(
+        SimpleNamespace(),
+        plugin,
+        SimpleNamespace(github_proxy=None),
+        SimpleNamespace(),
+    )
+
+    assert selected["asset_name"] == "b-plugin-linux.zip"
+    assert selected["source_prefix"] == "counterstrikesharp"
+    assert selected["custom_install_path"] == "addons/counterstrikesharp"
+
+
+@pytest.mark.asyncio
+async def test_market_install_refetches_release_and_succeeds_on_third_attempt(monkeypatch):
+    from modules import GitHubPluginInstallResponse
+    from services import plugin_conflict_service
+
+    asset = {
+        "download_url": "https://github.com/example/plugin/releases/download/v1/plugin.zip",
+        "release_id": "91",
+        "release_tag": "v1",
+        "asset_name": "plugin.zip",
+        "archive_sha256": "a" * 64,
+        "source_prefix": None,
+        "custom_install_path": None,
+        "allowed_roots": ["addons"],
+    }
+    select_asset = AsyncMock(return_value=asset)
+    install = AsyncMock(
+        side_effect=[
+            GitHubPluginInstallResponse(success=False, message="Failed to download plugin"),
+            GitHubPluginInstallResponse(success=False, message="SSH connection failed"),
+            GitHubPluginInstallResponse(success=True, message="Installed", installed_files=4),
+        ]
+    )
+    upsert = AsyncMock()
+    monkeypatch.setattr(plugin_conflict_service, "_latest_release_asset", select_asset)
+    monkeypatch.setattr(plugin_conflict_service, "install_github_plugin", install)
+    monkeypatch.setattr(plugin_conflict_service, "upsert_managed_plugin", upsert)
+    plugin = MarketPlugin(
+        id=7,
+        github_url="https://github.com/example/plugin",
+        title="Plugin",
+        download_count=0,
+        install_count=0,
+    )
+    db = SimpleNamespace(add=lambda _item: None, commit=AsyncMock())
+
+    result = await plugin_conflict_service._install_one(
+        db,
+        plugin,
+        SimpleNamespace(id=4),
+        SimpleNamespace(),
+    )
+
+    assert result["success"] is True
+    assert select_asset.await_count == 3
+    assert install.await_count == 3
+    assert upsert.await_count == 1
+    assert plugin.download_count == 1
+    assert plugin.install_count == 1
+
+
+@pytest.mark.asyncio
+async def test_plugin_install_retries_twice_and_succeeds_on_third_attempt(monkeypatch):
+    from modules import GitHubPluginInstallRequest, GitHubPluginInstallResponse
+    from services import plugin_installation
+
+    install = AsyncMock(
+        side_effect=[
+            GitHubPluginInstallResponse(success=False, message="Failed to download plugin"),
+            GitHubPluginInstallResponse(success=False, message="SSH connection failed"),
+            GitHubPluginInstallResponse(success=True, message="Installed", installed_files=4),
+        ]
+    )
+    monkeypatch.setattr(plugin_installation, "install_github_plugin", install)
+    progress = AsyncMock()
+    request = GitHubPluginInstallRequest(
+        download_url="https://github.com/example/plugin/releases/download/v1/plugin.zip"
+    )
+
+    result = await plugin_installation.install_github_plugin_with_retry(
+        4,
+        request,
+        SimpleNamespace(),
+        SimpleNamespace(),
+        ai_progress=progress,
+    )
+
+    assert result.success is True
+    assert result.installed_files == 4
+    assert install.await_count == 3
+    assert any("attempt 3/3" in call.args[0] for call in progress.await_args_list)
+
+
+@pytest.mark.asyncio
+async def test_plugin_install_retry_exhaustion_preserves_specific_error(monkeypatch):
+    from modules import GitHubPluginInstallRequest, GitHubPluginInstallResponse
+    from services import plugin_installation
+
+    install = AsyncMock(
+        return_value=GitHubPluginInstallResponse(
+            success=False,
+            message="No addons/ directory found in archive",
+        )
+    )
+    monkeypatch.setattr(plugin_installation, "install_github_plugin", install)
+    request = GitHubPluginInstallRequest(
+        download_url="https://github.com/example/plugin/releases/download/v1/plugin.zip"
+    )
+
+    result = await plugin_installation.install_github_plugin_with_retry(
+        4,
+        request,
+        SimpleNamespace(),
+        SimpleNamespace(),
+    )
+
+    assert result.success is False
+    assert install.await_count == 3
+    assert "No addons/ directory found" in result.message
+    assert "2 automatic retries" in result.message
 
 
 def test_multiple_write_tools_are_rejected_before_approval_rows_are_created():
@@ -989,7 +1289,7 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
 
     class DB:
         def __init__(self):
-            self.results = [Result([]), Result([run]), Result([read_tool, tool])]
+            self.results = [Result([]), Result([]), Result([run]), Result([read_tool, tool])]
 
         async def execute(self, _statement):
             return self.results.pop(0)
@@ -1002,6 +1302,81 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
     assert len(tasks[0].tools) == 1
     assert tasks[0].tools[0].progress_snapshot["current_step"] == "plugin:17"
     assert not hasattr(tasks[0].tools[0], "arguments")
+
+
+@pytest.mark.asyncio
+async def test_terminal_background_tasks_are_deleted_after_ten_minutes():
+    run = SimpleNamespace(id="run-old", status="completed")
+
+    class Result:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [run]
+
+    class DB:
+        def __init__(self):
+            self.deleted = []
+            self.commits = 0
+
+        async def execute(self, statement):
+            self.statement = str(statement)
+            return Result()
+
+        async def delete(self, item):
+            self.deleted.append(item)
+
+        async def commit(self):
+            self.commits += 1
+
+    db = DB()
+    deleted = await ai_orchestrator.cleanup_expired_ai_runs(db, user_id=8)
+
+    assert ai_orchestrator.AI_BACKGROUND_TASK_RETENTION_MINUTES == 10
+    assert deleted == 1
+    assert db.deleted == [run]
+    assert db.commits == 1
+    assert "coalesce" in db.statement.lower()
+    assert "ai_runs.user_id" in db.statement
+
+
+@pytest.mark.asyncio
+async def test_finished_background_task_can_be_deleted(monkeypatch):
+    run = SimpleNamespace(id="run-finished", status="completed")
+
+    class DB:
+        def __init__(self):
+            self.deleted = []
+            self.commits = 0
+
+        async def delete(self, item):
+            self.deleted.append(item)
+
+        async def commit(self):
+            self.commits += 1
+
+    db = DB()
+    monkeypatch.setattr(ai_routes, "_run_for_user", AsyncMock(return_value=run))
+
+    await ai_routes.delete_ai_background_task(run.id, db, SimpleNamespace(id=8))
+
+    assert db.deleted == [run]
+    assert db.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_active_background_task_cannot_be_deleted(monkeypatch):
+    run = SimpleNamespace(id="run-active", status="waiting_approval")
+    db = SimpleNamespace(delete=AsyncMock(), commit=AsyncMock())
+    monkeypatch.setattr(ai_routes, "_run_for_user", AsyncMock(return_value=run))
+
+    with pytest.raises(ai_routes.HTTPException) as exc_info:
+        await ai_routes.delete_ai_background_task(run.id, db, SimpleNamespace(id=8))
+
+    assert exc_info.value.status_code == 409
+    db.delete.assert_not_awaited()
+    db.commit.assert_not_awaited()
 
 
 def test_managed_plugin_file_unique_key_uses_fixed_size_path_digest():

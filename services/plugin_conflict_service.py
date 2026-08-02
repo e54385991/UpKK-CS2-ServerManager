@@ -26,7 +26,11 @@ from modules.http_helper import http_helper
 from services.github_credentials import get_effective_github_token
 from services.maintenance_lock import maintenance_lock_service
 from services.plugin_auto_update_service import derive_asset_glob, upsert_managed_plugin
-from services.plugin_installation import install_github_plugin
+from services.plugin_installation import (
+    PLUGIN_INSTALL_MAX_RETRIES,
+    _is_retryable_install_failure,
+    install_github_plugin,
+)
 from services.plugin_inventory_service import (
     PluginInventoryError,
     inspect_remote_plugin_inventory,
@@ -40,6 +44,19 @@ _GITHUB_REPOSITORY = re.compile(
     r"^(?:https://github\.com/|git@github\.com:)([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$"
 )
 _ARCHIVE_EXTENSIONS = (".zip", ".tar.gz", ".tgz", ".tar", ".7z")
+_BLOCKED_ASSET_MARKERS = (
+    "windows",
+    "win32",
+    "win64",
+    "-win-",
+    "_win_",
+    "macos",
+    "osx",
+    "source code",
+    "source-code",
+    "symbols",
+    "debug",
+)
 
 
 class PluginPlanError(ValueError):
@@ -91,6 +108,19 @@ def parse_dependency_ids(value: str | None) -> list[int]:
         if plugin_id not in result:
             result.append(plugin_id)
     return result
+
+
+def _plugin_plan_confirmation_payload(plan: dict[str, Any]) -> dict[str, Any]:
+    """Keep approval hashes stable while remote installation evidence changes."""
+    return {
+        "server_id": plan["server_id"],
+        "plugin": plan["plugin"],
+        "dependencies": plan["dependencies"],
+        "installation_order": plan["installation_order"],
+        "hard_conflicts": plan["hard_conflicts"],
+        "warnings": plan["warnings"],
+        "blocked": plan["blocked"],
+    }
 
 
 async def _resolve_dependency_order(
@@ -248,9 +278,7 @@ async def build_plugin_install_plan(
         "steps": steps,
         "blocked": bool(hard_conflicts),
     }
-    confirmation_payload = {
-        key: value for key, value in plan.items() if key != "compatibility_unknown"
-    }
+    confirmation_payload = _plugin_plan_confirmation_payload(plan)
     encoded = json.dumps(
         confirmation_payload,
         ensure_ascii=False,
@@ -277,12 +305,52 @@ def validate_plugin_plan_acknowledgements(
         )
 
 
+def _release_asset_candidates(release: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for asset in release.get("assets", []):
+        name = str(asset.get("name") or "")
+        lowered = name.casefold()
+        download_url = str(asset.get("browser_download_url") or "")
+        if (
+            not lowered.endswith(_ARCHIVE_EXTENSIONS)
+            or not download_url
+            or any(marker in lowered for marker in _BLOCKED_ASSET_MARKERS)
+        ):
+            continue
+        candidates.append(
+            {
+                "id": str(asset.get("id") or ""),
+                "name": name,
+                "url": download_url,
+                "size": int(asset.get("size") or 0),
+                "digest": asset.get("digest"),
+                "content_type": asset.get("content_type"),
+            }
+        )
+
+    def rank(asset: dict[str, Any]) -> tuple[int, int, int, str]:
+        lowered = asset["name"].casefold()
+        upgrade_only = any(marker in lowered for marker in ("upgrade", "update-only"))
+        linux_named = "linux" in lowered
+        runtime_named = any(
+            marker in lowered for marker in ("runtime", "release", "server", "plugin")
+        )
+        return (
+            1 if upgrade_only else 0,
+            0 if linux_named else 1,
+            0 if runtime_named else 1,
+            lowered,
+        )
+
+    return sorted(candidates, key=rank)
+
+
 async def _latest_release_asset(
     db: AsyncSession,
     plugin: MarketPlugin,
     server: Server,
     user: User,
-) -> tuple[str, str, str, str]:
+) -> dict[str, Any]:
     match = _GITHUB_REPOSITORY.fullmatch(plugin.github_url.strip().rstrip("/"))
     if not match:
         raise PluginPlanError(f"Invalid GitHub URL for {plugin.title}")
@@ -300,19 +368,54 @@ async def _latest_release_asset(
     )
     if not success or not isinstance(data, dict):
         raise PluginPlanError(f"Failed to fetch {plugin.title} release: {error}")
-    for asset in data.get("assets", []):
-        name = str(asset.get("name") or "")
-        lowered = name.lower()
-        if any(marker in lowered for marker in ("windows", "-win-", "_win_")):
+    candidates = _release_asset_candidates(data)
+    if not candidates:
+        raise PluginPlanError(f"No suitable Linux release asset found for {plugin.title}")
+
+    from services.github_plugin_plan_service import (
+        GitHubPlanError,
+        inspect_release_asset_layout,
+    )
+
+    rejected: list[str] = []
+    for asset in candidates:
+        try:
+            layout = await inspect_release_asset_layout(asset, repository)
+        except GitHubPlanError as exc:
+            rejected.append(f"{asset['name']}: {exc}")
             continue
-        if lowered.endswith(_ARCHIVE_EXTENSIONS) and asset.get("browser_download_url"):
-            return (
-                str(asset["browser_download_url"]),
-                str(data.get("id") or ""),
-                str(data.get("tag_name") or "unknown"),
-                name,
-            )
-    raise PluginPlanError(f"No suitable Linux release asset found for {plugin.title}")
+        mapping = layout["mapping"]
+        if layout["mapping_required"] and not plugin.custom_install_path:
+            rejected.append(f"{asset['name']}: archive layout is not a recognized CS2 plugin")
+            continue
+
+        target_prefixes = sorted({item["target"].split("/", 1)[0] for item in mapping})
+        inferred_custom_target = None
+        if len(mapping) == 1 and (
+            mapping[0]["target"] not in {"addons", "cfg"}
+            or (mapping[0].get("source", ".") in {".", ""} and mapping[0]["target"] == "addons")
+        ):
+            inferred_custom_target = mapping[0]["target"]
+        custom_target = plugin.custom_install_path or inferred_custom_target
+        return {
+            "download_url": asset["url"],
+            "release_id": str(data.get("id") or ""),
+            "release_tag": str(data.get("tag_name") or "unknown"),
+            "asset_name": asset["name"],
+            "archive_sha256": layout["archive_sha256"],
+            "source_prefix": layout["source_prefix"],
+            "custom_install_path": custom_target,
+            "allowed_roots": (
+                []
+                if custom_target is not None
+                else [root for root in target_prefixes if root in {"addons", "cfg"}]
+            ),
+        }
+    detail = "; ".join(rejected[:3])
+    raise PluginPlanError(
+        f"No installable CS2 release asset found for {plugin.title}"
+        + (f": {detail}" if detail else "")
+    )
 
 
 async def _install_one(
@@ -322,19 +425,65 @@ async def _install_one(
     user: User,
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
-    download_url, release_id, release_tag, asset_name = await _latest_release_asset(
-        db, plugin, server, user
-    )
-    request = GitHubPluginInstallRequest(
-        download_url=download_url,
-        custom_install_path=plugin.custom_install_path,
-        record_installation=False,
-        suppress_notification=False,
-    )
-    result = await install_github_plugin(server.id, request, db, user, ai_progress=progress)
-    if not result.success:
-        return {"success": False, "plugin_id": plugin.id, "message": result.message}
+    total_attempts = PLUGIN_INSTALL_MAX_RETRIES + 1
+    failures: list[str] = []
+    asset: dict[str, Any] | None = None
+    result = None
+    for attempt in range(1, total_attempts + 1):
+        if attempt > 1:
+            await _emit_plan_progress(
+                progress,
+                f"Retrying {plugin.title} installation (attempt {attempt}/{total_attempts})",
+                step_id=f"plugin:{plugin.id}",
+                step_status="running",
+            )
+        try:
+            asset = await _latest_release_asset(db, plugin, server, user)
+            request = GitHubPluginInstallRequest(
+                download_url=asset["download_url"],
+                custom_install_path=asset["custom_install_path"],
+                record_installation=False,
+                suppress_notification=False,
+                source_prefix=asset["source_prefix"],
+                allowed_roots=asset["allowed_roots"],
+                expected_archive_sha256=asset["archive_sha256"],
+            )
+            result = await install_github_plugin(
+                server.id,
+                request,
+                db,
+                user,
+                ai_progress=progress,
+            )
+            if result.success:
+                break
+            failure = result.message
+        except LookupError, PermissionError:
+            raise
+        except Exception as exc:
+            failure = str(exc) or exc.__class__.__name__
+        failures.append(failure)
+        deterministic = failure.casefold().startswith("invalid github url")
+        if attempt >= total_attempts or deterministic or not _is_retryable_install_failure(failure):
+            break
+        await _emit_plan_progress(
+            progress,
+            f"{plugin.title} installation attempt {attempt}/{total_attempts} failed: "
+            f"{failure}. Retrying automatically.",
+            step_id=f"plugin:{plugin.id}",
+            step_status="running",
+        )
 
+    if result is None or not result.success:
+        failure = failures[-1] if failures else "Plugin installation failed"
+        if len(failures) > 1:
+            failure = (
+                f"{failure} (installation failed after {len(failures)} attempts, "
+                f"including {len(failures) - 1} automatic retries)"
+            )
+        return {"success": False, "plugin_id": plugin.id, "message": failure}
+
+    assert asset is not None
     await upsert_managed_plugin(
         server_id=server.id,
         source_type="market",
@@ -342,10 +491,10 @@ async def _install_one(
         display_name=plugin.title,
         repo_url=plugin.github_url,
         market_plugin_id=plugin.id,
-        installed_release_id=release_id,
-        installed_version=release_tag or plugin.version or "unknown",
-        asset_glob=derive_asset_glob(asset_name, release_tag),
-        custom_install_path=plugin.custom_install_path,
+        installed_release_id=asset["release_id"],
+        installed_version=asset["release_tag"] or plugin.version or "unknown",
+        asset_glob=derive_asset_glob(asset["asset_name"], asset["release_tag"]),
+        custom_install_path=asset["custom_install_path"],
     )
     plugin.download_count += 1
     plugin.install_count += 1

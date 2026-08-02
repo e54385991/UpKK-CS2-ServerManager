@@ -35,7 +35,7 @@ from services.ai_access import authorized_server
 from services.github_credentials import get_effective_github_token
 from services.maintenance_lock import maintenance_lock_service
 from services.plugin_conflict_service import ProgressCallback
-from services.plugin_installation import install_github_plugin
+from services.plugin_installation import install_github_plugin_with_retry
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,11 @@ BLOCKED_RELEASE_SUFFIXES = {
 
 class GitHubPlanError(ValueError):
     pass
+
+
+def _github_plan_confirmation_payload(plan: dict[str, Any]) -> dict[str, Any]:
+    """Exclude live inventory evidence while retaining approval-critical state."""
+    return {key: value for key, value in plan.items() if key != "already_installed"}
 
 
 def normalize_public_repo_url(value: str) -> tuple[str, str, str]:
@@ -533,13 +538,57 @@ def _detect_mapping(
                 False,
             )
 
+    # Some CounterStrikeSharp releases intentionally omit the outer addons/
+    # directory. Preserve the whole framework subtree because it may include
+    # shared libraries and multiple companion plugin modules.
+    framework_prefixes = ["counterstrikesharp"]
+    framework_prefixes.extend(f"{first}/counterstrikesharp" for first in first_segments)
+    for prefix in framework_prefixes:
+        base = f"{prefix.strip('/')}/"
+        if any(
+            path.casefold().startswith(f"{base.casefold()}plugins/")
+            and path.casefold().endswith(".dll")
+            for path in paths
+        ):
+            return (
+                prefix,
+                [{"source": prefix, "target": "addons/counterstrikesharp"}],
+                False,
+            )
+
+    # A release may contain plugins/<name>/ without the CounterStrikeSharp
+    # wrapper. Map the entire plugins tree so companion modules are retained.
+    plugin_prefixes = ["plugins"]
+    plugin_prefixes.extend(f"{first}/plugins" for first in first_segments)
+    for prefix in plugin_prefixes:
+        base = f"{prefix.strip('/')}/"
+        if any(
+            path.casefold().startswith(base.casefold()) and path.casefold().endswith(".dll")
+            for path in paths
+        ):
+            return (
+                prefix,
+                [{"source": prefix, "target": "addons/counterstrikesharp/plugins"}],
+                False,
+            )
+
     files = [item for item in entries if not item["is_dir"]]
-    root_files = [item for item in files if "/" not in item["path"]]
-    suffixes = {posixpath.splitext(item["path"])[1].casefold() for item in root_files}
-    if ".dll" in suffixes and (".json" in suffixes or ".deps.json" in " ".join(suffixes)):
-        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", repo_name).strip(".-")
-        target = f"addons/counterstrikesharp/plugins/{safe_name}"
-        return None, [{"source": ".", "target": target}], False
+    flat_prefixes = [""]
+    flat_prefixes.extend(first_segments)
+    for prefix in flat_prefixes:
+        base = f"{prefix}/" if prefix else ""
+        direct_files = [
+            item["path"]
+            for item in files
+            if item["path"].startswith(base) and "/" not in item["path"][len(base) :]
+        ]
+        if any(path.casefold().endswith(".dll") for path in direct_files) and any(
+            path.casefold().endswith(".deps.json") for path in direct_files
+        ):
+            safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", repo_name).strip(".-")
+            target = f"addons/counterstrikesharp/plugins/{safe_name}"
+            source = prefix or "."
+            return prefix or None, [{"source": source, "target": target}], False
 
     root_dirs = {
         item["path"].strip("/").split("/")[0]
@@ -551,15 +600,6 @@ def _detect_mapping(
         for path in paths
     ):
         return None, [{"source": ".", "target": "addons"}], False
-    if "plugins" in root_dirs and any(
-        path.casefold().startswith("plugins/") and path.casefold().endswith(".dll")
-        for path in paths
-    ):
-        return (
-            "plugins",
-            [{"source": "plugins", "target": "addons/counterstrikesharp/plugins"}],
-            False,
-        )
     return None, [], True
 
 
@@ -568,7 +608,15 @@ def _infer_plugin_metadata(
 ) -> dict[str, Any]:
     paths = [item["path"].casefold() for item in entries if not item["is_dir"]]
     readme = str(documentation.get("readme") or "").casefold()
-    is_css = any("addons/counterstrikesharp/plugins/" in path for path in paths)
+    is_css = any(
+        path.endswith(".dll")
+        and (
+            "addons/counterstrikesharp/plugins/" in path
+            or "/counterstrikesharp/plugins/" in f"/{path}"
+            or "/plugins/" in f"/{path}"
+        )
+        for path in paths
+    )
     is_metamod = any("addons/metamod/" in path or path.endswith(".vdf") for path in paths)
     framework = "counterstrikesharp" if is_css else ("metamod" if is_metamod else None)
     dependencies: list[dict[str, str]] = []
@@ -707,6 +755,35 @@ async def _recipe_for_plan(
     return recipe
 
 
+async def inspect_release_asset_layout(asset: dict[str, Any], repo_name: str) -> dict[str, Any]:
+    """Download and safely derive an install mapping for one release asset."""
+    archive_path, archive_sha256, compressed_size = await _download_release_asset(asset["url"])
+    try:
+        try:
+            entries = await anyio.to_thread.run_sync(
+                _archive_entries, archive_path, asset["name"], compressed_size
+            )
+        except GitHubPlanError:
+            raise
+        except Exception as exc:
+            raise GitHubPlanError("Release archive could not be safely inspected") from exc
+    finally:
+        try:
+            os.unlink(archive_path)
+        except OSError:
+            pass
+    _validate_release_contents(entries)
+    source_prefix, mapping, mapping_required = _detect_mapping(entries, repo_name)
+    return {
+        "archive_sha256": archive_sha256,
+        "compressed_size": compressed_size,
+        "entries": entries,
+        "source_prefix": source_prefix,
+        "mapping": mapping,
+        "mapping_required": mapping_required,
+    }
+
+
 async def build_github_install_plan(
     db: AsyncSession,
     user: User,
@@ -724,24 +801,13 @@ async def build_github_install_plan(
         selected = inspected["selected_asset"]
     if selected is None:
         raise GitHubPlanError("Select exactly one stable Linux release archive")
-    archive_path, archive_sha256, compressed_size = await _download_release_asset(selected["url"])
-    try:
-        try:
-            entries = await anyio.to_thread.run_sync(
-                _archive_entries, archive_path, selected["name"], compressed_size
-            )
-        except GitHubPlanError:
-            raise
-        except Exception as exc:
-            raise GitHubPlanError("Release archive could not be safely inspected") from exc
-    finally:
-        try:
-            os.unlink(archive_path)
-        except OSError:
-            pass
     _owner, repo_name, canonical = normalize_public_repo_url(inspected["repo_url"])
-    _validate_release_contents(entries)
-    source_prefix, mapping, mapping_required = _detect_mapping(entries, repo_name)
+    layout = await inspect_release_asset_layout(selected, repo_name)
+    archive_sha256 = layout["archive_sha256"]
+    entries = layout["entries"]
+    source_prefix = layout["source_prefix"]
+    mapping = layout["mapping"]
+    mapping_required = layout["mapping_required"]
     plugin_metadata = _infer_plugin_metadata(entries, inspected["documentation"])
     recipe = await _recipe_for_plan(db, user, canonical, request.recipe_id)
     recipe_revision = None
@@ -801,7 +867,11 @@ async def build_github_install_plan(
         "target_revisions": target_revisions,
     }
     plan_hash = hashlib.sha256(
-        json.dumps(plan_core, sort_keys=True, separators=(",", ":")).encode()
+        json.dumps(
+            _github_plan_confirmation_payload(plan_core),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
     ).hexdigest()
     return {
         **plan_core,
@@ -945,7 +1015,13 @@ async def _execute_github_install_plan_locked(
         installation_plan_hash=plan["plan_hash"],
         config_policy=request.config_policy,
     )
-    result = await install_github_plugin(server.id, install_request, db, user, ai_progress=progress)
+    result = await install_github_plugin_with_retry(
+        server.id,
+        install_request,
+        db,
+        user,
+        ai_progress=progress,
+    )
     if not result.success:
         return {
             "success": False,

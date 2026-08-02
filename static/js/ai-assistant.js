@@ -318,10 +318,12 @@
                 .replace('{total}', String(total));
             parent.appendChild(count);
         }
-        if (snapshot.message) {
+        const failed = ['failed', 'interrupted', 'cancelled', 'expired'].includes(tool.status);
+        const detailText = failed && tool.error ? tool.error : snapshot.message;
+        if (detailText) {
             const message = document.createElement('div');
-            message.className = 'ai-task-progress-message';
-            message.textContent = snapshot.message;
+            message.className = `ai-task-progress-message${failed && tool.error ? ' text-danger' : ''}`;
+            message.textContent = detailText;
             parent.appendChild(message);
         }
         if (!steps.length) return;
@@ -364,6 +366,30 @@
         );
         connectEvents();
         pollRun();
+    }
+
+    async function deleteBackgroundTask(task) {
+        await jsonResponse(await authFetch(`/api/ai/tasks/${task.id}`, { method: 'DELETE' }));
+        await refreshBackgroundTasks();
+    }
+
+    function requestBackgroundTaskDelete(task) {
+        const remove = () => {
+            deleteBackgroundTask(task).catch((error) => setStatus(error.message, true));
+        };
+        if (typeof window.showConfirm !== 'function') {
+            remove();
+            return;
+        }
+        window.showConfirm(
+            translate(
+                'ai.deleteTaskConfirm',
+                'Delete this finished background task? Conversation messages will be kept.'
+            ),
+            remove,
+            () => {},
+            translate('ai.deleteTask', 'Delete task')
+        );
     }
 
     function plannedToolLabel(tool) {
@@ -420,6 +446,16 @@
             open.addEventListener('click', () => {
                 openBackgroundTask(task).catch((error) => setStatus(error.message, true));
             });
+            if (!activeStatuses.includes(task.status)) {
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'btn btn-sm btn-link text-danger ai-task-open';
+                remove.title = translate('ai.deleteTask', 'Delete task');
+                remove.setAttribute('aria-label', remove.title);
+                remove.innerHTML = '<i class="bi bi-trash3" aria-hidden="true"></i>';
+                remove.addEventListener('click', () => requestBackgroundTaskDelete(task));
+                actions.appendChild(remove);
+            }
             actions.appendChild(open);
             header.appendChild(label);
             header.appendChild(actions);
@@ -440,6 +476,12 @@
                 appendToolProgress(row, tool);
                 tools.appendChild(row);
             });
+            if (task.error && !taskTools.some((tool) => tool.error === task.error)) {
+                const error = document.createElement('div');
+                error.className = 'small text-danger mt-2';
+                error.textContent = task.error;
+                tools.appendChild(error);
+            }
             if (tools.childElementCount) card.appendChild(tools);
             list.appendChild(card);
         });
@@ -454,11 +496,13 @@
         } catch (error) {
             const list = element('ai-background-task-list');
             if (list) {
-                list.replaceChildren();
-                const message = document.createElement('div');
-                message.className = 'small text-danger';
+                let message = list.querySelector('.ai-background-task-refresh-error');
+                if (!message) {
+                    message = document.createElement('div');
+                    message.className = 'small text-danger ai-background-task-refresh-error';
+                    list.prepend(message);
+                }
                 message.textContent = error.message;
-                list.appendChild(message);
             }
         } finally {
             state.loadingBackgroundTasks = false;

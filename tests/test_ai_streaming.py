@@ -105,6 +105,19 @@ def test_background_task_viewer_refreshes_from_the_task_api():
     assert ".slice(0, 2)" in script
 
 
+def test_background_task_failures_keep_existing_rows_and_show_the_error():
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    refresh = script.split("async function refreshBackgroundTasks()", 1)[1].split(
+        "function scheduleBackgroundTaskRefresh()", 1
+    )[0]
+
+    assert "failed && tool.error ? tool.error : snapshot.message" in script
+    assert "task.error" in script
+    assert "ai-background-task-refresh-error" in refresh
+    assert "list.prepend(message)" in refresh
+    assert "list.replaceChildren()" not in refresh
+
+
 def test_run_errors_are_preserved_and_restored_as_error_cards():
     script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
     orchestrator = (PROJECT_ROOT / "services" / "ai_orchestrator.py").read_text(encoding="utf-8")
@@ -129,6 +142,18 @@ def test_sse_and_poll_failures_use_five_exponential_retries():
     assert '"providerRetrying"' in chinese
     assert '"sseRetrying"' in chinese
     assert '"pollRetrying"' in chinese
+
+
+def test_finished_background_tasks_have_a_manual_delete_action():
+    script = (PROJECT_ROOT / "static" / "js" / "ai-assistant.js").read_text(encoding="utf-8")
+    chinese = (PROJECT_ROOT / "static" / "locales" / "zh-CN.json").read_text(encoding="utf-8")
+
+    assert "deleteBackgroundTask(task)" in script
+    assert "`/api/ai/tasks/${task.id}`" in script
+    assert "!activeStatuses.includes(task.status)" in script
+    assert "bi bi-trash3" in script
+    assert '"deleteTask"' in chinese
+    assert '"deleteTaskConfirm"' in chinese
 
 
 def test_status_bar_shows_spinner_and_dots_while_active():

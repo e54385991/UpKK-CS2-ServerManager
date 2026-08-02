@@ -29,6 +29,16 @@ from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
 PROGRESS_UPDATE_INTERVAL = 10
+PLUGIN_INSTALL_MAX_RETRIES = 2
+
+_NON_RETRYABLE_INSTALL_ERRORS = (
+    "server not found",
+    "cs2 server not found",
+    "invalid custom install path",
+    "release archive digest changed",
+    "approved archive source prefix was not found",
+    "approved archive mapping did not contain addons",
+)
 
 
 def _build_plugin_copy_command(
@@ -869,3 +879,81 @@ async def install_github_plugin(
         return GitHubPluginInstallResponse(success=False, message=f"Installation error: {str(e)}")
     finally:
         await ssh_manager.disconnect()
+
+
+def _is_retryable_install_failure(message: str) -> bool:
+    lowered = message.casefold()
+    return not any(marker in lowered for marker in _NON_RETRYABLE_INSTALL_ERRORS)
+
+
+async def install_github_plugin_with_retry(
+    server_id: int,
+    request: GitHubPluginInstallRequest,
+    db: AsyncSession,
+    current_user: User,
+    ai_progress: Callable[[str, str], Awaitable[None]] | None = None,
+    *,
+    max_retries: int = PLUGIN_INSTALL_MAX_RETRIES,
+) -> GitHubPluginInstallResponse:
+    """Install a plugin and retry transient or package-layout failures twice."""
+    total_attempts = max(1, max_retries + 1)
+    failures: list[str] = []
+    last_result: GitHubPluginInstallResponse | None = None
+
+    async def report(message: str, message_type: str = "status") -> None:
+        if ai_progress is None:
+            return
+        try:
+            await ai_progress(message, message_type)
+        except Exception:
+            pass
+
+    for attempt in range(1, total_attempts + 1):
+        if attempt > 1:
+            await report(f"Retrying plugin installation (attempt {attempt}/{total_attempts})")
+        try:
+            result = await install_github_plugin(
+                server_id,
+                request,
+                db,
+                current_user,
+                ai_progress=ai_progress,
+            )
+        except LookupError, PermissionError:
+            raise
+        except Exception as exc:
+            result = GitHubPluginInstallResponse(
+                success=False,
+                message=f"Installation error: {exc}",
+            )
+        if result.success:
+            if attempt > 1:
+                await report(
+                    f"Plugin installation succeeded on attempt {attempt}/{total_attempts}",
+                    "success",
+                )
+            return result
+
+        last_result = result
+        failures.append(result.message)
+        if attempt >= total_attempts or not _is_retryable_install_failure(result.message):
+            break
+        await report(
+            f"Plugin installation attempt {attempt}/{total_attempts} failed: "
+            f"{result.message}. Retrying automatically.",
+            "warning",
+        )
+
+    assert last_result is not None
+    if len(failures) == 1:
+        return last_result
+    final_message = (
+        f"{last_result.message} (installation failed after {len(failures)} attempts, "
+        f"including {len(failures) - 1} automatic retries)"
+    )
+    await report(final_message, "error")
+    return GitHubPluginInstallResponse(
+        success=False,
+        message=final_message,
+        installed_files=last_result.installed_files,
+    )

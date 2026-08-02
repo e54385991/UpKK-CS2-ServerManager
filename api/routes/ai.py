@@ -56,6 +56,7 @@ from services.ai_access import audit_security_event
 from services.ai_events import ai_event_hub
 from services.ai_orchestrator import (
     ACTIVE_RUN_STATUSES,
+    cleanup_expired_ai_runs,
     interrupt_conversation_run,
     process_ai_run,
     reconcile_waiting_approval_runs,
@@ -628,6 +629,7 @@ async def list_ai_background_tasks(
 ) -> list[AIBackgroundTaskResponse]:
     """Return the caller's active and recently finished AI tasks."""
     await reconcile_waiting_approval_runs(db, user_id=current_user.id)
+    await cleanup_expired_ai_runs(db, user_id=current_user.id)
     run_result = await db.execute(
         select(AIRun)
         .join(AIToolRun, AIToolRun.run_id == AIRun.id)
@@ -684,6 +686,22 @@ async def list_ai_background_tasks(
         for run in runs
         if run.id in tools_by_run
     ]
+
+
+@router.delete("/api/ai/tasks/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_ai_background_task(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    run = await _run_for_user(db, current_user, run_id)
+    if run.status in ACTIVE_RUN_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Active AI tasks cannot be deleted",
+        )
+    await db.delete(run)
+    await db.commit()
 
 
 @router.post("/api/ai/runs/{run_id}/tools/{tool_run_id}")

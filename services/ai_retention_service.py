@@ -12,10 +12,12 @@ from sqlmodel import select
 from modules.database import async_session_maker
 from modules.models import AIConversation, AISystemSettings
 from modules.utils import get_current_time
-from services.ai_orchestrator import interrupt_active_ai_runs
+from services.ai_orchestrator import cleanup_expired_ai_runs, interrupt_active_ai_runs
 
 logger = logging.getLogger(__name__)
 MAX_AI_HISTORY_RETENTION_DAYS = 7
+AI_TASK_CLEANUP_INTERVAL_SECONDS = 60
+AI_HISTORY_CLEANUP_INTERVAL_TICKS = 24 * 60
 
 
 class AIRetentionService:
@@ -46,15 +48,26 @@ class AIRetentionService:
         self._task = None
 
     async def _loop(self) -> None:
+        history_cleanup_ticks = 0
         while True:
-            await asyncio.sleep(24 * 60 * 60)
+            await asyncio.sleep(AI_TASK_CLEANUP_INTERVAL_SECONDS)
             try:
-                await self.cleanup_once()
+                history_cleanup_ticks += 1
+                if history_cleanup_ticks >= AI_HISTORY_CLEANUP_INTERVAL_TICKS:
+                    await self.cleanup_once()
+                    history_cleanup_ticks = 0
+                else:
+                    await self.cleanup_background_tasks_once()
             except Exception:
-                logger.exception("AI conversation retention cleanup failed")
+                logger.exception("AI retention cleanup failed")
+
+    async def cleanup_background_tasks_once(self) -> int:
+        async with async_session_maker() as db:
+            return await cleanup_expired_ai_runs(db)
 
     async def cleanup_once(self) -> int:
         async with async_session_maker() as db:
+            await cleanup_expired_ai_runs(db)
             settings = await AISystemSettings.get_or_create(db)
             retention_days = min(
                 max(1, settings.history_retention_days),

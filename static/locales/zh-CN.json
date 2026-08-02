@@ -39,6 +39,8 @@
     "taskTools": "工具",
     "taskProgress": "{completed} / {total} 步",
     "openTask": "打开任务",
+    "deleteTask": "删除任务",
+    "deleteTaskConfirm": "删除这条已结束的后台任务吗？对话消息会保留。",
     "running": "AI 任务运行中…",
     "runFailed": "AI 任务失败",
     "providerRetrying": "AI 提供商请求失败，将在 {seconds} 秒后进行第 {attempt}/{max} 次重试：{error}",

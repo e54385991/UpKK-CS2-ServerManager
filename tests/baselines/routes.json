@@ -364,6 +364,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "DELETE"
+    ],
+    "name": "delete_ai_background_task",
+    "path": "/api/ai/tasks/{run_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "decide_ai_tool",

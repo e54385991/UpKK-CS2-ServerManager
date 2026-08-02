@@ -9861,6 +9861,46 @@
         ]
       }
     },
+    "/api/ai/tasks/{run_id}": {
+      "delete": {
+        "operationId": "delete_ai_background_task_api_ai_tasks__run_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Ai Background Task",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
     "/api/auth/ai-settings": {
       "get": {
         "operationId": "get_user_ai_settings_api_auth_ai_settings_get",
