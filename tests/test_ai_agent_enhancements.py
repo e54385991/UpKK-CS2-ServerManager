@@ -520,6 +520,16 @@ async def test_expired_approval_closes_run_and_tool():
         risk="write",
         status="pending_approval",
         approval_expires_at=get_current_time() - timedelta(seconds=1),
+        progress_snapshot={
+            "steps": [
+                {
+                    "id": "plugin:17",
+                    "label": "Install Plugin",
+                    "status": "pending",
+                }
+            ]
+        },
+        progress_updated_at=None,
         error=None,
         result=None,
         completed_at=None,
@@ -554,6 +564,8 @@ async def test_expired_approval_closes_run_and_tool():
     assert run.status == "expired"
     assert tool.status == "expired"
     assert tool.completed_at is not None
+    assert tool.progress_snapshot["steps"][0]["status"] == "interrupted"
+    assert tool.progress_snapshot["current_step"] is None
 
 
 @pytest.mark.asyncio
@@ -692,6 +704,160 @@ async def test_queued_write_emits_queue_then_execution_status(monkeypatch):
     assert tool.status == "completed"
 
 
+def test_approval_plan_snapshots_have_stable_workshop_and_plugin_step_ids():
+    workshop_plan, workshop_progress = ai_orchestrator._build_plan_snapshots(
+        "apply_workshop_map",
+        {
+            "target": {"name": "kz_variety_x"},
+            "steps": [
+                {"action": "install_framework", "framework": "metamod"},
+                {"action": "install_framework", "framework": "counterstrikesharp"},
+                {"action": "install_market_plugin", "title": "MapChooser"},
+                {"action": "patch_plugin_config"},
+                {"action": "append_map", "name": "kz_variety_x"},
+                {"action": "verify"},
+            ],
+        },
+    )
+
+    assert [step["id"] for step in workshop_plan["steps"]] == [
+        "install_metamod",
+        "install_counterstrikesharp",
+        "install_mapchooser",
+        "patch_plugin_config",
+        "append_map",
+        "verify",
+    ]
+    assert workshop_progress["total"] == 6
+    assert workshop_progress["message"] == "Waiting for approval"
+
+    plugin_plan, plugin_progress = ai_orchestrator._build_plan_snapshots(
+        "apply_plugin_plan",
+        {
+            "steps": [
+                {"plugin_id": 17, "title": "Dependency", "status": "already_installed"},
+                {"plugin_id": 24, "title": "Target", "status": "install"},
+            ]
+        },
+    )
+    assert [step["id"] for step in plugin_plan["steps"]] == ["plugin:17", "plugin:24"]
+    assert plugin_progress["steps"][0]["status"] == "skipped"
+    assert plugin_progress["completed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_structured_tool_progress_is_persisted_before_completion(monkeypatch):
+    user = SimpleNamespace(id=8, is_active=True)
+    run = SimpleNamespace(id="run-progress", conversation_id="conversation-progress")
+    _plan, progress = ai_orchestrator._build_plan_snapshots(
+        "apply_plugin_plan",
+        {"steps": [{"plugin_id": 17, "title": "Plugin", "status": "install"}]},
+    )
+    tool = SimpleNamespace(
+        id="tool-progress",
+        tool_name="apply_plugin_plan",
+        arguments={},
+        arguments_hash="a" * 64,
+        risk="read",
+        requires_approval=False,
+        status="pending",
+        result=None,
+        error=None,
+        completed_at=None,
+        tool_call_id="call-progress",
+        progress_snapshot=progress,
+        progress_updated_at=None,
+    )
+    events = []
+
+    class DB:
+        def __init__(self):
+            self.commits = 0
+
+        async def get(self, _model, _id):
+            return user
+
+        def add(self, _item):
+            pass
+
+        async def commit(self):
+            self.commits += 1
+
+    async def execute(_name, _arguments, context):
+        await context.emit(
+            "tool_progress",
+            {
+                "message": "Installing Plugin",
+                "step_id": "plugin:17",
+                "step_status": "running",
+            },
+        )
+        return {"success": True}
+
+    async def emit(_run_id, event_type, payload):
+        events.append((event_type, payload))
+
+    db = DB()
+    monkeypatch.setattr(ai_orchestrator, "execute_tool", execute)
+    monkeypatch.setattr(ai_orchestrator, "_emit", emit)
+
+    await ai_orchestrator._execute_tool_run(db, run, tool, user, None)
+
+    assert db.commits >= 3
+    assert [step["status"] for step in tool.progress_snapshot["steps"]] == ["completed"]
+    assert tool.progress_snapshot["message"] == "Operation completed"
+    assert any(event_type == "tool_progress" for event_type, _payload in events)
+
+
+@pytest.mark.asyncio
+async def test_unsuccessful_tool_result_is_not_marked_completed(monkeypatch):
+    user = SimpleNamespace(id=8, is_active=True)
+    run = SimpleNamespace(id="run-failed-result", conversation_id="conversation-failed-result")
+    tool = SimpleNamespace(
+        id="tool-failed-result",
+        tool_name="apply_workshop_map",
+        arguments={},
+        arguments_hash="a" * 64,
+        risk="read",
+        requires_approval=False,
+        status="pending",
+        result=None,
+        error=None,
+        completed_at=None,
+        tool_call_id="call-failed-result",
+        progress_snapshot={"steps": []},
+        progress_updated_at=None,
+    )
+
+    class DB:
+        async def get(self, _model, _id):
+            return user
+
+        def add(self, _item):
+            pass
+
+        async def commit(self):
+            pass
+
+    events = []
+
+    async def emit(_run_id, event_type, _payload):
+        events.append(event_type)
+
+    monkeypatch.setattr(ai_orchestrator, "_emit", emit)
+    monkeypatch.setattr(
+        ai_orchestrator,
+        "execute_tool",
+        AsyncMock(return_value={"success": False, "message": "Remote verification failed"}),
+    )
+
+    await ai_orchestrator._execute_tool_run(DB(), run, tool, user, None)
+
+    assert tool.status == "failed"
+    assert tool.error == "Remote verification failed"
+    assert events[-1] == "tool_failed"
+
+
 @pytest.mark.asyncio
 async def test_background_task_view_returns_only_non_sensitive_task_progress():
     run = SimpleNamespace(
@@ -710,6 +876,15 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
         tool_name="apply_plugin_plan",
         risk="write",
         status="running",
+        plan_snapshot={"steps": [{"id": "plugin:17", "label": "Install Plugin"}]},
+        progress_snapshot={
+            "steps": [{"id": "plugin:17", "label": "Install Plugin", "status": "running"}],
+            "current_step": "plugin:17",
+            "message": "Installing Plugin",
+            "completed": 0,
+            "total": 1,
+        },
+        progress_updated_at=None,
         error=None,
         created_at=None,
         completed_at=None,
@@ -737,6 +912,7 @@ async def test_background_task_view_returns_only_non_sensitive_task_progress():
     assert len(tasks) == 1
     assert tasks[0].id == run.id
     assert tasks[0].tools[0].tool_name == tool.tool_name
+    assert tasks[0].tools[0].progress_snapshot["current_step"] == "plugin:17"
     assert not hasattr(tasks[0].tools[0], "arguments")
 
 

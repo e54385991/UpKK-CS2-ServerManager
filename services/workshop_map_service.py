@@ -31,12 +31,13 @@ from services.map_management_service import (
 )
 from services.plugin_auto_update_service import record_framework_installation
 from services.plugin_conflict_service import (
+    _emit_plan_progress,
     build_plugin_install_plan,
     execute_plugin_install_plan,
 )
 from services.ssh_manager import SSHManager
 
-ProgressCallback = Callable[[str, str], Awaitable[None]]
+ProgressCallback = Callable[..., Awaitable[None]]
 MAPCHOOSER_MARKET_TITLE = "CS2-Upkk-PanelPLG-Mapchooser"
 
 
@@ -310,6 +311,21 @@ async def execute_workshop_map_plan(
 ) -> dict[str, Any]:
     """Revalidate and execute the exact confirmed plan, reporting partial work."""
     completed: list[dict[str, Any]] = []
+    current_step: str | None = None
+
+    async def report(step_id: str, step_status: str, message: str) -> None:
+        nonlocal current_step
+        if step_status == "running":
+            current_step = step_id
+        elif current_step == step_id:
+            current_step = None
+        await _emit_plan_progress(
+            progress,
+            message,
+            step_id=step_id,
+            step_status=step_status,
+        )
+
     async with maintenance_lock_service.get(
         server.id, operation="workshop_map_plan", wait=False, ttl=3600
     ):
@@ -336,27 +352,37 @@ async def execute_workshop_map_plan(
 
         try:
             if not plan["current"].get("metamod"):
-                if progress:
-                    await progress("Installing Metamod", "status")
+                await report("install_metamod", "running", "Installing Metamod")
                 success, message = await SSHManager().install_metamod(current_server)
                 if not success:
                     raise WorkshopPlanError(message)
                 await record_framework_installation(current_server, user, "metamod")
                 completed.append({"action": "install_metamod", "success": True})
+                await report("install_metamod", "completed", "Installed Metamod")
 
             if not plan["current"].get("css"):
-                if progress:
-                    await progress("Installing CounterStrikeSharp", "status")
+                await report(
+                    "install_counterstrikesharp", "running", "Installing CounterStrikeSharp"
+                )
                 success, message = await SSHManager().install_counterstrikesharp(current_server)
                 if not success:
                     raise WorkshopPlanError(message)
                 await record_framework_installation(current_server, user, "counterstrikesharp")
                 completed.append({"action": "install_counterstrikesharp", "success": True})
+                await report(
+                    "install_counterstrikesharp", "completed", "Installed CounterStrikeSharp"
+                )
 
             if not plan["current"].get("mapchooser"):
                 plugin_id = plan["plugin_plan"]["plugin"]["id"]
-                if progress:
-                    await progress("Installing MapChooser", "status")
+                await report("install_mapchooser", "running", "Installing MapChooser")
+
+                async def mapchooser_progress(
+                    message: str, message_type: str, metadata: dict[str, Any] | None = None
+                ) -> None:
+                    del message_type, metadata
+                    await report("install_mapchooser", "running", message)
+
                 plugin_result = await execute_plugin_install_plan(
                     db,
                     current_server,
@@ -364,12 +390,13 @@ async def execute_workshop_map_plan(
                     plugin_id,
                     acknowledged,
                     expected_plan_hash=plan["plugin_plan"]["plan_hash"],
-                    progress=progress,
+                    progress=mapchooser_progress,
                     acquire_lock=False,
                 )
                 completed.append({"action": "install_mapchooser", "result": plugin_result})
                 if not plugin_result["success"]:
                     raise WorkshopPlanError(plugin_result["message"])
+                await report("install_mapchooser", "completed", "Installed MapChooser")
 
             manager = await _connect(current_server)
             try:
@@ -394,6 +421,9 @@ async def execute_workshop_map_plan(
                     parse_plugin_config(config_content).get("ChangeMapUse_host_workshop_map")
                     is not True
                 ):
+                    await report(
+                        "patch_plugin_config", "running", "Updating MapChooser configuration"
+                    )
                     updated_config = update_plugin_config(
                         config_content,
                         {"ChangeMapUse_host_workshop_map": True},
@@ -414,7 +444,11 @@ async def execute_workshop_map_plan(
                             "backup": backup,
                         }
                     )
+                    await report(
+                        "patch_plugin_config", "completed", "Updated MapChooser configuration"
+                    )
 
+                await report("append_map", "running", "Adding map to MapChooser")
                 updated_maps = append_map_to_config(
                     maps_content,
                     name=plan["workshop"]["name"],
@@ -429,9 +463,11 @@ async def execute_workshop_map_plan(
                     existed=state.get("maps", False),
                 )
                 completed.append({"action": "append_map", "success": True, "backup": maps_backup})
+                await report("append_map", "completed", "Added map to MapChooser")
 
                 # Final read-after-write verification checks both the exact ID
                 # and the setting required for host_workshop_map downloads.
+                await report("verify", "running", "Verifying Workshop map configuration")
                 state = await _inspect(manager, current_server)
                 verified_maps, verified_config = await _read_configs(manager, current_server, state)
                 entries = parse_maps_config(verified_maps).maps
@@ -447,9 +483,12 @@ async def execute_workshop_map_plan(
                 if not matching or not config_enabled:
                     raise WorkshopPlanError("Final Workshop map verification failed")
                 completed.append({"action": "verify", "success": True})
+                await report("verify", "completed", "Verified Workshop map configuration")
             finally:
                 await manager.disconnect()
         except Exception as exc:
+            if current_step:
+                await report(current_step, "failed", str(exc))
             return {
                 "success": False,
                 "message": str(exc),

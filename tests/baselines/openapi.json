@@ -130,6 +130,42 @@
             "title": "Id",
             "type": "string"
           },
+          "plan_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Snapshot"
+          },
+          "progress_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Snapshot"
+          },
+          "progress_updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Updated At"
+          },
           "risk": {
             "title": "Risk",
             "type": "string"
@@ -1291,6 +1327,15 @@
         ],
         "title": "ArchiveContentItem",
         "type": "object"
+      },
+      "AuthType": {
+        "description": "SSH Authentication types",
+        "enum": [
+          "password",
+          "key_file"
+        ],
+        "title": "AuthType",
+        "type": "string"
       },
       "BatchActionRequest": {
         "description": "Schema for batch server actions",
@@ -5685,6 +5730,674 @@
           "action"
         ],
         "title": "ServerAction",
+        "type": "object"
+      },
+      "ServerConfigEntry": {
+        "description": "Portable server configuration used by the export/import bundle.",
+        "properties": {
+          "a2s_check_interval_seconds": {
+            "default": 60,
+            "description": "A2S check interval in seconds (15-3600)",
+            "maximum": 3600.0,
+            "minimum": 15.0,
+            "title": "A2S Check Interval Seconds",
+            "type": "integer"
+          },
+          "a2s_failure_threshold": {
+            "default": 3,
+            "description": "Number of consecutive A2S failures before restart (1-10)",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "A2S Failure Threshold",
+            "type": "integer"
+          },
+          "a2s_query_host": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A2S query host (defaults to server host if not set)",
+            "title": "A2S Query Host"
+          },
+          "a2s_query_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A2S query port (defaults to game port if not set)",
+            "title": "A2S Query Port"
+          },
+          "additional_parameters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Parameters"
+          },
+          "auth_type": {
+            "$ref": "#/components/schemas/AuthType",
+            "default": "password"
+          },
+          "auto_clear_crash_hours": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hours offline before auto-clearing crash history (0 or None = disabled, default 2 hours recommended)",
+            "title": "Auto Clear Crash Hours"
+          },
+          "auto_restart_on_crash": {
+            "default": true,
+            "description": "Auto-restart if process not found (when monitoring enabled)",
+            "title": "Auto Restart On Crash",
+            "type": "boolean"
+          },
+          "backend_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Backend URL for status reporting (optional)",
+            "title": "Backend Url"
+          },
+          "captcha_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
+          },
+          "captcha_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "client_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Port"
+          },
+          "cpu_affinity": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')",
+            "title": "Cpu Affinity"
+          },
+          "current_game_version": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current installed CS2 version",
+            "title": "Current Game Version"
+          },
+          "default_map": {
+            "default": "de_dust2",
+            "maxLength": 100,
+            "title": "Default Map",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "discord_channel_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discord Channel Name"
+          },
+          "discord_crash_restart_min_interval_minutes": {
+            "default": 10,
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Discord Crash Restart Min Interval Minutes",
+            "type": "integer"
+          },
+          "discord_notifications_enabled": {
+            "default": false,
+            "title": "Discord Notifications Enabled",
+            "type": "boolean"
+          },
+          "discord_notify_auto_updates": {
+            "default": true,
+            "title": "Discord Notify Auto Updates",
+            "type": "boolean"
+          },
+          "discord_notify_crash_restarts": {
+            "default": true,
+            "title": "Discord Notify Crash Restarts",
+            "type": "boolean"
+          },
+          "discord_notify_manual_updates": {
+            "default": true,
+            "title": "Discord Notify Manual Updates",
+            "type": "boolean"
+          },
+          "discord_notify_plugin_updates": {
+            "default": true,
+            "title": "Discord Notify Plugin Updates",
+            "type": "boolean"
+          },
+          "discord_notify_s3_backups": {
+            "default": true,
+            "title": "Discord Notify S3 Backups",
+            "type": "boolean"
+          },
+          "discord_webhook_url": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discord Webhook Url"
+          },
+          "enable_a2s_monitoring": {
+            "default": false,
+            "description": "Enable A2S query monitoring",
+            "title": "Enable A2S Monitoring",
+            "type": "boolean"
+          },
+          "enable_auto_update": {
+            "default": true,
+            "description": "Enable automatic updates based on Steam API version check",
+            "title": "Enable Auto Update",
+            "type": "boolean"
+          },
+          "enable_panel_monitoring": {
+            "default": false,
+            "description": "Enable web panel monitoring and auto-restart",
+            "title": "Enable Panel Monitoring",
+            "type": "boolean"
+          },
+          "enable_plugin_auto_update": {
+            "default": false,
+            "title": "Enable Plugin Auto Update",
+            "type": "boolean"
+          },
+          "enable_ssh_health_monitoring": {
+            "default": true,
+            "title": "Enable Ssh Health Monitoring",
+            "type": "boolean"
+          },
+          "game_directory": {
+            "default": "/home/cs2server/cs2",
+            "title": "Game Directory",
+            "type": "string"
+          },
+          "game_mode": {
+            "default": "competitive",
+            "maxLength": 50,
+            "title": "Game Mode",
+            "type": "string"
+          },
+          "game_port": {
+            "default": 27015,
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Game Port",
+            "type": "integer"
+          },
+          "game_type": {
+            "default": "0",
+            "maxLength": 50,
+            "title": "Game Type",
+            "type": "string"
+          },
+          "github_proxy": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GitHub proxy URL (e.g., https://ghfast.top/https://github.com)",
+            "title": "Github Proxy"
+          },
+          "host": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "ip_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Address"
+          },
+          "map_pool_sync_url": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Map Pool Sync Url"
+          },
+          "max_players": {
+            "default": 32,
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Max Players",
+            "type": "integer"
+          },
+          "monitor_interval_seconds": {
+            "default": 60,
+            "description": "How often to check server status in seconds (10-3600)",
+            "maximum": 3600.0,
+            "minimum": 10.0,
+            "title": "Monitor Interval Seconds",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "plugin_update_check_interval_hours": {
+            "default": 1.0,
+            "maximum": 24.0,
+            "minimum": 0.0167,
+            "title": "Plugin Update Check Interval Hours",
+            "type": "number"
+          },
+          "rcon_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rcon Password"
+          },
+          "redacted_fields": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Redacted Fields",
+            "type": "array"
+          },
+          "server_name": {
+            "default": "CS2 Server",
+            "maxLength": 255,
+            "title": "Server Name",
+            "type": "string"
+          },
+          "server_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Password"
+          },
+          "session_manager": {
+            "default": "tmux",
+            "description": "Terminal multiplexer used to run and control the CS2 process",
+            "enum": [
+              "screen",
+              "tmux"
+            ],
+            "title": "Session Manager",
+            "type": "string"
+          },
+          "ssh_health_check_interval_hours": {
+            "default": 2,
+            "maximum": 168.0,
+            "minimum": 1.0,
+            "title": "Ssh Health Check Interval Hours",
+            "type": "integer"
+          },
+          "ssh_health_failure_threshold": {
+            "default": 84,
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Ssh Health Failure Threshold",
+            "type": "integer"
+          },
+          "ssh_key_path": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Key Path"
+          },
+          "ssh_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Password"
+          },
+          "ssh_port": {
+            "default": 22,
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Ssh Port",
+            "type": "integer"
+          },
+          "ssh_user": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Ssh User",
+            "type": "string"
+          },
+          "steam_account_token": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Steam game server login token (GSLT)",
+            "title": "Steam Account Token"
+          },
+          "sudo_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sudo Password"
+          },
+          "tv_enable": {
+            "default": false,
+            "title": "Tv Enable",
+            "type": "boolean"
+          },
+          "tv_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tv Port"
+          },
+          "update_check_interval_hours": {
+            "default": 1.0,
+            "description": "Hours between version checks (0.0167-24, where 0.0167≈1 minute)",
+            "maximum": 24.0,
+            "minimum": 0.0167,
+            "title": "Update Check Interval Hours",
+            "type": "number"
+          },
+          "use_panel_proxy": {
+            "default": false,
+            "description": "Use panel server as proxy for all downloads (SteamCMD, GitHub). Mutually exclusive with github_proxy.",
+            "title": "Use Panel Proxy",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "host",
+          "ssh_user"
+        ],
+        "title": "ServerConfigEntry",
+        "type": "object"
+      },
+      "ServerConfigImportRequest": {
+        "description": "Import request with a selectable conflict strategy.",
+        "properties": {
+          "conflict_strategy": {
+            "default": "skip",
+            "enum": [
+              "skip",
+              "update",
+              "rename"
+            ],
+            "title": "Conflict Strategy",
+            "type": "string"
+          },
+          "exported_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exported At"
+          },
+          "format": {
+            "const": "upkk-cs2-server-config",
+            "default": "upkk-cs2-server-config",
+            "title": "Format",
+            "type": "string"
+          },
+          "include_secrets": {
+            "default": false,
+            "title": "Include Secrets",
+            "type": "boolean"
+          },
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/ServerConfigEntry"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Servers",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "servers"
+        ],
+        "title": "ServerConfigImportRequest",
+        "type": "object"
+      },
+      "ServerConfigImportResponse": {
+        "description": "Summary returned after processing a configuration import bundle.",
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "imported": {
+            "title": "Imported",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ServerConfigImportResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "imported",
+          "updated",
+          "skipped",
+          "failed",
+          "results"
+        ],
+        "title": "ServerConfigImportResponse",
+        "type": "object"
+      },
+      "ServerConfigImportResult": {
+        "description": "Result for one item in a batch import.",
+        "properties": {
+          "action": {
+            "enum": [
+              "imported",
+              "updated",
+              "skipped",
+              "failed"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          }
+        },
+        "required": [
+          "index",
+          "name",
+          "action"
+        ],
+        "title": "ServerConfigImportResult",
         "type": "object"
       },
       "ServerCreate": {
@@ -14159,6 +14872,122 @@
           }
         ],
         "summary": "Get All Servers Disk Space",
+        "tags": [
+          "servers"
+        ]
+      }
+    },
+    "/servers/export": {
+      "get": {
+        "description": "Download one or more portable server configuration entries.",
+        "operationId": "export_server_configs_servers_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "server_ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "maxItems": 100,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Server Ids"
+            }
+          },
+          {
+            "description": "Include SSH, game, Steam, and Discord credentials in the downloaded bundle",
+            "in": "query",
+            "name": "include_secrets",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include SSH, game, Steam, and Discord credentials in the downloaded bundle",
+              "title": "Include Secrets",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Export Server Configs",
+        "tags": [
+          "servers"
+        ]
+      }
+    },
+    "/servers/import": {
+      "post": {
+        "description": "Import a configuration bundle into the current user's server list.",
+        "operationId": "import_server_configs_servers_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerConfigImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerConfigImportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Import Server Configs",
         "tags": [
           "servers"
         ]

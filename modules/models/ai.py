@@ -202,6 +202,9 @@ class AIToolRun(SQLModel, table=True):
     )
     approved_at: Optional[datetime] = Field(default=None)
     approval_expires_at: Optional[datetime] = Field(default=None, index=True)
+    plan_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    progress_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    progress_updated_at: Optional[datetime] = Field(default=None)
     result: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
     error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(

@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from modules.models import AuthType
+
 from .auth import UserResponse
 from .common import *
 
@@ -163,6 +165,92 @@ class ServerCreate(SQLModel):
                 "github_proxy and use_panel_proxy are mutually exclusive. Please choose only one."
             )
         return self
+
+
+class ServerConfigEntry(ServerCreate):
+    """Portable server configuration used by the export/import bundle."""
+
+    # Transfer bundles do not carry CAPTCHA values and may intentionally omit
+    # credentials when they were exported in redacted mode.
+    ssh_password: Optional[str] = None
+    captcha_token: Optional[str] = None
+    captcha_code: Optional[str] = None
+
+    auth_type: AuthType = AuthType.PASSWORD
+    ssh_key_path: Optional[str] = Field(None, max_length=500)
+
+    map_pool_sync_url: Optional[str] = Field(None, max_length=4096)
+
+    # Discord notification configuration
+    discord_notifications_enabled: bool = False
+    discord_webhook_url: Optional[str] = Field(None, max_length=1000)
+    discord_channel_name: Optional[str] = Field(None, max_length=255)
+    discord_notify_auto_updates: bool = True
+    discord_notify_manual_updates: bool = True
+    discord_notify_plugin_updates: bool = True
+    discord_notify_s3_backups: bool = True
+    discord_notify_crash_restarts: bool = True
+    discord_crash_restart_min_interval_minutes: int = Field(default=10, ge=1, le=1440)
+
+    # SSH health monitoring configuration
+    enable_ssh_health_monitoring: bool = True
+    ssh_health_check_interval_hours: int = Field(default=2, ge=1, le=168)
+    ssh_health_failure_threshold: int = Field(default=84, ge=1, le=10000)
+
+    redacted_fields: List[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("redacted_fields")
+    @classmethod
+    def validate_redacted_fields(cls, values):
+        allowed = {
+            "ssh_password",
+            "sudo_password",
+            "server_password",
+            "rcon_password",
+            "steam_account_token",
+            "discord_webhook_url",
+        }
+        unknown = set(values) - allowed
+        if unknown:
+            raise ValueError(f"Unsupported redacted fields: {', '.join(sorted(unknown))}")
+        return list(dict.fromkeys(values))
+
+
+class ServerConfigExport(SQLModel):
+    """Top-level portable server configuration export document."""
+
+    format: Literal["upkk-cs2-server-config"] = "upkk-cs2-server-config"
+    version: int = Field(default=1, ge=1, le=1)
+    exported_at: Optional[datetime] = None
+    include_secrets: bool = False
+    servers: List[ServerConfigEntry] = Field(..., min_length=1, max_length=100)
+
+
+class ServerConfigImportRequest(ServerConfigExport):
+    """Import request with a selectable conflict strategy."""
+
+    conflict_strategy: Literal["skip", "update", "rename"] = "skip"
+
+
+class ServerConfigImportResult(SQLModel):
+    """Result for one item in a batch import."""
+
+    index: int
+    name: str
+    action: Literal["imported", "updated", "skipped", "failed"]
+    server_id: Optional[int] = None
+    message: Optional[str] = None
+
+
+class ServerConfigImportResponse(SQLModel):
+    """Summary returned after processing a configuration import bundle."""
+
+    total: int
+    imported: int
+    updated: int
+    skipped: int
+    failed: int
+    results: List[ServerConfigImportResult]
 
 
 class ServerUpdate(SQLModel):

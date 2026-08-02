@@ -630,10 +630,7 @@ async def list_ai_background_tasks(
     await reconcile_waiting_approval_runs(db, user_id=current_user.id)
     run_result = await db.execute(
         select(AIRun)
-        .where(
-            AIRun.user_id == current_user.id,
-            AIRun.status.in_(ACTIVE_RUN_STATUSES),
-        )
+        .where(AIRun.user_id == current_user.id)
         .order_by(AIRun.updated_at.desc(), AIRun.created_at.desc())
         .limit(limit)
     )
@@ -654,6 +651,9 @@ async def list_ai_background_tasks(
                 tool_name=tool.tool_name,
                 risk=tool.risk,
                 status=tool.status,
+                plan_snapshot=getattr(tool, "plan_snapshot", None),
+                progress_snapshot=getattr(tool, "progress_snapshot", None),
+                progress_updated_at=getattr(tool, "progress_updated_at", None),
                 error=tool.error,
                 created_at=tool.created_at,
                 completed_at=tool.completed_at,

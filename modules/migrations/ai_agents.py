@@ -64,6 +64,9 @@ async def migrate_ai_agents(conn: AsyncConnection) -> None:
     """Create new tables and extend existing rows without destructive rewrites."""
     await conn.run_sync(SQLModel.metadata.create_all)
     await _add_column(conn, "ai_tool_runs", "approval_expires_at", "DATETIME NULL")
+    await _add_column(conn, "ai_tool_runs", "plan_snapshot", "JSON NULL")
+    await _add_column(conn, "ai_tool_runs", "progress_snapshot", "JSON NULL")
+    await _add_column(conn, "ai_tool_runs", "progress_updated_at", "DATETIME NULL")
     await _add_column(
         conn,
         "managed_plugins",

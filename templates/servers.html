@@ -7,9 +7,21 @@
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="bi bi-hdd-rack"></i> <span data-i18n="servers.title">Server Management</span></h2>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addServerModal">
-            <i class="bi bi-plus-circle"></i> <span data-i18n="servers.addNewServer">Add CS2 Server (Ensure New Server Initialization Complete)</span>
-        </button>
+        <div class="d-flex flex-wrap gap-2 justify-content-end">
+            <button @click="exportServers(true)" class="btn btn-outline-warning" type="button"
+                    title="Includes saved credentials">
+                <i class="bi bi-download"></i> <span data-i18n="servers.exportWithSecrets">Export Config</span>
+            </button>
+            <button @click="exportServers(false)" class="btn btn-outline-secondary" type="button">
+                <i class="bi bi-shield-lock"></i> <span data-i18n="servers.exportRedacted">Redacted Copy</span>
+            </button>
+            <button @click="openImportModal()" class="btn btn-outline-primary" type="button">
+                <i class="bi bi-upload"></i> <span data-i18n="servers.importConfig">Import Config</span>
+            </button>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addServerModal" type="button">
+                <i class="bi bi-plus-circle"></i> <span data-i18n="servers.addNewServer">Add CS2 Server (Ensure New Server Initialization Complete)</span>
+            </button>
+        </div>
     </div>
 
     <!-- Steam Latest Version Banner -->
@@ -86,6 +98,11 @@
                             :disabled="bulkActionRunning"
                             class="btn btn-sm btn-success">
                         <i class="bi bi-terminal"></i> <span data-i18n="servers.bulkActions.sendCommand">Send Command</span>
+                    </button>
+                    <button @click="exportServers(true, selectedServers)"
+                            :disabled="bulkActionRunning"
+                            class="btn btn-sm btn-outline-warning">
+                        <i class="bi bi-download"></i> <span data-i18n="servers.bulkActions.exportSelected">Export Selected</span>
                     </button>
                 </div>
             </div>
@@ -533,6 +550,43 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="common.cancel">Cancel</button>
                 <button type="button" class="btn btn-success" onclick="confirmSendCommand()" data-i18n="servers.sendCommand.send">Send Command</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Server Config Modal -->
+<div class="modal fade" id="importServerConfigModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-upload"></i> <span data-i18n="servers.importConfig">Import Server Config</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning small">
+                    <i class="bi bi-shield-exclamation"></i>
+                    <span data-i18n="servers.importWarning">Imported servers are saved to this panel. A redacted export needs credentials to be filled in before deployment.</span>
+                </div>
+                <div class="mb-3">
+                    <label for="serverConfigFile" class="form-label" data-i18n="servers.configFile">Configuration file</label>
+                    <input class="form-control" type="file" id="serverConfigFile" accept=".json,application/json">
+                </div>
+                <div class="mb-3">
+                    <label for="serverConfigConflictStrategy" class="form-label" data-i18n="servers.conflictStrategy">When a server already exists</label>
+                    <select class="form-select" id="serverConfigConflictStrategy">
+                        <option value="skip" data-i18n="servers.conflictSkip">Skip existing server</option>
+                        <option value="update" data-i18n="servers.conflictUpdate">Update existing server</option>
+                        <option value="rename" data-i18n="servers.conflictRename">Create with a new name</option>
+                    </select>
+                </div>
+                <div id="serverConfigImportResult" class="small" role="status"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="common.cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" id="importServerConfigBtn" onclick="confirmImportServers()">
+                    <i class="bi bi-upload"></i> <span data-i18n="servers.importConfig">Import Config</span>
+                </button>
             </div>
         </div>
     </div>
@@ -997,6 +1051,92 @@ function serverManager() {
         clearSelection() {
             this.selectedServers = [];
         },
+
+        openImportModal() {
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('importServerConfigModal'));
+            modal.show();
+        },
+
+        async exportServers(includeSecrets, serverIds = this.servers.map(server => server.id)) {
+            if (!serverIds || serverIds.length === 0) {
+                showWarning(window.i18n?.t('servers.bulkActions.selectServer') || 'No servers available to export');
+                return;
+            }
+
+            const params = new URLSearchParams();
+            serverIds.forEach(serverId => params.append('server_ids', serverId));
+            params.set('include_secrets', includeSecrets ? 'true' : 'false');
+
+            try {
+                const response = await authFetch(`/servers/export?${params.toString()}`);
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to export server configuration');
+                }
+
+                const blob = await response.blob();
+                const contentDisposition = response.headers.get('Content-Disposition') || '';
+                const filenameMatch = contentDisposition.match(/filename=([^;]+)/i);
+                const filename = filenameMatch ? decodeURIComponent(filenameMatch[1].replace(/"/g, '')) : 'cs2-server-config.json';
+                const downloadUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+
+                const messageKey = includeSecrets ? 'servers.exportSuccess' : 'servers.exportRedactedSuccess';
+                showBatchActionToast(window.i18n?.t(messageKey, { count: serverIds.length }) || 'Configuration exported');
+            } catch (err) {
+                showError((window.i18n?.t('errors.exportingServerConfig') || 'Error exporting server configuration') + ': ' + err.message);
+            }
+        },
+
+        async importServers() {
+            const fileInput = document.getElementById('serverConfigFile');
+            const file = fileInput?.files?.[0];
+            if (!file) {
+                showWarning(window.i18n?.t('servers.selectConfigFile') || 'Please select a configuration file');
+                return;
+            }
+
+            const importButton = document.getElementById('importServerConfigBtn');
+            const resultElement = document.getElementById('serverConfigImportResult');
+            importButton.disabled = true;
+            resultElement.textContent = window.i18n?.t('servers.importing') || 'Importing...';
+
+            try {
+                const payload = JSON.parse(await file.text());
+                payload.conflict_strategy = document.getElementById('serverConfigConflictStrategy').value;
+                const response = await authFetch('/servers/import', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to import server configuration');
+                }
+
+                const result = await response.json();
+                resultElement.textContent = window.i18n?.t('servers.importSummary', {
+                    imported: result.imported,
+                    updated: result.updated,
+                    skipped: result.skipped,
+                    failed: result.failed
+                }) || `Imported ${result.imported}, updated ${result.updated}, skipped ${result.skipped}, failed ${result.failed}`;
+                await this.loadServers();
+                this.clearSelection();
+                showBatchActionToast(resultElement.textContent, result.failed > 0 ? 'warning' : 'success');
+            } catch (err) {
+                resultElement.textContent = (window.i18n?.t('errors.importingServerConfig') || 'Error importing server configuration') + ': ' + err.message;
+                showError(resultElement.textContent);
+            } finally {
+                importButton.disabled = false;
+            }
+        },
         
         async bulkAction(action) {
             if (this.selectedServers.length === 0) {
@@ -1377,6 +1517,13 @@ function confirmSendCommand() {
     
     // Clear input for next time
     commandInput.value = '';
+}
+
+function confirmImportServers() {
+    const app = Alpine.$data(document.querySelector('[x-data]'));
+    if (app && app.importServers) {
+        app.importServers();
+    }
 }
 
 function toggleAuthFields() {

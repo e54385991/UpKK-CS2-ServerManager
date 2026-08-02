@@ -95,10 +95,14 @@
             running: 'text-bg-primary',
             completed: 'text-bg-success',
             failed: 'text-bg-danger',
+            pending_approval: 'text-bg-warning',
             waiting_approval: 'text-bg-warning',
             rejected: 'text-bg-secondary',
             expired: 'text-bg-secondary',
-            cancelled: 'text-bg-secondary'
+            cancelled: 'text-bg-secondary',
+            skipped: 'text-bg-secondary',
+            interrupted: 'text-bg-secondary',
+            pending: 'text-bg-light text-dark'
         };
         return classes[status] || 'text-bg-secondary';
     }
@@ -245,39 +249,142 @@
         parent.appendChild(badge);
     }
 
+    function progressStepIcon(status) {
+        const icons = {
+            completed: 'bi-check-circle-fill text-success',
+            running: 'bi-arrow-repeat text-primary ai-progress-step-spinner',
+            failed: 'bi-x-circle-fill text-danger',
+            skipped: 'bi-dash-circle text-muted',
+            interrupted: 'bi-slash-circle text-muted',
+            pending: 'bi-circle text-muted'
+        };
+        return icons[status] || icons.pending;
+    }
+
+    function appendToolProgress(parent, tool) {
+        const snapshot = tool.progress_snapshot || {};
+        const steps = snapshot.steps || tool.plan_snapshot?.steps || [];
+        const total = Number(snapshot.total ?? steps.length);
+        if (total > 0) {
+            const settled = steps.filter((step) =>
+                ['completed', 'failed', 'skipped', 'interrupted'].includes(step.status)
+            ).length;
+            const progress = document.createElement('div');
+            progress.className = 'progress ai-task-progress mt-2';
+            const bar = document.createElement('div');
+            bar.className = 'progress-bar';
+            bar.style.width = `${Math.min(100, Math.round((settled / total) * 100))}%`;
+            bar.setAttribute('role', 'progressbar');
+            bar.setAttribute('aria-valuemin', '0');
+            bar.setAttribute('aria-valuemax', String(total));
+            bar.setAttribute('aria-valuenow', String(settled));
+            progress.appendChild(bar);
+            parent.appendChild(progress);
+
+            const count = document.createElement('div');
+            count.className = 'ai-task-progress-count text-muted';
+            count.textContent = translate('ai.taskProgress', '{completed} / {total} steps')
+                .replace('{completed}', String(settled))
+                .replace('{total}', String(total));
+            parent.appendChild(count);
+        }
+        if (snapshot.message) {
+            const message = document.createElement('div');
+            message.className = 'ai-task-progress-message';
+            message.textContent = snapshot.message;
+            parent.appendChild(message);
+        }
+        if (!steps.length) return;
+        const timeline = document.createElement('ol');
+        timeline.className = 'ai-task-steps';
+        steps.forEach((step) => {
+            const item = document.createElement('li');
+            item.className = `ai-task-step ai-task-step-${step.status || 'pending'}`;
+            const icon = document.createElement('i');
+            icon.className = `bi ${progressStepIcon(step.status)}`;
+            icon.setAttribute('aria-hidden', 'true');
+            const label = document.createElement('span');
+            label.className = 'ai-task-step-label';
+            label.textContent = step.label || step.id;
+            const status = document.createElement('span');
+            status.className = 'ai-task-step-status text-muted';
+            status.textContent = operationStatusLabel(step.status || 'pending');
+            item.append(icon, label, status);
+            timeline.appendChild(item);
+        });
+        parent.appendChild(timeline);
+    }
+
+    async function openBackgroundTask(task) {
+        await openConversation(task.conversation_id);
+        task.tools.forEach((tool) => upsertToolStatus(tool, tool.status, tool.error || ''));
+        if (!['queued', 'running', 'waiting_approval'].includes(task.status)) {
+            hideStopButton();
+            return;
+        }
+        state.runId = task.id;
+        state.lastSequence = '0';
+        showStopButton();
+        setStatus(
+            task.status === 'waiting_approval'
+                ? translate('ai.waitingApproval', 'Waiting for your approval')
+                : translate('ai.running', 'AI task is running…')
+        );
+        connectEvents();
+        pollRun();
+    }
+
     function renderBackgroundTasks(tasks) {
         const list = element('ai-background-task-list');
         if (!list) return;
         list.replaceChildren();
-        if (!tasks.length) {
-            list.replaceChildren();
+        const visibleTasks = tasks.filter((task) => (task.tools || []).length).slice(0, 8);
+        if (!visibleTasks.length) {
+            const empty = document.createElement('div');
+            empty.className = 'small text-muted';
+            empty.textContent = translate('ai.noBackgroundTasks', 'No AI tasks yet');
+            list.appendChild(empty);
             return;
         }
-        tasks.forEach((task) => {
-            const activeTools = (task.tools || []).filter((tool) =>
-                ['queued', 'running', 'pending_approval'].includes(tool.status)
-            );
-            if (!activeTools.length) return;
+        visibleTasks.forEach((task) => {
+            const taskTools = task.tools || [];
             const card = document.createElement('div');
             card.className = 'ai-background-task small';
             const header = document.createElement('div');
             header.className = 'd-flex align-items-center justify-content-between gap-2';
             const label = document.createElement('span');
             label.className = 'fw-semibold text-truncate';
-            label.textContent = activeTools.map((tool) => tool.tool_name).join(', ');
+            label.textContent = taskTools.map((tool) => tool.tool_name).join(', ');
+            const actions = document.createElement('div');
+            actions.className = 'd-flex align-items-center gap-1 flex-shrink-0';
+            appendBackgroundTaskStatus(actions, task.status);
+            const open = document.createElement('button');
+            open.type = 'button';
+            open.className = 'btn btn-sm btn-link ai-task-open';
+            open.title = translate('ai.openTask', 'Open task');
+            open.setAttribute('aria-label', open.title);
+            open.innerHTML = '<i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>';
+            open.addEventListener('click', () => {
+                openBackgroundTask(task).catch((error) => setStatus(error.message, true));
+            });
+            actions.appendChild(open);
             header.appendChild(label);
-            appendBackgroundTaskStatus(header, task.status);
+            header.appendChild(actions);
             card.appendChild(header);
             const tools = document.createElement('div');
             tools.className = 'ai-background-task-tools mt-2';
-            activeTools.forEach((tool) => {
+            taskTools.forEach((tool) => {
                 const row = document.createElement('div');
-                row.className = 'd-flex align-items-center justify-content-between gap-2 text-muted';
+                row.className = 'ai-background-task-tool';
+                const toolHeader = document.createElement('div');
+                toolHeader.className = 'd-flex align-items-center justify-content-between gap-2 text-muted';
                 const name = document.createElement('span');
                 name.className = 'text-truncate';
                 name.textContent = tool.tool_name;
-                row.appendChild(name);
-                appendBackgroundTaskStatus(row, tool.status);
+                toolHeader.appendChild(name);
+                appendBackgroundTaskStatus(toolHeader, tool.status);
+                row.appendChild(toolHeader);
+                appendToolProgress(row, tool);
                 tools.appendChild(row);
             });
             if (tools.childElementCount) card.appendChild(tools);
@@ -374,7 +481,7 @@
         const pre = document.createElement('pre');
         pre.className = 'ai-tool-arguments bg-body-tertiary rounded p-2 mb-2';
         pre.textContent = JSON.stringify({
-            summary: tool.summary || null,
+            summary: tool.summary || tool.plan_snapshot || null,
             arguments: tool.arguments || {},
         }, null, 2);
         const controls = document.createElement('div');

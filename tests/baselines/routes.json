@@ -1,1682 +1,1698 @@
 [
   {
     "kind": "Route",
-    "path": "/openapi.json",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
     "name": "openapi",
-    "methods": [
-      "GET",
-      "HEAD"
-    ]
+    "path": "/openapi.json"
   },
   {
     "kind": "Route",
-    "path": "/docs",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
     "name": "swagger_ui_html",
-    "methods": [
-      "GET",
-      "HEAD"
-    ]
+    "path": "/docs"
   },
   {
     "kind": "Route",
-    "path": "/docs/oauth2-redirect",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
     "name": "swagger_ui_redirect",
-    "methods": [
-      "GET",
-      "HEAD"
-    ]
+    "path": "/docs/oauth2-redirect"
   },
   {
     "kind": "Route",
-    "path": "/redoc",
-    "name": "redoc_html",
     "methods": [
       "GET",
       "HEAD"
-    ]
+    ],
+    "name": "redoc_html",
+    "path": "/redoc"
   },
   {
     "kind": "Mount",
-    "path": "/static",
+    "methods": [],
     "name": "static",
-    "methods": []
+    "path": "/static"
   },
   {
     "kind": "APIRoute",
-    "path": "/ping",
+    "methods": [
+      "GET"
+    ],
     "name": "ping",
-    "methods": [
-      "GET"
-    ]
+    "path": "/ping"
   },
   {
     "kind": "APIRoute",
-    "path": "/a2s-cache-test",
+    "methods": [
+      "GET"
+    ],
     "name": "test_a2s_cache",
-    "methods": [
-      "GET"
-    ]
+    "path": "/a2s-cache-test"
   },
   {
     "kind": "APIRoute",
-    "path": "/a2s-cache",
+    "methods": [
+      "GET"
+    ],
     "name": "get_user_servers_a2s_cache",
-    "methods": [
-      "GET"
-    ]
+    "path": "/a2s-cache"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/captcha/generate",
+    "methods": [
+      "GET"
+    ],
     "name": "generate_captcha",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/captcha/generate"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/captcha/image/{token}",
+    "methods": [
+      "GET"
+    ],
     "name": "get_captcha_image",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/captcha/image/{token}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/captcha/refresh",
+    "methods": [
+      "POST"
+    ],
     "name": "refresh_captcha",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/captcha/refresh"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/google-config",
+    "methods": [
+      "GET"
+    ],
     "name": "get_google_config",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/auth/google-config"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/register",
+    "methods": [
+      "POST"
+    ],
     "name": "register",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/register"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/login",
+    "methods": [
+      "POST"
+    ],
     "name": "login",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/login"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/me",
+    "methods": [
+      "GET"
+    ],
     "name": "get_current_user_info",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/auth/me"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/session",
+    "methods": [
+      "POST"
+    ],
     "name": "bootstrap_web_session",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/session"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/reset-password",
+    "methods": [
+      "POST"
+    ],
     "name": "reset_password",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/reset-password"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/profile",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_profile",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/api/auth/profile"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/api-key",
+    "methods": [
+      "GET"
+    ],
     "name": "get_api_key",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/auth/api-key"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/api-key/generate",
+    "methods": [
+      "POST"
+    ],
     "name": "generate_user_api_key",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/api-key/generate"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/api-key",
+    "methods": [
+      "DELETE"
+    ],
     "name": "revoke_api_key",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/api/auth/api-key"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/steam-api-key",
+    "methods": [
+      "GET"
+    ],
     "name": "get_steam_api_key",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/auth/steam-api-key"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/github-token-status",
+    "methods": [
+      "GET"
+    ],
     "name": "get_github_token_status",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/auth/github-token-status"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/s3-settings",
+    "methods": [
+      "GET"
+    ],
     "name": "get_s3_settings",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/auth/s3-settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/s3-settings",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_s3_settings",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/api/auth/s3-settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/s3-settings/test",
+    "methods": [
+      "POST"
+    ],
     "name": "test_s3_settings",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/s3-settings/test"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/generate-server-token",
+    "methods": [
+      "POST"
+    ],
     "name": "generate_server_token",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/generate-server-token"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/forgot-password",
+    "methods": [
+      "POST"
+    ],
     "name": "forgot_password",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/forgot-password"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/reset-password-with-token",
+    "methods": [
+      "POST"
+    ],
     "name": "reset_password_with_token",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/reset-password-with-token"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/google-oauth",
+    "methods": [
+      "POST"
+    ],
     "name": "google_oauth_login",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/google-oauth"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/logout",
+    "methods": [
+      "POST"
+    ],
     "name": "logout",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/logout"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/system/ai-settings",
+    "methods": [
+      "GET"
+    ],
     "name": "get_system_ai_settings",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/system/ai-settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/system/ai-settings",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_system_ai_settings",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/api/system/ai-settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/system/ai-settings/test",
+    "methods": [
+      "POST"
+    ],
     "name": "test_system_ai_settings",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/system/ai-settings/test"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/ai-settings",
+    "methods": [
+      "GET"
+    ],
     "name": "get_user_ai_settings",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/auth/ai-settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/ai-settings",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_user_ai_settings",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/api/auth/ai-settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/auth/ai-settings/test",
+    "methods": [
+      "POST"
+    ],
     "name": "test_user_ai_settings",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/auth/ai-settings/test"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/conversations",
+    "methods": [
+      "POST"
+    ],
     "name": "create_ai_conversation",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/ai/conversations"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/conversations",
+    "methods": [
+      "GET"
+    ],
     "name": "list_ai_conversations",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/ai/conversations"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/conversations/{conversation_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "get_ai_conversation",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/ai/conversations/{conversation_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/conversations/{conversation_id}",
+    "methods": [
+      "DELETE"
+    ],
     "name": "delete_ai_conversation",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/api/ai/conversations/{conversation_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/conversations/{conversation_id}/messages",
+    "methods": [
+      "POST"
+    ],
     "name": "send_ai_message",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/ai/conversations/{conversation_id}/messages"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/conversations/{conversation_id}/interrupt",
+    "methods": [
+      "POST"
+    ],
     "name": "interrupt_conversation",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/ai/conversations/{conversation_id}/interrupt"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/runs/{run_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "get_ai_run",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/ai/runs/{run_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/tasks",
+    "methods": [
+      "GET"
+    ],
     "name": "list_ai_background_tasks",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/ai/tasks"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/runs/{run_id}/tools/{tool_run_id}",
+    "methods": [
+      "POST"
+    ],
     "name": "decide_ai_tool",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/ai/runs/{run_id}/tools/{tool_run_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/ai/runs/{run_id}/events/stream",
+    "methods": [
+      "GET"
+    ],
     "name": "ai_run_event_stream",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/ai/runs/{run_id}/events/stream"
   },
   {
     "kind": "APIWebSocketRoute",
-    "path": "/api/ai/runs/{run_id}/events",
+    "methods": [],
     "name": "ai_run_events",
-    "methods": []
+    "path": "/api/ai/runs/{run_id}/events"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers",
+    "methods": [
+      "POST"
+    ],
     "name": "create_server",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers",
+    "methods": [
+      "GET"
+    ],
     "name": "list_servers",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/admin/all",
+    "methods": [
+      "GET"
+    ],
     "name": "list_all_servers_admin",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/admin/all"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/disk-space-all",
+    "methods": [
+      "GET"
+    ],
     "name": "get_all_servers_disk_space",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/disk-space-all"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}",
+    "methods": [
+      "GET"
+    ],
+    "name": "export_server_configs",
+    "path": "/servers/export"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "import_server_configs",
+    "path": "/servers/import"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "get_server",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/discord-settings",
+    "methods": [
+      "GET"
+    ],
     "name": "get_discord_settings",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/discord-settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/discord-settings",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_discord_settings",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/servers/{server_id}/discord-settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/discord-settings/test",
+    "methods": [
+      "POST"
+    ],
     "name": "test_discord_settings",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/discord-settings/test"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/cleanup/scan",
+    "methods": [
+      "GET"
+    ],
     "name": "scan_server_cleanup",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/cleanup/scan"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/cleanup/delete",
+    "methods": [
+      "POST"
+    ],
     "name": "delete_server_cleanup_items",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/cleanup/delete"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/s3-backups",
+    "methods": [
+      "GET"
+    ],
     "name": "list_server_s3_backups",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/s3-backups"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/s3-restore",
+    "methods": [
+      "POST"
+    ],
     "name": "restore_server_s3_backup",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/s3-restore"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/custom-commands",
+    "methods": [
+      "GET"
+    ],
     "name": "list_custom_commands",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/custom-commands"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/custom-commands",
+    "methods": [
+      "POST"
+    ],
     "name": "create_custom_command",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/custom-commands"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/custom-commands/{command_id}",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_custom_command",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/servers/{server_id}/custom-commands/{command_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/custom-commands/{command_id}",
+    "methods": [
+      "DELETE"
+    ],
     "name": "delete_custom_command",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/servers/{server_id}/custom-commands/{command_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/custom-commands/execute",
+    "methods": [
+      "POST"
+    ],
     "name": "execute_one_time_custom_command",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/custom-commands/execute"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/custom-commands/{command_id}/execute",
+    "methods": [
+      "POST"
+    ],
     "name": "execute_saved_custom_command",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/custom-commands/{command_id}/execute"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_server",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/servers/{server_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/apply-system-defaults",
+    "methods": [
+      "POST"
+    ],
     "name": "apply_system_defaults_to_server",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/apply-system-defaults"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}",
+    "methods": [
+      "DELETE"
+    ],
     "name": "delete_server",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/servers/{server_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/monitoring-logs",
+    "methods": [
+      "GET"
+    ],
     "name": "get_monitoring_logs",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/monitoring-logs"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/ping",
+    "methods": [
+      "GET"
+    ],
     "name": "ping",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/ping"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/a2s-cache-test",
+    "methods": [
+      "GET"
+    ],
     "name": "test_a2s_cache",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/a2s-cache-test"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/a2s-cache",
+    "methods": [
+      "GET"
+    ],
     "name": "get_all_servers_a2s_cache",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/a2s-cache"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/a2s-info",
+    "methods": [
+      "GET"
+    ],
     "name": "get_server_a2s_info",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/a2s-info"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/cpu-count",
+    "methods": [
+      "GET"
+    ],
     "name": "get_server_cpu_count",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/cpu-count"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/disk-space",
+    "methods": [
+      "GET"
+    ],
     "name": "get_server_disk_space",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/disk-space"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/check-deployment",
+    "methods": [
+      "GET"
+    ],
     "name": "check_server_deployment",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/check-deployment"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/confirm-deployment",
+    "methods": [
+      "POST"
+    ],
     "name": "confirm_server_deployment",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/confirm-deployment"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/ssh-reconnect",
+    "methods": [
+      "POST"
+    ],
     "name": "manual_ssh_reconnect",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/ssh-reconnect"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/ssh-health",
+    "methods": [
+      "GET"
+    ],
     "name": "get_ssh_health_status",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/ssh-health"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/startup-command",
+    "methods": [
+      "GET"
+    ],
     "name": "get_startup_command",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/startup-command"
   },
   {
     "kind": "APIWebSocketRoute",
-    "path": "/servers/{server_id}/deployment-status",
+    "methods": [],
     "name": "deployment_status_websocket",
-    "methods": []
+    "path": "/servers/{server_id}/deployment-status"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/deployment-lock",
+    "methods": [
+      "GET"
+    ],
     "name": "check_deployment_lock",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/deployment-lock"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/deployment-lock",
+    "methods": [
+      "DELETE"
+    ],
     "name": "cancel_deployment",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/servers/{server_id}/deployment-lock"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/actions",
+    "methods": [
+      "POST"
+    ],
     "name": "server_action",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/actions"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/deployment-progress",
+    "methods": [
+      "GET"
+    ],
     "name": "get_deployment_progress",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/deployment-progress"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/logs",
+    "methods": [
+      "GET"
+    ],
     "name": "get_server_logs",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/logs"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/batch-actions",
+    "methods": [
+      "POST"
+    ],
     "name": "batch_server_actions",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/batch-actions"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/batch-actions/{batch_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "get_batch_action_status",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/batch-actions/{batch_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/batch-install-plugins",
+    "methods": [
+      "POST"
+    ],
     "name": "batch_install_plugins",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/batch-install-plugins"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/batch-send-command",
+    "methods": [
+      "POST"
+    ],
     "name": "batch_send_command",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/batch-send-command"
   },
   {
     "kind": "APIWebSocketRoute",
-    "path": "/servers/{server_id}/ssh-console",
+    "methods": [],
     "name": "ssh_console_websocket",
-    "methods": []
+    "path": "/servers/{server_id}/ssh-console"
   },
   {
     "kind": "APIWebSocketRoute",
-    "path": "/servers/{server_id}/game-console",
+    "methods": [],
     "name": "game_console_websocket",
-    "methods": []
+    "path": "/servers/{server_id}/game-console"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/ssh-connection-info",
+    "methods": [
+      "GET"
+    ],
     "name": "get_ssh_connection_info",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/ssh-connection-info"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/reconnect-ssh",
+    "methods": [
+      "POST"
+    ],
     "name": "reconnect_ssh",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/reconnect-ssh"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/reset-reconnect-counter",
+    "methods": [
+      "POST"
+    ],
     "name": "reset_reconnect_counter",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/reset-reconnect-counter"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/metamod-status",
-    "name": "get_metamod_status",
     "methods": [
       "GET"
-    ]
+    ],
+    "name": "get_metamod_status",
+    "path": "/servers/{server_id}/metamod-status"
   },
   {
     "kind": "APIWebSocketRoute",
-    "path": "/api/setup/setup-progress/{session_id}",
+    "methods": [],
     "name": "setup_progress_websocket",
-    "methods": []
+    "path": "/api/setup/setup-progress/{session_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/setup/auto-setup",
+    "methods": [
+      "POST"
+    ],
     "name": "auto_setup_server",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/setup/auto-setup"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/setup/initialized-servers",
+    "methods": [
+      "GET"
+    ],
     "name": "list_initialized_servers",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/setup/initialized-servers"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/setup/initialized-servers/{server_key:path}",
+    "methods": [
+      "DELETE"
+    ],
     "name": "delete_initialized_server",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/api/setup/initialized-servers/{server_key:path}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/setup/initialized-servers/{server_key:path}",
+    "methods": [
+      "GET"
+    ],
     "name": "get_initialized_server",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/setup/initialized-servers/{server_key:path}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/server-status/{server_id}/report",
+    "methods": [
+      "POST"
+    ],
     "name": "report_server_status",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/server-status/{server_id}/report"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/server-status/{server_id}/config",
+    "methods": [
+      "GET"
+    ],
     "name": "get_server_config",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/server-status/{server_id}/config"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/server-status/pool/stats",
+    "methods": [
+      "GET"
+    ],
     "name": "get_ssh_pool_stats",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/server-status/pool/stats"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files",
+    "methods": [
+      "GET"
+    ],
     "name": "list_directory",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/files"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/content",
+    "methods": [
+      "GET"
+    ],
     "name": "get_file_content",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/files/content"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/content",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_file_content",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/servers/{server_id}/files/content"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/upload",
+    "methods": [
+      "POST"
+    ],
     "name": "upload_file",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/files/upload"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/download",
+    "methods": [
+      "GET"
+    ],
     "name": "download_file",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/files/download"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/download-ticket",
+    "methods": [
+      "POST"
+    ],
     "name": "create_download_ticket",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/files/download-ticket"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/download-url",
+    "methods": [
+      "POST"
+    ],
     "name": "download_archive_from_url",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/files/download-url"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/download-url/status/{task_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "get_download_url_status",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/files/download-url/status/{task_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/mkdir",
+    "methods": [
+      "POST"
+    ],
     "name": "create_directory",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/files/mkdir"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files",
+    "methods": [
+      "DELETE"
+    ],
     "name": "delete_path",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/servers/{server_id}/files"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/rename",
+    "methods": [
+      "POST"
+    ],
     "name": "rename_file_or_directory",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/files/rename"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/archive/inspect",
+    "methods": [
+      "POST"
+    ],
     "name": "inspect_archive",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/files/archive/inspect"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/extract",
+    "methods": [
+      "POST"
+    ],
     "name": "extract_archive",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/files/extract"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/files/extract/status/{task_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "get_extraction_status",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/files/extract/status/{task_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/scheduled-tasks/{server_id}",
+    "methods": [
+      "POST"
+    ],
     "name": "create_scheduled_task",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/scheduled-tasks/{server_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/scheduled-tasks/{server_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "list_scheduled_tasks",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/scheduled-tasks/{server_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/scheduled-tasks/{server_id}/tasks/{task_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "get_scheduled_task",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/scheduled-tasks/{server_id}/tasks/{task_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/scheduled-tasks/{server_id}/tasks/{task_id}",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_scheduled_task",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/api/scheduled-tasks/{server_id}/tasks/{task_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/scheduled-tasks/{server_id}/tasks/{task_id}",
+    "methods": [
+      "DELETE"
+    ],
     "name": "delete_scheduled_task",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/api/scheduled-tasks/{server_id}/tasks/{task_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/scheduled-tasks/{server_id}/tasks/{task_id}/toggle",
+    "methods": [
+      "POST"
+    ],
     "name": "toggle_scheduled_task",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/scheduled-tasks/{server_id}/tasks/{task_id}/toggle"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/search",
+    "methods": [
+      "GET"
+    ],
     "name": "search_github_cs2_plugins",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/github-plugins/search"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/inspect",
+    "methods": [
+      "POST"
+    ],
     "name": "inspect_github_plugin",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/github-plugins/inspect"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/servers/{server_id}/install-plan",
+    "methods": [
+      "POST"
+    ],
     "name": "plan_github_plugin_install",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/github-plugins/servers/{server_id}/install-plan"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/servers/{server_id}/install-plan/execute",
+    "methods": [
+      "POST"
+    ],
     "name": "apply_github_plugin_install",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/github-plugins/servers/{server_id}/install-plan/execute"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/recipes",
+    "methods": [
+      "POST"
+    ],
     "name": "create_github_install_recipe",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/github-plugins/recipes"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/releases",
+    "methods": [
+      "GET"
+    ],
     "name": "get_github_releases",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/github-plugins/releases"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/servers/{server_id}/analyze-archive",
+    "methods": [
+      "GET"
+    ],
     "name": "analyze_archive",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/github-plugins/servers/{server_id}/analyze-archive"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/servers/{server_id}/install",
+    "methods": [
+      "POST"
+    ],
     "name": "install_github_plugin",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/github-plugins/servers/{server_id}/install"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/servers/{server_id}/analyze-installed-plugins",
+    "methods": [
+      "GET"
+    ],
     "name": "analyze_installed_plugins",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/github-plugins/servers/{server_id}/analyze-installed-plugins"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/github-plugins/servers/{server_id}/uninstall",
+    "methods": [
+      "POST"
+    ],
     "name": "uninstall_plugin",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/github-plugins/servers/{server_id}/uninstall"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins",
+    "methods": [
+      "GET"
+    ],
     "name": "list_plugins",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/plugin-market/plugins"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "get_plugin",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/plugin-market/plugins/{plugin_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins",
+    "methods": [
+      "POST"
+    ],
     "name": "create_plugin",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/plugin-market/plugins"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}",
-    "name": "update_plugin",
     "methods": [
       "PUT"
-    ]
+    ],
+    "name": "update_plugin",
+    "path": "/api/plugin-market/plugins/{plugin_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}",
+    "methods": [
+      "DELETE"
+    ],
     "name": "delete_plugin",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/api/plugin-market/plugins/{plugin_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}/releases",
+    "methods": [
+      "GET"
+    ],
     "name": "get_plugin_releases",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/plugin-market/plugins/{plugin_id}/releases"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}/install-preflight",
+    "methods": [
+      "GET"
+    ],
     "name": "plugin_install_preflight",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/plugin-market/plugins/{plugin_id}/install-preflight"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}/conflicts",
+    "methods": [
+      "GET"
+    ],
     "name": "get_plugin_conflict_rules",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/plugin-market/plugins/{plugin_id}/conflicts"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}/conflicts",
+    "methods": [
+      "PUT"
+    ],
     "name": "replace_plugin_conflict_rules",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/api/plugin-market/plugins/{plugin_id}/conflicts"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}/install",
+    "methods": [
+      "POST"
+    ],
     "name": "install_plugin",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/plugin-market/plugins/{plugin_id}/install"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/categories",
+    "methods": [
+      "GET"
+    ],
     "name": "list_categories",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/plugin-market/categories"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins-for-dependencies",
+    "methods": [
+      "GET"
+    ],
     "name": "list_plugins_for_dependencies",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/plugin-market/plugins-for-dependencies"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}/analyze-archive",
+    "methods": [
+      "GET"
+    ],
     "name": "analyze_plugin_archive",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/plugin-market/plugins/{plugin_id}/analyze-archive"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/fetch-repo-info",
+    "methods": [
+      "POST"
+    ],
     "name": "fetch_repo_info",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/plugin-market/fetch-repo-info"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/plugin-market/plugins/{plugin_id}/uninstall",
+    "methods": [
+      "POST"
+    ],
     "name": "uninstall_market_plugin",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/plugin-market/plugins/{plugin_id}/uninstall"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-auto-update",
+    "methods": [
+      "GET"
+    ],
     "name": "get_configuration",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/servers/{server_id}/plugin-auto-update"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-auto-update/settings",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_settings",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/api/servers/{server_id}/plugin-auto-update/settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-auto-update/plugins",
+    "methods": [
+      "POST"
+    ],
     "name": "register_plugin",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/servers/{server_id}/plugin-auto-update/plugins"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-auto-update/plugins/{plugin_id}",
+    "methods": [
+      "PATCH"
+    ],
     "name": "update_plugin",
-    "methods": [
-      "PATCH"
-    ]
+    "path": "/api/servers/{server_id}/plugin-auto-update/plugins/{plugin_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-auto-update/plugins/{plugin_id}",
+    "methods": [
+      "DELETE"
+    ],
     "name": "unmanage_plugin",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/api/servers/{server_id}/plugin-auto-update/plugins/{plugin_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-auto-update/run",
+    "methods": [
+      "POST"
+    ],
     "name": "run_now",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/servers/{server_id}/plugin-auto-update/run"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-auto-update/plugins/{plugin_id}/test-update",
+    "methods": [
+      "POST"
+    ],
     "name": "test_plugin_update",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/servers/{server_id}/plugin-auto-update/plugins/{plugin_id}/test-update"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-auto-update/status",
+    "methods": [
+      "GET"
+    ],
     "name": "get_run_status",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/servers/{server_id}/plugin-auto-update/status"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/plugin-configs/sources",
+    "methods": [
+      "GET"
+    ],
     "name": "list_sources",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/plugin-configs/sources"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/plugin-configs/sources",
+    "methods": [
+      "POST"
+    ],
     "name": "create_source",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/plugin-configs/sources"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/plugin-configs/sources/{source_id}",
+    "methods": [
+      "DELETE"
+    ],
     "name": "delete_source",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/servers/{server_id}/plugin-configs/sources/{source_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/plugin-configs/sources/restore-default",
+    "methods": [
+      "POST"
+    ],
     "name": "restore_default_source",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/plugin-configs/sources/restore-default"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/plugin-configs/browse",
+    "methods": [
+      "GET"
+    ],
     "name": "browse_source_path",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/plugin-configs/browse"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/plugin-configs/sources/{source_id}/scan",
+    "methods": [
+      "POST"
+    ],
     "name": "load_source_files",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/plugin-configs/sources/{source_id}/scan"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/plugin-configs/sources/{source_id}/file",
+    "methods": [
+      "GET"
+    ],
     "name": "get_config_file",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/plugin-configs/sources/{source_id}/file"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/plugin-configs/sources/{source_id}/file",
+    "methods": [
+      "PUT"
+    ],
     "name": "save_config_file",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/servers/{server_id}/plugin-configs/sources/{source_id}/file"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-diagnostics/recommendation",
+    "methods": [
+      "GET"
+    ],
     "name": "read_plugin_diagnostic_recommendation",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/servers/{server_id}/plugin-diagnostics/recommendation"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-diagnostics/plan",
+    "methods": [
+      "POST"
+    ],
     "name": "plan_plugin_diagnostic",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/servers/{server_id}/plugin-diagnostics/plan"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-diagnostics/runs",
+    "methods": [
+      "POST"
+    ],
     "name": "run_plugin_diagnostic",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/servers/{server_id}/plugin-diagnostics/runs"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "read_plugin_diagnostic",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/restore",
+    "methods": [
+      "POST"
+    ],
     "name": "restore_plugin_diagnostic",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/restore"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/resume",
+    "methods": [
+      "POST"
+    ],
     "name": "resume_plugin_diagnostic",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/resume"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/system/settings",
+    "methods": [
+      "GET"
+    ],
     "name": "get_system_settings",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/system/settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/system/settings",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_system_settings",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/api/system/settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/system/settings/test-email",
+    "methods": [
+      "POST"
+    ],
     "name": "test_email",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/system/settings/test-email"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/gmail-oauth/authorize",
+    "methods": [
+      "GET"
+    ],
     "name": "gmail_oauth_authorize",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/gmail-oauth/authorize"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/gmail-oauth/callback",
+    "methods": [
+      "GET"
+    ],
     "name": "gmail_oauth_callback",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/gmail-oauth/callback"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/gmail-oauth/upload-credentials",
+    "methods": [
+      "POST"
+    ],
     "name": "upload_gmail_credentials",
-    "methods": [
-      "POST"
-    ]
+    "path": "/api/gmail-oauth/upload-credentials"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/gmail-oauth/revoke",
+    "methods": [
+      "DELETE"
+    ],
     "name": "revoke_gmail_authorization",
-    "methods": [
-      "DELETE"
-    ]
+    "path": "/api/gmail-oauth/revoke"
   },
   {
     "kind": "APIRoute",
-    "path": "/api/gmail-oauth/status",
+    "methods": [
+      "GET"
+    ],
     "name": "gmail_oauth_status",
-    "methods": [
-      "GET"
-    ]
+    "path": "/api/gmail-oauth/status"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps/status",
+    "methods": [
+      "GET"
+    ],
     "name": "get_map_management_status",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/maps/status"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps/custom-sync",
+    "methods": [
+      "GET"
+    ],
     "name": "get_custom_map_sync",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/maps/custom-sync"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps/custom-sync",
-    "name": "update_custom_map_sync",
     "methods": [
       "PUT"
-    ]
+    ],
+    "name": "update_custom_map_sync",
+    "path": "/servers/{server_id}/maps/custom-sync"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps/custom-sync/run",
-    "name": "run_custom_map_sync",
     "methods": [
       "POST"
-    ]
+    ],
+    "name": "run_custom_map_sync",
+    "path": "/servers/{server_id}/maps/custom-sync/run"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps/plugin",
-    "name": "uninstall_mapchooser_plugin",
     "methods": [
       "DELETE"
-    ]
+    ],
+    "name": "uninstall_mapchooser_plugin",
+    "path": "/servers/{server_id}/maps/plugin"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps/plugin-config",
+    "methods": [
+      "GET"
+    ],
     "name": "get_plugin_config",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/maps/plugin-config"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps/plugin-config",
+    "methods": [
+      "PUT"
+    ],
     "name": "update_mapchooser_plugin_config",
-    "methods": [
-      "PUT"
-    ]
+    "path": "/servers/{server_id}/maps/plugin-config"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps",
-    "name": "get_maps_config",
     "methods": [
       "GET"
-    ]
+    ],
+    "name": "get_maps_config",
+    "path": "/servers/{server_id}/maps"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps",
-    "name": "update_maps_config",
     "methods": [
       "PUT"
-    ]
+    ],
+    "name": "update_maps_config",
+    "path": "/servers/{server_id}/maps"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps/preset",
+    "methods": [
+      "POST"
+    ],
     "name": "apply_map_preset",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/maps/preset"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps",
+    "methods": [
+      "POST"
+    ],
     "name": "add_map",
-    "methods": [
-      "POST"
-    ]
+    "path": "/servers/{server_id}/maps"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps",
-    "name": "update_map_enabled",
     "methods": [
       "PATCH"
-    ]
+    ],
+    "name": "update_map_enabled",
+    "path": "/servers/{server_id}/maps"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/maps",
-    "name": "delete_map",
     "methods": [
       "DELETE"
-    ]
+    ],
+    "name": "delete_map",
+    "path": "/servers/{server_id}/maps"
   },
   {
     "kind": "APIRoute",
-    "path": "/",
+    "methods": [
+      "GET"
+    ],
     "name": "root",
-    "methods": [
-      "GET"
-    ]
+    "path": "/"
   },
   {
     "kind": "APIRoute",
-    "path": "/deployment-tutorial",
+    "methods": [
+      "GET"
+    ],
     "name": "deployment_tutorial_page",
-    "methods": [
-      "GET"
-    ]
+    "path": "/deployment-tutorial"
   },
   {
     "kind": "APIRoute",
-    "path": "/login",
+    "methods": [
+      "GET"
+    ],
     "name": "login_page",
-    "methods": [
-      "GET"
-    ]
+    "path": "/login"
   },
   {
     "kind": "APIRoute",
-    "path": "/register",
+    "methods": [
+      "GET"
+    ],
     "name": "register_page",
-    "methods": [
-      "GET"
-    ]
+    "path": "/register"
   },
   {
     "kind": "APIRoute",
-    "path": "/google-callback",
+    "methods": [
+      "GET"
+    ],
     "name": "google_callback_page",
-    "methods": [
-      "GET"
-    ]
+    "path": "/google-callback"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers-ui",
+    "methods": [
+      "GET"
+    ],
     "name": "servers_ui",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers-ui"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers-ui/{server_id}",
+    "methods": [
+      "GET"
+    ],
     "name": "server_detail_ui",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers-ui/{server_id}"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/console-popup/{console_type}",
+    "methods": [
+      "GET"
+    ],
     "name": "console_popup",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/console-popup/{console_type}"
   },
   {
     "kind": "APIRoute",
-    "path": "/plugin-market",
+    "methods": [
+      "GET"
+    ],
     "name": "plugin_market_page",
-    "methods": [
-      "GET"
-    ]
+    "path": "/plugin-market"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/ssh-console",
+    "methods": [
+      "GET"
+    ],
     "name": "ssh_console",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/ssh-console"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/game-console",
+    "methods": [
+      "GET"
+    ],
     "name": "game_console",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/game-console"
   },
   {
     "kind": "APIRoute",
-    "path": "/servers/{server_id}/file-editor-popup",
+    "methods": [
+      "GET"
+    ],
     "name": "file_editor_popup",
-    "methods": [
-      "GET"
-    ]
+    "path": "/servers/{server_id}/file-editor-popup"
   },
   {
     "kind": "APIRoute",
-    "path": "/setup-wizard",
+    "methods": [
+      "GET"
+    ],
     "name": "setup_wizard",
-    "methods": [
-      "GET"
-    ]
+    "path": "/setup-wizard"
   },
   {
     "kind": "APIRoute",
-    "path": "/profile",
+    "methods": [
+      "GET"
+    ],
     "name": "profile_page",
-    "methods": [
-      "GET"
-    ]
+    "path": "/profile"
   },
   {
     "kind": "APIRoute",
-    "path": "/system-settings",
+    "methods": [
+      "GET"
+    ],
     "name": "system_settings_page",
-    "methods": [
-      "GET"
-    ]
+    "path": "/system-settings"
   },
   {
     "kind": "APIRoute",
-    "path": "/forgot-password",
+    "methods": [
+      "GET"
+    ],
     "name": "forgot_password_page",
-    "methods": [
-      "GET"
-    ]
+    "path": "/forgot-password"
   },
   {
     "kind": "APIRoute",
-    "path": "/reset-password",
+    "methods": [
+      "GET"
+    ],
     "name": "reset_password_page",
-    "methods": [
-      "GET"
-    ]
+    "path": "/reset-password"
   },
   {
     "kind": "APIRoute",
-    "path": "/health",
-    "name": "health_check",
     "methods": [
       "GET"
-    ]
+    ],
+    "name": "health_check",
+    "path": "/health"
   }
 ]

@@ -9,6 +9,7 @@ from . import configuration as _configuration
 from . import crud as _crud
 from . import maintenance as _maintenance
 from . import monitoring as _monitoring
+from . import transfer as _transfer
 from .common import *
 from .configuration import (
     create_custom_command,
@@ -51,12 +52,15 @@ from .monitoring import (
     ping,
     test_a2s_cache,
 )
+from .transfer import export_server_configs, import_server_configs
 
 ENDPOINT_ORDER = (
     "create_server",
     "list_servers",
     "list_all_servers_admin",
     "get_all_servers_disk_space",
+    "export_server_configs",
+    "import_server_configs",
     "get_server",
     "get_discord_settings",
     "update_discord_settings",
@@ -92,6 +96,7 @@ router = compose_router(
     (
         _crud.collection_router,
         _maintenance.global_router,
+        _transfer.router,
         _crud.item_router,
         _configuration.discord_router,
         _maintenance.cleanup_router,
@@ -105,5 +110,5 @@ router = compose_router(
 
 install_patch_compatibility(
     __name__,
-    (_common, _crud, _configuration, _maintenance, _monitoring),
+    (_common, _crud, _configuration, _maintenance, _monitoring, _transfer),
 )

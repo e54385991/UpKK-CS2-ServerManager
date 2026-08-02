@@ -178,6 +178,9 @@ class AIToolRunResponse(SQLModel):
     risk: str
     status: str
     requires_approval: bool
+    plan_snapshot: Optional[dict[str, Any]] = None
+    progress_snapshot: Optional[dict[str, Any]] = None
+    progress_updated_at: Optional[datetime] = None
     result: Optional[dict[str, Any]] = None
     error: Optional[str] = None
     approval_expires_at: Optional[datetime] = None
@@ -190,6 +193,9 @@ class AIBackgroundTaskToolResponse(SQLModel):
     tool_name: str
     risk: str
     status: str
+    plan_snapshot: Optional[dict[str, Any]] = None
+    progress_snapshot: Optional[dict[str, Any]] = None
+    progress_updated_at: Optional[datetime] = None
     error: Optional[str] = None
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

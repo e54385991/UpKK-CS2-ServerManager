@@ -37,6 +37,8 @@
     "refreshTasks": "Refresh tasks",
     "noBackgroundTasks": "No AI tasks yet",
     "taskTools": "Tools",
+    "taskProgress": "{completed} / {total} steps",
+    "openTask": "Open task",
     "running": "AI task is running…",
     "thinking": "Thinking",
     "runningTool": "Running tool",
@@ -55,13 +57,17 @@
     "retry": "Retry",
     "operation": {
       "queued": "Queued",
+      "pending": "Pending",
       "running": "Running",
       "completed": "Completed",
       "failed": "Failed",
+      "pending_approval": "Waiting for approval",
       "waiting_approval": "Waiting for approval",
       "rejected": "Rejected",
       "expired": "Expired",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "skipped": "Skipped",
+      "interrupted": "Interrupted"
     },
     "adminSettings": "AI Assistant Provider",
     "userSettings": "AI Assistant Provider",
@@ -280,7 +286,8 @@
       "completed": "{action} completed: {succeeded} succeeded, {failed} failed",
       "failedServersList": "Failed servers",
       "dispatched": "Command dispatched to {count} server(s)",
-      "commandDispatch": "Command sent to {count} server(s): {command}"
+      "commandDispatch": "Command sent to {count} server(s): {command}",
+      "exportSelected": "Export Selected"
     },
     "sendCommand": {
       "title": "Send Command to Servers",
@@ -364,6 +371,20 @@
       "offlineEstimate": "Offline Estimate"
     },
     "addNewServer": "Add CS2 Server (Ensure New Server Initialization Complete)",
+    "exportWithSecrets": "Export Config (with credentials)",
+    "exportRedacted": "Export Redacted Copy",
+    "importConfig": "Import Config",
+    "exportSuccess": "Exported configuration for {count} server(s)",
+    "exportRedactedSuccess": "Exported redacted configuration for {count} server(s)",
+    "importWarning": "Servers will be imported into this panel. A redacted export needs credentials before deployment.",
+    "configFile": "Configuration file",
+    "selectConfigFile": "Please select a configuration file",
+    "conflictStrategy": "When a server already exists",
+    "conflictSkip": "Skip existing server",
+    "conflictUpdate": "Update existing server",
+    "conflictRename": "Create with a new name",
+    "importing": "Importing...",
+    "importSummary": "Imported {imported}, updated {updated}, skipped {skipped}, failed {failed}",
     "serverNameLabel": "Server Name *",
     "hostIP": "Host IP *",
     "sshPortLabel": "SSH Port",
@@ -1230,7 +1251,9 @@
     "installingPlugins": "Error installing plugins",
     "deletingServer": "Error deleting server",
     "loadingServerDetails": "Error loading server details",
-    "sendingCommand": "Error sending command"
+    "sendingCommand": "Error sending command",
+    "exportingServerConfig": "Error exporting server configuration",
+    "importingServerConfig": "Error importing server configuration"
   },
   "confirmMessages": {
     "deleteServer": "Are you sure you want to delete server \"{serverName}\"?",

@@ -54,10 +54,156 @@ ACTIVE_RUN_STATUSES = ("queued", "running", "waiting_approval")
 AI_DELTA_EVENT_CHARS = 96
 AI_WRITE_QUEUE_WAIT_SECONDS = 5 * 60
 AI_WRITE_LOCK_TTL = 5 * 60
+STEP_STATUSES = {"pending", "running", "completed", "failed", "skipped", "interrupted"}
+TERMINAL_STEP_STATUSES = {"completed", "failed", "skipped", "interrupted"}
 
 
 async def _emit(run_id: str, event_type: str, payload: dict[str, Any]) -> None:
     await ai_event_hub.emit(run_id, event_type, payload)
+
+
+def _approval_step_id(tool_name: str, step: Any, index: int) -> str:
+    if isinstance(step, dict):
+        if tool_name == "apply_plugin_plan" and step.get("plugin_id") is not None:
+            return f"plugin:{step['plugin_id']}"
+        action = str(step.get("action") or "")
+        if tool_name == "apply_workshop_map":
+            if action == "install_framework":
+                framework = str(step.get("framework") or "").lower()
+                if framework == "metamod":
+                    return "install_metamod"
+                if framework == "counterstrikesharp":
+                    return "install_counterstrikesharp"
+            if action == "install_market_plugin":
+                return "install_mapchooser"
+            if action in {"patch_plugin_config", "append_map", "verify"}:
+                return action
+        if action:
+            return f"step:{index + 1}:{action}"
+    return f"step:{index + 1}"
+
+
+def _approval_step_label(step: Any) -> str:
+    if isinstance(step, str):
+        return redact_sensitive_text(step, limit=500)
+    if not isinstance(step, dict):
+        return "Planned operation"
+    action = str(step.get("action") or "")
+    if action == "install_framework":
+        return f"Install {step.get('framework') or 'framework'}"
+    if action == "install_market_plugin":
+        return f"Install {step.get('title') or 'plugin'}"
+    if action == "patch_plugin_config":
+        return "Update MapChooser configuration"
+    if action == "append_map":
+        return f"Add map {step.get('name') or step.get('workshop_id') or ''}".strip()
+    if action == "verify":
+        return "Verify installation"
+    title = step.get("title") or step.get("name") or action or "Planned operation"
+    prefix = "Skip" if step.get("status") == "already_installed" else "Install"
+    if step.get("plugin_id") is not None:
+        return redact_sensitive_text(f"{prefix} {title}", limit=500)
+    return redact_sensitive_text(str(title).replace("_", " ").strip(), limit=500)
+
+
+def _build_plan_snapshots(tool_name: str, summary: dict[str, Any]) -> tuple[dict, dict]:
+    safe_summary = sanitize_tool_result(summary)
+    plan = dict(safe_summary) if isinstance(safe_summary, dict) else {}
+    now = get_current_time().isoformat()
+    normalized_steps = []
+    for index, step in enumerate(summary.get("steps") or []):
+        skipped = isinstance(step, dict) and step.get("status") == "already_installed"
+        normalized_steps.append(
+            {
+                "id": _approval_step_id(tool_name, step, index),
+                "label": _approval_step_label(step),
+                "status": "skipped" if skipped else "pending",
+                "started_at": None,
+                "completed_at": now if skipped else None,
+            }
+        )
+    plan["version"] = 1
+    plan["steps"] = normalized_steps
+    progress = {
+        "version": 1,
+        "steps": [dict(step) for step in normalized_steps],
+        "current_step": None,
+        "message": "Waiting for approval",
+        "completed": sum(step["status"] in {"completed", "skipped"} for step in normalized_steps),
+        "total": len(normalized_steps),
+    }
+    return plan, progress
+
+
+def _update_progress_snapshot(tool_run: AIToolRun, payload: dict[str, Any]) -> None:
+    previous = getattr(tool_run, "progress_snapshot", None)
+    snapshot = dict(previous) if isinstance(previous, dict) else {"version": 1, "steps": []}
+    steps = [dict(step) for step in snapshot.get("steps") or [] if isinstance(step, dict)]
+    now = get_current_time()
+    step_id = str(payload.get("step_id") or "")
+    step_status = str(payload.get("step_status") or "")
+    if step_status not in STEP_STATUSES:
+        step_status = ""
+    if step_id and step_status:
+        for step in steps:
+            if str(step.get("id")) != step_id:
+                continue
+            step["status"] = step_status
+            if step_status == "running" and not step.get("started_at"):
+                step["started_at"] = now.isoformat()
+            if step_status in TERMINAL_STEP_STATUSES:
+                step["completed_at"] = now.isoformat()
+            break
+    running = next((step for step in steps if step.get("status") == "running"), None)
+    snapshot.update(
+        {
+            "version": 1,
+            "steps": steps,
+            "current_step": running.get("id") if running else None,
+            "message": redact_sensitive_text(str(payload.get("message") or ""), limit=2000),
+            "completed": sum(step.get("status") in {"completed", "skipped"} for step in steps),
+            "total": len(steps),
+        }
+    )
+    tool_run.progress_snapshot = snapshot
+    tool_run.progress_updated_at = now
+
+
+def _finalize_progress_snapshot(
+    tool_run: AIToolRun, *, success: bool, message: str, interrupted: bool = False
+) -> None:
+    snapshot = getattr(tool_run, "progress_snapshot", None)
+    if not isinstance(snapshot, dict):
+        return
+    steps = [dict(step) for step in snapshot.get("steps") or [] if isinstance(step, dict)]
+    now = get_current_time()
+    failure_recorded = any(step.get("status") == "failed" for step in steps)
+    for step in steps:
+        if step.get("status") in TERMINAL_STEP_STATUSES:
+            continue
+        if success:
+            status = "completed"
+        elif interrupted:
+            status = "interrupted"
+        elif step.get("status") == "running" or not failure_recorded:
+            status = "failed"
+            failure_recorded = True
+        else:
+            status = "interrupted"
+        step["status"] = status
+        step["started_at"] = step.get("started_at") or now.isoformat()
+        step["completed_at"] = now.isoformat()
+    snapshot.update(
+        {
+            "steps": steps,
+            "current_step": None,
+            "message": redact_sensitive_text(message, limit=2000),
+            "completed": sum(step.get("status") in {"completed", "skipped"} for step in steps),
+            "total": len(steps),
+        }
+    )
+    tool_run.progress_snapshot = snapshot
+    tool_run.progress_updated_at = now
 
 
 class _AssistantDeltaEmitter:
@@ -122,6 +268,7 @@ async def _close_unexecuted_tools(
         item.error = error
         item.result = {"success": False, "error": error}
         item.completed_at = now
+        _finalize_progress_snapshot(item, success=False, message=error, interrupted=True)
         db.add(item)
         db.add(
             AIMessage(
@@ -253,6 +400,10 @@ async def _execute_tool_run(
     server: Server | None,
 ) -> None:
     async def tool_event(event_type: str, payload: dict[str, Any]) -> None:
+        if event_type in {"tool_progress", "diagnostic_progress"}:
+            _update_progress_snapshot(tool_run, payload)
+            db.add(tool_run)
+            await db.commit()
         await _emit(
             run.id,
             event_type,
@@ -263,6 +414,7 @@ async def _execute_tool_run(
 
     async def mark_running() -> None:
         tool_run.status = "running"
+        _update_progress_snapshot(tool_run, {"message": "Starting operation"})
         db.add(tool_run)
         await db.commit()
         await _emit(
@@ -287,6 +439,9 @@ async def _execute_tool_run(
         context.user = current_user
         context.run_id = run.id
         if tool_run.risk == "write":
+            _update_progress_snapshot(tool_run, {"message": "Queued for execution"})
+            db.add(tool_run)
+            await db.commit()
             await _emit(
                 run.id,
                 "tool_queued",
@@ -321,11 +476,24 @@ async def _execute_tool_run(
         tool_run.status = "failed"
         tool_run.error = safe_error
         tool_run.result = {"success": False, "error": safe_error}
+        _finalize_progress_snapshot(tool_run, success=False, message=safe_error)
         event_type = "tool_failed"
     else:
-        tool_run.status = "completed"
         tool_run.result = result
-        event_type = "tool_completed"
+        result_failed = isinstance(result, dict) and result.get("success") is False
+        if result_failed:
+            safe_error = redact_sensitive_text(
+                str(result.get("error") or result.get("message") or "Tool execution failed"),
+                limit=2000,
+            )
+            tool_run.status = "failed"
+            tool_run.error = safe_error
+            _finalize_progress_snapshot(tool_run, success=False, message=safe_error)
+            event_type = "tool_failed"
+        else:
+            tool_run.status = "completed"
+            _finalize_progress_snapshot(tool_run, success=True, message="Operation completed")
+            event_type = "tool_completed"
     tool_run.completed_at = get_current_time()
     db.add(tool_run)
     db.add(
@@ -368,6 +536,9 @@ async def _resume_decided_tools(db, run: AIRun, user: User, server: Server | Non
                 continue
             item.result = {"success": False, "error": "denied_by_user"}
             item.completed_at = get_current_time()
+            _finalize_progress_snapshot(
+                item, success=False, message="Denied by user", interrupted=True
+            )
             db.add(item)
             db.add(
                 AIMessage(
@@ -657,6 +828,12 @@ async def process_ai_run(run_id: str) -> None:
                                 },
                             )
                             continue
+                        item.plan_snapshot, item.progress_snapshot = _build_plan_snapshots(
+                            item.tool_name, summary
+                        )
+                        item.progress_updated_at = get_current_time()
+                        db.add(item)
+                        await db.commit()
                         await _emit(
                             run.id,
                             "tool_approval_required",

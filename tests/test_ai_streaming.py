@@ -98,8 +98,9 @@ def test_background_task_viewer_refreshes_from_the_task_api():
     assert "/api/ai/tasks" in script
     assert "scheduleBackgroundTaskRefresh" in script
     assert "ai-background-task-list" in base
-    assert "['queued', 'running', 'pending_approval']" in script
-    assert "'expired', 'cancelled'" in script
+    assert "tool.progress_snapshot" in script
+    assert "ai-task-steps" in script
+    assert "openBackgroundTask(task)" in script
 
 
 def test_status_bar_shows_spinner_and_dots_while_active():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import re
 from collections.abc import Awaitable, Callable, Iterable
@@ -33,7 +34,7 @@ from services.plugin_inventory_service import (
     verified_market_plugin_ids,
 )
 
-ProgressCallback = Callable[[str, str], Awaitable[None]]
+ProgressCallback = Callable[..., Awaitable[None]]
 
 _GITHUB_REPOSITORY = re.compile(
     r"^(?:https://github\.com/|git@github\.com:)([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$"
@@ -43,6 +44,36 @@ _ARCHIVE_EXTENSIONS = (".zip", ".tar.gz", ".tgz", ".tar", ".7z")
 
 class PluginPlanError(ValueError):
     """Raised when a dependency graph or conflict acknowledgement is invalid."""
+
+
+async def _emit_plan_progress(
+    progress: ProgressCallback | None,
+    message: str,
+    *,
+    step_id: str,
+    step_status: str,
+) -> None:
+    if progress is None:
+        return
+    metadata = {"step_id": step_id, "step_status": step_status}
+    try:
+        parameters = inspect.signature(progress).parameters.values()
+        accepts_metadata = any(item.kind == inspect.Parameter.VAR_POSITIONAL for item in parameters)
+        accepts_metadata = (
+            accepts_metadata
+            or sum(
+                item.kind
+                in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                for item in parameters
+            )
+            >= 3
+        )
+    except TypeError, ValueError:
+        accepts_metadata = False
+    if accepts_metadata:
+        await progress(message, "status", metadata)
+    else:
+        await progress(message, "status")
 
 
 def parse_dependency_ids(value: str | None) -> list[int]:
@@ -373,6 +404,7 @@ async def execute_plugin_install_plan(
         by_id = {plugin.id: plugin for plugin in plugins}
 
         for current_id in refreshed_plan["installation_order"]:
+            step_id = f"plugin:{current_id}"
             latest_plan = await build_plugin_install_plan(
                 db, server.id, plugin_id, server=refreshed_server
             )
@@ -383,12 +415,22 @@ async def execute_plugin_install_plan(
                 )
             if current_id in installed:
                 completed.append({"plugin_id": current_id, "success": True, "skipped": True})
+                await _emit_plan_progress(
+                    progress,
+                    f"Plugin {current_id} is already installed",
+                    step_id=step_id,
+                    step_status="skipped",
+                )
                 continue
             plugin = by_id.get(current_id)
             if plugin is None:
                 raise PluginPlanError(f"Plugin {current_id} disappeared before execution")
-            if progress:
-                await progress(f"Installing {plugin.title}", "status")
+            await _emit_plan_progress(
+                progress,
+                f"Installing {plugin.title}",
+                step_id=step_id,
+                step_status="running",
+            )
             try:
                 result = await _install_one(db, plugin, refreshed_server, user, progress)
             except Exception as exc:
@@ -399,6 +441,22 @@ async def execute_plugin_install_plan(
                 }
             completed.append(result)
             if not result["success"]:
+                await _emit_plan_progress(
+                    progress,
+                    str(result.get("message") or f"Failed to install {plugin.title}"),
+                    step_id=step_id,
+                    step_status="failed",
+                )
+                completed_ids = {entry["plugin_id"] for entry in completed}
+                for remaining_id in refreshed_plan["installation_order"]:
+                    if remaining_id in completed_ids:
+                        continue
+                    await _emit_plan_progress(
+                        progress,
+                        "Not started because an earlier plugin failed",
+                        step_id=f"plugin:{remaining_id}",
+                        step_status="interrupted",
+                    )
                 return {
                     "success": False,
                     "message": f"Stopped after {plugin.title} failed",
@@ -409,6 +467,12 @@ async def execute_plugin_install_plan(
                         if item not in {entry["plugin_id"] for entry in completed}
                     ],
                 }
+            await _emit_plan_progress(
+                progress,
+                f"Installed {plugin.title}",
+                step_id=step_id,
+                step_status="completed",
+            )
 
     return {
         "success": True,

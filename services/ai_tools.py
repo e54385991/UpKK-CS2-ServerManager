@@ -752,8 +752,9 @@ async def apply_github_plugin_install(ctx: ToolContext, data: GitHubApplyInput) 
         data.expected_plan_hash,
         set(data.acknowledge_warning_rule_ids),
         data.acknowledge_unknown_compatibility,
-        progress=lambda message, message_type: ctx.emit(
-            "tool_progress", {"message": message, "message_type": message_type}
+        progress=lambda message, message_type, metadata=None: ctx.emit(
+            "tool_progress",
+            {"message": message, "message_type": message_type, **(metadata or {})},
         ),
     )
 
@@ -892,8 +893,9 @@ async def apply_plugin_plan(ctx: ToolContext, data: ApplyPluginPlanInput) -> dic
         data.plugin_id,
         set(data.acknowledge_warning_rule_ids),
         expected_plan_hash=data.expected_plan_hash,
-        progress=lambda message, message_type: ctx.emit(
-            "tool_progress", {"message": message, "message_type": message_type}
+        progress=lambda message, message_type, metadata=None: ctx.emit(
+            "tool_progress",
+            {"message": message, "message_type": message_type, **(metadata or {})},
         ),
     )
 
@@ -909,8 +911,9 @@ async def apply_workshop_map(ctx: ToolContext, data: ApplyWorkshopPlanInput) -> 
         data.model_dump(exclude={"acknowledge_warning_rule_ids", "expected_plan_hash"}),
         set(data.acknowledge_warning_rule_ids),
         expected_plan_hash=data.expected_plan_hash,
-        progress=lambda message, message_type: ctx.emit(
-            "tool_progress", {"message": message, "message_type": message_type}
+        progress=lambda message, message_type, metadata=None: ctx.emit(
+            "tool_progress",
+            {"message": message, "message_type": message_type, **(metadata or {})},
         ),
     )
 

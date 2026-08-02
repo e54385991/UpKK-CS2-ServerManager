@@ -37,6 +37,8 @@
     "refreshTasks": "刷新任务",
     "noBackgroundTasks": "暂无 AI 任务",
     "taskTools": "工具",
+    "taskProgress": "{completed} / {total} 步",
+    "openTask": "打开任务",
     "running": "AI 任务运行中…",
     "thinking": "思考中",
     "runningTool": "正在执行工具",
@@ -55,13 +57,17 @@
     "retry": "重试",
     "operation": {
       "queued": "排队中",
+      "pending": "待执行",
       "running": "执行中",
       "completed": "已完成",
       "failed": "失败",
+      "pending_approval": "等待确认",
       "waiting_approval": "等待确认",
       "rejected": "已拒绝",
       "expired": "已过期",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "skipped": "已跳过",
+      "interrupted": "已中断"
     },
     "adminSettings": "AI 助手提供商",
     "userSettings": "AI 助手提供商",
@@ -280,7 +286,8 @@
       "completed": "{action} 完成: 成功 {succeeded} 个, 失败 {failed} 个",
       "failedServersList": "失败服务器",
       "dispatched": "命令已下发到 {count} 个服务器",
-      "commandDispatch": "命令已发送到 {count} 个服务器: {command}"
+      "commandDispatch": "命令已发送到 {count} 个服务器: {command}",
+      "exportSelected": "导出所选配置"
     },
     "sendCommand": {
       "title": "发送命令到服务器",
@@ -364,6 +371,20 @@
       "offlineEstimate": "离线估计"
     },
     "addNewServer": "添加CS2服务器（确保已完成新服务器初始化）",
+    "exportWithSecrets": "导出配置（含凭据）",
+    "exportRedacted": "导出脱敏副本",
+    "importConfig": "导入配置",
+    "exportSuccess": "已导出 {count} 台服务器配置",
+    "exportRedactedSuccess": "已导出 {count} 台服务器的脱敏配置",
+    "importWarning": "配置将导入当前面板。脱敏导出文件需要在部署前补充凭据。",
+    "configFile": "配置文件",
+    "selectConfigFile": "请选择配置文件",
+    "conflictStrategy": "服务器已存在时",
+    "conflictSkip": "跳过已有服务器",
+    "conflictUpdate": "更新已有服务器",
+    "conflictRename": "使用新名称创建",
+    "importing": "正在导入...",
+    "importSummary": "导入 {imported} 台，更新 {updated} 台，跳过 {skipped} 台，失败 {failed} 台",
     "serverNameLabel": "服务器名称 *",
     "hostIP": "主机 IP *",
     "sshPortLabel": "SSH 端口",
@@ -1230,7 +1251,9 @@
     "installingPlugins": "安装插件失败",
     "deletingServer": "删除服务器失败",
     "loadingServerDetails": "加载服务器详情失败",
-    "sendingCommand": "发送命令失败"
+    "sendingCommand": "发送命令失败",
+    "exportingServerConfig": "导出服务器配置失败",
+    "importingServerConfig": "导入服务器配置失败"
   },
   "confirmMessages": {
     "deleteServer": "确定要删除服务器 \"{serverName}\" 吗？",
