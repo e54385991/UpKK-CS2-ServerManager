@@ -361,17 +361,25 @@ async def tail_server_log(ctx: ToolContext, data: TailLogInput) -> dict[str, Any
     manager = await _connect(server)
     try:
         valid, error = await manager.validate_path_within_base(
-            server.game_directory, path, server, allow_missing=False, require_regular=True
+            server.game_directory, path, server, allow_missing=True, require_regular=False
         )
         if not valid:
             raise ValueError(error)
         success, stdout, stderr = await manager.execute_command(
-            f"tail -n {data.lines} -- {shlex.quote(path)}", timeout=20
+            f"test -f {shlex.quote(path)} && tail -n {data.lines} -- {shlex.quote(path)}",
+            timeout=20,
         )
         if not success:
             raise RuntimeError(stderr or stdout or "Unable to read console.log")
     finally:
         await manager.disconnect()
+    if not stdout.strip():
+        return {
+            "path": "cs2/game/csgo/console.log",
+            "content": "",
+            "note": "console.log does not exist yet. The server may not have been started, "
+            "or the log was cleaned up. Start the server first to generate logs.",
+        }
     return {"path": "cs2/game/csgo/console.log", "content": redact_sensitive_text(stdout)}
 
 
