@@ -294,10 +294,14 @@ async def search_server_files(ctx: ToolContext, data: FileSearchInput) -> dict[s
     server = await _require_current_server(ctx)
     relative = _safe_relative_path(data.relative_path)
     path = posixpath.join(server.game_directory.rstrip("/"), relative)
+    await ctx.emit(
+        "tool_progress",
+        {"message": f"Searching for '{data.query}' in {relative or '.'}"},
+    )
     manager = await _connect(server)
     try:
         valid, error = await manager.validate_path_within_base(
-            server.game_directory, path, server, allow_missing=False
+            server.game_directory, path, server, allow_missing=True
         )
         if not valid:
             raise ValueError(error)
@@ -305,12 +309,14 @@ async def search_server_files(ctx: ToolContext, data: FileSearchInput) -> dict[s
         safe_query = shlex.quote(data.query)
         if data.search_content:
             command = (
+                f"test -d {safe_path} && "
                 f"find {safe_path} -xdev -type f -size -1M -print0 2>/dev/null | "
                 f"xargs -0 -r grep -Il -- {safe_query} 2>/dev/null | head -n {data.limit}"
             )
         else:
             pattern = shlex.quote(f"*{data.query}*")
             command = (
+                f"test -d {safe_path} && "
                 f"find {safe_path} -xdev \\( -type f -o -type d \\) -iname {pattern} "
                 f"-print 2>/dev/null | head -n {data.limit}"
             )
@@ -321,7 +327,16 @@ async def search_server_files(ctx: ToolContext, data: FileSearchInput) -> dict[s
         await manager.disconnect()
     prefix = server.game_directory.rstrip("/") + "/"
     paths = [line.strip().removeprefix(prefix) for line in stdout.splitlines() if line.strip()]
-    return {"matches": paths, "count": len(paths), "truncated": len(paths) >= data.limit}
+    result: dict[str, Any] = {
+        "matches": paths,
+        "count": len(paths),
+        "truncated": len(paths) >= data.limit,
+    }
+    if not paths:
+        result["note"] = (
+            f"No files matching '{data.query}' found in {relative or '.'}. This is normal if the path does not exist or has no matches."
+        )
+    return result
 
 
 async def read_server_text_file(ctx: ToolContext, data: FileReadInput) -> dict[str, Any]:

@@ -441,7 +441,7 @@ async def test_queued_write_emits_queue_then_execution_status(monkeypatch):
                 "operation": "ai_user_write",
                 "wait": True,
                 "wait_timeout": ai_orchestrator.AI_WRITE_QUEUE_WAIT_SECONDS,
-                "ttl": 30 * 60,
+                "ttl": ai_orchestrator.AI_WRITE_LOCK_TTL,
             },
         )
     ]

@@ -44,6 +44,7 @@ from services.ai_tools import (
     tool_definitions,
 )
 from services.maintenance_lock import maintenance_lock_service
+from services.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
 DEFAULT_MAX_PROVIDER_ROUNDS = 30
@@ -51,7 +52,8 @@ MAX_TOOL_CALLS_PER_ROUND = 5
 MAX_REPEATED_CALLS = 3
 ACTIVE_RUN_STATUSES = ("queued", "running", "waiting_approval")
 AI_DELTA_EVENT_CHARS = 96
-AI_WRITE_QUEUE_WAIT_SECONDS = 30 * 60
+AI_WRITE_QUEUE_WAIT_SECONDS = 5 * 60
+AI_WRITE_LOCK_TTL = 5 * 60
 
 
 async def _emit(run_id: str, event_type: str, payload: dict[str, Any]) -> None:
@@ -184,7 +186,7 @@ async def _execute_tool_run(
                 operation="ai_user_write",
                 wait=True,
                 wait_timeout=AI_WRITE_QUEUE_WAIT_SECONDS,
-                ttl=30 * 60,
+                ttl=AI_WRITE_LOCK_TTL,
             ):
                 await mark_running()
                 result = await execute_tool(tool_run.tool_name, tool_run.arguments, context)
@@ -572,13 +574,21 @@ async def interrupt_active_ai_runs() -> int:
     async with async_session_maker() as db:
         result = await db.execute(select(AIRun).where(AIRun.status.in_(ACTIVE_RUN_STATUSES)))
         runs = list(result.scalars().all())
+        user_ids = {run.user_id for run in runs}
         for run in runs:
             run.status = "interrupted"
             run.error = "Application restarted before this run completed"
             run.completed_at = get_current_time()
             db.add(run)
         await db.commit()
-        return len(runs)
+    # Release stale AI write locks left behind by the previous process.
+    for uid in user_ids:
+        key = f"server_operation_lock:-{uid + 1}"
+        try:
+            await redis_manager.client.delete(key)
+        except Exception:
+            pass
+    return len(runs)
 
 
 async def interrupt_conversation_run(
