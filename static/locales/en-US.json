@@ -52,6 +52,7 @@
     "approved": "Approved",
     "rejected": "Rejected",
     "completed": "Completed",
+    "retry": "Retry",
     "operation": {
       "queued": "Queued",
       "running": "Running",
@@ -71,6 +72,7 @@
     "keyMissing": "No key configured",
     "timeout": "Request timeout (seconds)",
     "retention": "History retention (days)",
+    "maxProviderRounds": "Max reasoning rounds",
     "allowlist": "Private endpoint allowlist",
     "allowlistHint": "One exact scheme://host:port origin per line. Public endpoints must use HTTPS.",
     "adminPrompt": "Administrator prompt additions",

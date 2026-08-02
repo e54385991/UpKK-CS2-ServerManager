@@ -16,6 +16,7 @@
         lastSequence: '0',
         streamedMessages: new Map(),
         suppressReload: false,
+        lastFailedMessage: null,
     };
 
     const element = (id) => document.getElementById(id);
@@ -119,6 +120,36 @@
             link.target = '_blank';
             link.rel = 'noopener noreferrer nofollow';
         });
+    }
+
+    function appendErrorMessage(message) {
+        const list = element('ai-message-list');
+        const card = document.createElement('div');
+        card.className = 'ai-message ai-message-error';
+        const body = document.createElement('div');
+        body.className = 'card card-body p-2 bg-danger bg-opacity-10 border-danger';
+        const header = document.createElement('div');
+        header.className = 'd-flex align-items-start gap-2';
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-exclamation-triangle-fill text-danger mt-1';
+        const text = document.createElement('span');
+        text.className = 'small text-danger flex-grow-1';
+        text.style.whiteSpace = 'pre-wrap';
+        text.textContent = message;
+        header.append(icon, text);
+        body.appendChild(header);
+        if (state.lastFailedMessage) {
+            const retry = document.createElement('button');
+            retry.type = 'button';
+            retry.className = 'btn btn-sm btn-outline-danger mt-2';
+            retry.innerHTML = '<i class="bi bi-arrow-clockwise"></i> ' + translate('ai.retry', 'Retry');
+            retry.addEventListener('click', retryLastMessage);
+            body.appendChild(retry);
+        }
+        card.appendChild(body);
+        list.appendChild(card);
+        list.scrollTop = list.scrollHeight;
+        return card;
     }
 
     function appendMessage(role, content, allowEmpty = false) {
@@ -476,6 +507,7 @@
     function newConversation() {
         stopRunWatch();
         state.conversationId = null;
+        state.lastFailedMessage = null;
         element('ai-conversation-select').value = '';
         element('ai-message-list').replaceChildren();
         state.streamedMessages.clear();
@@ -507,6 +539,7 @@
             const conversationId = await ensureConversation();
             appendMessage('user', content);
             input.value = '';
+            state.lastFailedMessage = null;
             const response = await authFetch(`/api/ai/conversations/${conversationId}/messages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -543,6 +576,8 @@
             connectEvents();
             pollRun();
         } catch (error) {
+            state.lastFailedMessage = content;
+            appendErrorMessage(error.message);
             setStatus(error.message, true);
             element('ai-send-button').disabled = !state.enabled;
         }
@@ -688,16 +723,36 @@
         const conversationId = state.conversationId;
         stopRunWatch();
         hideStopButton();
-        setStatus(message, isError);
         element('ai-send-button').disabled = !state.enabled;
-        if (conversationId && !state.suppressReload) {
-            try {
-                await openConversation(conversationId);
-                await loadConversations(conversationId);
-            } catch (error) {
-                setStatus(error.message, true);
+        if (isError) {
+            appendErrorMessage(message);
+            setStatus(message, true);
+            if (conversationId && !state.suppressReload) {
+                try {
+                    await loadConversations(conversationId);
+                } catch (error) {
+                    // ignore — error already shown inline
+                }
+            }
+        } else {
+            setStatus(message, isError);
+            if (conversationId && !state.suppressReload) {
+                try {
+                    await openConversation(conversationId);
+                    await loadConversations(conversationId);
+                } catch (error) {
+                    setStatus(error.message, true);
+                }
             }
         }
+    }
+
+    async function retryLastMessage() {
+        if (!state.lastFailedMessage || state.runId) return;
+        const input = element('ai-message-input');
+        input.value = state.lastFailedMessage;
+        state.lastFailedMessage = null;
+        await sendMessage(new Event('submit'));
     }
 
     function stopRunWatch() {

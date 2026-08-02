@@ -389,6 +389,11 @@ body {
     animation: ai-stream-cursor .8s steps(1) infinite;
 }
 
+.ai-message-error {
+    margin-right: auto;
+    max-width: 92%;
+}
+
 @keyframes ai-stream-cursor {
     50% { opacity: 0; }
 }

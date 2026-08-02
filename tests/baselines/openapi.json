@@ -691,6 +691,10 @@
             "title": "Max Completion Tokens",
             "type": "integer"
           },
+          "max_provider_rounds": {
+            "title": "Max Provider Rounds",
+            "type": "integer"
+          },
           "model": {
             "anyOf": [
               {
@@ -823,6 +827,7 @@
           "token_limit_parameter",
           "request_timeout_seconds",
           "history_retention_days",
+          "max_provider_rounds",
           "provider_tested",
           "tool_calling_tested",
           "streaming_tested"
@@ -922,6 +927,19 @@
               }
             ],
             "title": "Max Completion Tokens"
+          },
+          "max_provider_rounds": {
+            "anyOf": [
+              {
+                "maximum": 60.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Provider Rounds"
           },
           "model": {
             "anyOf": [

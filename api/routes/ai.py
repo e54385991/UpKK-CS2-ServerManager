@@ -136,6 +136,7 @@ def _system_response(item: AISystemSettings) -> AISystemSettingsResponse:
         **_model_parameters(item),
         request_timeout_seconds=item.request_timeout_seconds,
         history_retention_days=item.history_retention_days,
+        max_provider_rounds=item.max_provider_rounds,
         provider_tested=item.provider_tested,
         tool_calling_tested=item.tool_calling_tested,
         streaming_tested=item.streaming_tested,
@@ -225,6 +226,8 @@ async def update_system_ai_settings(
         item.admin_prompt = request.admin_prompt.strip() or None
     if request.request_timeout_seconds is not None:
         item.request_timeout_seconds = request.request_timeout_seconds
+    if request.max_provider_rounds is not None:
+        item.max_provider_rounds = request.max_provider_rounds
     if request.history_retention_days is not None:
         item.history_retention_days = request.history_retention_days
     if changed_provider:

@@ -52,6 +52,7 @@
     "approved": "已确认",
     "rejected": "已拒绝",
     "completed": "已完成",
+    "retry": "重试",
     "operation": {
       "queued": "排队中",
       "running": "执行中",
@@ -71,6 +72,7 @@
     "keyMissing": "未配置密钥",
     "timeout": "请求超时（秒）",
     "retention": "历史保留天数",
+    "maxProviderRounds": "最大推理轮数",
     "allowlist": "私有地址白名单",
     "allowlistHint": "每行一个精确的 scheme://host:port；公网地址必须使用 HTTPS。",
     "adminPrompt": "管理员追加提示词",

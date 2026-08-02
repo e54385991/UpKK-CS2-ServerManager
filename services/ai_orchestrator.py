@@ -19,6 +19,7 @@ from modules.models import (
     AIConversation,
     AIMessage,
     AIRun,
+    AISystemSettings,
     AIToolRun,
     Server,
     User,
@@ -45,7 +46,7 @@ from services.ai_tools import (
 from services.maintenance_lock import maintenance_lock_service
 
 logger = logging.getLogger(__name__)
-MAX_PROVIDER_ROUNDS = 12
+DEFAULT_MAX_PROVIDER_ROUNDS = 30
 MAX_TOOL_CALLS_PER_ROUND = 5
 MAX_REPEATED_CALLS = 3
 ACTIVE_RUN_STATUSES = ("queued", "running", "waiting_approval")
@@ -307,6 +308,9 @@ async def process_ai_run(run_id: str) -> None:
             await _fail_run(db, run, "No tested AI provider is enabled")
             return
 
+        settings = await AISystemSettings.get_or_create(db)
+        max_rounds = settings.max_provider_rounds or DEFAULT_MAX_PROVIDER_ROUNDS
+
         run.status = "running"
         run.error = None
         db.add(run)
@@ -342,7 +346,7 @@ async def process_ai_run(run_id: str) -> None:
                 (item.tool_name, item.arguments_hash) for item in tool_result.scalars().all()
             )
 
-            while rounds_used < MAX_PROVIDER_ROUNDS:
+            while rounds_used < max_rounds:
                 await db.refresh(run)
                 if run.status == "interrupted":
                     await _emit(run.id, "run_interrupted", {"error": run.error or "Interrupted"})
@@ -556,7 +560,7 @@ async def process_ai_run(run_id: str) -> None:
                     return
 
             raise AIProviderError(
-                f"The assistant reached the maximum number of reasoning rounds ({MAX_PROVIDER_ROUNDS}). Send another message to continue with the remaining tasks."
+                f"The assistant reached the maximum number of reasoning rounds ({max_rounds}). Send another message to continue with the remaining tasks."
             )
         except Exception as exc:
             logger.warning("AI run %s failed: %s", run.id, exc)

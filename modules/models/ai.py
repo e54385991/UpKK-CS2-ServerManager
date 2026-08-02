@@ -36,6 +36,7 @@ class AISystemSettings(SQLModel, table=True):
     parallel_tool_calls: Optional[bool] = Field(default=None)
     request_timeout_seconds: int = Field(default=60)
     history_retention_days: int = Field(default=7)
+    max_provider_rounds: int = Field(default=30)
     provider_tested: bool = Field(default=False)
     tool_calling_tested: bool = Field(default=False)
     streaming_tested: bool = Field(default=False)
