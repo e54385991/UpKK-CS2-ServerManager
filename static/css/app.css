@@ -597,3 +597,62 @@ body {
         bottom: 1rem;
     }
 }
+
+
+/* Page header actions: solid buttons remain readable on the purple gradient background */
+.page-header-actions {
+    gap: 1rem;
+}
+
+.page-title {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.page-action-bar {
+    padding: 0.5rem;
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(8px);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.page-action-btn {
+    font-weight: 600;
+    border-width: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.page-action-btn.btn-light {
+    color: #1f2937;
+    background: #ffffff;
+}
+
+.page-action-btn.btn-light:hover,
+.page-action-btn.btn-light:focus {
+    color: #111827;
+    background: #f3f4f6;
+}
+
+.page-action-btn.btn-warning {
+    color: #1f2937;
+    background: #fbbf24;
+}
+
+.page-action-btn.btn-warning:hover,
+.page-action-btn.btn-warning:focus {
+    color: #111827;
+    background: #f59e0b;
+}
+
+.page-action-btn.page-action-btn-import {
+    color: #1d4ed8;
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 0 0 2px #2563eb;
+}
+
+.page-action-btn.page-action-btn-import:hover,
+.page-action-btn.page-action-btn-import:focus {
+    color: #1e3a8a;
+    background: #eff6ff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 0 0 2px #1d4ed8;
+}

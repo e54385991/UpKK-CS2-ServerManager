@@ -5,20 +5,20 @@
 {% block content %}
 <div x-data="serverManager()">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-hdd-rack"></i> <span data-i18n="servers.title">Server Management</span></h2>
-        <div class="d-flex flex-wrap gap-2 justify-content-end">
-            <button @click="exportServers(true)" class="btn btn-outline-warning" type="button"
+    <div class="d-flex justify-content-between align-items-center mb-4 page-header-actions">
+        <h2 class="page-title text-white mb-0"><i class="bi bi-hdd-rack"></i> <span data-i18n="servers.title">Server Management</span></h2>
+        <div class="d-flex flex-wrap gap-2 justify-content-end page-action-bar">
+            <button @click="exportServers(true)" class="btn btn-warning page-action-btn" type="button"
                     title="Includes saved credentials">
                 <i class="bi bi-download"></i> <span data-i18n="servers.exportWithSecrets">Export Config</span>
             </button>
-            <button @click="exportServers(false)" class="btn btn-outline-secondary" type="button">
+            <button @click="exportServers(false)" class="btn btn-light page-action-btn" type="button">
                 <i class="bi bi-shield-lock"></i> <span data-i18n="servers.exportRedacted">Redacted Copy</span>
             </button>
-            <button @click="openImportModal()" class="btn btn-outline-primary" type="button">
+            <button @click="openImportModal()" class="btn btn-light page-action-btn page-action-btn-import" type="button">
                 <i class="bi bi-upload"></i> <span data-i18n="servers.importConfig">Import Config</span>
             </button>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addServerModal" type="button">
+            <button class="btn btn-primary page-action-btn" data-bs-toggle="modal" data-bs-target="#addServerModal" type="button">
                 <i class="bi bi-plus-circle"></i> <span data-i18n="servers.addNewServer">Add CS2 Server (Ensure New Server Initialization Complete)</span>
             </button>
         </div>
@@ -101,7 +101,7 @@
                     </button>
                     <button @click="exportServers(true, selectedServers)"
                             :disabled="bulkActionRunning"
-                            class="btn btn-sm btn-outline-warning">
+                            class="btn btn-sm btn-warning">
                         <i class="bi bi-download"></i> <span data-i18n="servers.bulkActions.exportSelected">Export Selected</span>
                     </button>
                 </div>
