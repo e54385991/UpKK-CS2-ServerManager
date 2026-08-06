@@ -4666,6 +4666,11 @@
             "title": "Enable Plugin Auto Update",
             "type": "boolean"
           },
+          "enable_plugin_post_update_commands": {
+            "default": false,
+            "title": "Enable Plugin Post Update Commands",
+            "type": "boolean"
+          },
           "last_plugin_update_check": {
             "anyOf": [
               {
@@ -4677,6 +4682,13 @@
               }
             ],
             "title": "Last Plugin Update Check"
+          },
+          "plugin_post_update_command_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Plugin Post Update Command Ids",
+            "type": "array"
           },
           "plugin_update_check_interval_hours": {
             "title": "Plugin Update Check Interval Hours",
@@ -4702,6 +4714,18 @@
           "enable_plugin_auto_update": {
             "title": "Enable Plugin Auto Update",
             "type": "boolean"
+          },
+          "enable_plugin_post_update_commands": {
+            "default": false,
+            "title": "Enable Plugin Post Update Commands",
+            "type": "boolean"
+          },
+          "plugin_post_update_command_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Plugin Post Update Command Ids",
+            "type": "array"
           },
           "plugin_update_check_interval_hours": {
             "maximum": 24.0,

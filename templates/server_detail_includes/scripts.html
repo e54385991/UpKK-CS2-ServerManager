@@ -42,8 +42,11 @@
             enable_plugin_auto_update: false,
             plugin_update_check_interval_hours: 1,
             last_plugin_update_check: null,
+            enable_plugin_post_update_commands: false,
+            plugin_post_update_command_ids: [],
             plugins: []
         },
+        pluginPostUpdateCommandToAdd: '',
         loadingPluginAutoUpdate: false,
         savingPluginAutoUpdate: false,
         registeringManagedPlugin: false,
@@ -2159,7 +2162,13 @@
             try {
                 const response = await authFetch(`/api/servers/${this.serverId}/plugin-auto-update`);
                 if (!response.ok) throw new Error((await response.json()).detail || 'Failed to load plugin auto-update settings');
-                this.pluginAutoUpdate = await response.json();
+                const data = await response.json();
+                data.plugin_post_update_command_ids = data.plugin_post_update_command_ids || [];
+                data.enable_plugin_post_update_commands = !!data.enable_plugin_post_update_commands;
+                this.pluginAutoUpdate = data;
+                if (!this.customCommands || this.customCommands.length === 0) {
+                    await this.loadCustomCommands();
+                }
             } catch (err) {
                 this.showToast(err.message, 'error');
             } finally {
@@ -2174,7 +2183,9 @@
                     method: 'PUT', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         enable_plugin_auto_update: this.pluginAutoUpdate.enable_plugin_auto_update,
-                        plugin_update_check_interval_hours: Number(this.pluginAutoUpdate.plugin_update_check_interval_hours)
+                        plugin_update_check_interval_hours: Number(this.pluginAutoUpdate.plugin_update_check_interval_hours),
+                        enable_plugin_post_update_commands: !!this.pluginAutoUpdate.enable_plugin_post_update_commands,
+                        plugin_post_update_command_ids: (this.pluginAutoUpdate.plugin_post_update_command_ids || []).map(Number)
                     })
                 });
                 if (!response.ok) throw new Error((await response.json()).detail || 'Failed to save settings');
@@ -2185,6 +2196,46 @@
             } finally {
                 this.savingPluginAutoUpdate = false;
             }
+        },
+
+        availablePluginPostUpdateCommands() {
+            const selected = new Set((this.pluginAutoUpdate.plugin_post_update_command_ids || []).map(Number));
+            return (this.customCommands || []).filter(command => !selected.has(Number(command.id)));
+        },
+
+        pluginPostUpdateCommandLabel(commandId) {
+            const command = (this.customCommands || []).find(item => Number(item.id) === Number(commandId));
+            if (!command) {
+                return (window.i18n?.t('pluginAutoUpdate.missingQuickCommand', {id: commandId}) || `Quick command #${commandId} (missing)`);
+            }
+            return `${command.name} (${command.target})`;
+        },
+
+        addPluginPostUpdateCommand() {
+            const commandId = Number(this.pluginPostUpdateCommandToAdd);
+            if (!commandId) return;
+            if (!Array.isArray(this.pluginAutoUpdate.plugin_post_update_command_ids)) {
+                this.pluginAutoUpdate.plugin_post_update_command_ids = [];
+            }
+            if (this.pluginAutoUpdate.plugin_post_update_command_ids.map(Number).includes(commandId)) {
+                this.pluginPostUpdateCommandToAdd = '';
+                return;
+            }
+            this.pluginAutoUpdate.plugin_post_update_command_ids.push(commandId);
+            this.pluginPostUpdateCommandToAdd = '';
+        },
+
+        removePluginPostUpdateCommand(index) {
+            if (!Array.isArray(this.pluginAutoUpdate.plugin_post_update_command_ids)) return;
+            this.pluginAutoUpdate.plugin_post_update_command_ids.splice(index, 1);
+        },
+
+        movePluginPostUpdateCommand(index, delta) {
+            const ids = this.pluginAutoUpdate.plugin_post_update_command_ids || [];
+            const target = index + delta;
+            if (target < 0 || target >= ids.length) return;
+            const [item] = ids.splice(index, 1);
+            ids.splice(target, 0, item);
         },
 
         async toggleManagedPlugin(plugin) {

@@ -748,7 +748,6 @@
     "backupPlugins": "备份插件",
     "confirmBackupPlugins": "这将备份以下内容到 {path}：\n\n• addons/ 文件夹\n• cfg/ 文件夹\n• gameinfo.gi 文件\n\n是否继续？",
     "s3Backups": "S3 备份",
-    "refresh": "刷新",
     "noS3Backups": "未找到 S3 备份。",
     "backupFile": "文件",
     "backupSize": "大小",
@@ -1673,27 +1672,90 @@
       "other": "其他配置"
     },
     "pluginConfigFields": {
-      "VoteStartTime": { "label": "投票开始提前量（分钟）", "description": "在地图时间结束前多少分钟开始选图投票。" },
-      "AllowExtend": { "label": "允许延长当前地图", "description": "允许玩家在投票中选择延长当前地图。" },
-      "ExtendTimeStep": { "label": "每次延长时间（分钟）", "description": "每次延长当前地图时增加的时间。" },
-      "ExtendLimit": { "label": "最多延长次数", "description": "单张地图允许被延长的最大次数。" },
-      "ExcludeMaps": { "label": "排除最近地图数", "description": "从候选项中排除最近游玩过的地图数量。" },
-      "IncludeMaps": { "label": "投票候选地图数", "description": "一次选图投票中包含的地图数量。" },
-      "IncludeCurrent": { "label": "候选项包含当前地图", "description": "允许当前地图出现在投票候选项中。" },
-      "DontChangeRTV": { "label": "RTV 后不立即换图", "description": "RTV 投票完成后保留插件的延后换图流程。" },
-      "VoteDuration": { "label": "投票持续时间（秒）", "description": "选图投票保持开放的时间，最大 60 秒。" },
-      "IgnoreSpec": { "label": "忽略观战玩家", "description": "计算投票人数时不计入观战玩家。" },
-      "AllowRtv": { "label": "允许 RTV", "description": "允许玩家请求提前进行换图投票。" },
-      "UseGameTimeLimit": { "label": "使用游戏时间限制", "description": "使用游戏自身的地图时间限制来触发换图。" },
-      "RTVPercent": { "label": "RTV 通过比例", "description": "RTV 所需玩家比例，取值范围为 0 到 1。" },
-      "RTVDelay": { "label": "RTV 开放延迟（分钟）", "description": "地图开始后等待多少分钟才允许 RTV。" },
-      "EnforceTimeLimit": { "label": "强制执行时间限制", "description": "到达时间限制时由插件执行换图流程。" },
-      "ChangeMapUse_host_workshop_map": { "label": "使用 host_workshop_map 换图", "description": "切换创意工坊地图时使用 host_workshop_map 命令。" },
-      "DisplayHudTimeleftRemaining": { "label": "HUD 倒计时显示阈值（秒）", "description": "剩余时间低于该秒数时显示 HUD 倒计时；0 表示关闭。" },
-      "RunOfFVote": { "label": "启用决选投票", "description": "首轮结果未达到要求时发起决选投票。" },
-      "VotePercent": { "label": "投票通过比例", "description": "选项获胜所需比例，取值范围为 0 到 1。" },
-      "AutoDownload": { "label": "自动下载地图", "description": "自动处理地图下载。" },
-      "VoteStartSound": { "label": "投票开始音效", "description": "投票开始时播放的声音资源路径。" }
+      "VoteStartTime": {
+        "label": "投票开始提前量（分钟）",
+        "description": "在地图时间结束前多少分钟开始选图投票。"
+      },
+      "AllowExtend": {
+        "label": "允许延长当前地图",
+        "description": "允许玩家在投票中选择延长当前地图。"
+      },
+      "ExtendTimeStep": {
+        "label": "每次延长时间（分钟）",
+        "description": "每次延长当前地图时增加的时间。"
+      },
+      "ExtendLimit": {
+        "label": "最多延长次数",
+        "description": "单张地图允许被延长的最大次数。"
+      },
+      "ExcludeMaps": {
+        "label": "排除最近地图数",
+        "description": "从候选项中排除最近游玩过的地图数量。"
+      },
+      "IncludeMaps": {
+        "label": "投票候选地图数",
+        "description": "一次选图投票中包含的地图数量。"
+      },
+      "IncludeCurrent": {
+        "label": "候选项包含当前地图",
+        "description": "允许当前地图出现在投票候选项中。"
+      },
+      "DontChangeRTV": {
+        "label": "RTV 后不立即换图",
+        "description": "RTV 投票完成后保留插件的延后换图流程。"
+      },
+      "VoteDuration": {
+        "label": "投票持续时间（秒）",
+        "description": "选图投票保持开放的时间，最大 60 秒。"
+      },
+      "IgnoreSpec": {
+        "label": "忽略观战玩家",
+        "description": "计算投票人数时不计入观战玩家。"
+      },
+      "AllowRtv": {
+        "label": "允许 RTV",
+        "description": "允许玩家请求提前进行换图投票。"
+      },
+      "UseGameTimeLimit": {
+        "label": "使用游戏时间限制",
+        "description": "使用游戏自身的地图时间限制来触发换图。"
+      },
+      "RTVPercent": {
+        "label": "RTV 通过比例",
+        "description": "RTV 所需玩家比例，取值范围为 0 到 1。"
+      },
+      "RTVDelay": {
+        "label": "RTV 开放延迟（分钟）",
+        "description": "地图开始后等待多少分钟才允许 RTV。"
+      },
+      "EnforceTimeLimit": {
+        "label": "强制执行时间限制",
+        "description": "到达时间限制时由插件执行换图流程。"
+      },
+      "ChangeMapUse_host_workshop_map": {
+        "label": "使用 host_workshop_map 换图",
+        "description": "切换创意工坊地图时使用 host_workshop_map 命令。"
+      },
+      "DisplayHudTimeleftRemaining": {
+        "label": "HUD 倒计时显示阈值（秒）",
+        "description": "剩余时间低于该秒数时显示 HUD 倒计时；0 表示关闭。"
+      },
+      "RunOfFVote": {
+        "label": "启用决选投票",
+        "description": "首轮结果未达到要求时发起决选投票。"
+      },
+      "VotePercent": {
+        "label": "投票通过比例",
+        "description": "选项获胜所需比例，取值范围为 0 到 1。"
+      },
+      "AutoDownload": {
+        "label": "自动下载地图",
+        "description": "自动处理地图下载。"
+      },
+      "VoteStartSound": {
+        "label": "投票开始音效",
+        "description": "投票开始时播放的声音资源路径。"
+      }
     }
   },
   "pluginConfigs": {
@@ -1750,7 +1812,7 @@
   "pluginAutoUpdate": {
     "title": "插件自动升级",
     "checkNow": "立即检查",
-    "noRestartWarning": "备份和重启均按项目单独配置，默认关闭；多个项目请求重启时，整批完成后只重启一次。",
+    "noRestartWarning": "备份和重启均按项目单独配置，默认关闭；多个项目请求重启时，整批完成后只重启一次。可选的升级后快捷指令也仅在整批完成后再执行。",
     "liveStatus": "实时请求 / 处理状态",
     "testUpdate": "立即测试此项目更新",
     "testUpdateShort": "测试更新",
@@ -1783,7 +1845,13 @@
     "saved": "插件自动升级设置已保存",
     "selectReleaseAsset": "请选择当前已安装的发行版和资源",
     "unmanage": "取消纳管",
-    "unmanageConfirm": "停止管理 {name}？远端文件会保留。"
+    "unmanageConfirm": "停止管理 {name}？远端文件会保留。",
+    "postUpdateCommandsSwitch": "全部插件升级完成后执行快捷指令",
+    "postUpdateCommandsHint": "仅在本批所有插件升级完成（含可能的一次性重启）后执行。可添加多条「服务器操作」中已保存的快捷指令，并按列表顺序执行。",
+    "addPostUpdateCommand": "添加快捷指令",
+    "selectQuickCommand": "选择已保存的快捷指令",
+    "noPostUpdateCommands": "尚未选择升级后快捷指令。",
+    "missingQuickCommand": "快捷指令 #{id}（已不存在）"
   },
   "forgotPassword": {
     "title": "忘记密码",

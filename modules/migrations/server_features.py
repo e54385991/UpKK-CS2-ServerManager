@@ -246,6 +246,8 @@ async def migrate_server_features(conn: AsyncConnection) -> None:
         "enable_plugin_auto_update": "TINYINT(1) NOT NULL DEFAULT 0",
         "plugin_update_check_interval_hours": "FLOAT NOT NULL DEFAULT 1.0",
         "last_plugin_update_check": "DATETIME NULL",
+        "enable_plugin_post_update_commands": "TINYINT(1) NOT NULL DEFAULT 0",
+        "plugin_post_update_command_ids": "JSON NULL",
         "map_pool_sync_url": "VARCHAR(4096) NULL",
     }
 

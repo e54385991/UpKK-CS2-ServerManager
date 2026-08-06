@@ -263,6 +263,27 @@ class MarketPluginInstallRequest(SQLModel):
 class PluginAutoUpdateSettings(SQLModel):
     enable_plugin_auto_update: bool
     plugin_update_check_interval_hours: float = Field(ge=0.0167, le=24.0)
+    enable_plugin_post_update_commands: bool = False
+    plugin_post_update_command_ids: List[int] = Field(default_factory=list)
+
+    @field_validator("plugin_post_update_command_ids")
+    @classmethod
+    def validate_post_update_command_ids(cls, values: List[int]) -> List[int]:
+        if values is None:
+            return []
+        cleaned: List[int] = []
+        seen = set()
+        for value in values:
+            command_id = int(value)
+            if command_id <= 0:
+                raise ValueError("plugin_post_update_command_ids must contain positive integers")
+            if command_id in seen:
+                continue
+            seen.add(command_id)
+            cleaned.append(command_id)
+        if len(cleaned) > 20:
+            raise ValueError("At most 20 post-update quick commands can be configured")
+        return cleaned
 
 
 class ManagedPluginCreate(SQLModel):
@@ -361,6 +382,8 @@ class PluginAutoUpdateResponse(SQLModel):
     enable_plugin_auto_update: bool
     plugin_update_check_interval_hours: float
     last_plugin_update_check: Optional[datetime] = None
+    enable_plugin_post_update_commands: bool = False
+    plugin_post_update_command_ids: List[int] = Field(default_factory=list)
     plugins: List[ManagedPluginResponse] = Field(default_factory=list)
 
 

@@ -99,6 +99,10 @@ class Server(SQLModel, table=True):
     enable_plugin_auto_update: bool = Field(default=False)
     plugin_update_check_interval_hours: float = Field(default=1.0)
     last_plugin_update_check: Optional[datetime] = Field(default=None)
+    enable_plugin_post_update_commands: bool = Field(default=False)
+    plugin_post_update_command_ids: List[int] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=True)
+    )
 
     # MapChooser custom remote map-pool synchronization
     map_pool_sync_url: Optional[str] = Field(default=None, max_length=4096)

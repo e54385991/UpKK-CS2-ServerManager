@@ -2,7 +2,7 @@
 
 import pytest
 
-from modules.models import AuthType, ManagedPlugin, Server, User
+from modules.models import AuthType, CustomCommand, ManagedPlugin, Server, User
 from services.maintenance_lock import maintenance_lock_service
 from services.plugin_auto_update_service import (
     PluginAutoUpdateService,
@@ -455,3 +455,168 @@ async def test_plugin_restart_policy_restarts_running_server_once_for_multiple_i
     }
     assert result["restart"]["message"] == "started"
     assert (await service.get_status(89))["state"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_post_update_commands_run_once_after_all_plugins_finish(monkeypatch):
+    service = PluginAutoUpdateService()
+    service._redis_status_retry_after = float("inf")
+    server = Server(
+        id=90,
+        user_id=3,
+        name="Post Commands",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+        enable_plugin_auto_update=True,
+        enable_plugin_post_update_commands=True,
+        plugin_post_update_command_ids=[11, 12],
+    )
+    user = User(id=3, username="owner3", email="owner3@example.com", hashed_password="x")
+    item = ManagedPlugin(
+        id=9,
+        server_id=90,
+        source_type="github",
+        source_key="repo",
+        display_name="Plugin A",
+        repo_url="https://github.com/Owner/RepoA",
+        asset_glob="plugin-*.zip",
+        installed_release_id="1",
+        installed_version="v1",
+        auto_update_enabled=True,
+    )
+    second = ManagedPlugin(
+        id=10,
+        server_id=90,
+        source_type="github",
+        source_key="repo2",
+        display_name="Plugin B",
+        repo_url="https://github.com/Owner/RepoB",
+        asset_glob="plugin2-*.zip",
+        installed_release_id="1",
+        installed_version="v1",
+        auto_update_enabled=True,
+    )
+    commands = {
+        11: CustomCommand(
+            id=11,
+            user_id=3,
+            server_id=90,
+            name="Reload maps",
+            target="game_process",
+            commands="css_plugins reload",
+        ),
+        12: CustomCommand(
+            id=12,
+            user_id=3,
+            server_id=90,
+            name="Host check",
+            target="host",
+            commands="echo ready",
+        ),
+    }
+    items = {item.id: item, second.id: second}
+    install_order = []
+    command_order = []
+
+    class Result:
+        def __init__(self, values):
+            self._values = values
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self._values
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, model, object_id):
+            if model is Server:
+                return server
+            if model is User:
+                return user
+            if model is ManagedPlugin:
+                return items[object_id]
+
+        async def execute(self, statement):
+            entities = []
+            try:
+                entities = [
+                    description.get("entity")
+                    for description in getattr(statement, "column_descriptions", [])
+                ]
+            except Exception:
+                entities = []
+            if CustomCommand in entities:
+                return Result([commands[11], commands[12]])
+            return Result([item, second])
+
+        async def commit(self):
+            return None
+
+        def add(self, value):
+            return None
+
+    class Manager:
+        async def get_server_status(self, server):
+            return True, "stopped"
+
+        async def backup_plugins(self, server):
+            return True, "ok"
+
+    async def latest(*args):
+        return (
+            True,
+            {
+                "release_id": "2",
+                "version": "v2",
+                "asset": {"name": "plugin-v2.zip", "browser_download_url": "https://github.com/x"},
+            },
+            "",
+        )
+
+    async def install(server, user, managed, latest):
+        install_order.append(managed.display_name)
+        return True, "updated"
+
+    async def execute_commands(server, target, command_text):
+        command_order.append((target, command_text))
+        assert len(install_order) == 2
+        return {
+            "success": True,
+            "message": "Executed 1 command(s) successfully",
+            "target": target,
+            "results": [
+                {"index": 1, "command": command_text, "success": True, "stdout": "", "stderr": ""}
+            ],
+        }
+
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.async_session_maker", lambda: Session()
+    )
+    monkeypatch.setattr("services.plugin_auto_update_service.SSHManager", Manager)
+    monkeypatch.setattr(service, "_latest_github_release", latest)
+    monkeypatch.setattr(service, "_install_item", install)
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.execute_custom_commands", execute_commands
+    )
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.discord_notification_service.queue_notify",
+        lambda *a, **k: True,
+    )
+
+    result = await service.check_server(90)
+    assert result["success"] is True
+    assert install_order == ["Plugin A", "Plugin B"]
+    assert command_order == [
+        ("game_process", "css_plugins reload"),
+        ("host", "echo ready"),
+    ]
+    assert result["post_update_commands"]["success"] is True
+    assert len(result["post_update_commands"]["results"]) == 2

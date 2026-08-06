@@ -12,9 +12,14 @@ from sqlmodel import select
 
 from modules.database import async_session_maker
 from modules.http_helper import http_helper
-from modules.models import ManagedPlugin, Server, User
+from modules.models import CustomCommand, DeploymentLog, ManagedPlugin, Server, User
 from modules.schemas import GitHubPluginInstallRequest
 from modules.utils import get_current_time
+from services.custom_command_service import (
+    CustomCommandError,
+    execute_custom_commands,
+    format_custom_command_log,
+)
 from services.discord_notification_service import (
     EVENT_PLUGIN_UPDATE,
     discord_notification_service,
@@ -484,6 +489,154 @@ class PluginAutoUpdateService:
         """
         return await self.check_server(server_id, force=True, plugin_id=plugin_id)
 
+    @staticmethod
+    def _normalize_command_ids(values) -> List[int]:
+        if not values:
+            return []
+        cleaned: List[int] = []
+        seen = set()
+        for value in values:
+            try:
+                command_id = int(value)
+            except TypeError, ValueError:
+                continue
+            if command_id <= 0 or command_id in seen:
+                continue
+            seen.add(command_id)
+            cleaned.append(command_id)
+        return cleaned
+
+    async def _execute_post_update_commands(
+        self,
+        server: Server,
+        command_ids: List[int],
+    ) -> Dict[str, Any]:
+        """Execute configured quick commands after the full plugin update batch."""
+        command_ids = self._normalize_command_ids(command_ids)
+        if not command_ids:
+            return {
+                "success": True,
+                "message": "No post-update quick commands configured",
+                "results": [],
+            }
+
+        async with async_session_maker() as db:
+            result = await db.execute(
+                select(CustomCommand).where(
+                    CustomCommand.server_id == server.id,
+                    CustomCommand.id.in_(command_ids),
+                )
+            )
+            by_id = {item.id: item for item in result.scalars().all()}
+
+        ordered = [(command_id, by_id.get(command_id)) for command_id in command_ids]
+        command_results: List[Dict[str, Any]] = []
+        overall_success = True
+
+        for index, (command_id, custom_command) in enumerate(ordered, start=1):
+            if custom_command is None:
+                overall_success = False
+                entry = {
+                    "id": command_id,
+                    "name": f"#{command_id}",
+                    "target": None,
+                    "success": False,
+                    "message": "Quick command no longer exists on this server",
+                }
+                command_results.append(entry)
+                await self._publish_status(
+                    server.id,
+                    phase="post_update_commands",
+                    message=f"Post-update quick command missing: #{command_id}",
+                    log=entry["message"],
+                )
+                continue
+
+            await self._publish_status(
+                server.id,
+                phase="post_update_commands",
+                message=f"Executing post-update quick command: {custom_command.name}",
+                current=index - 1,
+                total=len(ordered),
+                log=(
+                    f"Running post-update quick command {index}/{len(ordered)}: "
+                    f"{custom_command.name} ({custom_command.target})"
+                ),
+            )
+            try:
+                execution = await execute_custom_commands(
+                    server, custom_command.target, custom_command.commands
+                )
+            except CustomCommandError as exc:
+                execution = {
+                    "success": False,
+                    "message": str(exc),
+                    "target": custom_command.target,
+                    "results": [],
+                }
+            except Exception as exc:
+                logger.exception(
+                    "Post-update quick command failed for server %s command %s",
+                    server.id,
+                    command_id,
+                )
+                execution = {
+                    "success": False,
+                    "message": str(exc),
+                    "target": custom_command.target,
+                    "results": [],
+                }
+
+            success = bool(execution.get("success"))
+            overall_success = overall_success and success
+            entry = {
+                "id": command_id,
+                "name": custom_command.name,
+                "target": custom_command.target,
+                "success": success,
+                "message": execution.get("message") or ("Success" if success else "Failed"),
+            }
+            command_results.append(entry)
+
+            output = format_custom_command_log(custom_command.target, execution.get("results", []))
+            async with async_session_maker() as db:
+                db.add(
+                    DeploymentLog(
+                        server_id=server.id,
+                        action=f"plugin_post_update_command_{custom_command.target}",
+                        status="success" if success else "failed",
+                        output=(
+                            "Plugin auto-update post command: "
+                            + custom_command.name
+                            + "\n\n"
+                            + output
+                        ).strip(),
+                        error_message=None if success else entry["message"],
+                    )
+                )
+                await db.commit()
+
+            await self._publish_status(
+                server.id,
+                current=index,
+                total=len(ordered),
+                log=(
+                    f"{'Completed' if success else 'Failed'} post-update quick command "
+                    f"{custom_command.name}: {entry['message']}"
+                ),
+            )
+
+        message = (
+            f"Executed {len(command_results)} post-update quick command(s)"
+            if overall_success
+            else "One or more post-update quick commands failed"
+        )
+        return {
+            "success": overall_success,
+            "message": message,
+            "results": command_results,
+        }
+
     async def _check_server(
         self, server_id: int, force: bool = False, plugin_id: Optional[int] = None
     ) -> Dict[str, Any]:
@@ -533,6 +686,12 @@ class PluginAutoUpdateService:
                     )
                     return {"success": False, "message": "Plugin auto-update is disabled"}
                 user = await db.get(User, server.user_id)
+                post_update_commands_enabled = bool(
+                    getattr(server, "enable_plugin_post_update_commands", False)
+                )
+                post_update_command_ids = self._normalize_command_ids(
+                    getattr(server, "plugin_post_update_command_ids", None)
+                )
                 item_filters = [ManagedPlugin.server_id == server_id]
                 if plugin_id is None:
                     item_filters.append(ManagedPlugin.auto_update_enabled.is_(True))
@@ -896,10 +1055,42 @@ class PluginAutoUpdateService:
                                 server_id, log=f"Start result: {restart_message}"
                             )
 
+            post_update_success = True
+            post_update_message = "Not requested"
+            post_update_results: List[Dict[str, Any]] = []
+            successful_updates = [result for result in results if result["success"]]
+            # Only after every selected plugin update has finished (and any batch
+            # restart has been attempted). Commands run only when at least one
+            # plugin was actually updated successfully.
+            if post_update_commands_enabled and post_update_command_ids and successful_updates:
+                await self._publish_status(
+                    server_id,
+                    phase="post_update_commands",
+                    message="Running configured post-update quick commands",
+                    current=len(candidates),
+                    total=len(candidates),
+                    log=(
+                        "All plugin updates finished; executing "
+                        f"{len(post_update_command_ids)} post-update quick command(s)"
+                    ),
+                )
+                post_update = await self._execute_post_update_commands(
+                    server, post_update_command_ids
+                )
+                post_update_success = bool(post_update.get("success"))
+                post_update_message = post_update.get("message") or post_update_message
+                post_update_results = list(post_update.get("results") or [])
+            elif post_update_commands_enabled and post_update_command_ids:
+                post_update_message = (
+                    "Skipped because no plugin was updated successfully in this batch"
+                )
+                await self._publish_status(server_id, log=post_update_message)
+
             all_success = (
                 all(result["success"] for result in results)
                 and not resolve_failures
                 and restart_success
+                and post_update_success
             )
             summary_lines = [
                 f"{'✓' if result['success'] else '✗'} {result['name']}: {result['version']}"
@@ -924,6 +1115,18 @@ class PluginAutoUpdateService:
                     "Results": "\n".join(summary_lines),
                     "Backup": backup_message,
                     "Restart": restart_message,
+                    "Post-update Commands": (
+                        post_update_message
+                        if not post_update_results
+                        else "\n".join(
+                            ("OK" if item["success"] else "FAIL")
+                            + " "
+                            + item["name"]
+                            + ": "
+                            + item["message"]
+                            for item in post_update_results
+                        )
+                    ),
                 },
             )
             terminal_message = (
@@ -938,7 +1141,10 @@ class PluginAutoUpdateService:
                 message=terminal_message,
                 current=len(candidates),
                 total=len(candidates),
-                log=f"{terminal_message}. Restart: {restart_message}",
+                log=(
+                    f"{terminal_message}. Restart: {restart_message}. "
+                    f"Post-update commands: {post_update_message}"
+                ),
             )
             return {
                 "success": all_success,
@@ -948,6 +1154,11 @@ class PluginAutoUpdateService:
                     "success": restart_success,
                     "message": restart_message,
                     "previous_state": status_check_message,
+                },
+                "post_update_commands": {
+                    "success": post_update_success,
+                    "message": post_update_message,
+                    "results": post_update_results,
                 },
             }
 

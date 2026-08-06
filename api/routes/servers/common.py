@@ -56,6 +56,18 @@ from modules import (
 from modules.config import settings as app_settings
 from services import redis_manager
 from services.captcha_service import captcha_service
+from services.custom_command_service import (
+    CustomCommandError,
+)
+from services.custom_command_service import (
+    execute_custom_commands as _execute_custom_commands,
+)
+from services.custom_command_service import (
+    format_custom_command_log as _format_custom_command_log,
+)
+from services.custom_command_service import (
+    parse_custom_command_lines as _parse_custom_command_lines,
+)
 from services.discord_notification_service import discord_notification_service
 from services.game_cleanup_service import game_cleanup_service
 from services.game_session import (
@@ -128,22 +140,11 @@ async def get_custom_command_or_404(
 
 
 def parse_custom_command_lines(commands: str) -> List[str]:
-    return [line.strip() for line in commands.splitlines() if line.strip()]
+    return _parse_custom_command_lines(commands)
 
 
 def format_custom_command_log(target: str, command_results: List[Dict[str, Any]]) -> str:
-    lines = [f"Target: {target}", ""]
-    for result in command_results:
-        status_text = "OK" if result.get("success") else "FAIL"
-        lines.append(f"[{status_text}] #{result.get('index')}: {result.get('command')}")
-        stdout = (result.get("stdout") or "").strip()
-        stderr = (result.get("stderr") or "").strip()
-        if stdout:
-            lines.append(f"stdout:\n{stdout}")
-        if stderr:
-            lines.append(f"stderr:\n{stderr}")
-        lines.append("")
-    return "\n".join(lines).strip()
+    return _format_custom_command_log(target, command_results)
 
 
 async def execute_custom_commands(
@@ -151,84 +152,10 @@ async def execute_custom_commands(
     target: str,
     commands: str,
 ) -> Dict[str, Any]:
-    command_lines = parse_custom_command_lines(commands)
-    if not command_lines:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="At least one command line is required"
-        )
-
-    ssh_manager = SSHManager()
-    connect_success, connect_message = await ssh_manager.connect(server)
-    if not connect_success:
-        return {
-            "success": False,
-            "message": f"SSH connection failed: {connect_message}",
-            "target": target,
-            "results": [],
-        }
-
-    results: List[Dict[str, Any]] = []
     try:
-        if target == "game_process":
-            name = session_name(server.id)
-            active_manager = await find_running_session_manager(
-                ssh_manager.execute_command,
-                server.session_manager,
-                name,
-            )
-            if not active_manager:
-                return {
-                    "success": False,
-                    "message": "Game server is not running. Please start the server first.",
-                    "target": target,
-                    "results": [],
-                }
-
-            for index, command in enumerate(command_lines, start=1):
-                input_cmd = send_keys_command(active_manager, name, command)
-                success, stdout, stderr = await ssh_manager.execute_command(input_cmd, timeout=10)
-                results.append(
-                    {
-                        "index": index,
-                        "command": command,
-                        "success": success,
-                        "stdout": stdout,
-                        "stderr": stderr,
-                    }
-                )
-        elif target == "host":
-            for index, command in enumerate(command_lines, start=1):
-                success, stdout, stderr = await ssh_manager.execute_command(command, timeout=300)
-                results.append(
-                    {
-                        "index": index,
-                        "command": command,
-                        "success": success,
-                        "stdout": stdout,
-                        "stderr": stderr,
-                    }
-                )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid custom command target"
-            )
-    finally:
-        await ssh_manager.disconnect()
-
-    failed_count = len([result for result in results if not result["success"]])
-    total_count = len(results)
-    success = failed_count == 0
-    message = (
-        f"Executed {total_count} command(s) successfully"
-        if success
-        else f"Executed {total_count} command(s), {failed_count} failed"
-    )
-    return {
-        "success": success,
-        "message": message,
-        "target": target,
-        "results": results,
-    }
+        return await _execute_custom_commands(server, target, commands)
+    except CustomCommandError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 async def execute_and_log_custom_commands(

@@ -9,6 +9,7 @@ from sqlmodel import select
 
 from modules import (
     ActionResponse,
+    CustomCommand,
     ManagedPlugin,
     ManagedPluginCreate,
     ManagedPluginResponse,
@@ -44,6 +45,43 @@ def _task_done(task: asyncio.Task) -> None:
 async def shutdown_background_tasks() -> None:
     """Compatibility wrapper for lifecycle-owned task cleanup."""
     await plugin_update_task_registry.shutdown()
+
+
+def normalize_command_ids(values) -> list[int]:
+    if not values:
+        return []
+    cleaned: list[int] = []
+    seen: set[int] = set()
+    for value in values:
+        command_id = int(value)
+        if command_id in seen:
+            continue
+        seen.add(command_id)
+        cleaned.append(command_id)
+    return cleaned
+
+
+async def validate_post_update_commands(
+    db: AsyncSession, server: Server, current_user: User, command_ids: list[int]
+) -> list[int]:
+    command_ids = normalize_command_ids(command_ids)
+    if not command_ids:
+        return []
+    result = await db.execute(
+        select(CustomCommand).where(
+            CustomCommand.server_id == server.id,
+            CustomCommand.user_id == current_user.id,
+            CustomCommand.id.in_(command_ids),
+        )
+    )
+    found = {item.id for item in result.scalars().all()}
+    missing = [command_id for command_id in command_ids if command_id not in found]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown quick command id(s) for this server: {', '.join(map(str, missing))}",
+        )
+    return command_ids
 
 
 async def owned_server(db: AsyncSession, server_id: int, user: User) -> Server:
@@ -87,6 +125,12 @@ async def get_configuration(
         enable_plugin_auto_update=server.enable_plugin_auto_update,
         plugin_update_check_interval_hours=server.plugin_update_check_interval_hours,
         last_plugin_update_check=server.last_plugin_update_check,
+        enable_plugin_post_update_commands=bool(
+            getattr(server, "enable_plugin_post_update_commands", False)
+        ),
+        plugin_post_update_command_ids=normalize_command_ids(
+            getattr(server, "plugin_post_update_command_ids", None)
+        ),
         plugins=[ManagedPluginResponse.model_validate(item) for item in result.scalars().all()],
     )
 
@@ -99,8 +143,13 @@ async def update_settings(
     current_user: User = Depends(get_current_active_user),
 ):
     server = await owned_server(db, server_id, current_user)
+    command_ids = await validate_post_update_commands(
+        db, server, current_user, request.plugin_post_update_command_ids
+    )
     server.enable_plugin_auto_update = request.enable_plugin_auto_update
     server.plugin_update_check_interval_hours = request.plugin_update_check_interval_hours
+    server.enable_plugin_post_update_commands = request.enable_plugin_post_update_commands
+    server.plugin_post_update_command_ids = command_ids
     db.add(server)
     await db.commit()
     await db.refresh(server)
