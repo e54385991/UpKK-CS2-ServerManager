@@ -957,7 +957,7 @@
     "initializationInfo": "新服务器初始化页面",
     "initializationDescription": "系统将完成创建用户、环境安装、设置目录权限等基础操作。（同一个服务器只需操作一次）",
     "manualSetupNote": "如果无法自动设置成功请手动设置",
-    "testedEnvironment": "测试成功环境：Ubuntu 24.04 LTS 且国际网络能够正常访问",
+    "testedEnvironment": "支持目标：Ubuntu 24.04+ 或 Debian 13+、amd64 (x86_64) 架构，且国际网络能够正常访问",
     "selectSetupMethod": "选择设置方式",
     "autoSetupRecommended": "自动设置（推荐）",
     "autoSetupDescription": "只需提供 SSH 凭据，系统自动处理一切。",

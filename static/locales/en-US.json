@@ -957,7 +957,7 @@
     "initializationInfo": "Server Initialization Page",
     "initializationDescription": "The system will complete user creation, environment installation, directory permissions setup, and other basic operations. (Each server only needs to be initialized once)",
     "manualSetupNote": "If automatic setup fails, please configure manually",
-    "testedEnvironment": "Tested Environment: Ubuntu 24.04 LTS with international network access",
+    "testedEnvironment": "Supported target: Ubuntu 24.04+ or Debian 13+ on amd64 (x86_64), with international network access",
     "selectSetupMethod": "Select Setup Method",
     "autoSetupRecommended": "Auto Setup (Recommended)",
     "autoSetupDescription": "Just provide SSH credentials, the system handles everything automatically.",

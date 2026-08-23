@@ -23,15 +23,18 @@ On **each server where you want to run CS2** (NOT on the manager server):
 # Install required system packages (as root or with sudo)
 sudo apt-get update
 sudo apt-get install -y \
-    lib32gcc-s1 \
-    lib32stdc++6 \
-    lib32z1 \
-    libsdl2-2.0-0:i386 \
+    ca-certificates \
     curl \
     wget \
     tar \
+    unzip \
     screen \
-    tmux
+    tmux \
+    bzip2 \
+    libc6-i386 \
+    lib32gcc-s1 \
+    lib32stdc++6 \
+    lib32z1
 
 # Create a dedicated user for CS2
 sudo useradd -m -s /bin/bash cs2server
@@ -167,15 +170,18 @@ uv run --no-dev --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 80
 # 安装必需的系统包（以 root 或使用 sudo）
 sudo apt-get update
 sudo apt-get install -y \
-    lib32gcc-s1 \
-    lib32stdc++6 \
-    lib32z1 \
-    libsdl2-2.0-0:i386 \
+    ca-certificates \
     curl \
     wget \
     tar \
+    unzip \
     screen \
-    tmux
+    tmux \
+    bzip2 \
+    libc6-i386 \
+    lib32gcc-s1 \
+    lib32stdc++6 \
+    lib32z1
 
 # 创建 CS2 专用用户
 sudo useradd -m -s /bin/bash cs2server

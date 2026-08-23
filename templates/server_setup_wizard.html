@@ -68,8 +68,8 @@
                 data-i18n="setupWizard.manualSetupNote">如果无法自动设置成功请手动设置</span>
         </p>
         <p class="mb-0">
-            <i class="bi bi-check-circle"></i> <span data-i18n="setupWizard.testedEnvironment">测试成功环境：Ubuntu 24.04 LTS
-                且国际网络能够正常访问</span>
+            <i class="bi bi-check-circle"></i> <span data-i18n="setupWizard.testedEnvironment">支持目标：Ubuntu 24.04+
+                或 Debian 13+、amd64 (x86_64) 架构，且国际网络能够正常访问</span>
         </p>
     </div>
 
@@ -481,28 +481,84 @@
 
             generateSetupScript() {
                 this.setupScript = `#!/bin/bash
-set -e
+set -Eeuo pipefail
+
+trap 'status=$?; echo "设置失败（第 $LINENO 行，退出码 $status）" >&2; exit $status' ERR
+
+CS2_USER='${this.autoSetupForm.cs2_username}'
+
+apt_retry() {
+    local attempt
+    for attempt in 1 2 3; do
+        if sudo env DEBIAN_FRONTEND=noninteractive apt-get \
+            -o DPkg::Lock::Timeout=120 \
+            -o Acquire::Retries=3 \
+            -o Dpkg::Use-Pty=0 "$@"; then
+            return 0
+        fi
+        if [ "$attempt" -lt 3 ]; then
+            echo "APT 操作失败，将自动重试（$attempt/3）..." >&2
+            sleep $((attempt * 2))
+        fi
+    done
+    return 1
+}
 
 echo "开始设置 CS2 服务器环境..."
 
-# 更新包列表
-sudo apt-get update
+# SteamCMD/CS2 不支持 ARM 服务器
+ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m)
+case "$ARCH" in
+    amd64|x86_64) ;;
+    *)
+        echo "不支持的服务器架构: $ARCH；SteamCMD/CS2 需要 amd64 (x86_64)。" >&2
+        exit 1
+        ;;
+esac
 
-# 安装依赖
-sudo apt-get install -y lib32gcc-s1 lib32stdc++6 screen tmux curl wget
+# 更新包列表（自动等待锁并重试网络错误）
+apt_retry update
+
+# 安装并验证 SteamCMD 必需依赖
+apt_retry install -y \
+    ca-certificates curl wget tar unzip screen tmux bzip2 \
+    libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1
+
+for package in ca-certificates curl wget tar unzip screen tmux bzip2 \
+    libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1; do
+    if [ "$(dpkg-query -W -f='\${Status}' "$package" 2>/dev/null || true)" != "install ok installed" ]; then
+        echo "必需依赖验证失败: $package" >&2
+        exit 1
+    fi
+done
+
+# 可选增强依赖失败不会破坏已经验证通过的 SteamCMD 运行时
+if apt-cache show --no-all-versions 7zip >/dev/null 2>&1; then
+    apt_retry install -y libicu-dev 7zip || echo "警告：可选增强依赖安装失败" >&2
+elif apt-cache show --no-all-versions p7zip-full >/dev/null 2>&1; then
+    apt_retry install -y libicu-dev p7zip-full || echo "警告：可选增强依赖安装失败" >&2
+else
+    apt_retry install -y libicu-dev || echo "警告：libicu-dev 安装失败" >&2
+fi
 
 # 创建用户
-sudo useradd -m -s /bin/bash cs2server || echo "用户已存在"
+if id -u "$CS2_USER" >/dev/null 2>&1; then
+    echo "用户已存在: $CS2_USER"
+else
+    sudo useradd -m -s /bin/bash "$CS2_USER"
+fi
 
-# 设置密码
-echo "cs2server:${this.password}" | sudo chpasswd
+# 使用禁止变量展开的 heredoc，安全写入包含特殊字符的密码
+sudo chpasswd <<'EOF_PASSWORD'
+${this.autoSetupForm.cs2_username}:${this.password}
+EOF_PASSWORD
 
 # 创建目录
-sudo mkdir -p /home/cs2server/cs2
-sudo chown -R cs2server:cs2server /home/cs2server
+sudo mkdir -p "/home/$CS2_USER/cs2"
+sudo chown -R "$CS2_USER:$CS2_USER" "/home/$CS2_USER"
 
 echo "设置完成！"
-echo "用户名: cs2server"
+echo "用户名: $CS2_USER"
 echo "密码: ${this.password}"`;
             },
 

@@ -765,15 +765,15 @@ class ConnectionMixin:
             return False, "", "Not connected"
 
         try:
+            sudo_command = f"sudo -n -- sh -c {shlex.quote(command)}"
             if sudo_password:
-                # Use -S option to read password from stdin
-                full_command = f"echo '{sudo_password}' | sudo -S {command}"
-            else:
-                # Try passwordless sudo
-                full_command = f"sudo {command}"
+                sudo_command = (
+                    f"printf '%s\\n' {shlex.quote(sudo_password)} | "
+                    f"sudo -S -- sh -c {shlex.quote(command)}"
+                )
 
             result = await asyncio.wait_for(
-                self.conn.run(full_command, check=False), timeout=timeout
+                self.conn.run(sudo_command, check=False), timeout=timeout
             )
 
             stdout_text = result.stdout

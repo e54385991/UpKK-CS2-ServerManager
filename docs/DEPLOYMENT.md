@@ -41,22 +41,24 @@ The CS2 Server Manager works entirely in user space and does NOT require sudo ac
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-    lib32gcc-s1 \
-    lib32stdc++6 \
-    lib32z1 \
-    libsdl2-2.0-0:i386 \
+    ca-certificates \
     curl \
     wget \
     tar \
+    unzip \
     screen \
-    tmux
+    tmux \
+    bzip2 \
+    libc6-i386 \
+    lib32gcc-s1 \
+    lib32stdc++6 \
+    lib32z1
 ```
 
 **Why these packages are needed:**
-- `lib32gcc-s1`, `lib32stdc++6`, `lib32z1`: 32-bit compatibility libraries required by SteamCMD and CS2
-- `libsdl2-2.0-0:i386`: SDL2 library for CS2 server
+- `libc6-i386`, `lib32gcc-s1`, `lib32stdc++6`, `lib32z1`: 32-bit compatibility libraries required by SteamCMD
 - `curl`, `wget`: For downloading files
-- `tar`: For extracting archives
+- `tar`, `unzip`, `bzip2`: For extracting archives
 - `screen`, `tmux`: Selectable terminal multiplexers for detached game sessions
 
 ### Step 2: Create User Account
@@ -145,7 +147,7 @@ If you see errors like `wget: command not found` or `tar: command not found`, it
 **Solution:** Have your system administrator install the prerequisites on the target server:
 ```bash
 sudo apt-get update
-sudo apt-get install -y wget tar curl screen tmux lib32gcc-s1 lib32stdc++6 lib32z1 libsdl2-2.0-0:i386
+sudo apt-get install -y ca-certificates wget tar unzip curl screen tmux bzip2 libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1
 ```
 
 ### Permission Denied Errors
@@ -236,22 +238,24 @@ CS2 服务器管理器完全在用户空间运行，部署时不需要 sudo 访�
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-    lib32gcc-s1 \
-    lib32stdc++6 \
-    lib32z1 \
-    libsdl2-2.0-0:i386 \
+    ca-certificates \
     curl \
     wget \
     tar \
+    unzip \
     screen \
-    tmux
+    tmux \
+    bzip2 \
+    libc6-i386 \
+    lib32gcc-s1 \
+    lib32stdc++6 \
+    lib32z1
 ```
 
 **为什么需要这些包：**
-- `lib32gcc-s1`, `lib32stdc++6`, `lib32z1`: SteamCMD 和 CS2 需要的 32 位兼容性库
-- `libsdl2-2.0-0:i386`: CS2 服务器的 SDL2 库
+- `libc6-i386`, `lib32gcc-s1`, `lib32stdc++6`, `lib32z1`: SteamCMD 需要的 32 位兼容性库
 - `curl`, `wget`: 用于下载文件
-- `tar`: 用于解压存档
+- `tar`, `unzip`, `bzip2`: 用于解压存档
 - `screen`, `tmux`: 可按服务器选择的后台终端会话管理器
 
 ### 步骤 2: 创建用户账户
@@ -340,7 +344,7 @@ sudo passwd cs2server
 **解决方案：** 让系统管理员在目标服务器上安装前置条件：
 ```bash
 sudo apt-get update
-sudo apt-get install -y wget tar curl screen tmux lib32gcc-s1 lib32stdc++6 lib32z1 libsdl2-2.0-0:i386
+sudo apt-get install -y ca-certificates wget tar unzip curl screen tmux bzip2 libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1
 ```
 
 ### 权限被拒绝错误

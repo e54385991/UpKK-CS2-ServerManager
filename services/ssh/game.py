@@ -7,12 +7,47 @@ from services.server_startup_arguments import (
     normalize_default_map,
     resolved_game_mode,
 )
+from services.system_dependencies import (
+    APT_RETRY_ATTEMPTS,
+    APT_RETRY_DELAYS_SECONDS,
+    STEAMCMD_RUNTIME_PACKAGES,
+    apt_get_command,
+    installed_packages_verification_command,
+    normalize_debian_architecture,
+    steamcmd_architecture_supported,
+)
 
 from .common import *
 
 
 class GameLifecycleMixin:
     """Internal game behavior; instantiate through SSHManager."""
+
+    async def _steamcmd_host_preflight_connected(self) -> Tuple[bool, str]:
+        """Verify architecture and the 32-bit runtime before downloading SteamCMD."""
+        success, stdout, stderr = await self.execute_command(
+            "dpkg --print-architecture 2>/dev/null || uname -m"
+        )
+        architecture = normalize_debian_architecture(stdout)
+        if not success or not steamcmd_architecture_supported(architecture):
+            detected = architecture or stderr.strip() or "unknown"
+            return False, (
+                f"Unsupported server architecture: {detected}. "
+                "SteamCMD/CS2 requires amd64 (x86_64); arm64/aarch64 cannot run it natively."
+            )
+
+        success, stdout, stderr = await self.execute_command(
+            installed_packages_verification_command(STEAMCMD_RUNTIME_PACKAGES)
+        )
+        if not success:
+            detail = stderr.strip() or stdout.strip() or "required packages are missing"
+            packages = " ".join(STEAMCMD_RUNTIME_PACKAGES)
+            return False, (
+                f"SteamCMD runtime preflight failed: {detail}. "
+                f"Run the Setup Wizard again or install: sudo apt-get install -y {packages}"
+            )
+
+        return True, f"amd64 runtime verified ({', '.join(STEAMCMD_RUNTIME_PACKAGES)})"
 
     async def deploy_cs2_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """
@@ -41,6 +76,13 @@ class GameLifecycleMixin:
             return False, f"Connection failed: {msg}"
 
         try:
+            await send_progress("Checking SteamCMD architecture and 32-bit runtime...")
+            preflight_success, preflight_message = await self._steamcmd_host_preflight_connected()
+            if not preflight_success:
+                await send_progress(f"✗ {preflight_message}")
+                return False, preflight_message
+            await send_progress(f"✓ {preflight_message}")
+
             # Check if environment is initialized (cs2server user exists)
             await send_progress("Checking environment initialization...")
 
@@ -121,35 +163,53 @@ class GameLifecycleMixin:
                 _, pkg_mgr, _ = await self.execute_command(check_apt)
 
                 if "apt" in pkg_mgr:
-                    # Try to install without sudo first (user might have passwordless sudo)
-                    install_cmd = f"apt-get update && apt-get install -y {' '.join(missing_tools)}"
-                    success, stdout, stderr = await self.execute_command(install_cmd, timeout=120)
+                    install_cmd = (
+                        f"{apt_get_command('update')} && "
+                        f"{apt_get_command('install', missing_tools)}"
+                    )
+                    success, stdout, stderr = await self.execute_command(install_cmd, timeout=600)
 
                     if not success:
-                        # Try with sudo
-                        if server.sudo_password:
-                            await send_progress("Trying to install with sudo...")
-                            install_cmd = f"echo '{server.sudo_password}' | sudo -S apt-get update && echo '{server.sudo_password}' | sudo -S apt-get install -y {' '.join(missing_tools)}"
-                            success, stdout, stderr = await self.execute_command(
-                                install_cmd, timeout=120
+                        await send_progress("Trying to install with sudo and automatic retries...")
+                        for attempt in range(1, APT_RETRY_ATTEMPTS + 1):
+                            success, stdout, stderr = await self.execute_sudo_command(
+                                install_cmd, server.sudo_password, timeout=600
                             )
-
                             if success:
-                                await send_progress(
-                                    f"✓ Successfully installed: {', '.join(missing_tools)}"
-                                )
-                            else:
-                                await send_progress(
-                                    f"⚠ Could not install tools. Please run: sudo apt-get install {' '.join(missing_tools)}"
-                                )
+                                break
+                            await send_progress(
+                                f"⚠ Dependency installation attempt {attempt}/"
+                                f"{APT_RETRY_ATTEMPTS} failed: {stderr.strip() or stdout.strip()}"
+                            )
+                            if attempt < APT_RETRY_ATTEMPTS:
+                                delay = APT_RETRY_DELAYS_SECONDS[
+                                    min(attempt - 1, len(APT_RETRY_DELAYS_SECONDS) - 1)
+                                ]
+                                await send_progress(f"Retrying in {delay} seconds...")
+                                await asyncio.sleep(delay)
+
+                        if success:
+                            await send_progress(
+                                f"✓ Successfully installed: {', '.join(missing_tools)}"
+                            )
                         else:
                             await send_progress(
-                                f"⚠ Could not install tools (no sudo password). Please run: sudo apt-get install {' '.join(missing_tools)}"
+                                f"⚠ Could not install tools. Please run: "
+                                f"sudo apt-get install {' '.join(missing_tools)}"
                             )
                     else:
                         await send_progress(f"✓ Successfully installed: {', '.join(missing_tools)}")
-                else:
-                    await send_progress(f"⚠ Please manually install: {', '.join(missing_tools)}")
+
+                unresolved_tools = []
+                for tool in missing_tools:
+                    tool_success, _, _ = await self.execute_command(f"command -v {tool}")
+                    if not tool_success:
+                        unresolved_tools.append(tool)
+                if unresolved_tools:
+                    return False, (
+                        "Required tools are still missing after automatic installation: "
+                        f"{', '.join(unresolved_tools)}"
+                    )
 
             # Create directory
             await send_progress(f"Creating game directory: {server.game_directory}")

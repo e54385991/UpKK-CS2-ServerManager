@@ -7,7 +7,7 @@ import secrets
 import shlex
 import string
 import time
-from typing import List, Optional, Tuple
+from typing import Awaitable, Callable, List, Optional, Tuple
 
 import asyncssh
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
@@ -24,6 +24,17 @@ from modules import (
 )
 from services.captcha_service import captcha_service
 from services.redis_manager import redis_manager
+from services.system_dependencies import (
+    APT_RETRY_ATTEMPTS,
+    APT_RETRY_DELAYS_SECONDS,
+    SETUP_OPTIONAL_PACKAGES,
+    SEVEN_ZIP_PACKAGE_ALTERNATIVES,
+    STEAMCMD_REQUIRED_PACKAGES,
+    apt_get_command,
+    installed_packages_verification_command,
+    normalize_debian_architecture,
+    steamcmd_architecture_supported,
+)
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
@@ -156,21 +167,88 @@ def generate_secure_password(length: int = 16) -> str:
 
 
 async def run_sudo_command(
-    conn: asyncssh.SSHClientConnection, command: str, sudo_password: Optional[str] = None
+    conn: asyncssh.SSHClientConnection,
+    command: str,
+    sudo_password: Optional[str] = None,
+    timeout: Optional[float] = None,
 ) -> Tuple[str, str, int]:
     """
     Run command with sudo, handling both passwordless and password-required sudo
     Returns: (stdout, stderr, exit_code)
     """
+    privileged_command = f"sudo -n -- sh -c {shlex.quote(command)}"
     if sudo_password:
         # Quote the password so credentials containing shell metacharacters stay data.
-        full_command = f"printf '%s\\n' {shlex.quote(sudo_password)} | sudo -S -- {command}"
-    else:
-        # Try passwordless sudo
-        full_command = f"sudo {command}"
+        privileged_command = (
+            f"printf '%s\\n' {shlex.quote(sudo_password)} | sudo -S -- sh -c {shlex.quote(command)}"
+        )
 
-    result = await conn.run(full_command, check=False)
+    result = await conn.run(privileged_command, check=False, timeout=timeout)
     return result.stdout, result.stderr, result.exit_status
+
+
+async def run_admin_command(
+    conn: asyncssh.SSHClientConnection,
+    command: str,
+    *,
+    needs_sudo: bool,
+    sudo_password: Optional[str],
+    timeout: Optional[float] = None,
+) -> Tuple[str, str, int]:
+    """Run an internally generated command as root on the remote host."""
+    if needs_sudo:
+        return await run_sudo_command(conn, command, sudo_password, timeout=timeout)
+    result = await conn.run(command, check=False, timeout=timeout)
+    return result.stdout, result.stderr, result.exit_status
+
+
+def _short_command_error(stdout: str, stderr: str, limit: int = 2000) -> str:
+    combined = "\n".join(part.strip() for part in (stderr, stdout) if part and part.strip())
+    if not combined:
+        return "命令未返回错误详情"
+    return combined[-limit:]
+
+
+async def run_apt_command_with_retry(
+    conn: asyncssh.SSHClientConnection,
+    command: str,
+    *,
+    description: str,
+    needs_sudo: bool,
+    sudo_password: Optional[str],
+    add_log: Callable[[str], Awaitable[None]],
+    attempts: int = APT_RETRY_ATTEMPTS,
+) -> Tuple[str, str, int]:
+    """Run apt with bounded retries for transient network and dpkg-lock failures."""
+    last_result = ("", "命令尚未执行", 1)
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            await add_log(f"重试 {description}（第 {attempt}/{attempts} 次）...")
+        try:
+            last_result = await run_admin_command(
+                conn,
+                command,
+                needs_sudo=needs_sudo,
+                sudo_password=sudo_password,
+                timeout=600,
+            )
+        except asyncio.TimeoutError:
+            last_result = ("", f"{description}在 600 秒后超时", 124)
+
+        stdout, stderr, exit_code = last_result
+        if exit_code == 0:
+            return last_result
+
+        await add_log(
+            f"⚠ {description}失败（第 {attempt}/{attempts} 次）："
+            f"{_short_command_error(stdout, stderr)}"
+        )
+        if attempt < attempts:
+            delay = APT_RETRY_DELAYS_SECONDS[min(attempt - 1, len(APT_RETRY_DELAYS_SECONDS) - 1)]
+            await add_log(f"将在 {delay} 秒后自动重试...")
+            await asyncio.sleep(delay)
+
+    return last_result
 
 
 async def send_setup_progress(session_id: Optional[str], user_id: int, log_message: str):
@@ -280,6 +358,11 @@ async def auto_setup_server(
         logs.append(message)
         await send_setup_progress(setup_req.session_id, current_user.id, message)
 
+    async def add_command_output(output: str):
+        for line in output.strip().splitlines():
+            if line.strip():
+                await add_log(f"  {line}")
+
     try:
         # Generate CS2 user password if not provided
         cs2_password = setup_req.cs2_password or generate_secure_password()
@@ -300,6 +383,41 @@ async def auto_setup_server(
         )
 
         await add_log("✓ SSH 连接成功")
+
+        # Reject unsupported hosts before creating users or mutating packages.
+        architecture_result = await conn.run(
+            "dpkg --print-architecture 2>/dev/null || uname -m", check=False
+        )
+        remote_architecture = normalize_debian_architecture(architecture_result.stdout)
+        await add_log(f"检测到系统架构: {remote_architecture or '未知'}")
+        if architecture_result.exit_status != 0 or not steamcmd_architecture_supported(
+            remote_architecture
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"不支持的服务器架构: {remote_architecture or '未知'}。"
+                    "SteamCMD/CS2 Linux 服务端需要 amd64 (x86_64)；"
+                    "arm64/aarch64 服务器不能原生运行。"
+                ),
+            )
+        await add_log("✓ 架构兼容 SteamCMD/CS2")
+
+        package_manager_result = await conn.run("command -v apt-get", check=False)
+        if package_manager_result.exit_status != 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="目标服务器未安装 apt-get；自动设置仅支持 Ubuntu/Debian。",
+            )
+
+        await add_log("检测系统版本...")
+        result = await conn.run(
+            "lsb_release -rs 2>/dev/null || "
+            "sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '\"'",
+            check=False,
+        )
+        os_version = result.stdout.strip()
+        await add_log(f"系统版本: {os_version or '未知'}")
 
         # Detect if we need sudo
         result = await conn.run("whoami", check=False)
@@ -348,85 +466,114 @@ async def auto_setup_server(
             else:
                 await add_log("✓ sudo 权限验证成功")
 
-        # Update package list
-        await add_log("更新系统包列表...")
-        if needs_sudo:
-            stdout, stderr, exit_code = await run_sudo_command(conn, "apt-get update", sudo_pass)
-        else:
-            result = await conn.run("apt-get update", check=False)
-            exit_code = result.exit_status
-            stdout = result.stdout
-            stderr = result.stderr
-
-        # Show the actual output from apt-get update
+        # Update package metadata with apt-level network/lock handling plus
+        # application-level retries. Never claim success with stale metadata.
+        await add_log("更新系统包列表（自动等待 APT 锁并重试网络错误）...")
+        stdout, stderr, exit_code = await run_apt_command_with_retry(
+            conn,
+            apt_get_command("update"),
+            description="更新系统包列表",
+            needs_sudo=needs_sudo,
+            sudo_password=sudo_pass,
+            add_log=add_log,
+        )
         if stdout and stdout.strip():
-            for line in stdout.strip().split("\n"):
-                if line.strip():
-                    await add_log(f"  {line}")
-
-        if exit_code == 0:
-            await add_log("✓ 包列表更新完成")
-        else:
-            await add_log(f"⚠ 包列表更新失败 (继续): {stderr[:100]}")
+            await add_command_output(stdout)
+        if exit_code != 0:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"更新系统包列表失败，已自动重试: {_short_command_error(stdout, stderr)}",
+            )
+        await add_log("✓ 包列表更新完成")
 
         # Install sudo if not available (Debian 12 clean install does not include sudo by default)
         await add_log("检查 sudo 是否已安装...")
-        result = await conn.run("which sudo", check=False)
+        result = await conn.run("command -v sudo", check=False)
         if result.exit_status != 0:
             await add_log("sudo 未安装，正在安装 sudo...")
-            if not needs_sudo:
-                result = await conn.run(
-                    "DEBIAN_FRONTEND=noninteractive apt-get install -y sudo", check=False
+            stdout, stderr, exit_code = await run_apt_command_with_retry(
+                conn,
+                apt_get_command("install", ("sudo",)),
+                description="安装 sudo",
+                needs_sudo=needs_sudo,
+                sudo_password=sudo_pass,
+                add_log=add_log,
+            )
+            if exit_code != 0:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"安装 sudo 失败: {_short_command_error(stdout, stderr)}",
                 )
-                exit_code = result.exit_status
-                stderr = result.stderr
-            else:
-                stdout, stderr, exit_code = await run_sudo_command(
-                    conn, "DEBIAN_FRONTEND=noninteractive apt-get install -y sudo", sudo_pass
-                )
-            if exit_code == 0:
-                await add_log("✓ sudo 安装成功")
-            else:
-                await add_log(f"⚠ sudo 安装失败: {stderr[:100]}")
+            await add_log("✓ sudo 安装成功")
         else:
             await add_log("✓ sudo 已安装")
 
-        # Install required packages
-        await add_log(
-            "安装系统依赖 (lib32gcc-s1, lib32stdc++6, screen, tmux, curl, wget, p7zip-full, bzip2, libicu-dev)..."
+        await add_log(f"安装 SteamCMD 必需依赖: {', '.join(STEAMCMD_REQUIRED_PACKAGES)}")
+        stdout, stderr, exit_code = await run_apt_command_with_retry(
+            conn,
+            apt_get_command("install", STEAMCMD_REQUIRED_PACKAGES),
+            description="安装 SteamCMD 必需依赖",
+            needs_sudo=needs_sudo,
+            sudo_password=sudo_pass,
+            add_log=add_log,
         )
-        packages = (
-            "lib32gcc-s1 lib32stdc++6 screen tmux curl wget unzip p7zip-full bzip2 libicu-dev"
-        )
-        install_cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages}"
-
-        if needs_sudo:
-            stdout, stderr, exit_code = await run_sudo_command(conn, install_cmd, sudo_pass)
-        else:
-            result = await conn.run(install_cmd, check=False)
-            exit_code = result.exit_status
-            stdout = result.stdout
-            stderr = result.stderr
-
-        # Show the actual output from apt-get install
         if stdout and stdout.strip():
-            for line in stdout.strip().split("\n"):
-                if line.strip():
-                    await add_log(f"  {line}")
+            await add_command_output(stdout)
+        if exit_code != 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"安装 SteamCMD 必需依赖失败: {_short_command_error(stdout, stderr)}",
+            )
 
-        if exit_code == 0:
-            await add_log("✓ 系统依赖安装完成")
-        else:
-            await add_log(f"⚠ 部分依赖安装可能失败: {stderr[:100]}")
-
-        # Check if system is Ubuntu 24 and install libssl1.1 if needed
-        await add_log("检测系统版本...")
-        result = await conn.run(
-            "lsb_release -rs 2>/dev/null || cat /etc/os-release | grep VERSION_ID | cut -d'\"' -f2",
-            check=False,
+        verification = await conn.run(
+            installed_packages_verification_command(STEAMCMD_REQUIRED_PACKAGES), check=False
         )
-        os_version = result.stdout.strip()
-        await add_log(f"系统版本: {os_version}")
+        if verification.exit_status != 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    "APT 返回成功，但依赖验证失败: "
+                    f"{_short_command_error(verification.stdout, verification.stderr)}"
+                ),
+            )
+        await add_log("✓ SteamCMD 必需依赖已安装并验证")
+
+        # Archive tooling and ICU development headers are useful to plugins, but
+        # are not allowed to invalidate a working SteamCMD runtime. Ubuntu 26.04
+        # uses 7zip while older systems may still expose p7zip-full.
+        archive_package = None
+        for candidate in SEVEN_ZIP_PACKAGE_ALTERNATIVES:
+            candidate_result = await conn.run(
+                f"apt-cache show --no-all-versions {shlex.quote(candidate)} >/dev/null 2>&1",
+                check=False,
+            )
+            if candidate_result.exit_status == 0:
+                archive_package = candidate
+                break
+
+        optional_packages = list(SETUP_OPTIONAL_PACKAGES)
+        if archive_package:
+            optional_packages.append(archive_package)
+        else:
+            await add_log("⚠ 软件源中没有 7zip/p7zip-full；跳过可选的 7z 支持")
+
+        if optional_packages:
+            await add_log(f"安装可选增强依赖: {', '.join(optional_packages)}")
+            stdout, stderr, exit_code = await run_apt_command_with_retry(
+                conn,
+                apt_get_command("install", optional_packages),
+                description="安装可选增强依赖",
+                needs_sudo=needs_sudo,
+                sudo_password=sudo_pass,
+                add_log=add_log,
+            )
+            if exit_code == 0:
+                await add_log("✓ 可选增强依赖安装完成")
+            else:
+                await add_log(
+                    "⚠ 可选增强依赖安装失败；SteamCMD 运行时已验证，将继续设置。"
+                    f"详情: {_short_command_error(stdout, stderr)}"
+                )
 
         if os_version.startswith("24."):
             await add_log("检测到 Ubuntu 24，正在安装 libssl1.1...")
@@ -515,6 +662,7 @@ async def auto_setup_server(
             else:
                 result = await conn.run(create_user_cmd, check=False)
                 exit_code = result.exit_status
+                stdout = result.stdout
                 stderr = result.stderr
 
             if exit_code == 0:
@@ -530,23 +678,24 @@ async def auto_setup_server(
         # and works properly with sudo
         await add_log("设置用户密码...")
 
-        # Create a safe command using a here-document wrapped in bash -c
-        # This avoids all shell escaping issues and works with sudo
-        chpasswd_cmd = (
-            f"bash -c \"chpasswd <<'EOFPWD'\n{setup_req.cs2_username}:{cs2_password}\nEOFPWD\""
-        )
+        credential = f"{setup_req.cs2_username}:{cs2_password}"
+        chpasswd_cmd = f"printf '%s\\n' {shlex.quote(credential)} | chpasswd"
 
         if needs_sudo:
             stdout, stderr, exit_code = await run_sudo_command(conn, chpasswd_cmd, sudo_pass)
         else:
             result = await conn.run(chpasswd_cmd, check=False)
             exit_code = result.exit_status
+            stdout = result.stdout
             stderr = result.stderr
 
         if exit_code == 0:
             await add_log("✓ 密码设置成功")
         else:
-            await add_log(f"⚠ 密码设置可能失败: {stderr[:100]}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"设置 CS2 用户密码失败: {_short_command_error(stdout, stderr)}",
+            )
 
         # Add CS2 user to sudo group
         await add_log(f"将用户 {setup_req.cs2_username} 添加到 sudo 组...")
@@ -557,6 +706,7 @@ async def auto_setup_server(
         else:
             result = await conn.run(add_sudo_cmd, check=False)
             exit_code = result.exit_status
+            stdout = result.stdout
             stderr = result.stderr
 
         if exit_code == 0:
@@ -574,6 +724,14 @@ async def auto_setup_server(
         else:
             result = await conn.run(mkdir_cmd, check=False)
             exit_code = result.exit_status
+            stdout = result.stdout
+            stderr = result.stderr
+
+        if exit_code != 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"创建游戏目录失败: {_short_command_error(stdout, stderr)}",
+            )
 
         # Set ownership
         await add_log("设置目录权限...")
@@ -584,9 +742,16 @@ async def auto_setup_server(
         else:
             result = await conn.run(chown_cmd, check=False)
             exit_code = result.exit_status
+            stdout = result.stdout
+            stderr = result.stderr
 
         if exit_code == 0:
             await add_log("✓ 权限设置完成")
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"设置目录权限失败: {_short_command_error(stdout, stderr)}",
+            )
 
         # Configure UFW firewall if requested
         if setup_req.open_game_ports:
