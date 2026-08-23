@@ -84,6 +84,7 @@ async def upsert_managed_plugin(
     framework_key: Optional[str] = None,
     installed_release_id: Optional[str] = None,
     installed_version: str = "unknown",
+    installed_asset_name: Optional[str] = None,
     asset_glob: Optional[str] = None,
     custom_install_path: Optional[str] = None,
     exclude_dirs: Optional[List[str]] = None,
@@ -113,6 +114,7 @@ async def upsert_managed_plugin(
         item.framework_key = framework_key
         item.installed_release_id = installed_release_id
         item.installed_version = installed_version or "unknown"
+        item.installed_asset_name = installed_asset_name or item.installed_asset_name
         item.asset_glob = asset_glob or item.asset_glob
         item.custom_install_path = custom_install_path
         item.exclude_dirs = list(exclude_dirs or [])
@@ -349,7 +351,10 @@ class PluginAutoUpdateService:
         return []
 
     async def _latest_github_release(
-        self, item: ManagedPlugin, user: User
+        self,
+        item: ManagedPlugin,
+        user: User,
+        linux_runtime_profile: Optional[Dict[str, Any]] = None,
     ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
         if not item.repo_url:
             return False, None, "GitHub repository is not configured"
@@ -368,6 +373,7 @@ class PluginAutoUpdateService:
         matches = [
             asset for asset in assets if fnmatch.fnmatchcase(str(asset.get("name") or ""), pattern)
         ]
+        fallback_matches: List[Dict[str, Any]] = []
         if not matches:
             fallback_matches = self._fallback_release_assets(item, assets, pattern)
             if len(fallback_matches) == 1:
@@ -378,7 +384,7 @@ class PluginAutoUpdateService:
                     pattern,
                     fallback_matches[0].get("name"),
                 )
-            else:
+            elif linux_runtime_profile is None or not fallback_matches:
                 fallback_count = len(fallback_matches)
                 return (
                     False,
@@ -388,6 +394,51 @@ class PluginAutoUpdateService:
                         f"matched {fallback_count}; exactly one is required"
                     ),
                 )
+
+        # A scheduled check supplies a freshly detected profile. If the stored
+        # glob points at RT3 but the host now needs RT4 (or vice versa), select
+        # the sibling from the same asset family instead of pinning stale ABI
+        # metadata forever. Registration helpers omit the profile and retain
+        # their explicit asset/glob selection.
+        if linux_runtime_profile is not None:
+            from services.linux_runtime_service import (
+                RuntimeSelectionRequired,
+                paired_runtime_families,
+                prioritize_runtime_assets,
+                steam_runtime_asset_family,
+            )
+
+            paired = paired_runtime_families(assets)
+            reference_families = {
+                family
+                for name in [
+                    item.installed_asset_name,
+                    *(str(asset.get("name") or "") for asset in matches),
+                    *(str(asset.get("name") or "") for asset in fallback_matches),
+                ]
+                if name and (family := steam_runtime_asset_family(str(name)))
+            }
+            related = paired & reference_families
+            if len(related) == 1:
+                family = next(iter(related))
+                siblings = [
+                    asset
+                    for asset in assets
+                    if steam_runtime_asset_family(str(asset.get("name") or "")) == family
+                ]
+                try:
+                    matches = [prioritize_runtime_assets(siblings, linux_runtime_profile)[0]]
+                except RuntimeSelectionRequired as exc:
+                    return False, None, f"{item.display_name}: {exc}"
+            elif len(related) > 1:
+                return (
+                    False,
+                    None,
+                    f"Multiple paired Steam Runtime asset families match '{pattern}'",
+                )
+            elif not matches and fallback_matches:
+                matches = fallback_matches
+
         if len(matches) != 1:
             return (
                 False,
@@ -709,6 +760,10 @@ class PluginAutoUpdateService:
                     )
                 await db.commit()
 
+            from services.linux_runtime_service import detect_linux_runtime_profile
+
+            linux_runtime_profile = await detect_linux_runtime_profile(server)
+
             if plugin_id is not None and not items:
                 message = "Managed plugin not found"
                 await self._publish_status(
@@ -749,13 +804,17 @@ class PluginAutoUpdateService:
                     if item.framework_key == "metamod":
                         ok, latest, error = await self._latest_metamod(server)
                     else:
-                        ok, latest, error = await self._latest_github_release(item, user)
+                        ok, latest, error = await self._latest_github_release(
+                            item,
+                            user,
+                            linux_runtime_profile,
+                        )
                 except Exception as exc:
                     logger.exception(
                         "Failed to resolve latest release for managed plugin %s", item.id
                     )
                     ok, latest, error = False, None, str(exc)
-                is_current = bool(
+                same_release = bool(
                     ok
                     and latest
                     and (
@@ -763,6 +822,14 @@ class PluginAutoUpdateService:
                         or item.installed_version == latest["version"]
                     )
                 )
+                selected_asset_name = str(latest["asset"].get("name") or "") if latest else ""
+                same_asset = bool(
+                    not item.installed_asset_name
+                    or item.installed_asset_name == selected_asset_name
+                )
+                if not item.installed_asset_name and item.asset_glob:
+                    same_asset = fnmatch.fnmatchcase(selected_asset_name, item.asset_glob)
+                is_current = same_release and same_asset
                 async with async_session_maker() as db:
                     saved = await db.get(ManagedPlugin, item.id)
                     if saved:
@@ -978,6 +1045,10 @@ class PluginAutoUpdateService:
                         if success:
                             saved.installed_release_id = latest["release_id"]
                             saved.installed_version = latest["version"]
+                            saved.installed_asset_name = latest["asset"].get("name")
+                            saved.asset_glob = derive_asset_glob(
+                                latest["asset"].get("name"), latest["version"]
+                            )
                             saved.last_update_at = get_current_time()
                         db.add(saved)
                         await db.commit()
@@ -987,6 +1058,7 @@ class PluginAutoUpdateService:
                         "success": success,
                         "message": message,
                         "version": latest["version"],
+                        "asset_name": latest["asset"].get("name"),
                         "restart_after_update": item.restart_after_update,
                         "source_type": item.source_type,
                     }

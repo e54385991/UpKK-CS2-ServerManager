@@ -88,6 +88,28 @@ def test_plugin_market_loads_admin_accessible_servers_for_plugin_management():
     assert "formatPluginManagementServerName(server)" in template
 
 
+def test_plugin_market_runtime_selection_requires_one_recommendation():
+    template = (PROJECT_ROOT / "templates" / "plugin_market.html").read_text(encoding="utf-8")
+
+    assert "linuxRuntimeProfile = data.linux_runtime_profile || null" in template
+    assert "recommendedAssets.length === 1" in template
+    assert "(!hasPairedRuntimeAssets && index === 0)" in template
+    assert "asset.runtime_compatibility === 'unknown'" in template
+    assert "runtimeOverrideWarning" in template
+
+    for locale in ("en-US", "zh-CN"):
+        messages = json.loads(
+            (PROJECT_ROOT / "static" / "locales" / f"{locale}.json").read_text(encoding="utf-8")
+        )["pluginMarket"]["installModal"]
+        assert {
+            "runtimeRecommended",
+            "runtimeOverride",
+            "runtimeUnknown",
+            "runtimeSelectionRequired",
+            "runtimeOverrideWarning",
+        } <= messages.keys()
+
+
 def test_server_admin_view_refreshes_admin_authorized_a2s_cache():
     template = (PROJECT_ROOT / "templates" / "servers.html").read_text(encoding="utf-8")
 

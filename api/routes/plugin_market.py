@@ -115,6 +115,72 @@ def parse_dependency_ids(dependencies: Optional[str]) -> list[int]:
     return dep_ids
 
 
+async def resolve_latest_market_asset(
+    plugin: MarketPlugin,
+    server: Server,
+    db: AsyncSession,
+    current_user: User,
+    linux_runtime_profile: dict | None,
+) -> tuple[Optional[dict], Optional[str]]:
+    """Resolve the latest compatible archive before dependencies change the server."""
+    owner, repo = parse_github_url(plugin.github_url)
+    github_token = await get_effective_github_token(db, current_user)
+    success, data, error = await http_helper.get(
+        f"https://api.github.com/repos/{owner}/{repo}/releases/latest",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"},
+        timeout=30,
+        proxy=server.github_proxy,
+        github_token=github_token,
+    )
+    if not success or not isinstance(data, dict):
+        return None, f"Failed to fetch latest release: {error}"
+
+    candidates = []
+    for asset in data.get("assets", []):
+        asset_name = str(asset.get("name") or "")
+        lowered = asset_name.casefold()
+        if (
+            "windows" in lowered
+            or "-win-" in lowered
+            or "_win_" in lowered
+            or lowered.endswith("-win.zip")
+        ):
+            continue
+        if any(
+            lowered.endswith(extension) for extension in (".zip", ".tar.gz", ".tgz", ".tar", ".7z")
+        ):
+            candidates.append(asset)
+
+    from services.linux_runtime_service import (
+        RuntimeSelectionRequired,
+        has_paired_runtime_assets,
+        select_unique_runtime_asset,
+    )
+
+    if not candidates:
+        return None, "No suitable release asset found for installation"
+    if has_paired_runtime_assets(candidates):
+        selected = select_unique_runtime_asset(candidates, linux_runtime_profile)
+        if selected is None:
+            raise RuntimeSelectionRequired(
+                "Multiple Steam Runtime package families are available; select an asset explicitly"
+            )
+    else:
+        selected = candidates[0]
+    download_url = str(selected.get("browser_download_url") or "")
+    if not download_url:
+        return None, "Selected release asset does not include a download URL"
+    return (
+        {
+            "download_url": download_url,
+            "release_id": str(data.get("id") or ""),
+            "release_tag": str(data.get("tag_name") or "unknown"),
+            "asset_name": str(selected.get("name") or ""),
+        },
+        None,
+    )
+
+
 async def validate_dependencies(db: AsyncSession, dependency_ids: list[int]) -> None:
     """
     Validate that all dependency plugin IDs exist in the database.
@@ -743,6 +809,7 @@ async def install_plugin(
     selected_release_id = None
     selected_release_tag = None
     selected_asset_name = None
+    linux_runtime_profile = None
 
     # Validate download_url if provided
     if download_url:
@@ -798,6 +865,36 @@ async def install_plugin(
             success=False,
             message=f"Cannot connect to server via SSH: {ssh_msg}. Please check server connectivity before installing plugins.",
         )
+
+    if not download_url:
+        from services.linux_runtime_service import (
+            RuntimeSelectionRequired,
+            detect_linux_runtime_profile,
+        )
+
+        linux_runtime_profile = await detect_linux_runtime_profile(server)
+        try:
+            resolved_asset, resolve_error = await resolve_latest_market_asset(
+                plugin,
+                server,
+                db,
+                current_user,
+                linux_runtime_profile,
+            )
+        except RuntimeSelectionRequired as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+        if resolved_asset is None:
+            return GitHubPluginInstallResponse(
+                success=False,
+                message=resolve_error or "No suitable release asset found for installation",
+            )
+        download_url = resolved_asset["download_url"]
+        selected_release_id = resolved_asset["release_id"]
+        selected_release_tag = resolved_asset["release_tag"]
+        selected_asset_name = resolved_asset["asset_name"]
 
     # Install dependencies first if requested and present
     installed_deps = []
@@ -865,76 +962,17 @@ async def install_plugin(
             ),
         )
 
-    # Increment download count in a separate short transaction to avoid locks
     try:
-        plugin.download_count += 1
-        db.add(plugin)
-        await db.commit()
-    except Exception as e:
-        # Log but don't fail the installation if download count update fails
-        logger.error(f"Failed to update download count: {e}")
-        await db.rollback()
+        # Increment download count in a separate short transaction to avoid locks.
+        try:
+            plugin.download_count += 1
+            db.add(plugin)
+            await db.commit()
+        except Exception as exc:
+            logger.error("Failed to update download count: %s", exc)
+            await db.rollback()
 
-    # Refresh plugin to avoid stale data
-    await db.refresh(plugin)
-
-    try:
-        # If download_url is not provided, fetch latest release from GitHub
-        if not download_url:
-            # Fetch releases from GitHub (use local parse_github_url function)
-            owner, repo = parse_github_url(plugin.github_url)
-
-            # Get latest release
-            api_url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
-            headers = {"Accept": "application/vnd.github+json", "User-Agent": "CS2-ServerManager"}
-
-            github_token = await get_effective_github_token(db, current_user)
-
-            success, data, error = await http_helper.get(
-                api_url,
-                headers=headers,
-                timeout=30,
-                proxy=server.github_proxy,
-                github_token=github_token,
-            )
-
-            if not success:
-                message = f"Failed to fetch latest release: {error}"
-                if installed_deps:
-                    message += f" (Dependencies installed: {', '.join(installed_deps)})"
-                return GitHubPluginInstallResponse(success=False, message=message)
-
-            # Find suitable asset (exclude Windows, prefer Linux archives)
-            assets = data.get("assets", [])
-            selected_release_id = str(data.get("id") or "")
-            selected_release_tag = data.get("tag_name") or "unknown"
-            download_url = None
-
-            for asset in assets:
-                asset_name = asset.get("name", "").lower()
-
-                # Skip Windows assets
-                if (
-                    "windows" in asset_name
-                    or "-win-" in asset_name
-                    or "_win_" in asset_name
-                    or asset_name.endswith("-win.zip")
-                ):
-                    continue
-
-                # Check for archive files
-                if any(
-                    asset_name.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]
-                ):
-                    download_url = asset.get("browser_download_url")
-                    selected_asset_name = asset.get("name")
-                    break
-
-            if not download_url:
-                message = "No suitable release asset found for installation"
-                if installed_deps:
-                    message += f" (Dependencies installed: {', '.join(installed_deps)})"
-                return GitHubPluginInstallResponse(success=False, message=message)
+        await db.refresh(plugin)
 
         # Use existing installation logic
         # If upgrade_mode is enabled, add config file extension patterns to exclude_files
@@ -979,6 +1017,7 @@ async def install_plugin(
                 market_plugin_id=plugin.id,
                 installed_release_id=selected_release_id,
                 installed_version=selected_release_tag or plugin.version or "unknown",
+                installed_asset_name=selected_asset_name,
                 asset_glob=derive_asset_glob(selected_asset_name, selected_release_tag),
                 custom_install_path=plugin.custom_install_path,
                 exclude_dirs=exclude_dirs,
@@ -991,6 +1030,8 @@ async def install_plugin(
 
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error installing plugin: {e}", exc_info=True)
         message = f"Installation error: {str(e)}"

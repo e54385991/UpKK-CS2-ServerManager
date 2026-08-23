@@ -16,7 +16,7 @@
     "alpinejs": "3.15.12",
     "bootstrap": "5.3.8",
     "bootstrap-icons": "1.13.1",
-    "dompurify": "3.4.12",
+    "dompurify": "3.4.14",
     "marked": "18.0.7"
   }
 }

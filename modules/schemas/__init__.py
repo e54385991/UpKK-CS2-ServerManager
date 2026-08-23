@@ -63,6 +63,7 @@ from .plugins import (
     GitHubRepoInfo,
     InstalledPluginAnalysisResponse,
     InstalledPluginFile,
+    LinuxRuntimeProfile,
     ManagedPluginCreate,
     ManagedPluginResponse,
     ManagedPluginUpdate,

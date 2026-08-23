@@ -112,6 +112,7 @@
     "CustomCommandExecuteRequest",
     "CustomCommandResponse",
     "GitHubReleaseAsset",
+    "LinuxRuntimeProfile",
     "GitHubRelease",
     "GitHubReleasesResponse",
     "ArchiveContentItem",

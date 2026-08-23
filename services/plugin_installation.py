@@ -232,6 +232,7 @@ async def install_github_plugin(
             repo_url=repo_url,
             installed_release_id=request.release_id,
             installed_version=request.release_tag or "unknown",
+            installed_asset_name=request.asset_name,
             asset_glob=request.asset_glob
             or derive_asset_glob(request.asset_name, request.release_tag),
             custom_install_path=request.custom_install_path,

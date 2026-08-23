@@ -449,6 +449,7 @@
                             <label class="form-label">
                                 <i class="bi bi-file-earmark-zip"></i> <span data-i18n="pluginMarket.installModal.selectAsset">Select Asset File</span>:
                             </label>
+                            <div id="runtime-detection-info" class="alert py-2 mb-2" style="display: none;"></div>
                             <div id="asset-list" class="list-group mb-3">
                                 <!-- Assets will be populated here -->
                             </div>
@@ -1550,6 +1551,9 @@ async function onServerSelected() {
     
     if (!serverId) {
         document.getElementById('version-selection-section').style.display = 'none';
+        releasesData = null;
+        linuxRuntimeProfile = null;
+        document.getElementById('runtime-detection-info').style.display = 'none';
         return;
     }
     
@@ -1562,6 +1566,7 @@ async function onServerSelected() {
 
 // Global variable to store releases data
 let releasesData = null;
+let linuxRuntimeProfile = null;
 
 // Load available versions for the plugin
 async function loadVersions(serverId) {
@@ -1581,6 +1586,7 @@ async function loadVersions(serverId) {
             if (data.success && data.releases && data.releases.length > 0) {
                 // Store releases data globally
                 releasesData = data.releases;
+                linuxRuntimeProfile = data.linux_runtime_profile || null;
                 
                 versionSelect.innerHTML = '';
                 
@@ -1604,14 +1610,18 @@ async function loadVersions(serverId) {
             } else {
                 versionSelect.innerHTML = '<option value="">No releases available</option>';
                 releasesData = null;
+                linuxRuntimeProfile = null;
             }
         } else {
             versionSelect.innerHTML = '<option value="">Failed to load versions</option>';
             releasesData = null;
+            linuxRuntimeProfile = null;
         }
     } catch (error) {
         console.error('Error loading versions:', error);
         versionSelect.innerHTML = '<option value="">Error loading versions</option>';
+        releasesData = null;
+        linuxRuntimeProfile = null;
     }
 }
 
@@ -1640,6 +1650,16 @@ function onVersionSelected() {
     // Show asset selection
     assetSection.style.display = 'block';
     assetList.innerHTML = '';
+    renderRuntimeDetection(release);
+
+    const recommendedAssets = release.assets.filter(
+        (asset) => asset.runtime_compatibility === 'recommended'
+    );
+    const hasPairedRuntimeAssets = release.assets.some(
+        (asset) => asset.runtime_compatibility === 'recommended'
+            || asset.runtime_compatibility === 'alternative'
+            || asset.runtime_compatibility === 'unknown'
+    );
     
     release.assets.forEach((asset, index) => {
         const label = document.createElement('label');
@@ -1653,9 +1673,10 @@ function onVersionSelected() {
         radio.name = 'plugin-asset';
         radio.value = asset.browser_download_url;
         radio.id = `asset-${index}`;
-        if (index === 0) {
-            radio.checked = true;  // Auto-select first asset
-        }
+        radio.dataset.runtimeCompatibility = asset.runtime_compatibility || 'not_applicable';
+        radio.checked = recommendedAssets.length === 1
+            ? asset.runtime_compatibility === 'recommended'
+            : (!hasPairedRuntimeAssets && index === 0);
         
         const nameSpan = document.createElement('span');
         nameSpan.textContent = asset.name;
@@ -1673,6 +1694,28 @@ function onVersionSelected() {
             badge.textContent = 'Windows';
             nameSpan.appendChild(badge);
         }
+        if (asset.runtime_compatibility === 'recommended') {
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-primary ms-2';
+            badge.textContent = window.i18n
+                ? window.i18n.t('pluginMarket.installModal.runtimeRecommended')
+                : 'Recommended';
+            nameSpan.appendChild(badge);
+        } else if (asset.runtime_compatibility === 'alternative') {
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-warning text-dark ms-2';
+            badge.textContent = window.i18n
+                ? window.i18n.t('pluginMarket.installModal.runtimeOverride')
+                : 'Manual override';
+            nameSpan.appendChild(badge);
+        } else if (asset.runtime_compatibility === 'unknown') {
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-secondary ms-2';
+            badge.textContent = window.i18n
+                ? window.i18n.t('pluginMarket.installModal.runtimeUnknown')
+                : 'Compatibility unknown';
+            nameSpan.appendChild(badge);
+        }
         
         leftDiv.appendChild(radio);
         leftDiv.appendChild(nameSpan);
@@ -1687,10 +1730,58 @@ function onVersionSelected() {
         // Make the whole label clickable
         label.addEventListener('click', function() {
             radio.checked = true;
+            updateRuntimeSelectionNotice();
         });
+        radio.addEventListener('change', updateRuntimeSelectionNotice);
         
         assetList.appendChild(label);
     });
+    updateRuntimeSelectionNotice();
+}
+
+function renderRuntimeDetection(release) {
+    const info = document.getElementById('runtime-detection-info');
+    const hasRuntimePair = release.assets.some(
+        (asset) => ['recommended', 'alternative', 'unknown'].includes(asset.runtime_compatibility)
+    );
+    if (!hasRuntimePair) {
+        info.style.display = 'none';
+        info.textContent = '';
+        return;
+    }
+    info.style.display = 'block';
+    const recommended = linuxRuntimeProfile?.recommended_steam_runtime;
+    if (recommended) {
+        info.className = 'alert alert-info py-2 mb-2';
+        const environment = linuxRuntimeProfile.pretty_name
+            || linuxRuntimeProfile.glibc_version
+            || 'Linux';
+        info.textContent = `${environment}: ${linuxRuntimeProfile.reason}`;
+    } else {
+        info.className = 'alert alert-warning py-2 mb-2';
+        info.textContent = linuxRuntimeProfile?.reason
+            || (window.i18n
+                ? window.i18n.t('pluginMarket.installModal.runtimeSelectionRequired')
+                : 'Runtime compatibility could not be detected; select an asset manually.');
+    }
+}
+
+function updateRuntimeSelectionNotice() {
+    const selected = document.querySelector('input[name="plugin-asset"]:checked');
+    const info = document.getElementById('runtime-detection-info');
+    if (!selected) return;
+    if (selected.dataset.runtimeCompatibility === 'alternative') {
+        info.style.display = 'block';
+        info.className = 'alert alert-warning py-2 mb-2';
+        info.textContent = window.i18n
+            ? window.i18n.t('pluginMarket.installModal.runtimeOverrideWarning')
+            : 'You selected a non-recommended Steam Runtime build. This manual override will be used.';
+        return;
+    }
+    const release = releasesData?.[
+        parseInt(document.getElementById('install-version-select').value)
+    ];
+    if (release) renderRuntimeDetection(release);
 }
 
 // Format file size helper

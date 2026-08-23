@@ -358,10 +358,17 @@ async def get_github_releases(
     # A server context is authorization-only. GitHub credentials are never sent
     # through a user-configured proxy.
     github_proxy = None
+    server = None
     if server_id:
         from services.ai_access import authorized_server
 
-        await authorized_server(db, current_user, server_id)
+        server = await authorized_server(db, current_user, server_id)
+
+    linux_runtime_profile = None
+    if server is not None:
+        from services.linux_runtime_service import detect_linux_runtime_profile
+
+        linux_runtime_profile = await detect_linux_runtime_profile(server)
 
     # Limit count to prevent abuse
     count = min(count, 10)
@@ -405,7 +412,7 @@ async def get_github_releases(
     for release_data in data:
         if release_data.get("draft") or release_data.get("prerelease"):
             continue
-        assets = []
+        asset_payloads = []
         for asset_data in release_data.get("assets", []):
             asset_name = asset_data.get("name", "")
             asset_name_lower = asset_name.lower()
@@ -423,14 +430,21 @@ async def get_github_releases(
             if any(
                 asset_name_lower.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]
             ):
-                assets.append(
-                    GitHubReleaseAsset(
-                        name=asset_name,
-                        browser_download_url=asset_data.get("browser_download_url", ""),
-                        size=asset_data.get("size", 0),
-                        content_type=asset_data.get("content_type"),
-                    )
+                asset_payloads.append(
+                    {
+                        "name": asset_name,
+                        "browser_download_url": asset_data.get("browser_download_url", ""),
+                        "size": asset_data.get("size", 0),
+                        "content_type": asset_data.get("content_type"),
+                    }
                 )
+
+        from services.linux_runtime_service import annotate_runtime_assets
+
+        assets = [
+            GitHubReleaseAsset.model_validate(item)
+            for item in annotate_runtime_assets(asset_payloads, linux_runtime_profile)
+        ]
 
         # Only include releases that have downloadable assets
         if assets:
@@ -447,7 +461,13 @@ async def get_github_releases(
             if len(releases) >= count:
                 break
 
-    return GitHubReleasesResponse(success=True, releases=releases, repo_owner=owner, repo_name=repo)
+    return GitHubReleasesResponse(
+        success=True,
+        releases=releases,
+        repo_owner=owner,
+        repo_name=repo,
+        linux_runtime_profile=linux_runtime_profile,
+    )
 
 
 @router.get("/servers/{server_id}/analyze-archive")

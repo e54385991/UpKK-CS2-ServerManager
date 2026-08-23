@@ -1,5 +1,7 @@
 """Focused tests for managed plugin release selection and safe defaults."""
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from modules.models import AuthType, CustomCommand, ManagedPlugin, Server, User
@@ -188,6 +190,162 @@ async def test_market_release_asset_fallback_rejects_ambiguous_archives(monkeypa
     assert ok is False
     assert release is None
     assert "fallback matched 2" in error
+
+
+@pytest.mark.asyncio
+async def test_same_release_switches_to_newly_required_runtime(monkeypatch):
+    service = PluginAutoUpdateService()
+    service._redis_status_retry_after = float("inf")
+    server = Server(
+        id=87,
+        user_id=2,
+        name="Runtime Switch",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+        enable_plugin_auto_update=True,
+    )
+    user = User(id=2, username="owner", email="runtime@example.com", hashed_password="x")
+    item = ManagedPlugin(
+        id=4,
+        server_id=87,
+        source_type="market",
+        source_key="44",
+        display_name="MultiAddonManager",
+        repo_url="https://github.com/Source2ZE/MultiAddonManager",
+        market_plugin_id=44,
+        installed_release_id="154",
+        installed_version="v1.5.4",
+        installed_asset_name="MultiAddonManager-v1.5.4-steamrt3.tar.gz",
+        asset_glob="MultiAddonManager-*-steamrt3.tar.gz",
+        auto_update_enabled=True,
+    )
+
+    class Result:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [item]
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, model, object_id):
+            if model is Server:
+                return server
+            if model is User:
+                return user
+            if model is ManagedPlugin:
+                return item
+            return None
+
+        async def execute(self, statement):
+            return Result()
+
+        async def commit(self):
+            return None
+
+        def add(self, value):
+            return None
+
+    release = {
+        "id": 154,
+        "tag_name": "v1.5.4",
+        "draft": False,
+        "prerelease": False,
+        "assets": [
+            {
+                "name": "MultiAddonManager-v1.5.4-steamrt3.tar.gz",
+                "browser_download_url": "https://github.com/example/rt3",
+            },
+            {
+                "name": "MultiAddonManager-v1.5.4-steamrt4.tar.gz",
+                "browser_download_url": "https://github.com/example/rt4",
+            },
+        ],
+    }
+    detection = AsyncMock(
+        return_value={
+            "recommended_steam_runtime": "steamrt4",
+            "detection_source": "glibc",
+            "reason": "glibc 2.41 selects SteamRT4",
+        }
+    )
+    install = AsyncMock(return_value=(True, "updated"))
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.async_session_maker", lambda: Session()
+    )
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.http_helper.get",
+        AsyncMock(return_value=(True, release, None)),
+    )
+    monkeypatch.setattr("services.linux_runtime_service.detect_linux_runtime_profile", detection)
+    monkeypatch.setattr(service, "_install_item", install)
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.discord_notification_service.queue_notify",
+        lambda *args, **kwargs: True,
+    )
+
+    result = await service.check_server(server.id)
+
+    assert result["success"] is True
+    install.assert_awaited_once()
+    detection.assert_awaited_once_with(server)
+    assert item.installed_release_id == "154"
+    assert item.installed_asset_name.endswith("steamrt4.tar.gz")
+    assert item.asset_glob == "MultiAddonManager-*-steamrt4.tar.gz"
+
+
+@pytest.mark.asyncio
+async def test_unknown_runtime_only_blocks_paired_release(monkeypatch):
+    service = PluginAutoUpdateService()
+    user = User(username="u", email="unknown-runtime@example.com", hashed_password="x")
+    paired = ManagedPlugin(
+        server_id=1,
+        source_type="market",
+        source_key="1",
+        display_name="Paired",
+        repo_url="https://github.com/Owner/Paired",
+        market_plugin_id=1,
+        asset_glob="Paired-*.tar.gz",
+    )
+    ordinary = ManagedPlugin(
+        server_id=1,
+        source_type="github",
+        source_key="2",
+        display_name="Ordinary",
+        repo_url="https://github.com/Owner/Ordinary",
+        asset_glob="Ordinary-*.tar.gz",
+    )
+
+    async def release(url, **kwargs):
+        if url.endswith("/Paired/releases/latest"):
+            assets = [
+                {"name": "Paired-steamrt3.tar.gz", "browser_download_url": "rt3"},
+                {"name": "Paired-steamrt4.tar.gz", "browser_download_url": "rt4"},
+            ]
+        else:
+            assets = [{"name": "Ordinary-v2.tar.gz", "browser_download_url": "ordinary"}]
+        return True, {"id": 2, "tag_name": "v2", "assets": assets}, None
+
+    monkeypatch.setattr("services.plugin_auto_update_service.http_helper.get", release)
+    profile = {"recommended_steam_runtime": None}
+
+    paired_ok, _, paired_error = await service._latest_github_release(paired, user, profile)
+    ordinary_ok, ordinary_release, ordinary_error = await service._latest_github_release(
+        ordinary, user, profile
+    )
+
+    assert paired_ok is False
+    assert "could not be detected" in paired_error
+    assert ordinary_ok is True
+    assert ordinary_error == ""
+    assert ordinary_release["asset"]["name"] == "Ordinary-v2.tar.gz"
 
 
 @pytest.mark.asyncio

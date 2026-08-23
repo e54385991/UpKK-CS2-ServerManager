@@ -2651,6 +2651,16 @@
             "title": "Documentation",
             "type": "object"
           },
+          "linux_runtime_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinuxRuntimeProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "release": {
             "additionalProperties": true,
             "title": "Release",
@@ -2882,6 +2892,16 @@
             },
             "title": "Hard Conflicts",
             "type": "array"
+          },
+          "linux_runtime_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinuxRuntimeProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "mapping": {
             "items": {
@@ -3181,6 +3201,16 @@
             "title": "Candidates",
             "type": "array"
           },
+          "linux_runtime_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinuxRuntimeProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "query": {
             "title": "Query",
             "type": "string"
@@ -3285,9 +3315,35 @@
             "title": "Name",
             "type": "string"
           },
+          "runtime_compatibility": {
+            "default": "not_applicable",
+            "enum": [
+              "recommended",
+              "alternative",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Runtime Compatibility",
+            "type": "string"
+          },
           "size": {
             "title": "Size",
             "type": "integer"
+          },
+          "steam_runtime": {
+            "anyOf": [
+              {
+                "enum": [
+                  "steamrt3",
+                  "steamrt4"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steam Runtime"
           }
         },
         "required": [
@@ -3311,6 +3367,16 @@
               }
             ],
             "title": "Error"
+          },
+          "linux_runtime_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinuxRuntimeProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "releases": {
             "default": [],
@@ -3521,6 +3587,89 @@
           "archive_path"
         ],
         "title": "InspectArchiveRequest",
+        "type": "object"
+      },
+      "LinuxRuntimeProfile": {
+        "description": "Detected Linux userspace information used for Steam Runtime selection.",
+        "properties": {
+          "detection_source": {
+            "default": "unknown",
+            "enum": [
+              "glibc",
+              "os_release",
+              "unknown"
+            ],
+            "title": "Detection Source",
+            "type": "string"
+          },
+          "distro_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distro Id"
+          },
+          "distro_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distro Version"
+          },
+          "glibc_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Glibc Version"
+          },
+          "pretty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pretty Name"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "recommended_steam_runtime": {
+            "anyOf": [
+              {
+                "enum": [
+                  "steamrt3",
+                  "steamrt4"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Steam Runtime"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "LinuxRuntimeProfile",
         "type": "object"
       },
       "ManagedPluginCreate": {

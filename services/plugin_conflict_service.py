@@ -442,6 +442,7 @@ async def _latest_release_asset(
     plugin: MarketPlugin,
     server: Server,
     user: User,
+    linux_runtime_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     match = _GITHUB_REPOSITORY.fullmatch(plugin.github_url.strip().rstrip("/"))
     if not match:
@@ -463,6 +464,25 @@ async def _latest_release_asset(
     candidates = _release_asset_candidates(data)
     if not candidates:
         raise PluginPlanError(f"No suitable Linux release asset found for {plugin.title}")
+
+    from services.linux_runtime_service import (
+        RuntimeSelectionRequired,
+        has_paired_runtime_assets,
+        select_unique_runtime_asset,
+        steam_runtime_for_asset,
+    )
+
+    try:
+        selected_runtime_asset = select_unique_runtime_asset(candidates, linux_runtime_profile)
+    except RuntimeSelectionRequired as exc:
+        raise PluginPlanError(f"{plugin.title}: {exc}") from exc
+    if has_paired_runtime_assets(candidates):
+        if selected_runtime_asset is None:
+            raise PluginPlanError(
+                f"{plugin.title}: multiple Steam Runtime package families are available; "
+                "select a release asset explicitly"
+            )
+        candidates = [selected_runtime_asset]
 
     from services.github_plugin_plan_service import (
         GitHubPlanError,
@@ -494,6 +514,7 @@ async def _latest_release_asset(
             "release_id": str(data.get("id") or ""),
             "release_tag": str(data.get("tag_name") or "unknown"),
             "asset_name": asset["name"],
+            "steam_runtime": steam_runtime_for_asset(asset["name"]),
             "archive_sha256": layout["archive_sha256"],
             "source_prefix": layout["source_prefix"],
             "custom_install_path": custom_target,
@@ -517,6 +538,8 @@ async def _install_one(
     user: User,
     progress: ProgressCallback | None = None,
     operation_id: str | None = None,
+    linux_runtime_profile: dict[str, Any] | None = None,
+    resolved_asset: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     framework_key = _panel_framework_key(plugin)
     if framework_key is not None:
@@ -542,7 +565,17 @@ async def _install_one(
                 step_status="running",
             )
         try:
-            asset = await _latest_release_asset(db, plugin, server, user)
+            asset = (
+                resolved_asset
+                if attempt == 1 and resolved_asset is not None
+                else await _latest_release_asset(
+                    db,
+                    plugin,
+                    server,
+                    user,
+                    linux_runtime_profile,
+                )
+            )
             request = GitHubPluginInstallRequest(
                 download_url=asset["download_url"],
                 custom_install_path=asset["custom_install_path"],
@@ -598,6 +631,7 @@ async def _install_one(
         market_plugin_id=plugin.id,
         installed_release_id=asset["release_id"],
         installed_version=asset["release_tag"] or plugin.version or "unknown",
+        installed_asset_name=asset["asset_name"],
         asset_glob=derive_asset_glob(asset["asset_name"], asset["release_tag"]),
         custom_install_path=asset["custom_install_path"],
     )
@@ -609,6 +643,9 @@ async def _install_one(
         "success": True,
         "plugin_id": plugin.id,
         "message": result.message,
+        "selected_asset_name": asset["asset_name"],
+        "steam_runtime": asset.get("steam_runtime"),
+        "linux_runtime_profile": linux_runtime_profile,
         "restart_required": True,
         "next_step": (
             "Restart (or start) the server and wait for startup before locating generated configs."
@@ -681,6 +718,36 @@ async def execute_plugin_install_plan(
         plugins = await MarketPlugin.get_by_ids(db, refreshed_plan["installation_order"])
         by_id = {plugin.id: plugin for plugin in plugins}
 
+        resolved_assets: dict[int, dict[str, Any]] = {}
+        ordinary_plugin_ids = [
+            current_id
+            for current_id in refreshed_plan["installation_order"]
+            if current_id not in installed
+            and (plugin := by_id.get(current_id)) is not None
+            and _panel_framework_key(plugin) is None
+        ]
+        linux_runtime_profile = None
+        if ordinary_plugin_ids:
+            from services.linux_runtime_service import detect_linux_runtime_profile
+
+            linux_runtime_profile = await detect_linux_runtime_profile(refreshed_server)
+        # Resolve every ordinary asset before installing the first dependency.
+        # This guarantees an unknown RT3/RT4 choice cannot leave partial changes.
+        for current_id in refreshed_plan["installation_order"]:
+            if current_id in installed:
+                continue
+            plugin = by_id.get(current_id)
+            if plugin is None:
+                raise PluginPlanError(f"Plugin {current_id} disappeared before execution")
+            if current_id in ordinary_plugin_ids:
+                resolved_assets[current_id] = await _latest_release_asset(
+                    db,
+                    plugin,
+                    refreshed_server,
+                    user,
+                    linux_runtime_profile,
+                )
+
         for current_id in refreshed_plan["installation_order"]:
             step_id = f"plugin:{current_id}"
             latest_plan = await build_plugin_install_plan(
@@ -717,6 +784,8 @@ async def execute_plugin_install_plan(
                     user,
                     progress,
                     operation_id=operation_id,
+                    linux_runtime_profile=linux_runtime_profile,
+                    resolved_asset=resolved_assets.get(current_id),
                 )
             except Exception as exc:
                 result = {

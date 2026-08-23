@@ -5,6 +5,18 @@
 from .common import *
 
 
+class LinuxRuntimeProfile(SQLModel):
+    """Detected Linux userspace information used for Steam Runtime selection."""
+
+    distro_id: Optional[str] = None
+    distro_version: Optional[str] = None
+    pretty_name: Optional[str] = None
+    glibc_version: Optional[str] = None
+    recommended_steam_runtime: Optional[Literal["steamrt3", "steamrt4"]] = None
+    detection_source: Literal["glibc", "os_release", "unknown"] = "unknown"
+    reason: str
+
+
 class GitHubReleaseAsset(SQLModel):
     """Schema for a GitHub release asset"""
 
@@ -12,6 +24,10 @@ class GitHubReleaseAsset(SQLModel):
     browser_download_url: str
     size: int
     content_type: Optional[str] = None
+    steam_runtime: Optional[Literal["steamrt3", "steamrt4"]] = None
+    runtime_compatibility: Literal["recommended", "alternative", "unknown", "not_applicable"] = (
+        "not_applicable"
+    )
 
 
 class GitHubRelease(SQLModel):
@@ -33,6 +49,7 @@ class GitHubReleasesResponse(SQLModel):
     error: Optional[str] = None
     repo_owner: Optional[str] = None
     repo_name: Optional[str] = None
+    linux_runtime_profile: Optional[LinuxRuntimeProfile] = None
 
 
 class ArchiveContentItem(SQLModel):
@@ -521,6 +538,7 @@ class GitHubPluginSearchResponse(SQLModel):
     query: str
     candidates: List[Dict] = Field(default_factory=list)
     recommended_repo_url: Optional[str] = None
+    linux_runtime_profile: Optional[LinuxRuntimeProfile] = None
 
 
 class GitHubPluginInspectResponse(SQLModel):
@@ -530,6 +548,7 @@ class GitHubPluginInspectResponse(SQLModel):
     selected_asset: Optional[Dict] = None
     documentation: Dict = Field(default_factory=dict)
     warnings: List[str] = Field(default_factory=list)
+    linux_runtime_profile: Optional[LinuxRuntimeProfile] = None
 
 
 class GitHubPluginInstallPlanRequest(GitHubPluginInspectRequest):
@@ -563,6 +582,7 @@ class GitHubPluginInstallPlanResponse(SQLModel):
     hard_conflicts: List[Dict] = Field(default_factory=list)
     conflict_warnings: List[Dict] = Field(default_factory=list)
     compatibility_unknown: bool = False
+    linux_runtime_profile: Optional[LinuxRuntimeProfile] = None
 
 
 class GitHubInstallRecipeCreate(SQLModel):

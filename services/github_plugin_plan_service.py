@@ -202,6 +202,7 @@ async def inspect_github_plugin(
     user: User,
     repo_url: str,
     mode: Literal["install", "upgrade"] = "install",
+    linux_runtime_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     owner, repo, canonical = normalize_public_repo_url(repo_url)
     token = await get_effective_github_token(db, user)
@@ -213,7 +214,14 @@ async def inspect_github_plugin(
     raw_release = await _github_request(f"/repos/{owner}/{repo}/releases/latest", token)
     release = _release_payload(raw_release)
     warnings: list[str] = []
-    assets = release["assets"]
+    from services.linux_runtime_service import (
+        RuntimeSelectionRequired,
+        annotate_runtime_assets,
+        select_unique_runtime_asset,
+    )
+
+    assets = annotate_runtime_assets(release["assets"], linux_runtime_profile)
+    release["assets"] = assets
     selected: dict[str, Any] | None = None
     if assets:
         preferred = [
@@ -224,9 +232,11 @@ async def inspect_github_plugin(
             linux_named = [item for item in candidates if "linux" in item["name"].casefold()]
             if linux_named:
                 candidates = linux_named
-        if len(candidates) == 1:
-            selected = candidates[0]
-        else:
+        try:
+            selected = select_unique_runtime_asset(candidates, linux_runtime_profile)
+        except RuntimeSelectionRequired as exc:
+            warnings.append(str(exc))
+        if selected is None and not any("select an asset explicitly" in item for item in warnings):
             warnings.append("Multiple Linux release assets require an explicit selection")
     else:
         warnings.append("No stable Linux release archive is available")
@@ -264,6 +274,7 @@ async def inspect_github_plugin(
         "selected_asset": selected,
         "documentation": documentation,
         "warnings": warnings,
+        "linux_runtime_profile": linux_runtime_profile,
     }
 
 
@@ -273,6 +284,7 @@ async def search_github_plugins(
     query: str,
     *,
     limit: int = 3,
+    linux_runtime_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     query = query.strip()
     if not query or len(query) > 120:
@@ -294,7 +306,12 @@ async def search_github_plugins(
             break
         url = str(item.get("html_url") or "")
         try:
-            inspected = await inspect_github_plugin(db, user, url)
+            inspected = await inspect_github_plugin(
+                db,
+                user,
+                url,
+                linux_runtime_profile=linux_runtime_profile,
+            )
         except GitHubPlanError:
             continue
         if not inspected["release"]["assets"]:
@@ -326,6 +343,7 @@ async def search_github_plugins(
         "query": query,
         "candidates": selected,
         "recommended_repo_url": selected[0]["repo_url"] if selected else None,
+        "linux_runtime_profile": linux_runtime_profile,
     }
 
 
@@ -830,7 +848,16 @@ async def build_github_install_plan(
             f"{framework_name} is managed by the panel. Use run_server_operation with "
             f"operation={operation}; generic GitHub installation is disabled for this framework."
         )
-    inspected = await inspect_github_plugin(db, user, request.repo_url, request.mode)
+    from services.linux_runtime_service import detect_linux_runtime_profile
+
+    linux_runtime_profile = await detect_linux_runtime_profile(server)
+    inspected = await inspect_github_plugin(
+        db,
+        user,
+        request.repo_url,
+        request.mode,
+        linux_runtime_profile,
+    )
     assets = inspected["release"]["assets"]
     if request.asset_name:
         selected = next((item for item in assets if item["name"] == request.asset_name), None)
@@ -860,6 +887,17 @@ async def build_github_install_plan(
     for item in mapped_files:
         item["target_revision"] = target_revisions.get(item["target_path"], "missing")
     warnings = list(inspected["warnings"])
+    if request.asset_name:
+        warnings = [
+            warning
+            for warning in warnings
+            if "select an asset explicitly" not in warning
+            and "Multiple Linux release assets" not in warning
+        ]
+    if request.asset_name and selected.get("runtime_compatibility") == "alternative":
+        warnings.append(
+            "The explicitly selected Steam Runtime asset overrides the detected recommendation"
+        )
     market_result = await db.execute(
         select(MarketPlugin).where(
             func.lower(MarketPlugin.github_url).in_(
@@ -904,6 +942,7 @@ async def build_github_install_plan(
         "conflict_warnings": market_plan["warnings"] if market_plan else [],
         "compatibility_unknown": market_plugin is None,
         "target_revisions": target_revisions,
+        "linux_runtime_profile": linux_runtime_profile,
     }
     plan_hash = hashlib.sha256(
         json.dumps(
@@ -1130,12 +1169,23 @@ async def _execute_github_install_plan_locked(
                 )
             )
         await db.commit()
+    from services.linux_runtime_service import steam_runtime_for_asset
+
+    selected_runtime = steam_runtime_for_asset(plan["asset"]["name"])
     return {
         "success": True,
         "message": result.message,
         "installed_files": result.installed_files,
         "plan_hash": plan["plan_hash"],
         "archive_sha256": plan["archive_sha256"],
+        "selected_asset_name": plan["asset"]["name"],
+        "steam_runtime": selected_runtime,
+        "runtime_selection_reason": (
+            plan["linux_runtime_profile"]["reason"]
+            if selected_runtime
+            else "The selected release asset is not part of a paired Steam Runtime family"
+        ),
+        "linux_runtime_profile": plan["linux_runtime_profile"],
         "completed_dependencies": completed_dependencies,
         **_post_install_restart_payload(True),
     }
