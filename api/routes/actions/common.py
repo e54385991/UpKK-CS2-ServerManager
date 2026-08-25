@@ -8,13 +8,13 @@ import json
 import logging
 import secrets
 from contextlib import suppress
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import require_server_access
+from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from modules import (
     ActionResponse,
     BatchActionRequest,
@@ -101,8 +101,8 @@ async def get_server_and_verify_ownership(db: AsyncSession, server_id: int, user
 
 async def acquire_server_action_lock(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Verify ownership and hold the cross-process lock for one mutating action."""
     server = await get_server_and_verify_ownership(db, server_id, current_user)
@@ -114,6 +114,9 @@ async def acquire_server_action_lock(
         ttl=7200,
     ):
         yield server
+
+
+ServerActionLock = Annotated[Server, Depends(acquire_server_action_lock)]
 
 
 async def get_server_owner(db: AsyncSession, server: Server, current_user: User) -> User:

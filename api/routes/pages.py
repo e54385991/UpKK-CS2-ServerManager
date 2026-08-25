@@ -1,17 +1,13 @@
 """Server-rendered HTML page routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.dependencies import DatabaseSession, WebAdmin, WebUser
 from api.routes import servers
 from api.templating import templates
 from modules import (
     ServerResponse,
-    User,
-    get_current_web_admin,
-    get_current_web_user,
-    get_db,
 )
 
 router = APIRouter()
@@ -57,8 +53,8 @@ async def servers_ui(request: Request):
 async def server_detail_ui(
     request: Request,
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_web_user),
+    db: DatabaseSession,
+    current_user: WebUser,
 ):
     """Server detail UI with real-time monitoring"""
     server = await servers.get_server_with_permission(server_id, current_user, db)
@@ -82,8 +78,8 @@ async def console_popup(
     request: Request,
     server_id: int,
     console_type: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_web_user),
+    db: DatabaseSession,
+    current_user: WebUser,
 ):
     """Console popup window"""
     if console_type.lower() not in {"ssh", "game"}:
@@ -103,7 +99,7 @@ async def console_popup(
 @router.get("/plugin-market", response_class=HTMLResponse)
 async def plugin_market_page(
     request: Request,
-    _: User = Depends(get_current_web_user),
+    _: WebUser,
 ):
     """Plugin market page"""
     return templates.TemplateResponse(request, "plugin_market.html")
@@ -113,8 +109,8 @@ async def plugin_market_page(
 async def ssh_console(
     request: Request,
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_web_user),
+    db: DatabaseSession,
+    current_user: WebUser,
 ):
     """Independent SSH console page"""
     await servers.get_server_with_permission(server_id, current_user, db)
@@ -129,8 +125,8 @@ async def ssh_console(
 async def game_console(
     request: Request,
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_web_user),
+    db: DatabaseSession,
+    current_user: WebUser,
 ):
     """Independent game console page"""
     await servers.get_server_with_permission(server_id, current_user, db)
@@ -147,8 +143,8 @@ async def file_editor_popup(
     server_id: int,
     file_path: str,
     file_name: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_web_user),
+    db: DatabaseSession,
+    current_user: WebUser,
 ):
     """File editor popup window"""
     server = await servers.get_server_with_permission(server_id, current_user, db)
@@ -203,7 +199,7 @@ async def file_editor_popup(
 @router.get("/setup-wizard", response_class=HTMLResponse)
 async def setup_wizard(
     request: Request,
-    _: User = Depends(get_current_web_user),
+    _: WebUser,
 ):
     """Server setup wizard UI - authentication checked client-side"""
     return templates.TemplateResponse(request, "server_setup_wizard.html")
@@ -212,7 +208,7 @@ async def setup_wizard(
 @router.get("/profile", response_class=HTMLResponse)
 async def profile_page(
     request: Request,
-    _: User = Depends(get_current_web_user),
+    _: WebUser,
 ):
     """User profile page"""
     return templates.TemplateResponse(request, "profile.html")
@@ -221,7 +217,7 @@ async def profile_page(
 @router.get("/system-settings", response_class=HTMLResponse)
 async def system_settings_page(
     request: Request,
-    _: User = Depends(get_current_web_admin),
+    _: WebAdmin,
 ):
     """System settings page (admin only - auth checked client-side)"""
     return templates.TemplateResponse(request, "system_settings.html")

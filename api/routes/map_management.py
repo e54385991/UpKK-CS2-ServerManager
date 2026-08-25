@@ -9,14 +9,15 @@ import uuid
 from datetime import timedelta
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from api.dependencies import ActiveUser, DatabaseSession
 from api.routes.servers import get_server_with_permission
-from modules import ManagedPlugin, ScheduledTask, Server, User, get_current_active_user, get_db
+from modules import ManagedPlugin, ScheduledTask, Server
 from modules.http_helper import http_helper
 from modules.utils import get_current_time
 from services.maintenance_lock import maintenance_lock_service
@@ -499,8 +500,8 @@ async def _record_map_sync_result(
 @router.get("/status")
 async def get_map_management_status(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     ssh_manager = await _connect(server)
@@ -513,8 +514,8 @@ async def get_map_management_status(
 @router.get("/custom-sync")
 async def get_custom_map_sync(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     tasks = await _get_map_sync_tasks(db, server_id)
@@ -525,8 +526,8 @@ async def get_custom_map_sync(
 async def update_custom_map_sync(
     server_id: int,
     request: CustomMapSyncUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     try:
@@ -586,8 +587,8 @@ async def update_custom_map_sync(
 async def run_custom_map_sync(
     server_id: int,
     request: CustomMapSyncRunRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     tasks = await _get_map_sync_tasks(db, server_id)
@@ -649,8 +650,8 @@ async def run_custom_map_sync(
 async def uninstall_mapchooser_plugin(
     server_id: int,
     request: MapChooserUninstallRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     if request.confirmation != MAPCHOOSER_UNINSTALL_CONFIRMATION:
         raise HTTPException(
@@ -728,8 +729,8 @@ async def uninstall_mapchooser_plugin(
 @router.get("/plugin-config")
 async def get_plugin_config(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     ssh_manager = await _connect(server)
@@ -754,8 +755,8 @@ async def get_plugin_config(
 async def update_mapchooser_plugin_config(
     server_id: int,
     request: PluginConfigUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     async with maintenance_lock_service.get(server_id, operation="map_config", wait=False):
@@ -800,8 +801,8 @@ async def update_mapchooser_plugin_config(
 @router.get("")
 async def get_maps_config(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     ssh_manager = await _connect(server)
@@ -826,8 +827,8 @@ async def get_maps_config(
 async def update_maps_config(
     server_id: int,
     request: MapConfigUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     async with maintenance_lock_service.get(server_id, operation="map_add", wait=False):
@@ -872,8 +873,8 @@ async def update_maps_config(
 async def apply_map_preset(
     server_id: int,
     request: MapPresetApplyRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     async with maintenance_lock_service.get(server_id, operation="map_preset", wait=False):
@@ -960,8 +961,8 @@ async def apply_map_preset(
 async def add_map(
     server_id: int,
     request: MapAddRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     async with maintenance_lock_service.get(server_id, operation="map_update", wait=False):
@@ -1029,8 +1030,8 @@ async def add_map(
 async def update_map_enabled(
     server_id: int,
     request: MapEnabledUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     async with maintenance_lock_service.get(server_id, operation="map_delete", wait=False):
@@ -1081,8 +1082,8 @@ async def update_map_enabled(
 async def delete_map(
     server_id: int,
     request: MapIdentityRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, object]:
     server = await get_server_with_permission(server_id, current_user, db)
     async with maintenance_lock_service.get(server_id, operation="map_batch", wait=False):

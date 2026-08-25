@@ -7,10 +7,11 @@ import json
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from api.dependencies import ActiveUser, DatabaseSession
 from modules import (
     DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS,
     AuthType,
@@ -18,9 +19,7 @@ from modules import (
     Server,
     User,
     generate_api_key,
-    get_current_active_user,
     get_current_time,
-    get_db,
 )
 from modules.schemas.servers import (
     ServerConfigExport,
@@ -100,8 +99,8 @@ async def export_server_configs(
         default=False,
         description="Include SSH, game, Steam, and Discord credentials in the downloaded bundle",
     ),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """Download one or more portable server configuration entries."""
     servers = await _resolve_export_servers(db, current_user, server_ids)
@@ -135,8 +134,8 @@ async def export_server_configs(
 )
 async def import_server_configs(
     request: ServerConfigImportRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Import a configuration bundle into the current user's server list."""
     results: list[ServerConfigImportResult] = []

@@ -4,6 +4,8 @@
 
 import hashlib
 
+from api.dependencies import ActiveUser, AdminUser, DatabaseSession
+
 from .common import *
 
 collection_router = APIRouter(prefix="/servers", tags=["servers"])
@@ -14,8 +16,8 @@ mutation_router = APIRouter(prefix="/servers", tags=["servers"])
 @collection_router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
 async def create_server(
     server_data: ServerCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Create a new CS2 server"""
     # Validate CAPTCHA first
@@ -171,8 +173,8 @@ async def create_server(
 async def list_servers(
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """List all servers owned by current user"""
     servers = await Server.get_all_by_user(db, current_user.id, skip, limit)
@@ -183,8 +185,8 @@ async def list_servers(
 async def list_all_servers_admin(
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession = None,
+    current_user: AdminUser = None,
 ):
     """List all servers across all users (admin only)"""
     servers = await Server.get_all(db, skip, limit)
@@ -212,8 +214,8 @@ async def list_all_servers_admin(
 @item_router.get("/{server_id}", response_model=ServerResponse)
 async def get_server(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Get server by ID - admins can access any server, users can only access their own"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -224,8 +226,8 @@ async def get_server(
 async def update_server(
     server_id: int,
     server_data: ServerUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Update server - admins can update any server, users can only update their own"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -301,8 +303,8 @@ async def update_server(
 @mutation_router.post("/{server_id}/apply-system-defaults", response_model=ServerResponse)
 async def apply_system_defaults_to_server(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Apply system default proxy settings to a server"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -337,8 +339,8 @@ async def apply_system_defaults_to_server(
 @mutation_router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_server(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Delete server - admins can delete any server, users can only delete their own"""
     server = await get_server_with_permission(server_id, current_user, db)

@@ -4,13 +4,13 @@ These endpoints are called by CS2 servers to report their status (crashes, resta
 Authentication is done via API key rather than JWT
 """
 
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
 
-from modules import DeploymentLog, Server, ServerStatus, get_db
+from api.dependencies import DatabaseSession
+from modules import DeploymentLog, Server, ServerStatus
 
 router = APIRouter(prefix="/api/server-status", tags=["server-status"])
 
@@ -27,7 +27,7 @@ class ServerStatusReport(SQLModel):
 
 async def verify_server_api_key(
     x_api_key: str = Header(..., description="Server API key for authentication"),
-    db: AsyncSession = Depends(get_db),
+    db: DatabaseSession = None,
 ) -> Server:
     """
     Verify server API key and return the server instance.
@@ -50,12 +50,15 @@ async def verify_server_api_key(
     return server
 
 
+VerifiedServer = Annotated[Server, Depends(verify_server_api_key)]
+
+
 @router.post("/{server_id}/report")
 async def report_server_status(
     server_id: int,
     report: ServerStatusReport,
-    server: Server = Depends(verify_server_api_key),
-    db: AsyncSession = Depends(get_db),
+    server: VerifiedServer,
+    db: DatabaseSession = None,
 ):
     """
     Receive status reports from CS2 servers.
@@ -131,8 +134,8 @@ async def report_server_status(
 @router.get("/{server_id}/config")
 async def get_server_config(
     server_id: int,
-    server: Server = Depends(verify_server_api_key),
-    db: AsyncSession = Depends(get_db),
+    server: VerifiedServer,
+    db: DatabaseSession = None,
 ):
     """
     Get server configuration for the startup script.

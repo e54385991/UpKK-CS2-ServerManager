@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from api.dependencies import ActiveUser, DatabaseSession
+
 from .common import *
 
 router = APIRouter(tags=["actions"])
@@ -59,8 +61,8 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
 @router.get("/servers/{server_id}/deployment-lock")
 async def check_deployment_lock(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Check deployment lock status for a server.
@@ -93,8 +95,8 @@ async def check_deployment_lock(
 @router.delete("/servers/{server_id}/deployment-lock")
 async def cancel_deployment(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Cancel an in-progress or stuck deployment by clearing the deployment lock
@@ -169,9 +171,9 @@ async def cancel_deployment(
 async def server_action(
     server_id: int,
     action_data: ServerAction,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-    locked_server: Server = Depends(acquire_server_action_lock),
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    locked_server: ServerActionLock,
 ):
     """Execute action on server (deploy, start, stop, restart, status)"""
     server = (
@@ -694,8 +696,8 @@ async def server_action(
 @router.get("/servers/{server_id}/deployment-progress")
 async def get_deployment_progress(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Get accumulated deployment progress for a server
@@ -717,8 +719,8 @@ async def get_server_logs(
     server_id: int,
     skip: int = 0,
     limit: int = 50,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """Get deployment logs for a server"""
     await get_server_and_verify_ownership(db, server_id, current_user)

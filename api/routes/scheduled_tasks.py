@@ -4,10 +4,11 @@ API routes for scheduled tasks
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import delete
 
+from api.dependencies import CurrentUser, DatabaseSession
 from modules import (
     ScheduledTask,
     ScheduledTaskCreate,
@@ -15,8 +16,6 @@ from modules import (
     ScheduledTaskUpdate,
     Server,
     User,
-    get_current_user,
-    get_db,
 )
 from services.scheduled_task_service import scheduled_task_service
 
@@ -47,8 +46,8 @@ async def get_server_for_user(server_id: int, db: AsyncSession, current_user: Us
 async def create_scheduled_task(
     server_id: int,
     task_data: ScheduledTaskCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DatabaseSession,
+    current_user: CurrentUser,
 ):
     """Create a new scheduled task for a server"""
     # Verify server exists and belongs to user
@@ -80,8 +79,8 @@ async def create_scheduled_task(
 @router.get("/{server_id}", response_model=List[ScheduledTaskResponse])
 async def list_scheduled_tasks(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DatabaseSession,
+    current_user: CurrentUser,
 ):
     """List all scheduled tasks for a server"""
     # Verify server exists and belongs to user
@@ -96,8 +95,8 @@ async def list_scheduled_tasks(
 async def get_scheduled_task(
     server_id: int,
     task_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DatabaseSession,
+    current_user: CurrentUser,
 ):
     """Get a specific scheduled task"""
     # Verify server exists and belongs to user
@@ -116,8 +115,8 @@ async def update_scheduled_task(
     server_id: int,
     task_id: int,
     task_data: ScheduledTaskUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DatabaseSession,
+    current_user: CurrentUser,
 ):
     """Update a scheduled task"""
     # Verify server exists and belongs to user
@@ -170,8 +169,8 @@ async def update_scheduled_task(
 async def delete_scheduled_task(
     server_id: int,
     task_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DatabaseSession,
+    current_user: CurrentUser,
 ):
     """Delete a scheduled task"""
     # Verify server exists and belongs to user
@@ -200,8 +199,8 @@ async def delete_scheduled_task(
 async def toggle_scheduled_task(
     server_id: int,
     task_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: DatabaseSession,
+    current_user: CurrentUser,
 ):
     """Toggle a scheduled task enabled/disabled"""
     # Verify server exists and belongs to user

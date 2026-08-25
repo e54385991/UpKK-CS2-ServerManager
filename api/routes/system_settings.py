@@ -2,17 +2,14 @@
 System settings routes (admin only)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, status
 
+from api.dependencies import AdminUser, DatabaseSession
 from modules import (
     EmailTestRequest,
     SystemSettings,
     SystemSettingsResponse,
     SystemSettingsUpdate,
-    User,
-    get_current_admin_user,
-    get_db,
 )
 from services.email_service import email_service
 
@@ -20,9 +17,7 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 
 
 @router.get("/settings", response_model=SystemSettingsResponse)
-async def get_system_settings(
-    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_admin_user)
-):
+async def get_system_settings(db: DatabaseSession, current_user: AdminUser):
     """Get system settings (admin only)"""
     settings = await SystemSettings.get_or_create_settings(db)
     return settings
@@ -31,8 +26,8 @@ async def get_system_settings(
 @router.put("/settings", response_model=SystemSettingsResponse)
 async def update_system_settings(
     settings_update: SystemSettingsUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ):
     """Update system settings (admin only)"""
     settings = await SystemSettings.get_or_create_settings(db)
@@ -58,8 +53,8 @@ async def update_system_settings(
 @router.post("/settings/test-email")
 async def test_email(
     request: EmailTestRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ):
     """Send a test email to verify email configuration (admin only)"""
 

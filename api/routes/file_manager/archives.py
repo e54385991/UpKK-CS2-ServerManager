@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from api.dependencies import ActiveUser, DatabaseSession
+
 from .common import *
 
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
@@ -11,8 +13,8 @@ router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 async def inspect_archive(
     server_id: int,
     request: InspectArchiveRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Inspect a remote archive and return its safe directory entries."""
     server = await get_server_for_user(server_id, db, current_user)
@@ -45,8 +47,8 @@ async def inspect_archive(
 async def extract_archive(
     server_id: int,
     request: ExtractArchiveRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Extract archive file (zip, tar, tar.gz, etc.) asynchronously.
@@ -136,8 +138,8 @@ async def extract_archive(
 async def get_extraction_status(
     server_id: int,
     task_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Get the status of an extraction task.

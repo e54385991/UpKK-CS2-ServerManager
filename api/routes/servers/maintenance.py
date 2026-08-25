@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from api.dependencies import ActiveUser, DatabaseSession
+
 from .common import *
 
 global_router = APIRouter(prefix="/servers", tags=["servers"])
@@ -12,8 +14,8 @@ diagnostics_router = APIRouter(prefix="/servers", tags=["servers"])
 @global_router.get("/disk-space-all")
 async def get_all_servers_disk_space(
     force_refresh: bool = False,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """
     Get cached disk space information for all servers owned by current user.
@@ -43,8 +45,8 @@ async def get_all_servers_disk_space(
 @cleanup_router.get("/{server_id}/cleanup/scan", response_model=CleanupScanResponse)
 async def scan_server_cleanup(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Scan approved game directory cleanup candidates for this server"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -66,8 +68,8 @@ async def scan_server_cleanup(
 async def delete_server_cleanup_items(
     server_id: int,
     cleanup_data: CleanupDeleteRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Delete approved game directory cleanup candidates for this server"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -94,8 +96,8 @@ async def delete_server_cleanup_items(
 @cleanup_router.get("/{server_id}/s3-backups", response_model=List[S3BackupItem])
 async def list_server_s3_backups(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """List S3 plugin backups for this server"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -111,8 +113,8 @@ async def list_server_s3_backups(
 async def restore_server_s3_backup(
     server_id: int,
     restore_data: S3RestoreRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Restore a selected S3 plugin backup to this server"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -191,8 +193,8 @@ async def restore_server_s3_backup(
 @diagnostics_router.get("/{server_id}/cpu-count")
 async def get_server_cpu_count(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Get CPU core count from the remote server"""
     from services.ssh_manager import SSHManager
@@ -254,8 +256,8 @@ async def get_server_cpu_count(
 async def get_server_disk_space(
     server_id: int,
     force_refresh: bool = False,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """
     Get disk space information for server directory
@@ -284,8 +286,8 @@ async def get_server_disk_space(
 @diagnostics_router.get("/{server_id}/check-deployment")
 async def check_server_deployment(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Check if server is actually deployed by verifying cs2 binary file exists
@@ -338,8 +340,8 @@ async def check_server_deployment(
 @diagnostics_router.post("/{server_id}/confirm-deployment")
 async def confirm_server_deployment(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Manually record a completed deployment when remote verification is unavailable."""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -385,8 +387,8 @@ async def confirm_server_deployment(
 )
 async def manual_ssh_reconnect(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Manually reconnect to a server and reset SSH health status
@@ -418,8 +420,8 @@ async def manual_ssh_reconnect(
 @diagnostics_router.get("/{server_id}/ssh-health")
 async def get_ssh_health_status(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Get SSH health status for a server"""
     # Get server and verify ownership

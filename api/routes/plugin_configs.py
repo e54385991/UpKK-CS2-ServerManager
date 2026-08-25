@@ -7,20 +7,18 @@ import posixpath
 from typing import Any, Literal, Optional
 
 import asyncssh
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from api.dependencies import ActiveUser, DatabaseSession
 from api.routes.servers import get_server_with_permission
 from modules import (
     DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS,
     PluginConfigSource,
-    User,
-    get_current_active_user,
-    get_db,
 )
 from services.maintenance_lock import maintenance_lock_service
 from services.plugin_config_service import (
@@ -157,8 +155,8 @@ def _file_payload(relative_path: str, content: str) -> dict[str, Any]:
 @router.get("/sources")
 async def list_sources(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
     result = await db.execute(
@@ -181,8 +179,8 @@ async def list_sources(
 async def create_source(
     server_id: int,
     request: SourceCreateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
     try:
@@ -235,8 +233,8 @@ async def create_source(
 async def delete_source(
     server_id: int,
     source_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, bool]:
     await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)
@@ -252,8 +250,8 @@ async def delete_source(
 @router.post("/sources/restore-default")
 async def restore_default_source(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
     restored_sources = []
@@ -294,8 +292,8 @@ async def restore_default_source(
 async def browse_source_path(
     server_id: int,
     path: str = Query("."),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
     try:
@@ -316,8 +314,8 @@ async def browse_source_path(
 async def load_source_files(
     server_id: int,
     source_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> StreamingResponse:
     server = await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)
@@ -367,8 +365,8 @@ async def get_config_file(
     server_id: int,
     source_id: int,
     path: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)
@@ -388,8 +386,8 @@ async def save_config_file(
     server_id: int,
     source_id: int,
     request: ConfigSaveRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
     source = await _source_for_server(db, server_id, source_id)

@@ -6,12 +6,12 @@ import logging
 from datetime import timedelta
 
 from anyio import to_thread
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from google.auth.transport import requests
 from google.oauth2 import id_token
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from api.dependencies import ActiveUser, DatabaseSession
 from modules import (
     ApiKeyGenerate,
     ApiKeyResponse,
@@ -34,8 +34,6 @@ from modules import (
     clear_web_session_cookie,
     create_access_token,
     generate_api_key,
-    get_current_active_user,
-    get_db,
     get_password_hash_async,
     set_web_session_cookie,
     settings,
@@ -71,7 +69,7 @@ async def get_google_config():
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, request: Request, db: AsyncSession = Depends(get_db)):
+async def register(user_data: UserCreate, request: Request, db: DatabaseSession):
     """Register a new user"""
     await enforce_rate_limit(request, "register", limit=5, window=3600, identity=user_data.username)
     # Validate CAPTCHA first
@@ -109,9 +107,7 @@ async def register(user_data: UserCreate, request: Request, db: AsyncSession = D
 
 
 @router.post("/login", response_model=Token)
-async def login(
-    user_data: UserLogin, request: Request, response: Response, db: AsyncSession = Depends(get_db)
-):
+async def login(user_data: UserLogin, request: Request, response: Response, db: DatabaseSession):
     """Login and get access token"""
     await enforce_rate_limit(request, "login", limit=10, window=60, identity=user_data.username)
     # Validate CAPTCHA first
@@ -153,7 +149,7 @@ async def login(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
+async def get_current_user_info(current_user: ActiveUser):
     """Get current user information"""
     return current_user
 
@@ -162,7 +158,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_active_
 async def bootstrap_web_session(
     request: Request,
     response: Response,
-    current_user: User = Depends(get_current_active_user),
+    current_user: ActiveUser,
 ):
     """Copy an already validated bearer token into the protected browser cookie."""
     authorization = request.headers.get("authorization", "")
@@ -178,8 +174,8 @@ async def bootstrap_web_session(
 @router.post("/reset-password")
 async def reset_password(
     password_data: PasswordReset,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: ActiveUser,
+    db: DatabaseSession,
 ):
     """Reset user password"""
     # Validate CAPTCHA first
@@ -217,8 +213,8 @@ async def reset_password(
 @router.put("/profile", response_model=UserResponse)
 async def update_profile(
     profile_data: UserProfileUpdate,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: ActiveUser,
+    db: DatabaseSession,
 ):
     """Update user profile"""
     # Validate CAPTCHA first
@@ -268,7 +264,7 @@ async def update_profile(
 
 @router.get("/api-key", response_model=ApiKeyResponse)
 async def get_api_key(
-    current_user: User = Depends(get_current_active_user),
+    current_user: ActiveUser,
 ):
     """Get current user's API key"""
     if not current_user.api_key:
@@ -286,8 +282,8 @@ async def get_api_key(
 @router.post("/api-key/generate", response_model=ApiKeyResponse)
 async def generate_user_api_key(
     api_key_data: ApiKeyGenerate,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: ActiveUser,
+    db: DatabaseSession,
 ):
     """Generate a new API key for the current user (or regenerate if exists)"""
     # Validate CAPTCHA if provided (optional for automation)
@@ -325,9 +321,7 @@ async def generate_user_api_key(
 
 
 @router.delete("/api-key")
-async def revoke_api_key(
-    current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)
-):
+async def revoke_api_key(current_user: ActiveUser, db: DatabaseSession):
     """Revoke (delete) the current user's API key"""
     if not current_user.api_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No API key to revoke")
@@ -341,7 +335,7 @@ async def revoke_api_key(
 
 @router.get("/steam-api-key", response_model=SteamApiKeyResponse)
 async def get_steam_api_key(
-    current_user: User = Depends(get_current_active_user),
+    current_user: ActiveUser,
 ):
     """Get current user's Steam API key"""
     return {"steam_api_key": current_user.steam_api_key}
@@ -349,7 +343,7 @@ async def get_steam_api_key(
 
 @router.get("/github-token-status", response_model=GitHubTokenStatusResponse)
 async def get_github_token_status(
-    current_user: User = Depends(get_current_active_user),
+    current_user: ActiveUser,
 ):
     """Get GitHub token configuration status (without revealing the full token)"""
     has_token = current_user.has_github_token
@@ -364,7 +358,7 @@ async def get_github_token_status(
 
 @router.get("/s3-settings", response_model=S3SettingsResponse)
 async def get_s3_settings(
-    current_user: User = Depends(get_current_active_user),
+    current_user: ActiveUser,
 ):
     """Get current user's S3 backup settings without revealing the secret key"""
     return _build_s3_settings_response(current_user)
@@ -373,8 +367,8 @@ async def get_s3_settings(
 @router.put("/s3-settings", response_model=S3SettingsResponse)
 async def update_s3_settings(
     settings_data: S3SettingsUpdate,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: ActiveUser,
+    db: DatabaseSession,
 ):
     """Update current user's S3 backup settings"""
     is_valid = await captcha_service.validate_captcha(
@@ -418,7 +412,7 @@ async def update_s3_settings(
 
 @router.post("/s3-settings/test")
 async def test_s3_settings(
-    current_user: User = Depends(get_current_active_user),
+    current_user: ActiveUser,
 ):
     """Test the saved S3 backup settings"""
     success, message, steps = await s3_backup_service.test_connection(current_user)
@@ -428,8 +422,8 @@ async def test_s3_settings(
 @router.post("/generate-server-token", response_model=GenerateServerTokenResponse)
 async def generate_server_token(
     request_data: GenerateServerTokenRequest,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: ActiveUser,
+    db: DatabaseSession,
 ):
     """Generate a Steam game server login token (GSLT) using user's Steam API key"""
     # Validate CAPTCHA (required for security)
@@ -467,7 +461,7 @@ async def generate_server_token(
 
 @router.post("/forgot-password")
 async def forgot_password(
-    reset_request: ForgotPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)
+    reset_request: ForgotPasswordRequest, request: Request, db: DatabaseSession
 ):
     """Request password reset email"""
     from datetime import timedelta
@@ -531,7 +525,7 @@ async def forgot_password(
 
 @router.post("/reset-password-with-token")
 async def reset_password_with_token(
-    reset_request: ResetPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)
+    reset_request: ResetPasswordRequest, request: Request, db: DatabaseSession
 ):
     """Reset password using reset token"""
     from modules import PasswordResetToken
@@ -577,7 +571,7 @@ async def google_oauth_login(
     oauth_data: GoogleOAuthRequest,
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db),
+    db: DatabaseSession,
 ):
     """
     Google OAuth login/register endpoint

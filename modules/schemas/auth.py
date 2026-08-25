@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from pydantic import ConfigDict
+
 from .common import *
 
 
@@ -38,7 +40,7 @@ class UserResponse(SQLModel):
     is_admin: bool
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Token(SQLModel):
@@ -121,7 +123,7 @@ class SteamApiKeyResponse(SQLModel):
 
     steam_api_key: Optional[str] = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GitHubTokenStatusResponse(SQLModel):
@@ -132,7 +134,7 @@ class GitHubTokenStatusResponse(SQLModel):
         None  # Shows first part like "github_pat_11..." without revealing full token
     )
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class S3SettingsResponse(SQLModel):
@@ -324,7 +326,7 @@ class ApiKeyResponse(SQLModel):
     api_key: str
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ApiKeyGenerate(SQLModel):

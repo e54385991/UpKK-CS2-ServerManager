@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from api.dependencies import ActiveUser, DatabaseSession
+
 from .common import *
 
 router = APIRouter(tags=["actions"])
@@ -10,8 +12,8 @@ router = APIRouter(tags=["actions"])
 @router.post("/servers/batch-actions", response_model=BatchActionResponse)
 async def batch_server_actions(
     request: BatchActionRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Execute an action on multiple servers asynchronously (non-blocking).
@@ -74,9 +76,7 @@ async def batch_server_actions(
 
 
 @router.get("/servers/batch-actions/{batch_id}")
-async def get_batch_action_status(
-    batch_id: str, current_user: User = Depends(get_current_active_user)
-):
+async def get_batch_action_status(batch_id: str, current_user: ActiveUser):
     """
     Get the status of a batch action.
 
@@ -117,8 +117,8 @@ async def get_batch_action_status(
 @router.post("/servers/batch-install-plugins", response_model=BatchActionResponse)
 async def batch_install_plugins(
     request: BatchInstallPluginsRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Install plugins on multiple servers asynchronously (non-blocking).
@@ -184,8 +184,8 @@ async def batch_install_plugins(
 @router.post("/servers/batch-send-command", response_model=BatchActionResponse)
 async def batch_send_command(
     request: BatchSendCommandRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Send a command to multiple game servers asynchronously (non-blocking).

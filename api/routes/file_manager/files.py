@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from api.dependencies import ActiveUser, DatabaseSession
+
 from .common import *
 
 transfer_router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
@@ -12,8 +14,8 @@ mutation_router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-man
 async def list_directory(
     server_id: int,
     path: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """List directory contents"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -43,8 +45,8 @@ async def list_directory(
 async def get_file_content(
     server_id: int,
     path: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Get file content for viewing/editing"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -71,8 +73,8 @@ async def update_file_content(
     server_id: int,
     path: str,
     request: FileContentRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Update file content"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -99,8 +101,8 @@ async def upload_file(
     server_id: int,
     path: str,
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """Upload file to server"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -159,8 +161,8 @@ async def upload_file(
 async def download_file(
     server_id: int,
     path: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user_for_download),
+    db: DatabaseSession,
+    current_user: DownloadUser,
 ):
     """Download file from server"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -230,8 +232,8 @@ async def download_file(
 async def create_download_ticket(
     server_id: int,
     request: DownloadTicketRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Create a short-lived one-time ticket for browser-native downloads."""
     server = await get_server_for_user(server_id, db, current_user)
@@ -251,8 +253,8 @@ async def create_directory(
     server_id: int,
     path: str,
     request: CreateDirectoryRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Create a new directory"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -286,8 +288,8 @@ async def create_directory(
 async def delete_path(
     server_id: int,
     path: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Delete file or directory"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -320,8 +322,8 @@ async def rename_file_or_directory(
     server_id: int,
     path: str,
     request: RenameRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Rename file or directory"""
     server = await get_server_for_user(server_id, db, current_user)

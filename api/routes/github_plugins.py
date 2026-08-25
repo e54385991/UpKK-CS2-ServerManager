@@ -12,10 +12,14 @@ from typing import Optional
 from urllib.parse import unquote, urlsplit
 
 import anyio
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import locked_server_operation
+from api.dependencies import (
+    ActiveUser,
+    DatabaseSession,
+    LockedServerOperation,
+)
 from modules import (
     ArchiveAnalysisResponse,
     ArchiveContentItem,
@@ -35,8 +39,6 @@ from modules import (
     PluginUninstallResponse,
     Server,
     User,
-    get_current_active_user,
-    get_db,
 )
 from modules.http_helper import http_helper
 from services import SSHManager
@@ -159,8 +161,8 @@ def _safe_github_error(exc: Exception) -> HTTPException:
 async def search_github_cs2_plugins(
     q: str = Query(min_length=1, max_length=120),
     limit: int = Query(default=3, ge=1, le=3),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ) -> dict:
     try:
         await enforce_agent_rate_limit(current_user.id, "github_search", limit=10)
@@ -172,8 +174,8 @@ async def search_github_cs2_plugins(
 @router.post("/inspect", response_model=GitHubPluginInspectResponse)
 async def inspect_github_plugin(
     request: GitHubPluginInspectRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     try:
         await enforce_agent_rate_limit(current_user.id, "github_inspect", limit=15)
@@ -186,8 +188,8 @@ async def inspect_github_plugin(
 async def plan_github_plugin_install(
     server_id: int,
     request: GitHubPluginInstallPlanRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     try:
         await enforce_agent_rate_limit(current_user.id, "github_plan", limit=5)
@@ -200,8 +202,8 @@ async def plan_github_plugin_install(
 async def apply_github_plugin_install(
     server_id: int,
     request: GitHubPluginInstallExecuteRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     try:
         await enforce_agent_rate_limit(
@@ -232,8 +234,8 @@ async def apply_github_plugin_install(
 @router.post("/recipes")
 async def create_github_install_recipe(
     request: GitHubInstallRecipeCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     try:
         recipe = await create_install_recipe(db, current_user, request.model_dump())
@@ -336,8 +338,8 @@ async def get_github_releases(
     repo_url: str,
     count: int = 5,
     server_id: Optional[int] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ) -> GitHubReleasesResponse:
     """
     Fetch recent releases from a GitHub repository.
@@ -474,8 +476,8 @@ async def get_github_releases(
 async def analyze_archive(
     server_id: int,
     download_url: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> ArchiveAnalysisResponse:
     """
     Download and analyze archive contents to detect structure.
@@ -730,8 +732,8 @@ async def analyze_archive(
 async def install_github_plugin(
     server_id: int,
     request: GitHubPluginInstallRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from a GitHub release asset with WebSocket progress updates.
@@ -786,8 +788,8 @@ async def install_github_plugin(
 async def analyze_installed_plugins(
     server_id: int,
     directory: str = "addons",
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """
     Analyze installed plugin files to help users select which files to uninstall.
@@ -889,9 +891,9 @@ async def analyze_installed_plugins(
 async def uninstall_plugin(
     server_id: int,
     request: PluginUninstallRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-    _operation_server: Server = Depends(locked_server_operation),
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    _operation_server: LockedServerOperation,
 ) -> PluginUninstallResponse:
     """
     Uninstall a plugin by deleting selected files.

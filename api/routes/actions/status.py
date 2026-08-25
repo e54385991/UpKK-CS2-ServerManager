@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from api.dependencies import ActiveUser, DatabaseSession
+
 from .common import *
 
 router = APIRouter(tags=["actions"])
@@ -10,8 +12,8 @@ router = APIRouter(tags=["actions"])
 @router.get("/servers/{server_id}/ssh-connection-info")
 async def get_ssh_connection_info(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Get SSH connection information for a server.
@@ -31,8 +33,8 @@ async def get_ssh_connection_info(
 @router.post("/servers/{server_id}/reconnect-ssh")
 async def reconnect_ssh(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Manually reconnect SSH connection for a server.
@@ -91,8 +93,8 @@ async def reconnect_ssh(
 @router.post("/servers/{server_id}/reset-reconnect-counter")
 async def reset_reconnect_counter(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Reset the reconnection counter for a server without reconnecting.
@@ -116,8 +118,8 @@ async def reset_reconnect_counter(
 @router.get("/servers/{server_id}/metamod-status")
 async def get_metamod_status(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Check if Metamod:Source framework is installed on the server.

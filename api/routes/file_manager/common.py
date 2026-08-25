@@ -13,7 +13,7 @@ import socket
 import tempfile
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlsplit
 
 import anyio
@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel, select
 from starlette.background import BackgroundTask
 
-from api.dependencies import require_server_access
+from api.dependencies import DatabaseSession, require_server_access
 from modules import Server, User, get_current_active_user, get_db, settings
 from services import SSHManager
 from services.concurrency_limiter import KeyedConcurrencyLimiter
@@ -206,7 +206,7 @@ async def get_current_active_user_for_download(
     path: str,
     ticket: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db),
+    db: DatabaseSession = None,
 ) -> User:
     """Authenticate downloads with a one-time ticket or a normal bearer token."""
     credentials_exception = HTTPException(
@@ -248,6 +248,9 @@ async def get_current_active_user_for_download(
         raise HTTPException(status_code=400, detail="Inactive user")
 
     return user
+
+
+DownloadUser = Annotated[User, Depends(get_current_active_user_for_download)]
 
 
 def is_path_safe(base_path: str, requested_path: str) -> bool:

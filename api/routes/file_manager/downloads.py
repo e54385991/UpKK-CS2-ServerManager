@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from api.dependencies import ActiveUser, DatabaseSession
+
 from .common import *
 
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
@@ -11,8 +13,8 @@ router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 async def download_archive_from_url(
     server_id: int,
     request: DownloadUrlRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Start downloading an HTTP(S) archive directly on the SSH host."""
     server = await get_server_for_user(server_id, db, current_user)
@@ -103,8 +105,8 @@ async def download_archive_from_url(
 async def get_download_url_status(
     server_id: int,
     task_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Return status for a URL download task owned by this user and server."""
     await get_server_for_user(server_id, db, current_user)

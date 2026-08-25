@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from pydantic import ConfigDict
+
 from .common import *
 
 
@@ -164,4 +166,4 @@ class ScheduledTaskResponse(SQLModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)

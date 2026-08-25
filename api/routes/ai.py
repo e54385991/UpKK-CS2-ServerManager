@@ -8,7 +8,6 @@ from typing import Any
 
 from fastapi import (
     APIRouter,
-    Depends,
     HTTPException,
     Query,
     Request,
@@ -21,6 +20,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from api.dependencies import ActiveUser, AdminUser, DatabaseSession
 from modules import (
     AIConversation,
     AIConversationCreate,
@@ -46,9 +46,6 @@ from modules import (
     UserAISettingsUpdate,
     async_session_maker,
     authenticate_websocket,
-    get_current_active_user,
-    get_current_admin_user,
-    get_db,
 )
 from modules.schemas.ai import AIBackgroundTaskResponse, AIBackgroundTaskToolResponse
 from modules.utils import get_current_time
@@ -193,8 +190,8 @@ def _configuration_error(exc: Exception) -> HTTPException:
 
 @router.get("/api/system/ai-settings", response_model=AISystemSettingsResponse)
 async def get_system_ai_settings(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ) -> AISystemSettingsResponse:
     return _system_response(await AISystemSettings.get_or_create(db))
 
@@ -202,8 +199,8 @@ async def get_system_ai_settings(
 @router.put("/api/system/ai-settings", response_model=AISystemSettingsResponse)
 async def update_system_ai_settings(
     request: AISystemSettingsUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ) -> AISystemSettingsResponse:
     item = await AISystemSettings.get_or_create(db)
     changed_provider = False
@@ -278,8 +275,8 @@ async def update_system_ai_settings(
 @router.post("/api/system/ai-settings/test", response_model=AIProviderTestResponse)
 async def test_system_ai_settings(
     request: AIProviderTestRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ) -> AIProviderTestResponse:
     item = await AISystemSettings.get_or_create(db)
     try:
@@ -321,8 +318,8 @@ async def test_system_ai_settings(
 
 @router.get("/api/auth/ai-settings", response_model=UserAISettingsResponse)
 async def get_user_ai_settings(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> UserAISettingsResponse:
     return await _user_response(db, current_user, await _get_user_settings(db, current_user.id))
 
@@ -330,8 +327,8 @@ async def get_user_ai_settings(
 @router.put("/api/auth/ai-settings", response_model=UserAISettingsResponse)
 async def update_user_ai_settings(
     request: UserAISettingsUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> UserAISettingsResponse:
     item = await _get_user_settings(db, current_user.id)
     changed_provider = request.mode != item.mode
@@ -367,8 +364,8 @@ async def update_user_ai_settings(
 @router.post("/api/auth/ai-settings/test", response_model=AIProviderTestResponse)
 async def test_user_ai_settings(
     request: AIProviderTestRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> AIProviderTestResponse:
     item = await _get_user_settings(db, current_user.id)
     system = await AISystemSettings.get_or_create(db)
@@ -444,8 +441,8 @@ async def _conversation_for_user(
 @router.post("/api/ai/conversations", response_model=AIConversationResponse)
 async def create_ai_conversation(
     request: AIConversationCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> AIConversation:
     if await get_effective_provider(db, current_user) is None:
         raise HTTPException(
@@ -469,8 +466,8 @@ async def create_ai_conversation(
 
 @router.get("/api/ai/conversations", response_model=list[AIConversationResponse])
 async def list_ai_conversations(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> list[AIConversation]:
     result = await db.execute(
         select(AIConversation)
@@ -484,8 +481,8 @@ async def list_ai_conversations(
 @router.get("/api/ai/conversations/{conversation_id}", response_model=AIConversationDetail)
 async def get_ai_conversation(
     conversation_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> AIConversationDetail:
     conversation = await _conversation_for_user(db, current_user, conversation_id)
     result = await db.execute(
@@ -505,8 +502,8 @@ async def get_ai_conversation(
 @router.delete("/api/ai/conversations/{conversation_id}", status_code=204)
 async def delete_ai_conversation(
     conversation_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> None:
     conversation = await _conversation_for_user(db, current_user, conversation_id)
     await reconcile_waiting_approval_runs(db, conversation_id=conversation.id)
@@ -534,8 +531,8 @@ async def delete_ai_conversation(
 async def send_ai_message(
     conversation_id: str,
     request: AIMessageCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> AIRun:
     conversation = await _conversation_for_user(db, current_user, conversation_id)
     if await get_effective_provider(db, current_user) is None:
@@ -588,8 +585,8 @@ async def send_ai_message(
 @router.post("/api/ai/conversations/{conversation_id}/interrupt")
 async def interrupt_conversation(
     conversation_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     conversation = await _conversation_for_user(db, current_user, conversation_id)
     try:
@@ -610,8 +607,8 @@ async def _run_for_user(db: AsyncSession, user: User, run_id: str) -> AIRun:
 @router.get("/api/ai/runs/{run_id}")
 async def get_ai_run(
     run_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, Any]:
     run = await _run_for_user(db, current_user, run_id)
     await reconcile_waiting_approval_runs(db, run_id=run.id)
@@ -633,8 +630,8 @@ async def get_ai_run(
 async def list_ai_background_tasks(
     limit: int = Query(default=20, ge=1, le=100),
     conversation_id: str = Query(min_length=36, max_length=36),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ) -> list[AIBackgroundTaskResponse]:
     """Return active and recent AI tasks belonging to one caller conversation."""
     await reconcile_waiting_approval_runs(db, user_id=current_user.id)
@@ -701,8 +698,8 @@ async def list_ai_background_tasks(
 @router.delete("/api/ai/tasks/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_ai_background_task(
     run_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> None:
     run = await _run_for_user(db, current_user, run_id)
     if run.status in ACTIVE_RUN_STATUSES:
@@ -719,8 +716,8 @@ async def decide_ai_tool(
     run_id: str,
     tool_run_id: str,
     request: AIToolDecisionRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, str]:
     run = await _run_for_user(db, current_user, run_id)
     terminal_runs = await reconcile_waiting_approval_runs(db, run_id=run.id)
@@ -814,8 +811,8 @@ async def ai_run_event_stream(
     run_id: str,
     request: Request,
     after: int = Query(default=0, ge=0),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ) -> StreamingResponse:
     await _run_for_user(db, current_user, run_id)
 

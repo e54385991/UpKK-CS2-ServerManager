@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, status
 
+from api.dependencies import ActiveUser, DatabaseSession
 from modules import (
     PluginDiagnosticExecuteRequest,
     PluginDiagnosticPlanRequest,
     PluginDiagnosticPlanResponse,
     PluginDiagnosticRunResponse,
-    User,
-    get_current_active_user,
-    get_db,
 )
 from services.ai_access import AgentAccessDenied, enforce_agent_rate_limit
 from services.plugin_diagnostic_service import (
@@ -35,8 +32,8 @@ def _not_found(exc: Exception) -> HTTPException:
 @router.get("/recommendation")
 async def read_plugin_diagnostic_recommendation(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     """Return a read-only hint; this endpoint never changes plugin state."""
     try:
@@ -49,8 +46,8 @@ async def read_plugin_diagnostic_recommendation(
 async def plan_plugin_diagnostic(
     server_id: int,
     request: PluginDiagnosticPlanRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     try:
         await enforce_agent_rate_limit(current_user.id, "diagnostic_plan", limit=10)
@@ -63,8 +60,8 @@ async def plan_plugin_diagnostic(
 async def run_plugin_diagnostic(
     server_id: int,
     request: PluginDiagnosticExecuteRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     try:
         await enforce_agent_rate_limit(
@@ -87,8 +84,8 @@ async def run_plugin_diagnostic(
 async def read_plugin_diagnostic(
     server_id: int,
     diagnostic_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     try:
         return await get_diagnostic_run(db, current_user, server_id, diagnostic_id)
@@ -100,8 +97,8 @@ async def read_plugin_diagnostic(
 async def restore_plugin_diagnostic(
     server_id: int,
     diagnostic_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     try:
         return await restore_diagnostic_run(db, current_user, server_id, diagnostic_id)
@@ -114,8 +111,8 @@ async def resume_plugin_diagnostic(
     server_id: int,
     diagnostic_id: str,
     request: PluginDiagnosticExecuteRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     """Safely resume by restoring the interrupted snapshot and starting a newly approved run."""
     try:

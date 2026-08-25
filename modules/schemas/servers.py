@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from pydantic import ConfigDict
+
 from modules.models import AuthType
 from services.server_startup_arguments import (
     normalize_additional_parameters,
@@ -527,7 +529,7 @@ class ServerResponse(SQLModel):
     # Restart required flag (set by update endpoint when startup-affecting settings change)
     restart_required: bool = False
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ServerResponseWithUser(ServerResponse):
@@ -535,7 +537,7 @@ class ServerResponseWithUser(ServerResponse):
 
     user: Optional[UserResponse] = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ServerAction(SQLModel):
@@ -735,7 +737,7 @@ class CustomCommandResponse(SQLModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ActionResponse(SQLModel):
@@ -757,7 +759,7 @@ class DeploymentLogResponse(SQLModel):
     error_message: Optional[str] = None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class A2SServerInfo(SQLModel):
@@ -833,7 +835,7 @@ class InitializedServerListItem(SQLModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class InitializedServerResponse(SQLModel):
@@ -850,4 +852,4 @@ class InitializedServerResponse(SQLModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)

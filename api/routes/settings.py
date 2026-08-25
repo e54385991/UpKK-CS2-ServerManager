@@ -4,18 +4,15 @@ Global settings routes for system-wide configuration
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.dependencies import AdminUser, DatabaseSession
 from modules import (
     AutoRestartSettings,
     GlobalSettings,
     GlobalSettingsResponse,
     GlobalSettingsUpdate,
-    User,
-    get_current_admin_user,
-    get_db,
 )
 from services.server_monitor import server_monitor
 
@@ -23,7 +20,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 @router.get("/auto-restart", response_model=AutoRestartSettings)
-async def get_auto_restart_settings(db: AsyncSession = Depends(get_db)):
+async def get_auto_restart_settings(db: DatabaseSession):
     """
     Get auto-restart global configuration
 
@@ -59,8 +56,8 @@ async def get_auto_restart_settings(db: AsyncSession = Depends(get_db)):
 @router.put("/auto-restart", response_model=AutoRestartSettings)
 async def update_auto_restart_settings(
     settings: AutoRestartSettings,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ):
     """
     Update auto-restart global configuration (Admin only)
@@ -132,9 +129,7 @@ async def update_auto_restart_settings(
 
 
 @router.get("/all", response_model=List[GlobalSettingsResponse])
-async def get_all_settings(
-    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_admin_user)
-):
+async def get_all_settings(db: DatabaseSession, current_user: AdminUser):
     """
     Get all global settings (Admin only)
 
@@ -148,8 +143,8 @@ async def get_all_settings(
 @router.get("/{setting_key}", response_model=GlobalSettingsResponse)
 async def get_setting(
     setting_key: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ):
     """
     Get a specific global setting by key (Admin only)
@@ -171,8 +166,8 @@ async def get_setting(
 async def update_setting(
     setting_key: str,
     setting_update: GlobalSettingsUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ):
     """
     Update a specific global setting (Admin only)

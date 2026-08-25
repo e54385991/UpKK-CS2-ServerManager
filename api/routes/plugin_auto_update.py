@@ -3,10 +3,11 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from api.dependencies import ActiveUser, DatabaseSession
 from modules import (
     ActionResponse,
     CustomCommand,
@@ -19,8 +20,6 @@ from modules import (
     PluginAutoUpdateSettings,
     Server,
     User,
-    get_current_active_user,
-    get_db,
 )
 from services.maintenance_lock import maintenance_lock_service
 from services.plugin_auto_update_service import (
@@ -112,8 +111,8 @@ async def owned_plugin(db: AsyncSession, server_id: int, plugin_id: int) -> Mana
 @router.get("", response_model=PluginAutoUpdateResponse)
 async def get_configuration(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     server = await owned_server(db, server_id, current_user)
     result = await db.execute(
@@ -139,8 +138,8 @@ async def get_configuration(
 async def update_settings(
     server_id: int,
     request: PluginAutoUpdateSettings,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     server = await owned_server(db, server_id, current_user)
     command_ids = await validate_post_update_commands(
@@ -160,8 +159,8 @@ async def update_settings(
 async def register_plugin(
     server_id: int,
     request: ManagedPluginCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     await owned_server(db, server_id, current_user)
     repo_url = canonical_repo_url(request.repo_url) if request.repo_url else None
@@ -234,8 +233,8 @@ async def update_plugin(
     server_id: int,
     plugin_id: int,
     request: ManagedPluginUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     await owned_server(db, server_id, current_user)
     plugin = await owned_plugin(db, server_id, plugin_id)
@@ -250,8 +249,8 @@ async def update_plugin(
 async def unmanage_plugin(
     server_id: int,
     plugin_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     await owned_server(db, server_id, current_user)
     plugin = await owned_plugin(db, server_id, plugin_id)
@@ -265,8 +264,8 @@ async def unmanage_plugin(
 @router.post("/run", response_model=ActionResponse, status_code=status.HTTP_202_ACCEPTED)
 async def run_now(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     await owned_server(db, server_id, current_user)
     if await maintenance_lock_service.is_locked(server_id):
@@ -290,8 +289,8 @@ async def run_now(
 async def test_plugin_update(
     server_id: int,
     plugin_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Run the normal protected update pipeline for one managed plugin."""
     await owned_server(db, server_id, current_user)
@@ -312,8 +311,8 @@ async def test_plugin_update(
 @router.get("/status")
 async def get_run_status(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     await owned_server(db, server_id, current_user)
     return await plugin_auto_update_service.get_status(server_id)

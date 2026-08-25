@@ -2,17 +2,14 @@
 User settings routes for customizable mirror URLs
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.dependencies import ActiveUser, DatabaseSession
 from modules import (
-    User,
     UserSettings,
     UserSettingsResponse,
     UserSettingsUpdate,
-    get_current_active_user,
-    get_db,
     settings,
 )
 
@@ -29,9 +26,7 @@ async def get_mirror_presets():
 
 
 @router.get("", response_model=UserSettingsResponse)
-async def get_user_settings(
-    current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)
-):
+async def get_user_settings(current_user: ActiveUser, db: DatabaseSession):
     """Get current user's settings"""
     # Query user settings
     result = await db.execute(select(UserSettings).filter(UserSettings.user_id == current_user.id))
@@ -47,8 +42,8 @@ async def get_user_settings(
 @router.put("", response_model=UserSettingsResponse)
 async def update_user_settings(
     settings_data: UserSettingsUpdate,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: ActiveUser,
+    db: DatabaseSession,
 ):
     """Update user settings"""
     # Query existing settings
@@ -77,9 +72,7 @@ async def update_user_settings(
 
 
 @router.delete("")
-async def reset_user_settings(
-    current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)
-):
+async def reset_user_settings(current_user: ActiveUser, db: DatabaseSession):
     """Reset user settings to default (delete custom settings)"""
     # Query existing settings
     result = await db.execute(select(UserSettings).filter(UserSettings.user_id == current_user.id))

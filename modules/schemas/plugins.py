@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from pydantic import ConfigDict
+
 from .common import *
 
 
@@ -225,7 +227,7 @@ class PluginConflictRuleResponse(SQLModel):
     reason: Optional[str] = None
     is_enabled: bool
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PluginConflictRulesUpdate(SQLModel):
@@ -253,7 +255,7 @@ class MarketPluginResponse(SQLModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MarketPluginListResponse(SQLModel):
@@ -392,7 +394,7 @@ class ManagedPluginResponse(SQLModel):
     last_status: Optional[str] = None
     last_error: Optional[str] = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PluginAutoUpdateResponse(SQLModel):

@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from api.dependencies import ActiveUser, DatabaseSession
+
 from .common import *
 
 router = APIRouter(prefix="/servers", tags=["servers"])
@@ -12,8 +14,8 @@ async def get_monitoring_logs(
     server_id: int,
     limit: int = 50,
     event_type: str = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """Get monitoring logs for a server from Redis"""
     import logging
@@ -143,8 +145,8 @@ async def get_all_servers_a2s_cache():
 @router.get("/{server_id}/a2s-info")
 async def get_server_a2s_info(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Get A2S query information for a server"""
     from services.a2s_query import a2s_service

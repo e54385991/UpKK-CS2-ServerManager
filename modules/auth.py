@@ -3,7 +3,7 @@ Authentication utilities for user management
 """
 
 from datetime import timedelta
-from typing import Optional
+from typing import Annotated, Optional
 from urllib.parse import urlsplit
 
 import bcrypt
@@ -105,7 +105,7 @@ async def _get_active_user_for_token(token: str, db: AsyncSession) -> Optional[U
 
 async def get_current_web_user(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     """Authenticate browser page navigation with the HTTP-only session cookie."""
     token = request.cookies.get(WEB_SESSION_COOKIE)
@@ -120,7 +120,7 @@ async def get_current_web_user(
 
 
 async def get_current_web_admin(
-    current_user: User = Depends(get_current_web_user),
+    current_user: Annotated[User, Depends(get_current_web_user)],
 ) -> User:
     if not current_user.is_admin:
         raise HTTPException(
@@ -177,7 +177,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     """Get the current authenticated user from JWT token"""
     credentials_exception = HTTPException(
@@ -205,7 +206,9 @@ async def get_current_user(
     return user
 
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+async def get_current_active_user(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
     """Get the current active user"""
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
@@ -213,8 +216,8 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
 
 async def get_optional_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(optional_oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Optional[User]:
     """Get the current user if authenticated, None otherwise"""
     if credentials is None:
@@ -239,7 +242,9 @@ async def get_optional_current_user(
     return user
 
 
-async def get_current_admin_user(current_user: User = Depends(get_current_active_user)) -> User:
+async def get_current_admin_user(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> User:
     """Get the current admin user"""
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
@@ -248,7 +253,7 @@ async def get_current_admin_user(current_user: User = Depends(get_current_active
 
 async def get_user_from_api_key(
     x_api_key: Optional[str] = Header(None, description="User API key for authentication"),
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
 ) -> Optional[User]:
     """
     Get user from API key in header.
@@ -272,9 +277,9 @@ async def get_user_from_api_key(
 
 
 async def get_current_user_flexible(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: Annotated[Optional[str], Depends(oauth2_scheme)],
     x_api_key: Optional[str] = Header(None, description="User API key for authentication"),
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
 ) -> User:
     """
     Get the current authenticated user from either JWT token or API key.

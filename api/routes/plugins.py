@@ -8,12 +8,16 @@ import os
 from typing import Optional
 
 from anyio import to_thread
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import locked_server_operation
+from api.dependencies import (
+    ActiveUser,
+    DatabaseSession,
+    LockedServerOperation,
+)
 from modules import (
     InstalledPlugin,
     InstalledPluginResponse,
@@ -24,9 +28,6 @@ from modules import (
     PluginListResponse,
     PluginResponse,
     Server,
-    User,
-    get_current_active_user,
-    get_db,
 )
 from services import SSHManager
 
@@ -48,7 +49,7 @@ async def list_plugins(
     category: Optional[str] = Query(None, description="Filter by category"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    db: AsyncSession = Depends(get_db),
+    db: DatabaseSession = None,
 ):
     """
     Get paginated list of available plugins
@@ -77,7 +78,7 @@ async def list_plugins(
 
 
 @router.get("/{plugin_id}", response_model=PluginResponse)
-async def get_plugin(plugin_id: int, db: AsyncSession = Depends(get_db)):
+async def get_plugin(plugin_id: int, db: DatabaseSession):
     """Get details of a specific plugin"""
     plugin = await db.get(Plugin, plugin_id)
     if not plugin:
@@ -89,8 +90,8 @@ async def get_plugin(plugin_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("", response_model=PluginResponse)
 async def create_plugin(
     plugin: PluginCreate,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: ActiveUser,
+    db: DatabaseSession,
 ):
     """
     Create a new plugin in the catalog
@@ -136,8 +137,8 @@ async def upload_plugin(
     config_required: bool = Form(
         default=False, description="Whether plugin requires configuration"
     ),
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: ActiveUser = None,
+    db: DatabaseSession = None,
 ):
     """
     Upload a plugin file and add it to the catalog
@@ -251,8 +252,8 @@ async def upload_plugin(
 @router.get("/servers/{server_id}/installed", response_model=list[InstalledPluginResponse])
 async def get_installed_plugins(
     server_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: ActiveUser,
+    db: DatabaseSession,
 ):
     """Get all plugins installed on a specific server"""
     # Verify user owns the server
@@ -278,9 +279,9 @@ async def get_installed_plugins(
 async def install_plugin(
     server_id: int,
     install_request: PluginInstallRequest,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    _operation_server: Server = Depends(locked_server_operation),
+    current_user: ActiveUser,
+    db: DatabaseSession,
+    _operation_server: LockedServerOperation,
 ):
     """Install a plugin on a specific server"""
     # Verify user owns the server
@@ -342,9 +343,9 @@ async def install_plugin(
 async def uninstall_plugin(
     server_id: int,
     installed_plugin_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    _operation_server: Server = Depends(locked_server_operation),
+    current_user: ActiveUser,
+    db: DatabaseSession,
+    _operation_server: LockedServerOperation,
 ):
     """Uninstall a plugin from a specific server"""
     import logging

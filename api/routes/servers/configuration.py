@@ -2,6 +2,7 @@
 
 # ruff: noqa: F403,F405
 
+from api.dependencies import ActiveUser, DatabaseSession
 from services.server_startup_arguments import (
     normalize_additional_parameters,
     normalize_default_map,
@@ -18,8 +19,8 @@ startup_router = APIRouter(prefix="/servers", tags=["servers"])
 @discord_router.get("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
 async def get_discord_settings(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Get per-server Discord notification settings without exposing the webhook URL."""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -30,8 +31,8 @@ async def get_discord_settings(
 async def update_discord_settings(
     server_id: int,
     settings_data: DiscordSettingsUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Update per-server Discord notification settings."""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -94,8 +95,8 @@ async def update_discord_settings(
 async def test_discord_settings(
     server_id: int,
     request: DiscordTestRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Send a Discord test notification using the saved webhook."""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -110,8 +111,8 @@ async def test_discord_settings(
 )
 async def list_custom_commands(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """List saved quick commands for this server and current user"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -126,8 +127,8 @@ async def list_custom_commands(
 async def create_custom_command(
     server_id: int,
     command_data: CustomCommandCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Create a saved quick command for this server"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -151,8 +152,8 @@ async def update_custom_command(
     server_id: int,
     command_id: int,
     command_data: CustomCommandUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Update a saved quick command"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -173,8 +174,8 @@ async def update_custom_command(
 async def delete_custom_command(
     server_id: int,
     command_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Delete a saved quick command"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -188,8 +189,8 @@ async def delete_custom_command(
 async def execute_one_time_custom_command(
     server_id: int,
     command_data: CustomCommandExecuteRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Execute one-time custom commands without saving them"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -208,8 +209,8 @@ async def execute_one_time_custom_command(
 async def execute_saved_custom_command(
     server_id: int,
     command_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Execute a saved quick command"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -227,8 +228,8 @@ async def execute_saved_custom_command(
 @startup_router.get("/{server_id}/startup-command")
 async def get_startup_command(
     server_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Generate a preview of the startup command based on current server settings.

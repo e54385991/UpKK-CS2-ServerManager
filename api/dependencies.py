@@ -9,6 +9,8 @@ from modules import (
     Server,
     User,
     get_current_active_user,
+    get_current_admin_user,
+    get_current_user,
     get_current_web_admin,
     get_current_web_user,
     get_db,
@@ -17,7 +19,9 @@ from services.maintenance_lock import maintenance_lock_service
 from services.ssh_manager import SSHManager
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
 ActiveUser = Annotated[User, Depends(get_current_active_user)]
+AdminUser = Annotated[User, Depends(get_current_admin_user)]
 WebUser = Annotated[User, Depends(get_current_web_user)]
 WebAdmin = Annotated[User, Depends(get_current_web_admin)]
 
@@ -73,3 +77,6 @@ async def locked_server_operation(
         ttl=7200,
     ):
         yield server
+
+
+LockedServerOperation = Annotated[Server, Depends(locked_server_operation)]

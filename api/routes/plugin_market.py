@@ -7,11 +7,16 @@ import logging
 import re
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import locked_server_operation
+from api.dependencies import (
+    ActiveUser,
+    AdminUser,
+    DatabaseSession,
+    LockedServerOperation,
+)
 from modules import (
     ActionResponse,
     DependencyInfo,
@@ -30,9 +35,6 @@ from modules import (
     PluginUninstallRequest,
     Server,
     User,
-    get_current_active_user,
-    get_current_admin_user,
-    get_db,
 )
 from modules.http_helper import http_helper
 from services.github_credentials import get_effective_github_token
@@ -322,8 +324,8 @@ async def list_plugins(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     category: Optional[str] = Query(None, description="Filter by category"),
     search: Optional[str] = Query(None, description="Search query"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ) -> MarketPluginListResponse:
     """
     List plugins from the market with pagination, filtering, and search.
@@ -375,8 +377,8 @@ async def list_plugins(
 @router.get("/plugins/{plugin_id}", response_model=MarketPluginResponse)
 async def get_plugin(
     plugin_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> MarketPluginResponse:
     """
     Get details of a specific plugin.
@@ -399,8 +401,8 @@ async def get_plugin(
 @router.post("/plugins", response_model=MarketPluginResponse)
 async def create_plugin(
     request: MarketPluginCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ) -> MarketPluginResponse:
     """
     Add a new plugin to the market (admin only).
@@ -482,8 +484,8 @@ async def create_plugin(
 async def update_plugin(
     plugin_id: int,
     request: MarketPluginUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ) -> MarketPluginResponse:
     """
     Update a plugin in the market (admin only).
@@ -546,8 +548,8 @@ async def update_plugin(
 @router.delete("/plugins/{plugin_id}", response_model=ActionResponse)
 async def delete_plugin(
     plugin_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ) -> ActionResponse:
     """
     Delete a plugin from the market (admin only).
@@ -576,8 +578,8 @@ async def get_plugin_releases(
     plugin_id: int,
     server_id: Optional[int] = Query(None, description="Optional server ID for GitHub proxy"),
     count: int = Query(5, ge=1, le=10, description="Number of releases to fetch"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """
     Fetch available releases for a market plugin.
@@ -662,8 +664,8 @@ async def plugin_install_preflight(
     plugin_id: int,
     server_id: int = Query(..., description="Target server ID"),
     install_dependencies: bool = Query(default=True),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ) -> dict:
     """Resolve dependencies and conflicts without changing the server."""
     server = await get_server_for_user(server_id, db, current_user)
@@ -685,8 +687,8 @@ async def plugin_install_preflight(
 )
 async def get_plugin_conflict_rules(
     plugin_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> list[PluginConflictRule]:
     if await MarketPlugin.get_by_id(db, plugin_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
@@ -706,8 +708,8 @@ async def get_plugin_conflict_rules(
 async def replace_plugin_conflict_rules(
     plugin_id: int,
     request: PluginConflictRulesUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ) -> list[PluginConflictRule]:
     """Atomically replace every conflict rule attached to one plugin."""
     if await MarketPlugin.get_by_id(db, plugin_id) is None:
@@ -780,9 +782,9 @@ async def install_plugin(
     upgrade_mode: bool = Query(
         default=False, description="Enable upgrade mode to auto-exclude config files"
     ),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-    _operation_server: Server = Depends(locked_server_operation),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
+    _operation_server: LockedServerOperation = None,
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from the market to a server.
@@ -1041,7 +1043,7 @@ async def install_plugin(
 
 
 @router.get("/categories")
-async def list_categories(current_user: User = Depends(get_current_active_user)) -> dict:
+async def list_categories(current_user: ActiveUser) -> dict:
     """
     Get list of available plugin categories.
 
@@ -1059,8 +1061,8 @@ async def list_categories(current_user: User = Depends(get_current_active_user))
 async def list_plugins_for_dependencies(
     exclude_id: Optional[int] = Query(None, description="Plugin ID to exclude (for editing)"),
     search: Optional[str] = Query(None, description="Search query for filtering plugins"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession = None,
+    current_user: AdminUser = None,
 ) -> dict:
     """
     Get list of plugins for dependency selection (admin only).
@@ -1097,8 +1099,8 @@ async def analyze_plugin_archive(
     download_url: Optional[str] = Query(
         None, description="Specific release download URL (if not provided, uses latest)"
     ),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    db: DatabaseSession = None,
+    current_user: ActiveUser = None,
 ):
     """
     Analyze a plugin archive to show its directory structure.
@@ -1184,8 +1186,8 @@ async def analyze_plugin_archive(
 @router.post("/fetch-repo-info", response_model=GitHubRepoInfo)
 async def fetch_repo_info(
     github_url: str = Query(..., description="GitHub repository URL"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession = None,
+    current_user: AdminUser = None,
 ) -> GitHubRepoInfo:
     """
     Fetch repository information from GitHub (admin only).
@@ -1206,9 +1208,9 @@ async def uninstall_market_plugin(
     plugin_id: int,
     server_id: int,
     request: PluginUninstallRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-    _operation_server: Server = Depends(locked_server_operation),
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    _operation_server: LockedServerOperation,
 ):
     """
     Uninstall a market plugin from a server.

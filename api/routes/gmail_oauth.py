@@ -6,16 +6,13 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.dependencies import AdminUser, DatabaseSession
 from modules import (
     GmailCredentialsUploadRequest,
     SystemSettings,
-    User,
-    get_current_admin_user,
-    get_db,
     settings,
 )
 
@@ -27,8 +24,8 @@ router = APIRouter(prefix="/api/gmail-oauth", tags=["gmail-oauth"])
 @router.get("/authorize")
 async def gmail_oauth_authorize(
     request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ):
     """
     Start Gmail OAuth2 authorization flow (admin only)
@@ -97,7 +94,7 @@ async def gmail_oauth_callback(
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: DatabaseSession = None,
 ):
     """
     Handle OAuth2 callback from Google
@@ -179,8 +176,8 @@ async def gmail_oauth_callback(
 @router.post("/upload-credentials")
 async def upload_gmail_credentials(
     request: GmailCredentialsUploadRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    db: DatabaseSession,
+    current_user: AdminUser,
 ):
     """
     Upload Gmail API credentials JSON (admin only)
@@ -225,9 +222,7 @@ async def upload_gmail_credentials(
 
 
 @router.delete("/revoke")
-async def revoke_gmail_authorization(
-    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_admin_user)
-):
+async def revoke_gmail_authorization(db: DatabaseSession, current_user: AdminUser):
     """
     Revoke Gmail API authorization and clear stored tokens (admin only)
     """
@@ -251,9 +246,7 @@ async def revoke_gmail_authorization(
 
 
 @router.get("/status")
-async def gmail_oauth_status(
-    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_admin_user)
-):
+async def gmail_oauth_status(db: DatabaseSession, current_user: AdminUser):
     """
     Check Gmail OAuth configuration status (admin only)
     """
