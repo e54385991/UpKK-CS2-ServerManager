@@ -82,6 +82,8 @@ LEASE_RENEW_SECONDS = 20
 RECONCILE_SECONDS = 30
 MESSAGE_TRIGGER_MENTION_ONLY = "mention_only"
 MESSAGE_TRIGGER_GREETINGS = "mention_and_greetings"
+# Discord rejects channel-token edits of interaction/webhook messages with 10008.
+UNKNOWN_DISCORD_RESOURCE_CODES = {10008, 10015, 10062}
 
 
 def _safe_text(value, limit: int = 3900) -> str:
@@ -90,6 +92,74 @@ def _safe_text(value, limit: int = 3900) -> str:
     else:
         text = json.dumps(value, ensure_ascii=False, indent=2, default=str)
     return redact_sensitive_text(text, limit=limit)
+
+
+def _is_unknown_discord_resource(exc: BaseException) -> bool:
+    return (
+        isinstance(exc, discord.HTTPException)
+        and getattr(exc, "code", None) in UNKNOWN_DISCORD_RESOURCE_CODES
+    )
+
+
+def _public_error_text(exc: Exception) -> str:
+    if _is_unknown_discord_resource(exc):
+        return (
+            "That Discord message is no longer available. Reopen the menu or run the command again."
+        )
+    if isinstance(exc, discord.HTTPException):
+        return "Discord rejected this action. Reopen the menu or try again."
+    return _safe_text(str(exc), 1800)
+
+
+async def _edit_interaction_message(interaction: discord.Interaction, **kwargs) -> bool:
+    """Edit the targeted interaction message via the interaction token.
+
+    ``Message.edit`` on interaction/webhook cards returns Discord 10008.
+    """
+    try:
+        if interaction.response.is_done():
+            await interaction.edit_original_response(**kwargs)
+        else:
+            await interaction.response.edit_message(**kwargs)
+        return True
+    except discord.HTTPException as exc:
+        if not _is_unknown_discord_resource(exc):
+            raise
+        logger.info("Discord interaction message is gone: %s", exc)
+        return False
+
+
+async def _edit_webhook_message(message: object, **kwargs) -> bool:
+    edit = getattr(message, "edit", None)
+    if not callable(edit):
+        return False
+    try:
+        await edit(**kwargs)
+        return True
+    except discord.HTTPException as exc:
+        if not _is_unknown_discord_resource(exc):
+            raise
+        logger.info("Discord webhook message is gone: %s", exc)
+        return False
+
+
+async def _publish_interaction_update(interaction: discord.Interaction, **kwargs) -> bool:
+    if await _edit_interaction_message(interaction, **kwargs):
+        return True
+    send_kwargs = {
+        key: value for key, value in kwargs.items() if key != "view" and value is not None
+    }
+    if not send_kwargs:
+        return False
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(**send_kwargs, ephemeral=False)
+        else:
+            await interaction.response.send_message(**send_kwargs, ephemeral=False)
+        return True
+    except discord.HTTPException as exc:
+        logger.info("Unable to publish Discord update: %s", exc)
+        return False
 
 
 def _roles(interaction: discord.Interaction) -> set[str]:
@@ -963,6 +1033,19 @@ class DiscordBotManager:
                 delete_after=300,
                 silent=True,
             )
+        except discord.HTTPException as exc:
+            if _is_unknown_discord_resource(exc):
+                logger.info(
+                    "Discord launcher skipped; trigger message is gone for owner %s",
+                    client.owner_user_id,
+                )
+                return
+            logger.exception(
+                "Discord friendly-menu trigger failed for owner %s Guild %s channel %s",
+                client.owner_user_id,
+                message.guild.id,
+                message.channel.id,
+            )
         except Exception:
             logger.exception(
                 "Discord friendly-menu trigger failed for owner %s Guild %s channel %s",
@@ -1119,11 +1202,14 @@ class DiscordBotManager:
             )
 
     async def _respond_error(self, interaction: discord.Interaction, exc: Exception) -> None:
-        message = _safe_text(str(exc), 1800)
-        if interaction.response.is_done():
-            await interaction.followup.send(message, ephemeral=True)
-        else:
-            await interaction.response.send_message(message, ephemeral=True)
+        message = _public_error_text(exc)
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except discord.HTTPException as send_exc:
+            logger.warning("Unable to send Discord error reply: %s", send_exc)
 
     async def command_help(
         self, client: ManagedDiscordClient, interaction: discord.Interaction
@@ -1168,8 +1254,9 @@ class DiscordBotManager:
                 client, interaction, DiscordCapability.STATUS, server_value
             )
             await interaction.response.defer(ephemeral=False)
-            await interaction.edit_original_response(
-                embed=await self._status_embed(server, self._locale(interaction))
+            await _publish_interaction_update(
+                interaction,
+                embed=await self._status_embed(server, self._locale(interaction)),
             )
         except Exception as exc:
             await self._respond_error(interaction, exc)
@@ -1213,8 +1300,21 @@ class DiscordBotManager:
             plan,
             warnings=warnings,
         )
-        await interaction.edit_original_response(embed=embed, view=view)
-        message = await interaction.original_response()
+        try:
+            await interaction.edit_original_response(embed=embed, view=view)
+            message = await interaction.original_response()
+        except discord.HTTPException as exc:
+            if not _is_unknown_discord_resource(exc):
+                raise
+            message = await interaction.followup.send(
+                embed=embed,
+                view=view,
+                ephemeral=False,
+                wait=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        if message is None:
+            raise DiscordOperationDenied("Discord did not return the confirmation message")
         await self._save_operation_message(operation.id, message.id)
 
     async def _build_confirmation(
@@ -1291,8 +1391,8 @@ class DiscordBotManager:
         if message is None:
             raise DiscordOperationDenied("Discord did not return the confirmation message")
         await self._save_operation_message(operation.id, message.id)
-        await interaction.edit_original_response(
-            content=menu_text(self._locale(interaction), "published")
+        await _edit_interaction_message(
+            interaction, content=menu_text(self._locale(interaction), "published")
         )
 
     async def command_write(
@@ -1463,8 +1563,11 @@ class DiscordBotManager:
 
             plan = await plugin_auto_update_service.build_plugin_upgrade_plan(server.id, plugin_id)
             if plan["no_op"]:
-                await interaction.edit_original_response(
-                    content=f"{plan['name']} is already up to date.", embed=None, view=None
+                await _publish_interaction_update(
+                    interaction,
+                    content=f"{plan['name']} is already up to date.",
+                    embed=None,
+                    view=None,
                 )
                 return
             await self._send_confirmation(
@@ -1490,8 +1593,9 @@ class DiscordBotManager:
                 client, interaction, DiscordCapability.AGENT_ASK, server_value
             )
             await interaction.response.defer(ephemeral=False)
-            await interaction.edit_original_response(
-                embed=discord.Embed(title="AI Agent", description="Working…")
+            await _publish_interaction_update(
+                interaction,
+                embed=discord.Embed(title="AI Agent", description="Working…"),
             )
             run_id = await ask_discord_agent(
                 owner_user_id=client.owner_user_id,
@@ -1540,18 +1644,19 @@ class DiscordBotManager:
             embed.add_field(
                 name="Plan", value=f"```json\n{_safe_text(tool['plan'], 900)}\n```", inline=False
             )
-            await interaction.edit_original_response(
-                embed=embed, view=_AIConfirmView(run_id, tool["id"])
+            await _publish_interaction_update(
+                interaction, embed=embed, view=_AIConfirmView(run_id, tool["id"])
             )
             return
         color = discord.Color.green() if snapshot["status"] == "completed" else discord.Color.red()
         description = snapshot["message"] or snapshot["error"] or snapshot["status"]
-        await interaction.edit_original_response(
+        await _publish_interaction_update(
+            interaction,
             embed=discord.Embed(title="AI Agent", description=_safe_text(description), color=color),
             view=None,
         )
 
-    async def _render_ai_run_message(self, message: discord.WebhookMessage, run_id: str) -> None:
+    async def _render_ai_run_message(self, message: discord.WebhookMessage, run_id: str) -> bool:
         snapshot = await discord_run_snapshot(run_id)
         if snapshot["status"] == "waiting_approval" and snapshot["tool"]:
             tool = snapshot["tool"]
@@ -1563,11 +1668,13 @@ class DiscordBotManager:
             embed.add_field(
                 name="Plan", value=f"```json\n{_safe_text(tool['plan'], 900)}\n```", inline=False
             )
-            await message.edit(embed=embed, view=_AIConfirmView(run_id, tool["id"]))
-            return
+            return await _edit_webhook_message(
+                message, embed=embed, view=_AIConfirmView(run_id, tool["id"])
+            )
         color = discord.Color.green() if snapshot["status"] == "completed" else discord.Color.red()
         description = snapshot["message"] or snapshot["error"] or snapshot["status"]
-        await message.edit(
+        return await _edit_webhook_message(
+            message,
             embed=discord.Embed(title="AI Agent", description=_safe_text(description), color=color),
             view=None,
         )
@@ -1579,8 +1686,8 @@ class DiscordBotManager:
             ephemeral=False,
             allowed_mentions=discord.AllowedMentions.none(),
         )
-        await interaction.edit_original_response(
-            content=menu_text(self._locale(interaction), "published")
+        await _edit_interaction_message(
+            interaction, content=menu_text(self._locale(interaction), "published")
         )
 
     @staticmethod
@@ -1769,7 +1876,7 @@ class DiscordBotManager:
             nonce=nonce,
             page=0,
         )
-        await interaction.edit_original_response(content=None, view=view)
+        await _edit_interaction_message(interaction, content=None, view=view)
 
     async def _menu_console_submit(
         self,
@@ -1826,20 +1933,21 @@ class DiscordBotManager:
                 channel_id=str(interaction.channel_id),
                 prompt=prompt,
             )
-            await self._render_ai_run_message(message, run_id)
         except Exception:
-            with suppress(discord.HTTPException):
-                await message.edit(
-                    embed=discord.Embed(
-                        title="AI Agent",
-                        description="The request failed. Reopen the menu and try again.",
-                        color=discord.Color.red(),
-                    ),
-                    view=None,
-                )
+            await _edit_webhook_message(
+                message,
+                embed=discord.Embed(
+                    title="AI Agent",
+                    description="The request failed. Reopen the menu and try again.",
+                    color=discord.Color.red(),
+                ),
+                view=None,
+            )
             raise
-        await interaction.edit_original_response(
-            content=menu_text(self._locale(interaction), "published")
+        if not await self._render_ai_run_message(message, run_id):
+            await self._render_ai_run(interaction, run_id)
+        await _edit_interaction_message(
+            interaction, content=menu_text(self._locale(interaction), "published")
         )
 
     async def _handle_menu_action(
@@ -1945,7 +2053,7 @@ class DiscordBotManager:
                 ephemeral=False,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
-            await interaction.edit_original_response(content=menu_text(locale, "published"))
+            await _edit_interaction_message(interaction, content=menu_text(locale, "published"))
             return
         raise DiscordAuthorizationDenied("Unknown or unavailable menu action")
 
@@ -2049,8 +2157,8 @@ class DiscordBotManager:
             if mode == "browse":
                 await interaction.response.defer(ephemeral=True, thinking=True)
                 await interaction.followup.send(embed=self._plugin_embed(plugin), ephemeral=False)
-                await interaction.edit_original_response(
-                    content=menu_text(self._locale(interaction), "published")
+                await _edit_interaction_message(
+                    interaction, content=menu_text(self._locale(interaction), "published")
                 )
                 return
             await interaction.response.defer(ephemeral=True, thinking=True)
@@ -2058,8 +2166,8 @@ class DiscordBotManager:
 
             plan = await plugin_auto_update_service.build_plugin_upgrade_plan(server.id, plugin_id)
             if plan["no_op"]:
-                await interaction.edit_original_response(
-                    content=f"{plan['name']} is already up to date."
+                await _publish_interaction_update(
+                    interaction, content=f"{plan['name']} is already up to date."
                 )
                 return
             await self._publish_menu_confirmation(
@@ -2113,8 +2221,8 @@ class DiscordBotManager:
             await interaction.response.defer(ephemeral=True, thinking=True)
             if mode == "browse":
                 await interaction.followup.send(embed=self._plugin_embed(plugin), ephemeral=False)
-                await interaction.edit_original_response(
-                    content=menu_text(self._locale(interaction), "published")
+                await _edit_interaction_message(
+                    interaction, content=menu_text(self._locale(interaction), "published")
                 )
                 return
             plan, arguments, warnings = await self._market_plan(server, plugin_id)
@@ -2171,15 +2279,15 @@ class DiscordBotManager:
                         detail.get("message")
                         or f"{progress.get('tool', 'AI tool')}: {progress.get('status', 'running')}"
                     )
-                    with suppress(discord.HTTPException):
-                        await interaction.message.edit(
-                            embed=discord.Embed(
-                                title="AI Agent operation",
-                                description=_safe_text(message, 3500),
-                                color=discord.Color.blurple(),
-                            ),
-                            view=None,
-                        )
+                    await _edit_interaction_message(
+                        interaction,
+                        embed=discord.Embed(
+                            title="AI Agent operation",
+                            description=_safe_text(message, 3500),
+                            color=discord.Color.blurple(),
+                        ),
+                        view=None,
+                    )
                     try:
                         await asyncio.wait_for(asyncio.shield(task), timeout=2)
                     except TimeoutError:
@@ -2201,7 +2309,8 @@ class DiscordBotManager:
             db.add(item)
             await db.commit()
         await record_discord_operation_event(item, "cancelled")
-        await interaction.response.edit_message(
+        await _publish_interaction_update(
+            interaction,
             embed=discord.Embed(title="Operation cancelled", color=discord.Color.greyple()),
             view=None,
         )
@@ -2246,7 +2355,8 @@ class DiscordBotManager:
             item.status = "running"
             db.add(item)
             await db.commit()
-        await interaction.message.edit(
+        await _publish_interaction_update(
+            interaction,
             embed=discord.Embed(title=f"Running {item.action}", description="Starting…"),
             view=None,
         )
@@ -2264,12 +2374,14 @@ class DiscordBotManager:
                     db.add(saved)
                     await db.commit()
                     await record_discord_operation_event(saved, "failure")
-            await interaction.message.edit(
+            await _publish_interaction_update(
+                interaction,
                 embed=discord.Embed(
                     title=f"{item.action} failed",
                     description=safe_error,
                     color=discord.Color.red(),
-                )
+                ),
+                view=None,
             )
             return
         async with async_session_maker() as db:
@@ -2283,12 +2395,14 @@ class DiscordBotManager:
                 await record_discord_operation_event(
                     saved, "success" if saved.status == "completed" else "failure"
                 )
-        await interaction.message.edit(
+        await _publish_interaction_update(
+            interaction,
             embed=discord.Embed(
                 title=f"{item.action} completed",
                 description=_safe_text(result),
                 color=discord.Color.green() if result.get("success", True) else discord.Color.red(),
-            )
+            ),
+            view=None,
         )
 
     async def _execute_operation(
@@ -2302,12 +2416,12 @@ class DiscordBotManager:
 
             async def progress(_event: str, payload: dict) -> None:
                 message = payload.get("message") or "Working…"
-                with suppress(discord.HTTPException):
-                    await interaction.message.edit(
-                        embed=discord.Embed(
-                            title=f"Running {item.action}", description=_safe_text(message, 3500)
-                        )
-                    )
+                await _edit_interaction_message(
+                    interaction,
+                    embed=discord.Embed(
+                        title=f"Running {item.action}", description=_safe_text(message, 3500)
+                    ),
+                )
 
             context = ToolContext(
                 db=db,

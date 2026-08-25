@@ -54,8 +54,12 @@ from services.discord_binding_template_service import (
 from services.discord_bot_manager import (
     DiscordBotManager,
     ManagedDiscordClient,
+    _edit_interaction_message,
     _is_channel_manager,
     _is_server_administrator,
+    _is_unknown_discord_resource,
+    _public_error_text,
+    _publish_interaction_update,
     discord_bot_manager,
     format_panel_update_age,
     load_panel_status_sources,
@@ -1308,3 +1312,96 @@ async def test_confirmation_rechecks_plan_binding_capability_and_ownership(monke
             actor_role_ids={"300"},
             fresh_plan={"plugin_id": 5, "version": "2.0"},
         )
+
+
+def _discord_http_error(code: int, message: str = "Unknown Message", status: int = 404):
+    response = SimpleNamespace(status=status, reason="Not Found")
+    return discord.HTTPException(response, {"code": code, "message": message})
+
+
+def test_unknown_message_errors_are_not_shown_verbatim():
+    unknown = _discord_http_error(10008)
+    assert _is_unknown_discord_resource(unknown)
+    assert "10008" not in _public_error_text(unknown)
+    assert "Unknown Message" not in _public_error_text(unknown)
+    assert "no longer available" in _public_error_text(unknown)
+
+
+@pytest.mark.asyncio
+async def test_respond_error_hides_discord_unknown_message():
+    manager = DiscordBotManager()
+    interaction = SimpleNamespace(
+        response=SimpleNamespace(is_done=lambda: True),
+        followup=SimpleNamespace(send=AsyncMock()),
+    )
+
+    await manager._respond_error(interaction, _discord_http_error(10008))
+
+    sent = interaction.followup.send.await_args.args[0]
+    assert "10008" not in sent
+    assert "Unknown Message" not in sent
+
+
+@pytest.mark.asyncio
+async def test_edit_interaction_message_uses_original_response_after_defer():
+    interaction = SimpleNamespace(
+        response=SimpleNamespace(is_done=lambda: True, edit_message=AsyncMock()),
+        edit_original_response=AsyncMock(),
+        message=SimpleNamespace(edit=AsyncMock()),
+    )
+
+    assert await _edit_interaction_message(interaction, content="Running")
+    interaction.edit_original_response.assert_awaited_once_with(content="Running")
+    interaction.message.edit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_publish_interaction_update_falls_back_when_original_is_gone():
+    interaction = SimpleNamespace(
+        response=SimpleNamespace(is_done=lambda: True),
+        edit_original_response=AsyncMock(side_effect=_discord_http_error(10008)),
+        followup=SimpleNamespace(send=AsyncMock()),
+    )
+
+    assert await _publish_interaction_update(
+        interaction, embed=discord.Embed(title="completed"), view=None
+    )
+    interaction.followup.send.assert_awaited_once()
+    assert interaction.followup.send.await_args.kwargs["ephemeral"] is False
+
+
+@pytest.mark.asyncio
+async def test_message_launcher_ignores_deleted_trigger_message(monkeypatch):
+    manager = DiscordBotManager()
+    client = SimpleNamespace(
+        owner_user_id=1,
+        message_trigger_mode="mention_and_greetings",
+        user=SimpleNamespace(id=999),
+    )
+    binding = ServerDiscordBinding(
+        server_id=10,
+        user_id=1,
+        enabled=True,
+        capabilities=["status"],
+    )
+    server = SimpleNamespace(id=10, name="Server")
+    monkeypatch.setattr(
+        manager, "_authorized_menu_pairs", AsyncMock(return_value=[(binding, server)])
+    )
+    monkeypatch.setattr(
+        "services.discord_bot_manager.redis_manager.hit_rate_limit",
+        AsyncMock(return_value=(True, 0)),
+    )
+    message = SimpleNamespace(
+        guild=SimpleNamespace(id=100, preferred_locale="zh-CN"),
+        channel=SimpleNamespace(id=200),
+        author=SimpleNamespace(id=400, bot=False, roles=[]),
+        webhook_id=None,
+        raw_mentions=[],
+        content="你好！",
+        reply=AsyncMock(side_effect=_discord_http_error(10008)),
+    )
+
+    await manager.handle_message(client, message)
+
+    message.reply.assert_awaited_once()
