@@ -82,9 +82,7 @@ class MigrationReport:
                 "success": True,
                 "total_rows": self.total_rows,
                 "tables": [asdict(item) for item in self.tables],
-                "deprecated_artifacts": [
-                    asdict(item) for item in self.deprecated_artifacts
-                ],
+                "deprecated_artifacts": [asdict(item) for item in self.deprecated_artifacts],
             },
             ensure_ascii=False,
             indent=2,
@@ -195,13 +193,9 @@ def _validate_source_schema(source_metadata: MetaData) -> None:
         deprecated_table = source_metadata.tables.get(table_name)
         if deprecated_table is None:
             continue
-        unexpected_columns = sorted(
-            set(deprecated_table.columns.keys()) - allowed_columns
-        )
+        unexpected_columns = sorted(set(deprecated_table.columns.keys()) - allowed_columns)
         if unexpected_columns:
-            failures.append(
-                f"{table_name} has unknown legacy columns {unexpected_columns}"
-            )
+            failures.append(f"{table_name} has unknown legacy columns {unexpected_columns}")
     for expected in expected_tables:
         source = source_metadata.tables.get(expected.name)
         if source is None:
@@ -216,9 +210,7 @@ def _validate_source_schema(source_metadata: MetaData) -> None:
         if missing_columns:
             failures.append(f"{expected.name} missing columns {missing_columns}")
         if unsupported_columns:
-            failures.append(
-                f"{expected.name} unexpected columns {unsupported_columns}"
-            )
+            failures.append(f"{expected.name} unexpected columns {unsupported_columns}")
         source_primary_key = tuple(column.name for column in source.primary_key)
         expected_primary_key = tuple(column.name for column in expected.primary_key)
         if source_primary_key != expected_primary_key:
@@ -286,9 +278,7 @@ async def _hash_projection(
     artifact_name: str,
 ) -> TableReport:
     column_names = tuple(column.name for column in columns)
-    stream = await connection.stream(
-        select(*columns).order_by(*_order_columns(table))
-    )
+    stream = await connection.stream(select(*columns).order_by(*_order_columns(table)))
     mappings = stream.mappings()
     digest = hashlib.sha256()
     row_count = 0
@@ -472,13 +462,10 @@ async def migrate(source_engine: AsyncEngine, target: AsyncEngine) -> MigrationR
         source = await source.execution_options(isolation_level="REPEATABLE READ")
         async with source.begin(), destination.begin():
             try:
-                deprecated_reports = await _deprecated_artifact_reports(
-                    source, source_metadata
-                )
+                deprecated_reports = await _deprecated_artifact_reports(source, source_metadata)
             except Exception as exc:
                 raise LegacyMigrationError(
-                    "failed to audit known deprecated MySQL artifacts: "
-                    f"{exc.__class__.__name__}"
+                    f"failed to audit known deprecated MySQL artifacts: {exc.__class__.__name__}"
                 ) from exc
             source_reports: list[TableReport] = []
             for target_table in _expected_tables():

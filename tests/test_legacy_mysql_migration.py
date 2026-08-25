@@ -7,8 +7,9 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import Boolean, DateTime, MetaData
+from sqlalchemy import Boolean, Column, DateTime, Integer, MetaData, Table
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlmodel import SQLModel
 
 import scripts.migrate_mysql_to_postgresql as migration_module
 from scripts.migrate_mysql_to_postgresql import (
@@ -84,6 +85,27 @@ def test_canonical_hash_is_deterministic_and_sensitive_to_content():
 def test_incompatible_legacy_schema_fails_before_copying():
     with pytest.raises(LegacyMigrationError, match="missing table"):
         _validate_source_schema(MetaData())
+
+
+def test_known_deprecated_legacy_artifacts_are_allowed_but_unknown_ones_fail():
+    metadata = MetaData()
+    for table in SQLModel.metadata.sorted_tables:
+        table.to_metadata(metadata)
+    metadata.tables["servers"].append_column(
+        Column("auto_restart_enabled", Boolean(), nullable=True)
+    )
+    metadata.tables["servers"].append_column(
+        Column("monitoring_interval", Integer(), nullable=True)
+    )
+    metadata.tables["servers"].append_column(Column("tickrate", Integer(), nullable=True))
+    Table("global_settings", metadata, Column("id", Integer(), primary_key=True))
+    Table("user_settings", metadata, Column("id", Integer(), primary_key=True))
+
+    _validate_source_schema(metadata)
+
+    Table("unknown_legacy_table", metadata, Column("id", Integer(), primary_key=True))
+    with pytest.raises(LegacyMigrationError, match="unexpected tables"):
+        _validate_source_schema(metadata)
 
 
 def test_report_contains_only_counts_and_digests():

@@ -12,14 +12,18 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Column,
     Date,
     DateTime,
     Float,
+    ForeignKey,
     Integer,
     LargeBinary,
     MetaData,
     Numeric,
     String,
+    Table,
+    Text,
     Time,
     func,
     select,
@@ -58,6 +62,33 @@ def _legacy_test_metadata() -> MetaData:
         for column in table.columns:
             if isinstance(column.type, JSONB):
                 column.type = JSON()
+
+    servers = metadata.tables["servers"]
+    servers.append_column(Column("auto_restart_enabled", Boolean(), nullable=True))
+    servers.append_column(Column("monitoring_interval", Integer(), nullable=True))
+    servers.append_column(Column("tickrate", Integer(), nullable=True))
+
+    Table(
+        "global_settings",
+        metadata,
+        Column("id", Integer(), primary_key=True, autoincrement=True),
+        Column("setting_key", String(100), nullable=False, unique=True),
+        Column("setting_value", Text(), nullable=False),
+        Column("description", Text(), nullable=True),
+        Column("created_at", DateTime(), nullable=True),
+        Column("updated_at", DateTime(), nullable=True),
+    )
+    Table(
+        "user_settings",
+        metadata,
+        Column("id", Integer(), primary_key=True, autoincrement=True),
+        Column("user_id", Integer(), ForeignKey("users.id"), nullable=False, unique=True),
+        Column("steamcmd_mirror_url", String(500), nullable=True),
+        Column("github_api_mirror_url", String(500), nullable=True),
+        Column("github_objects_mirror_url", String(500), nullable=True),
+        Column("created_at", DateTime(), nullable=True),
+        Column("updated_at", DateTime(), nullable=True),
+    )
     return metadata
 
 
@@ -141,6 +172,21 @@ def _fixture_row(table, primary_keys, *, variant: int = 1):
             ssh_password="ssh-sensitive-password",
             api_key="CaseSensitiveServerToken",
             rcon_password="rcon-sensitive-password",
+            auto_restart_enabled=True,
+            monitoring_interval=45,
+            tickrate=128,
+        )
+    if table.name == "global_settings":
+        values.update(
+            setting_key="auto_restart_max_restarts",
+            setting_value="9",
+            description="旧全局配置",
+        )
+    if table.name == "user_settings":
+        values.update(
+            steamcmd_mirror_url="https://legacy.example/steamcmd",
+            github_api_mirror_url="https://legacy.example/github-api",
+            github_objects_mirror_url="https://legacy.example/github-objects",
         )
     return values
 
@@ -208,6 +254,16 @@ async def test_all_tables_copy_verify_sequences_and_roll_back_on_failures(monkey
         assert len(report.tables) == 25
         assert all(item.rows >= 1 and len(item.sha256) == 64 for item in report.tables)
         assert next(item.rows for item in report.tables if item.table == "market_plugins") == 2
+        assert {item.table for item in report.deprecated_artifacts} == {
+            "global_settings",
+            "user_settings",
+            "servers.auto_restart_enabled",
+            "servers.monitoring_interval",
+            "servers.tickrate",
+        }
+        assert all(
+            item.rows >= 1 and len(item.sha256) == 64 for item in report.deprecated_artifacts
+        )
 
         users = SQLModel.metadata.tables["users"]
         async with success_engine.begin() as connection:
