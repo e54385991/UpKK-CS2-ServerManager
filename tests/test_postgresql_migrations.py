@@ -22,7 +22,9 @@ from modules.database_migrations import (
     MIGRATION_ADVISORY_LOCK_KEY,
     DatabaseMigrationError,
     _acquire_migration_lock,
+    _current_heads,
     _server_version_num,
+    _upgrade,
     alembic_config,
     code_heads,
     database_status,
@@ -106,6 +108,107 @@ async def test_postgresql_17_is_rejected_before_schema_access():
 async def test_nonpositive_migration_lock_timeout_is_rejected():
     with pytest.raises(DatabaseMigrationError, match="at least 1"):
         await _acquire_migration_lock(_VersionConnection(True), 0)  # type: ignore[arg-type]
+
+
+class _FakeMigrationConnection:
+    def __init__(self, *, heads: tuple[str, ...], acquire: bool = True):
+        self.heads = heads
+        self.acquire = acquire
+        self.commits = 0
+        self.rollbacks = 0
+        self.upgraded = False
+        self._in_txn = False
+
+    def in_transaction(self) -> bool:
+        return self._in_txn
+
+    async def scalar(self, statement, parameters=None):
+        sql = str(statement)
+        self._in_txn = True
+        if "server_version_num" in sql:
+            return 180000
+        if "pg_try_advisory_lock" in sql:
+            return self.acquire
+        if "pg_advisory_unlock" in sql:
+            return True
+        raise AssertionError(sql)
+
+    async def commit(self) -> None:
+        self.commits += 1
+        self._in_txn = False
+
+    async def rollback(self) -> None:
+        self.rollbacks += 1
+        self._in_txn = False
+
+    async def run_sync(self, fn):
+        self._in_txn = True
+        if fn is _current_heads:
+            return self.heads
+        if fn is _upgrade:
+            self.upgraded = True
+            self.heads = ("0007_discord_server_administrators",)
+            return None
+        raise AssertionError(fn)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeMigrationEngine:
+    def __init__(self, lock: _FakeMigrationConnection, work: _FakeMigrationConnection):
+        self._lock = lock
+        self._work = work
+        self.uses = 0
+
+    def connect(self):
+        self.uses += 1
+        if self.uses == 1:
+            return self._lock
+        if self.uses == 2:
+            return self._work
+        raise AssertionError("upgrade_database opened more than two connections")
+
+
+def test_upgrade_database_keeps_lock_and_schema_work_on_separate_connections():
+    source = (PROJECT_ROOT / "modules/database_migrations.py").read_text()
+    assert "lock_connection" in source
+    assert "_apply_schema_upgrade" in source
+    assert source.index("await _read_current_heads") < source.index("run_sync(_upgrade)")
+    env_source = (PROJECT_ROOT / "alembic/env.py").read_text()
+    assert 'config.attributes.get("connection") is None' in env_source
+    for revision in (
+        "0006_discord_channel_managers.py",
+        "0007_discord_server_administrators.py",
+    ):
+        revision_source = (PROJECT_ROOT / "alembic/versions" / revision).read_text()
+        assert "get_columns" in revision_source
+        assert "_ensure_boolean_column" in revision_source
+
+
+@pytest.mark.asyncio
+async def test_upgrade_database_skips_alembic_when_already_at_head():
+    expected = code_heads()
+    lock = _FakeMigrationConnection(heads=expected)
+    work = _FakeMigrationConnection(heads=expected)
+    status = await upgrade_database(_FakeMigrationEngine(lock, work), lock_timeout_seconds=5)  # type: ignore[arg-type]
+    assert status.is_current is True
+    assert work.upgraded is False
+    assert lock.rollbacks == 0
+
+
+@pytest.mark.asyncio
+async def test_upgrade_database_commits_schema_work_before_releasing_lock():
+    lock = _FakeMigrationConnection(heads=("0005_discord_global_binding",))
+    work = _FakeMigrationConnection(heads=("0005_discord_global_binding",))
+    status = await upgrade_database(_FakeMigrationEngine(lock, work), lock_timeout_seconds=5)  # type: ignore[arg-type]
+    assert work.upgraded is True
+    assert work.commits >= 1
+    assert status.is_current is True
+    assert status.current_heads == code_heads()
 
 
 @pytest.mark.skipif(

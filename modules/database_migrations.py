@@ -75,6 +75,7 @@ async def _acquire_migration_lock(connection: AsyncConnection, timeout_seconds: 
     if timeout_seconds < 1:
         raise DatabaseMigrationError("DB_MIGRATION_LOCK_TIMEOUT_SECONDS must be at least 1")
     deadline = time.monotonic() + timeout_seconds
+    logged_wait = False
     while True:
         acquired = await connection.scalar(
             text("SELECT pg_try_advisory_lock(:key)"),
@@ -87,6 +88,9 @@ async def _acquire_migration_lock(connection: AsyncConnection, timeout_seconds: 
             raise DatabaseMigrationError(
                 f"timed out after {timeout_seconds}s waiting for the database migration lock"
             )
+        if not logged_wait:
+            logger.info("Waiting for the database migration lock held by another process")
+            logged_wait = True
         await asyncio.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
 
 
@@ -121,31 +125,61 @@ async def database_status(engine: AsyncEngine) -> DatabaseStatus:
     return DatabaseStatus(version_num, current, expected)
 
 
+async def _read_current_heads(connection: AsyncConnection) -> tuple[str, ...]:
+    current = await connection.run_sync(_current_heads)
+    if connection.in_transaction():
+        await connection.rollback()
+    return current
+
+
+async def _apply_schema_upgrade(
+    connection: AsyncConnection,
+    *,
+    version_num: int,
+    expected: tuple[str, ...],
+) -> DatabaseStatus:
+    current = await _read_current_heads(connection)
+    if current == expected:
+        logger.info("Database schema is already current at %s", expected[0])
+        return DatabaseStatus(version_num, current, expected)
+
+    logger.info(
+        "Upgrading database schema from %s to Alembic head %s",
+        ", ".join(current) or "empty",
+        expected[0],
+    )
+    await connection.run_sync(_upgrade)
+    if connection.in_transaction():
+        await connection.commit()
+    current = await _read_current_heads(connection)
+    status = DatabaseStatus(version_num, current, expected)
+    if not status.is_current:
+        raise DatabaseMigrationError(f"database heads {current} do not match code head {expected}")
+    logger.info("Database schema is current at %s", expected[0])
+    return status
+
+
 async def upgrade_database(engine: AsyncEngine, *, lock_timeout_seconds: int) -> DatabaseStatus:
-    """Upgrade under one PostgreSQL session lock and fail closed on divergence."""
+    """Upgrade under one PostgreSQL session lock and fail closed on divergence.
+
+    The advisory lock lives on its own connection so lock release cannot roll
+    back a completed schema upgrade if Alembic left a transaction open.
+    """
     expected = tuple(sorted(code_heads()))
-    async with engine.connect() as connection:
-        version_num = await _server_version_num(connection)
-        if connection.in_transaction():
-            await connection.commit()
-        await _acquire_migration_lock(connection, lock_timeout_seconds)
+    async with engine.connect() as lock_connection:
+        version_num = await _server_version_num(lock_connection)
+        if lock_connection.in_transaction():
+            await lock_connection.commit()
+        await _acquire_migration_lock(lock_connection, lock_timeout_seconds)
         try:
-            logger.info("Upgrading database schema to Alembic head %s", expected[0])
-            await connection.run_sync(_upgrade)
-            if connection.in_transaction():
-                await connection.commit()
-            current = await connection.run_sync(_current_heads)
-            if connection.in_transaction():
-                await connection.rollback()
-            status = DatabaseStatus(version_num, current, expected)
-            if not status.is_current:
-                raise DatabaseMigrationError(
-                    f"database heads {current} do not match code head {expected}"
+            async with engine.connect() as work_connection:
+                return await _apply_schema_upgrade(
+                    work_connection,
+                    version_num=version_num,
+                    expected=expected,
                 )
-            logger.info("Database schema is current at %s", expected[0])
-            return status
         finally:
-            await _release_migration_lock(connection)
+            await _release_migration_lock(lock_connection)
 
 
 __all__ = [

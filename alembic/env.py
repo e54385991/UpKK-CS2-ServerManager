@@ -14,7 +14,9 @@ from alembic import context
 from modules.config import settings
 
 config = context.config
-if config.config_file_name is not None:
+# Keep the application logger when startup already supplied a connection.
+# Reloading alembic.ini here would reset handlers and look like a second boot.
+if config.config_file_name is not None and config.attributes.get("connection") is None:
     fileConfig(config.config_file_name)
 
 target_metadata = SQLModel.metadata
