@@ -78,7 +78,7 @@ CI 会禁止多个 Alembic head，并在真实 PostgreSQL 18 上检查空库升�
 uv sync --locked --extra legacy-mysql-migration
 ```
 
-通过部署平台的 secret 管理功能设置 `LEGACY_MYSQL_DATABASE_URL`，不要把密码放入命令参数、工单或日志。URL 必须使用异步驱动：
+通过部署平台的 secret 管理功能设置 `LEGACY_MYSQL_DATABASE_URL`；迁移器也会回退读取项目根目录的 `.env`。不要把密码放入命令参数、工单或日志，且必须确保 `.env` 未提交并限制文件权限。URL 必须使用异步驱动：
 
 ```dotenv
 LEGACY_MYSQL_DATABASE_URL=mysql+aiomysql://legacy_user:secret@mysql-host:3306/cs2_manager
@@ -87,7 +87,8 @@ LEGACY_MYSQL_DATABASE_URL=mysql+aiomysql://legacy_user:secret@mysql-host:3306/cs
 目标 PostgreSQL 继续使用 `.env` 中的 `POSTGRES_*` 配置。应用保持停止写入时执行唯一迁移命令：
 
 ```bash
-uv run --extra legacy-mysql-migration python scripts/migrate_mysql_to_postgresql.py
+uv run --extra legacy-mysql-migration \
+  python -m scripts.migrate_mysql_to_postgresql
 ```
 
 迁移器会：

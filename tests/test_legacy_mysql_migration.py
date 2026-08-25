@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import Boolean, DateTime, MetaData
 from sqlalchemy.dialects.postgresql import JSONB
 
+import scripts.migrate_mysql_to_postgresql as migration_module
 from scripts.migrate_mysql_to_postgresql import (
     LegacyMigrationError,
     MigrationReport,
@@ -22,7 +23,10 @@ from scripts.migrate_mysql_to_postgresql import (
 )
 
 
-def test_legacy_url_is_required_and_must_use_async_mysql(monkeypatch):
+def test_legacy_url_is_required_and_must_use_async_mysql(monkeypatch, tmp_path):
+    migration_env = tmp_path / ".env"
+    migration_env.write_text("")
+    monkeypatch.setattr(migration_module, "ENV_FILE", migration_env)
     monkeypatch.delenv("LEGACY_MYSQL_DATABASE_URL", raising=False)
     with pytest.raises(LegacyMigrationError, match="is required"):
         _legacy_url()
@@ -30,6 +34,17 @@ def test_legacy_url_is_required_and_must_use_async_mysql(monkeypatch):
     monkeypatch.setenv("LEGACY_MYSQL_DATABASE_URL", "mysql://user:secret@db/source")
     with pytest.raises(LegacyMigrationError, match=r"mysql\+aiomysql"):
         _legacy_url()
+
+
+def test_legacy_url_can_be_loaded_from_project_env(monkeypatch, tmp_path):
+    migration_env = tmp_path / ".env"
+    migration_env.write_text(
+        "LEGACY_MYSQL_DATABASE_URL='mysql+aiomysql://legacy:secret@mysql:3306/cs2_manager'\n"
+    )
+    monkeypatch.setattr(migration_module, "ENV_FILE", migration_env)
+    monkeypatch.delenv("LEGACY_MYSQL_DATABASE_URL", raising=False)
+
+    assert _legacy_url() == "mysql+aiomysql://legacy:secret@mysql:3306/cs2_manager"
 
 
 @pytest.mark.parametrize(

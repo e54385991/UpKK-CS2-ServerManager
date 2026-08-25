@@ -13,6 +13,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
+from dotenv import dotenv_values
 from sqlalchemy import JSON, Boolean, DateTime, MetaData, Table, func, select, text
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.dialects.postgresql import JSONB
@@ -23,7 +24,7 @@ from sqlalchemy.sql.sqltypes import Integer
 from sqlmodel import SQLModel
 
 import modules.models  # noqa: F401
-from modules.config import settings
+from modules.config import ENV_FILE, settings
 from modules.database import engine as target_engine
 from modules.database_migrations import upgrade_database
 
@@ -65,7 +66,8 @@ class MigrationReport:
 
 
 def _legacy_url() -> str:
-    raw = (os.getenv(LEGACY_URL_ENV) or "").strip()
+    env_file_value = dotenv_values(ENV_FILE).get(LEGACY_URL_ENV)
+    raw = (os.getenv(LEGACY_URL_ENV) or env_file_value or "").strip()
     if not raw:
         raise LegacyMigrationError(f"{LEGACY_URL_ENV} is required")
     url = make_url(raw)
