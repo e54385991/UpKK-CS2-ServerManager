@@ -29,6 +29,7 @@ from modules.schemas.servers import (
     ServerConfigImportResult,
 )
 from services import redis_manager
+from services.discord_binding_template_service import inherit_global_discord_binding
 from services.server_config_transfer import config_entry_values, server_to_config_entry
 
 from .common import get_server_with_permission
@@ -220,6 +221,7 @@ async def import_server_configs(
         db.add(server)
         await db.flush()
         db.add(ServerAgentPolicy(server_id=server.id))
+        await inherit_global_discord_binding(db, server)
 
         for default_path in DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS:
             db.add(

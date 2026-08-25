@@ -337,7 +337,7 @@
             <div class="card-body">
                 <div id="discord-bot-result" class="alert d-none"></div>
                 <ol class="mb-4">
-                    <li class="mb-2" data-i18n="discordBot.stepCreate">Create a Discord Application and Bot, then copy the Bot Token. Privileged Intents are not required.</li>
+                    <li class="mb-2" data-i18n="discordBot.stepCreate">Create a Discord Application and Bot, then copy the Bot Token. Mention-only menus do not require privileged Intents.</li>
                     <li class="mb-2" data-i18n="discordBot.stepTest">Save and test the Token. The Token is encrypted and is never returned by the API.</li>
                     <li data-i18n="discordBot.stepInvite">Use the generated minimum-permission invite link, then bind Guild channels and roles on each server page.</li>
                 </ol>
@@ -351,6 +351,18 @@
                         <input class="form-check-input" id="discord-bot-enabled" type="checkbox">
                         <label class="form-check-label" for="discord-bot-enabled" data-i18n="discordBot.enable">Enable Gateway connection</label>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="discord-bot-trigger-mode" data-i18n="discordBot.triggerMode">Friendly menu trigger</label>
+                        <select class="form-select" id="discord-bot-trigger-mode">
+                            <option value="mention_only" data-i18n="discordBot.triggerMentionOnly">@Bot and /cs2 menu (no privileged Intent)</option>
+                            <option value="mention_and_greetings" data-i18n="discordBot.triggerGreetings">Also listen for greetings such as 你好 (requires Message Content Intent)</option>
+                        </select>
+                        <div class="form-text" data-i18n="discordBot.triggerHint">Greeting mode reads messages only in bound channels and only reacts to exact wake words.</div>
+                    </div>
+                    <div class="alert alert-warning py-2 d-none" id="discord-bot-message-content-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <span data-i18n="discordBot.messageContentWarning">Before saving, enable Message Content Intent under Discord Developer Portal → Bot → Privileged Gateway Intents. Otherwise the Gateway connection will be rejected.</span>
+                    </div>
                     <div class="border rounded p-3 mb-3">
                         <div><strong data-i18n="discordBot.identity">Bot identity:</strong> <span id="discord-bot-identity">-</span></div>
                         <div><strong data-i18n="discordBot.status">Connection status:</strong> <span id="discord-bot-status">-</span></div>
@@ -361,6 +373,81 @@
                         <button class="btn btn-outline-primary" id="discord-bot-test" type="button"><i class="bi bi-wifi"></i> <span data-i18n="discordBot.test">Test Token</span></button>
                         <a class="btn btn-outline-success d-none" id="discord-bot-invite" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> <span data-i18n="discordBot.invite">Invite Bot</span></a>
                         <button class="btn btn-outline-danger" id="discord-bot-clear" type="button"><i class="bi bi-trash"></i> <span data-i18n="discordBot.clear">Clear Token</span></button>
+                    </div>
+                    <div class="border rounded p-3 mt-4" id="discord-global-binding-panel">
+                        <h6><i class="bi bi-sliders"></i> <span data-i18n="discordBot.globalTitle">Global server permission template</span></h6>
+                        <p class="form-text" data-i18n="discordBot.globalHint">New servers inherit this template. Existing per-server settings change only when you explicitly synchronize them.</p>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" id="discord-global-enabled" type="checkbox">
+                            <label class="form-check-label" for="discord-global-enabled" data-i18n="discordBot.globalEnable">Enable Discord Bot commands by default</label>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="discord-global-guild" data-i18n="discordBot.guild">Guild</label>
+                                <select class="form-select" id="discord-global-guild" disabled>
+                                    <option value="" data-i18n="discordBot.pushSelectGuild">Select a Guild</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="discord-global-channels" data-i18n="discordBot.channels">Allowed channels (one or more)</label>
+                                <select class="form-select" id="discord-global-channels" multiple size="5" disabled></select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="discord-global-roles" data-i18n="discordBot.roles">Allowed roles</label>
+                                <select class="form-select" id="discord-global-roles" multiple size="5" disabled></select>
+                                <div class="form-text" data-i18n="discordBot.noAdminBypass">Discord Administrator does not bypass this whitelist.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="discord-global-users" data-i18n="discordBot.users">Allowed Discord User IDs</label>
+                                <textarea class="form-control font-monospace" id="discord-global-users" rows="5" placeholder="123456789012345678"></textarea>
+                                <div class="form-text" data-i18n="discordBot.whitelistRule">A user ID match or any role match grants access.</div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                            <strong data-i18n="discordBot.commandCapabilities">Fixed command capabilities</strong>
+                            <button class="btn btn-sm btn-outline-secondary" id="discord-global-preset-readonly" type="button" data-i18n="discordBot.presetReadonly">Read only</button>
+                            <button class="btn btn-sm btn-outline-warning" id="discord-global-preset-operations" type="button" data-i18n="discordBot.presetOperations">Common operations</button>
+                        </div>
+                        <div class="row g-2" id="discord-global-capabilities"></div>
+                        <div class="alert alert-warning py-2 mt-3 d-none" id="discord-global-write-warning">
+                            <i class="bi bi-exclamation-triangle"></i> <span data-i18n="discordBot.writeWarning">Maintenance capabilities change remote server state. Every use still requires confirmation.</span>
+                        </div>
+                        <div class="alert alert-danger py-2 mt-3" data-i18n="discordBot.globalSyncWarning">Synchronizing overwrites the Discord binding, whitelist, and command capabilities on every server you own.</div>
+                        <div class="form-text mb-3" id="discord-global-stats"></div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-outline-primary" id="discord-global-save" type="button">
+                                <i class="bi bi-save"></i> <span data-i18n="discordBot.globalSave">Save template only</span>
+                            </button>
+                            <button class="btn btn-warning" id="discord-global-sync" type="button">
+                                <i class="bi bi-arrow-repeat"></i> <span data-i18n="discordBot.globalSaveSync">Save and synchronize all servers</span>
+                            </button>
+                        </div>
+                        <div class="form-text mt-2" id="discord-global-status"></div>
+                    </div>
+                    <div class="border rounded p-3 mt-4" id="discord-menu-push-panel">
+                        <h6><i class="bi bi-send"></i> <span data-i18n="discordBot.pushMenuTitle">Push a control menu</span></h6>
+                        <p class="form-text" data-i18n="discordBot.pushMenuHint">Send a five-minute public launcher to a channel already bound to at least one server.</p>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-5">
+                                <label class="form-label" for="discord-menu-push-guild" data-i18n="discordBot.pushGuild">Guild</label>
+                                <select class="form-select" id="discord-menu-push-guild" disabled>
+                                    <option value="" data-i18n="discordBot.pushSelectGuild">Select a Guild</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label" for="discord-menu-push-channel" data-i18n="discordBot.pushChannel">Channel</label>
+                                <select class="form-select" id="discord-menu-push-channel" disabled>
+                                    <option value="" data-i18n="discordBot.pushSelectChannel">Select a bound channel</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2 d-grid">
+                                <button class="btn btn-outline-primary" id="discord-menu-push-button" type="button" disabled>
+                                    <i class="bi bi-send"></i> <span data-i18n="discordBot.pushMenuButton">Push menu</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-text mt-2" id="discord-menu-push-status"></div>
                     </div>
                 </form>
             </div>
@@ -493,6 +580,8 @@ async function loadDiscordBotSettings() {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load Discord Bot settings'));
     document.getElementById('discord-bot-enabled').checked = !!data.enabled;
+    document.getElementById('discord-bot-trigger-mode').value = data.message_trigger_mode || 'mention_only';
+    updateDiscordBotTriggerWarning();
     document.getElementById('discord-bot-token').value = '';
     document.getElementById('discord-bot-token-status').textContent = data.token_configured
         ? 'A Token is encrypted and saved. Leave blank to keep it.'
@@ -509,6 +598,12 @@ async function loadDiscordBotSettings() {
     } else {
         invite.classList.add('d-none');
     }
+    if (data.connection_status === 'connected') {
+        await loadDiscordMenuPushGuilds();
+    } else {
+        resetDiscordMenuPushOptions();
+    }
+    await loadDiscordGlobalBinding();
 }
 
 function showDiscordBotResult(message, success) {
@@ -517,13 +612,360 @@ function showDiscordBotResult(message, success) {
     target.className = `alert ${success ? 'alert-success' : 'alert-danger'}`;
 }
 
+function updateDiscordBotTriggerWarning() {
+    const greetingMode = document.getElementById('discord-bot-trigger-mode').value === 'mention_and_greetings';
+    document.getElementById('discord-bot-message-content-warning').classList.toggle('d-none', !greetingMode);
+}
+
+document.getElementById('discord-bot-trigger-mode').addEventListener('change', updateDiscordBotTriggerWarning);
+
+function discordBotText(key, fallback) {
+    return window.i18n ? window.i18n.t(`discordBot.${key}`) : fallback;
+}
+
+const DISCORD_GLOBAL_CAPABILITIES = [
+    ['status', 'capStatus', 'Status'],
+    ['start', 'capStart', 'Start'],
+    ['stop', 'capStop', 'Stop'],
+    ['restart', 'capRestart', 'Restart'],
+    ['update', 'capUpdate', 'CS2 update'],
+    ['validate', 'capValidate', 'Validate'],
+    ['plugin_browse', 'capPluginBrowse', 'Plugin browse'],
+    ['plugin_install', 'capPluginInstall', 'Market install'],
+    ['plugin_upgrade', 'capPluginUpgrade', 'Managed upgrade'],
+    ['game_console', 'gameConsole', 'Game console input'],
+    ['agent_ask', 'capAgentAsk', 'AI Agent']
+];
+
+function renderDiscordGlobalCapabilities() {
+    const container = document.getElementById('discord-global-capabilities');
+    container.replaceChildren();
+    DISCORD_GLOBAL_CAPABILITIES.forEach(([value, key, fallback]) => {
+        const column = document.createElement('div');
+        column.className = 'col-md-4';
+        const label = document.createElement('label');
+        label.className = 'form-check';
+        const input = document.createElement('input');
+        input.className = 'form-check-input discord-global-capability';
+        input.type = 'checkbox';
+        input.value = value;
+        input.addEventListener('change', updateDiscordGlobalWriteWarning);
+        const text = document.createElement('span');
+        text.className = 'form-check-label';
+        text.textContent = discordBotText(key, fallback);
+        label.append(input, text);
+        column.appendChild(label);
+        container.appendChild(column);
+    });
+}
+
+function discordGlobalSelectedCapabilities() {
+    return [...document.querySelectorAll('.discord-global-capability:checked')].map(item => item.value);
+}
+
+function setDiscordGlobalCapabilities(values) {
+    const selected = new Set(values || []);
+    document.querySelectorAll('.discord-global-capability').forEach((item) => {
+        item.checked = selected.has(item.value);
+    });
+    updateDiscordGlobalWriteWarning();
+}
+
+function updateDiscordGlobalWriteWarning() {
+    const readonly = new Set(['status', 'plugin_browse', 'agent_ask']);
+    const dangerous = discordGlobalSelectedCapabilities().some(item => !readonly.has(item));
+    document.getElementById('discord-global-write-warning').classList.toggle('d-none', !dangerous);
+}
+
+function setDiscordGlobalMultiOptions(select, items, selectedValues, prefix = '') {
+    const selected = new Set(selectedValues || []);
+    select.replaceChildren();
+    items.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = `${prefix}${item.name}`;
+        option.selected = selected.has(item.id);
+        select.appendChild(option);
+    });
+    select.disabled = items.length === 0;
+}
+
+function setDiscordGlobalStatus(message, isError = false) {
+    const target = document.getElementById('discord-global-status');
+    target.textContent = message || '';
+    target.className = `form-text mt-2${isError ? ' text-danger' : ''}`;
+}
+
+function updateDiscordGlobalStats(data) {
+    const template = discordBotText(
+        'globalStats',
+        '{matching}/{total} existing servers currently match this template. New servers inherit it automatically.'
+    );
+    document.getElementById('discord-global-stats').textContent = template
+        .replace('{matching}', data.matching_server_count || 0)
+        .replace('{total}', data.server_count || 0);
+}
+
+async function loadDiscordGlobalOptions(guildId = '', selectedChannels = [], selectedRoles = []) {
+    const guildSelect = document.getElementById('discord-global-guild');
+    const channelSelect = document.getElementById('discord-global-channels');
+    const roleSelect = document.getElementById('discord-global-roles');
+    const suffix = guildId ? `?guild_id=${encodeURIComponent(guildId)}` : '';
+    try {
+        const response = await profileAIFetch(`/api/auth/discord-bot/global-options${suffix}`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load global Discord options'));
+        setDiscordMenuSelectOptions(
+            guildSelect,
+            discordBotText('pushSelectGuild', 'Select a Guild'),
+            data.guilds || []
+        );
+        guildSelect.value = guildId || '';
+        setDiscordGlobalMultiOptions(channelSelect, data.channels || [], selectedChannels, '#');
+        setDiscordGlobalMultiOptions(roleSelect, data.roles || [], selectedRoles);
+    } catch (error) {
+        setDiscordMenuSelectOptions(
+            guildSelect,
+            discordBotText('pushSelectGuild', 'Select a Guild'),
+            []
+        );
+        setDiscordGlobalMultiOptions(channelSelect, [], []);
+        setDiscordGlobalMultiOptions(roleSelect, [], []);
+        setDiscordGlobalStatus(error.message, true);
+    }
+}
+
+async function loadDiscordGlobalBinding() {
+    setDiscordGlobalStatus(discordBotText('globalLoading', 'Loading global template…'));
+    try {
+        const response = await profileAIFetch('/api/auth/discord-bot/global-settings');
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load global Discord template'));
+        document.getElementById('discord-global-enabled').checked = !!data.enabled;
+        document.getElementById('discord-global-users').value = (data.user_ids || []).join('\n');
+        setDiscordGlobalCapabilities(data.capabilities || []);
+        updateDiscordGlobalStats(data);
+        await loadDiscordGlobalOptions(
+            data.guild_id || '',
+            data.channel_ids || [],
+            data.role_ids || []
+        );
+        if (!document.getElementById('discord-global-status').classList.contains('text-danger')) {
+            setDiscordGlobalStatus('');
+        }
+    } catch (error) {
+        setDiscordGlobalStatus(error.message, true);
+    }
+}
+
+async function saveDiscordGlobalBinding(syncExisting) {
+    if (syncExisting && !confirm(discordBotText(
+        'globalSyncConfirm',
+        'Overwrite Discord settings on every server you own? Per-server customizations will be lost.'
+    ))) return;
+    const saveButton = document.getElementById('discord-global-save');
+    const syncButton = document.getElementById('discord-global-sync');
+    saveButton.disabled = true;
+    syncButton.disabled = true;
+    setDiscordGlobalStatus(discordBotText('globalSaving', 'Saving global template…'));
+    try {
+        const selectedValues = (id) => [...document.getElementById(id).selectedOptions]
+            .map(option => option.value);
+        const userIds = document.getElementById('discord-global-users').value
+            .split(/[\s,]+/).map(item => item.trim()).filter(Boolean);
+        const guildId = document.getElementById('discord-global-guild').value;
+        const payload = {
+            enabled: document.getElementById('discord-global-enabled').checked,
+            guild_id: guildId || null,
+            channel_ids: selectedValues('discord-global-channels'),
+            role_ids: selectedValues('discord-global-roles'),
+            user_ids: [...new Set(userIds)],
+            capabilities: discordGlobalSelectedCapabilities(),
+            response_visibility: 'public',
+            sync_existing_servers: syncExisting
+        };
+        const response = await profileAIFetch('/api/auth/discord-bot/global-settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to save global Discord template'));
+        updateDiscordGlobalStats(data);
+        const key = syncExisting ? 'globalSyncSuccess' : 'globalSaveSuccess';
+        const fallback = syncExisting
+            ? `Template saved and synchronized to ${data.synced_server_count || 0} servers.`
+            : 'Global template saved. Existing servers were not changed.';
+        setDiscordGlobalStatus(discordBotText(key, fallback)
+            .replace('{count}', data.synced_server_count || 0));
+        if (syncExisting && document.getElementById('discord-bot-status').textContent === 'connected') {
+            await loadDiscordMenuPushGuilds();
+        }
+    } catch (error) {
+        setDiscordGlobalStatus(error.message, true);
+    } finally {
+        saveButton.disabled = false;
+        syncButton.disabled = false;
+    }
+}
+
+renderDiscordGlobalCapabilities();
+
+document.getElementById('discord-global-guild').addEventListener('change', async (event) => {
+    await loadDiscordGlobalOptions(event.target.value, [], []);
+});
+
+document.getElementById('discord-global-preset-readonly').addEventListener('click', () => {
+    setDiscordGlobalCapabilities(['status', 'plugin_browse']);
+});
+
+document.getElementById('discord-global-preset-operations').addEventListener('click', () => {
+    setDiscordGlobalCapabilities(['status', 'start', 'stop', 'restart', 'update', 'validate', 'plugin_browse']);
+});
+
+document.getElementById('discord-global-save').addEventListener('click', () => {
+    saveDiscordGlobalBinding(false);
+});
+
+document.getElementById('discord-global-sync').addEventListener('click', () => {
+    saveDiscordGlobalBinding(true);
+});
+
+function setDiscordMenuPushStatus(message, isError = false) {
+    const target = document.getElementById('discord-menu-push-status');
+    target.textContent = message || '';
+    target.className = `form-text mt-2${isError ? ' text-danger' : ''}`;
+}
+
+function setDiscordMenuSelectOptions(select, placeholder, items) {
+    select.replaceChildren();
+    const initial = document.createElement('option');
+    initial.value = '';
+    initial.textContent = placeholder;
+    select.appendChild(initial);
+    items.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.name;
+        select.appendChild(option);
+    });
+    select.disabled = items.length === 0;
+}
+
+function resetDiscordMenuPushOptions() {
+    setDiscordMenuSelectOptions(
+        document.getElementById('discord-menu-push-guild'),
+        discordBotText('pushSelectGuild', 'Select a Guild'),
+        []
+    );
+    setDiscordMenuSelectOptions(
+        document.getElementById('discord-menu-push-channel'),
+        discordBotText('pushSelectChannel', 'Select a bound channel'),
+        []
+    );
+    document.getElementById('discord-menu-push-button').disabled = true;
+    setDiscordMenuPushStatus('');
+}
+
+async function loadDiscordMenuPushGuilds() {
+    resetDiscordMenuPushOptions();
+    setDiscordMenuPushStatus(discordBotText('pushLoading', 'Loading bound channels…'));
+    try {
+        const response = await profileAIFetch('/api/auth/discord-bot/menu-options');
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load menu channels'));
+        const guilds = Array.isArray(data.guilds) ? data.guilds : [];
+        const select = document.getElementById('discord-menu-push-guild');
+        setDiscordMenuSelectOptions(
+            select,
+            discordBotText('pushSelectGuild', 'Select a Guild'),
+            guilds
+        );
+        setDiscordMenuPushStatus(guilds.length
+            ? ''
+            : discordBotText('pushNoChannels', 'No enabled server binding has a pushable channel.'));
+        if (guilds.length === 1) {
+            select.value = guilds[0].id;
+            await loadDiscordMenuPushChannels(guilds[0].id);
+        }
+    } catch (error) {
+        setDiscordMenuPushStatus(error.message, true);
+    }
+}
+
+async function loadDiscordMenuPushChannels(guildId) {
+    const channelSelect = document.getElementById('discord-menu-push-channel');
+    setDiscordMenuSelectOptions(
+        channelSelect,
+        discordBotText('pushSelectChannel', 'Select a bound channel'),
+        []
+    );
+    document.getElementById('discord-menu-push-button').disabled = true;
+    if (!guildId) return;
+    setDiscordMenuPushStatus(discordBotText('pushLoading', 'Loading bound channels…'));
+    try {
+        const response = await profileAIFetch(`/api/auth/discord-bot/menu-options?guild_id=${encodeURIComponent(guildId)}`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load menu channels'));
+        const channels = Array.isArray(data.channels) ? data.channels : [];
+        setDiscordMenuSelectOptions(
+            channelSelect,
+            discordBotText('pushSelectChannel', 'Select a bound channel'),
+            channels
+        );
+        setDiscordMenuPushStatus(channels.length
+            ? ''
+            : discordBotText('pushNoChannels', 'No enabled server binding has a pushable channel.'));
+        if (channels.length === 1) {
+            channelSelect.value = channels[0].id;
+            document.getElementById('discord-menu-push-button').disabled = false;
+        }
+    } catch (error) {
+        setDiscordMenuPushStatus(error.message, true);
+    }
+}
+
+document.getElementById('discord-menu-push-guild').addEventListener('change', (event) => {
+    loadDiscordMenuPushChannels(event.target.value);
+});
+
+document.getElementById('discord-menu-push-channel').addEventListener('change', (event) => {
+    document.getElementById('discord-menu-push-button').disabled = !event.target.value;
+});
+
+document.getElementById('discord-menu-push-button').addEventListener('click', async () => {
+    const button = document.getElementById('discord-menu-push-button');
+    const guildId = document.getElementById('discord-menu-push-guild').value;
+    const channelId = document.getElementById('discord-menu-push-channel').value;
+    if (!guildId || !channelId) return;
+    button.disabled = true;
+    setDiscordMenuPushStatus(discordBotText('pushSending', 'Pushing menu…'));
+    try {
+        const response = await profileAIFetch('/api/auth/discord-bot/menu', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ guild_id: guildId, channel_id: channelId })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to push menu'));
+        setDiscordMenuPushStatus(discordBotText('pushSuccess', 'The menu was pushed and will expire in five minutes.'));
+    } catch (error) {
+        setDiscordMenuPushStatus(error.message, true);
+    } finally {
+        button.disabled = !document.getElementById('discord-menu-push-channel').value;
+    }
+});
+
 document.getElementById('discord-bot-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = document.getElementById('discord-bot-save');
     button.disabled = true;
     try {
         const token = document.getElementById('discord-bot-token').value.trim();
-        const body = { enabled: document.getElementById('discord-bot-enabled').checked };
+        const body = {
+            enabled: document.getElementById('discord-bot-enabled').checked,
+            message_trigger_mode: document.getElementById('discord-bot-trigger-mode').value,
+        };
         if (token) body.token = token;
         const response = await profileAIFetch('/api/auth/discord-bot', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)

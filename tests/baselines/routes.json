@@ -294,6 +294,46 @@
     "methods": [
       "GET"
     ],
+    "name": "get_discord_global_binding_options",
+    "path": "/api/auth/discord-bot/global-options"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_discord_global_binding",
+    "path": "/api/auth/discord-bot/global-settings"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "update_discord_global_binding",
+    "path": "/api/auth/discord-bot/global-settings"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_discord_menu_push_options",
+    "path": "/api/auth/discord-bot/menu-options"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "push_discord_menu",
+    "path": "/api/auth/discord-bot/menu"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "get_server_discord_bot_settings",
     "path": "/servers/{server_id}/discord-bot-settings"
   },

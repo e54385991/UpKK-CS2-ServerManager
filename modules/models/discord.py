@@ -22,12 +22,30 @@ class UserDiscordBot(SQLModel, table=True):
     """One encrypted Discord Bot credential per panel user."""
 
     __tablename__ = "user_discord_bots"
+    __table_args__ = (
+        CheckConstraint(
+            "message_trigger_mode IN ('mention_only', 'mention_and_greetings')",
+            name="ck_user_discord_bots_message_trigger_mode",
+        ),
+    )
 
     user_id: int = Field(
         sa_column=Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     )
     token_encrypted: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     enabled: bool = Field(default=False)
+    message_trigger_mode: str = Field(default="mention_only", max_length=32)
+    global_binding_configured: bool = Field(default=False)
+    global_binding_enabled: bool = Field(default=False)
+    global_guild_id: Optional[str] = Field(default=None, max_length=20)
+    global_channel_ids: List[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False)
+    )
+    global_role_ids: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    global_user_ids: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    global_capabilities: List[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False)
+    )
     application_id: Optional[str] = Field(default=None, max_length=20, unique=True, index=True)
     bot_user_id: Optional[str] = Field(default=None, max_length=20, unique=True, index=True)
     username: Optional[str] = Field(default=None, max_length=100)

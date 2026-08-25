@@ -17,9 +17,16 @@ from modules import (
     DiscordBotSettingsUpdate,
     DiscordBotTestRequest,
     DiscordBotTestResponse,
+    DiscordCapability,
     DiscordChannelOption,
+    DiscordGlobalBindingResponse,
+    DiscordGlobalBindingUpdate,
     DiscordGuildOption,
+    DiscordMenuPushOptionsResponse,
+    DiscordMenuPushRequest,
+    DiscordMenuPushResponse,
     DiscordRoleOption,
+    Server,
     ServerAgentPolicy,
     ServerDiscordBinding,
     User,
@@ -27,14 +34,24 @@ from modules import (
 )
 from services.agent_policy_service import get_effective_agent_policy
 from services.ai_security import decrypt_credential, encrypt_credential, get_effective_provider
+from services.discord_binding_template_service import (
+    global_binding_counts,
+    sync_global_discord_binding,
+)
 from services.discord_bot_service import (
     DISCORD_COMMAND_CHANNEL_TYPES,
+    DISCORD_MENU_PUSH_CHANNEL_TYPES,
     DiscordBotAPIError,
     build_invite_url,
+    delete_menu_launcher_after,
+    get_guild_locale,
     get_guild_options,
     list_guilds,
+    send_menu_launcher,
     test_bot_token,
 )
+from services.redis_manager import redis_manager
+from services.task_registry import discord_menu_task_registry
 
 router = APIRouter(tags=["discord-bot"])
 
@@ -68,6 +85,7 @@ def _bot_response(bot: UserDiscordBot | None) -> DiscordBotSettingsResponse:
     return DiscordBotSettingsResponse(
         enabled=bool(bot and bot.enabled),
         token_configured=bool(bot and bot.token_encrypted),
+        message_trigger_mode=bot.message_trigger_mode if bot else "mention_only",
         application_id=bot.application_id if bot else None,
         bot_user_id=bot.bot_user_id if bot else None,
         username=bot.username if bot else None,
@@ -87,6 +105,128 @@ async def _stored_token(db: DatabaseSession, user_id: int) -> tuple[UserDiscordB
     if not token:
         raise HTTPException(status_code=409, detail="Discord Bot Token is unavailable")
     return bot, token
+
+
+async def _connected_bot_token(db: DatabaseSession, user_id: int) -> tuple[UserDiscordBot, str]:
+    bot, token = await _stored_token(db, user_id)
+    if not bot.enabled or bot.connection_status != "connected":
+        raise HTTPException(
+            status_code=409,
+            detail="Discord Bot must be enabled and connected before pushing a menu",
+        )
+    return bot, token
+
+
+async def _bound_menu_push_channels(db: DatabaseSession, user_id: int) -> dict[str, set[str]]:
+    result = await db.execute(
+        select(ServerDiscordBinding, Server)
+        .join(Server, Server.id == ServerDiscordBinding.server_id)
+        .where(
+            ServerDiscordBinding.user_id == user_id,
+            ServerDiscordBinding.enabled.is_(True),
+            Server.user_id == user_id,
+        )
+    )
+    known_capabilities = {item.value for item in DiscordCapability}
+    channels_by_guild: dict[str, set[str]] = {}
+    for binding, server in result.all():
+        if (
+            server.user_id != user_id
+            or binding.user_id != user_id
+            or not binding.guild_id
+            or binding.invalid_reason is not None
+            or not known_capabilities.intersection(binding.capabilities or [])
+        ):
+            continue
+        channels_by_guild.setdefault(binding.guild_id, set()).update(binding.channel_ids or [])
+    return channels_by_guild
+
+
+async def _validate_binding_selection(
+    user_id: int,
+    token: str,
+    *,
+    guild_id: str | None,
+    channel_ids: list[str],
+    role_ids: list[str],
+) -> None:
+    if guild_id is None:
+        return
+    try:
+        _guilds, channels, roles = await _load_discord_options(user_id, token, guild_id)
+    except DiscordBotAPIError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    valid_channels = {
+        str(item["id"])
+        for item in channels
+        if int(item.get("type", -1)) in DISCORD_COMMAND_CHANNEL_TYPES
+    }
+    valid_roles = {str(item["id"]) for item in roles if str(item["id"]) != guild_id}
+    if set(channel_ids) - valid_channels:
+        raise HTTPException(status_code=422, detail="One or more channels are invalid")
+    if set(role_ids) - valid_roles:
+        raise HTTPException(status_code=422, detail="One or more roles are invalid")
+
+
+async def _discord_options_response(
+    user_id: int, token: str, guild_id: str | None
+) -> DiscordBotOptionsResponse:
+    try:
+        guild_payload, channels, roles = await _load_discord_options(user_id, token, guild_id)
+    except DiscordBotAPIError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    guilds = [
+        DiscordGuildOption(
+            id=str(item["id"]), name=str(item.get("name") or item["id"]), icon=item.get("icon")
+        )
+        for item in guild_payload
+    ]
+    if guild_id is None:
+        return DiscordBotOptionsResponse(guilds=guilds)
+    return DiscordBotOptionsResponse(
+        guilds=guilds,
+        channels=[
+            DiscordChannelOption(
+                id=str(item["id"]),
+                guild_id=guild_id,
+                name=str(item.get("name") or item["id"]),
+                type=int(item.get("type", 0)),
+            )
+            for item in channels
+            if int(item.get("type", -1)) in DISCORD_COMMAND_CHANNEL_TYPES
+        ],
+        roles=[
+            DiscordRoleOption(
+                id=str(item["id"]),
+                guild_id=guild_id,
+                name=str(item.get("name") or item["id"]),
+                position=int(item.get("position", 0)),
+            )
+            for item in roles
+            if str(item["id"]) != guild_id
+        ],
+    )
+
+
+async def _global_binding_response(
+    db: DatabaseSession,
+    bot: UserDiscordBot,
+    *,
+    synced_server_count: int = 0,
+) -> DiscordGlobalBindingResponse:
+    server_count, matching_server_count = await global_binding_counts(db, bot)
+    return DiscordGlobalBindingResponse(
+        configured=bot.global_binding_configured,
+        enabled=bot.global_binding_enabled,
+        guild_id=bot.global_guild_id,
+        channel_ids=list(bot.global_channel_ids or []),
+        role_ids=list(bot.global_role_ids or []),
+        user_ids=list(bot.global_user_ids or []),
+        capabilities=list(bot.global_capabilities or []),
+        server_count=server_count,
+        matching_server_count=matching_server_count,
+        synced_server_count=synced_server_count,
+    )
 
 
 @router.get("/api/auth/discord-bot", response_model=DiscordBotSettingsResponse)
@@ -137,6 +277,8 @@ async def update_discord_bot(
         bot.enabled = request.enabled
         if not request.enabled:
             bot.connection_status = "disabled"
+    if request.message_trigger_mode is not None:
+        bot.message_trigger_mode = request.message_trigger_mode
     db.add(bot)
     await db.commit()
     await db.refresh(bot)
@@ -208,6 +350,163 @@ async def get_discord_bot_guilds(
     ]
 
 
+@router.get(
+    "/api/auth/discord-bot/global-options",
+    response_model=DiscordBotOptionsResponse,
+)
+async def get_discord_global_binding_options(
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    guild_id: str | None = Query(default=None, pattern=r"^[1-9][0-9]{0,19}$"),
+) -> DiscordBotOptionsResponse:
+    _bot, token = await _stored_token(db, current_user.id)
+    return await _discord_options_response(current_user.id, token, guild_id)
+
+
+@router.get(
+    "/api/auth/discord-bot/global-settings",
+    response_model=DiscordGlobalBindingResponse,
+)
+async def get_discord_global_binding(
+    db: DatabaseSession, current_user: ActiveUser
+) -> DiscordGlobalBindingResponse:
+    bot = await db.get(UserDiscordBot, current_user.id)
+    if bot is None:
+        bot = UserDiscordBot(user_id=current_user.id)
+    return await _global_binding_response(db, bot)
+
+
+@router.put(
+    "/api/auth/discord-bot/global-settings",
+    response_model=DiscordGlobalBindingResponse,
+)
+async def update_discord_global_binding(
+    request: DiscordGlobalBindingUpdate,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> DiscordGlobalBindingResponse:
+    bot, token = await _stored_token(db, current_user.id)
+    await _validate_binding_selection(
+        current_user.id,
+        token,
+        guild_id=request.guild_id,
+        channel_ids=list(request.channel_ids),
+        role_ids=list(request.role_ids),
+    )
+    bot.global_binding_configured = True
+    bot.global_binding_enabled = request.enabled
+    bot.global_guild_id = request.guild_id
+    bot.global_channel_ids = list(request.channel_ids)
+    bot.global_role_ids = list(request.role_ids)
+    bot.global_user_ids = list(request.user_ids)
+    bot.global_capabilities = [item.value for item in request.capabilities]
+    db.add(bot)
+    synced_server_count = 0
+    if request.sync_existing_servers:
+        synced_server_count = await sync_global_discord_binding(db, bot)
+    await db.commit()
+    if synced_server_count:
+        await _notify_manager(current_user.id)
+    return await _global_binding_response(db, bot, synced_server_count=synced_server_count)
+
+
+@router.get(
+    "/api/auth/discord-bot/menu-options",
+    response_model=DiscordMenuPushOptionsResponse,
+)
+async def get_discord_menu_push_options(
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    guild_id: str | None = Query(default=None, pattern=r"^[1-9][0-9]{0,19}$"),
+) -> DiscordMenuPushOptionsResponse:
+    _bot, token = await _connected_bot_token(db, current_user.id)
+    allowed = await _bound_menu_push_channels(db, current_user.id)
+    try:
+        guild_payload, channels, _roles = await _load_discord_options(
+            current_user.id, token, guild_id
+        )
+    except DiscordBotAPIError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    guilds = [
+        DiscordGuildOption(
+            id=str(item["id"]), name=str(item.get("name") or item["id"]), icon=item.get("icon")
+        )
+        for item in guild_payload
+        if str(item["id"]) in allowed
+    ]
+    if guild_id is None:
+        return DiscordMenuPushOptionsResponse(guilds=guilds)
+    if guild_id not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail="The selected Guild has no enabled Discord server binding",
+        )
+    allowed_channel_ids = allowed[guild_id]
+    return DiscordMenuPushOptionsResponse(
+        guilds=guilds,
+        channels=[
+            DiscordChannelOption(
+                id=str(item["id"]),
+                guild_id=guild_id,
+                name=str(item.get("name") or item["id"]),
+                type=int(item.get("type", 0)),
+            )
+            for item in channels
+            if str(item["id"]) in allowed_channel_ids
+            and int(item.get("type", -1)) in DISCORD_MENU_PUSH_CHANNEL_TYPES
+        ],
+    )
+
+
+@router.post("/api/auth/discord-bot/menu", response_model=DiscordMenuPushResponse)
+async def push_discord_menu(
+    request: DiscordMenuPushRequest,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> DiscordMenuPushResponse:
+    _bot, token = await _connected_bot_token(db, current_user.id)
+    allowed = await _bound_menu_push_channels(db, current_user.id)
+    if request.channel_id not in allowed.get(request.guild_id, set()):
+        raise HTTPException(
+            status_code=422,
+            detail="The selected channel is not part of an enabled Discord server binding",
+        )
+    try:
+        _guilds, channels, _roles = await _load_discord_options(
+            current_user.id, token, request.guild_id
+        )
+    except DiscordBotAPIError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    channel = next((item for item in channels if str(item.get("id")) == request.channel_id), None)
+    if channel is None or int(channel.get("type", -1)) not in DISCORD_MENU_PUSH_CHANNEL_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail="The selected channel cannot receive a proactive menu message",
+        )
+    allowed_request, retry_after = await redis_manager.hit_rate_limit(
+        f"discord_menu_push:{current_user.id}:{request.guild_id}:{request.channel_id}", 1, 5
+    )
+    if not allowed_request:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Please wait {retry_after} seconds before pushing another menu",
+            headers={"Retry-After": str(retry_after)},
+        )
+    try:
+        locale = await get_guild_locale(token, request.guild_id)
+        message_id, _issued_at = await send_menu_launcher(token, request.channel_id, locale)
+    except DiscordBotAPIError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    discord_menu_task_registry.create(
+        delete_menu_launcher_after(token, request.channel_id, message_id)
+    )
+    return DiscordMenuPushResponse(
+        guild_id=request.guild_id,
+        channel_id=request.channel_id,
+        message_id=message_id,
+    )
+
+
 async def _owned_server(db: DatabaseSession, current_user: ActiveUser, server_id: int):
     server = await require_server_access(db, server_id, current_user)
     if server.user_id != current_user.id:
@@ -265,25 +564,13 @@ async def update_server_discord_bot_settings(
 ) -> DiscordBindingResponse:
     server = await _owned_server(db, current_user, server_id)
     _bot, token = await _stored_token(db, server.user_id)
-    if request.guild_id is not None:
-        try:
-            _guilds, channels, roles = await _load_discord_options(
-                server.user_id, token, request.guild_id
-            )
-        except DiscordBotAPIError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        valid_channels = {
-            str(item["id"])
-            for item in channels
-            if int(item.get("type", -1)) in DISCORD_COMMAND_CHANNEL_TYPES
-        }
-        valid_roles = {str(item["id"]) for item in roles if str(item["id"]) != request.guild_id}
-        invalid_channels = set(request.channel_ids) - valid_channels
-        invalid_roles = set(request.role_ids) - valid_roles
-        if invalid_channels:
-            raise HTTPException(status_code=422, detail="One or more channels are invalid")
-        if invalid_roles:
-            raise HTTPException(status_code=422, detail="One or more roles are invalid")
+    await _validate_binding_selection(
+        server.user_id,
+        token,
+        guild_id=request.guild_id,
+        channel_ids=list(request.channel_ids),
+        role_ids=list(request.role_ids),
+    )
     binding = await db.get(ServerDiscordBinding, server.id)
     if binding is None:
         binding = ServerDiscordBinding(server_id=server.id, user_id=server.user_id)
@@ -310,43 +597,7 @@ async def get_server_discord_bot_options(
 ) -> DiscordBotOptionsResponse:
     server = await _owned_server(db, current_user, server_id)
     _bot, token = await _stored_token(db, server.user_id)
-    try:
-        guild_payload, channels, roles = await _load_discord_options(
-            server.user_id, token, guild_id
-        )
-        guilds = [
-            DiscordGuildOption(
-                id=str(item["id"]), name=str(item.get("name") or item["id"]), icon=item.get("icon")
-            )
-            for item in guild_payload
-        ]
-        if guild_id is None:
-            return DiscordBotOptionsResponse(guilds=guilds)
-    except DiscordBotAPIError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return DiscordBotOptionsResponse(
-        guilds=guilds,
-        channels=[
-            DiscordChannelOption(
-                id=str(item["id"]),
-                guild_id=guild_id,
-                name=str(item.get("name") or item["id"]),
-                type=int(item.get("type", 0)),
-            )
-            for item in channels
-            if int(item.get("type", -1)) in DISCORD_COMMAND_CHANNEL_TYPES
-        ],
-        roles=[
-            DiscordRoleOption(
-                id=str(item["id"]),
-                guild_id=guild_id,
-                name=str(item.get("name") or item["id"]),
-                position=int(item.get("position", 0)),
-            )
-            for item in roles
-            if str(item["id"]) != guild_id
-        ],
-    )
+    return await _discord_options_response(server.user_id, token, guild_id)
 
 
 async def _agent_policy_response(db: DatabaseSession, server_id: int, owner) -> AgentPolicyResponse:

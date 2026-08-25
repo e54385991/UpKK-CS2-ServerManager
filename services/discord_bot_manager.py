@@ -6,12 +6,14 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import uuid
 from contextlib import suppress
 from dataclasses import dataclass
 
 import discord
 from discord import app_commands
+from sqlalchemy import func
 from sqlmodel import select
 
 from modules.database import async_session_maker
@@ -46,6 +48,25 @@ from services.discord_authorization_service import (
     authorized_bindings,
 )
 from services.discord_bot_service import DISCORD_COMMAND_CHANNEL_TYPES
+from services.discord_menu_ui import (
+    MENU_LIFETIME_SECONDS,
+    PLUGIN_PAGE_SIZE,
+    MenuInputModal,
+    action_capability,
+    control_view,
+    is_exact_wake_word,
+    launcher_is_expired,
+    launcher_view,
+    menu_is_expired,
+    menu_issued_at,
+    no_access_view,
+    normalize_message_trigger,
+    plugin_picker_view,
+    server_picker_view,
+)
+from services.discord_menu_ui import (
+    text as menu_text,
+)
 from services.discord_operation_service import (
     DiscordOperationDenied,
     confirm_operation,
@@ -57,6 +78,8 @@ logger = logging.getLogger(__name__)
 LEASE_TTL_SECONDS = 60
 LEASE_RENEW_SECONDS = 20
 RECONCILE_SECONDS = 30
+MESSAGE_TRIGGER_MENTION_ONLY = "mention_only"
+MESSAGE_TRIGGER_GREETINGS = "mention_and_greetings"
 
 
 def _safe_text(value, limit: int = 3900) -> str:
@@ -69,6 +92,14 @@ def _safe_text(value, limit: int = 3900) -> str:
 
 def _roles(interaction: discord.Interaction) -> set[str]:
     member = interaction.user
+    return {
+        str(role.id)
+        for role in getattr(member, "roles", [])
+        if getattr(role, "id", None) is not None
+    }
+
+
+def _member_roles(member: object) -> set[str]:
     return {
         str(role.id)
         for role in getattr(member, "roles", [])
@@ -146,12 +177,20 @@ class _AIConfirmView(discord.ui.View):
 
 
 class ManagedDiscordClient(discord.Client):
-    def __init__(self, manager: "DiscordBotManager", owner_user_id: int) -> None:
+    def __init__(
+        self,
+        manager: "DiscordBotManager",
+        owner_user_id: int,
+        message_trigger_mode: str = MESSAGE_TRIGGER_MENTION_ONLY,
+    ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
+        intents.guild_messages = True
+        intents.message_content = message_trigger_mode == MESSAGE_TRIGGER_GREETINGS
         super().__init__(intents=intents)
         self.manager = manager
         self.owner_user_id = owner_user_id
+        self.message_trigger_mode = message_trigger_mode
         self.tree = app_commands.CommandTree(self)
         self._register_commands()
 
@@ -161,11 +200,14 @@ class ManagedDiscordClient(discord.Client):
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         await self.manager._guild_removed(self.owner_user_id, str(guild.id))
 
+    async def on_message(self, message: discord.Message) -> None:
+        await self.manager.handle_message(self, message)
+
     async def on_interaction(self, interaction: discord.Interaction) -> None:
         if interaction.type != discord.InteractionType.component:
             return
         custom_id = str((interaction.data or {}).get("custom_id") or "")
-        if custom_id.startswith("cs2:op:") or custom_id.startswith("cs2:ai:"):
+        if custom_id.startswith(("cs2:op:", "cs2:ai:", "cs2:menu:")):
             await self.manager.handle_component(self, interaction, custom_id)
 
     async def sync_bound_guilds(self) -> None:
@@ -236,6 +278,9 @@ class ManagedDiscordClient(discord.Client):
 
         async def help_command(interaction: discord.Interaction) -> None:
             await self.manager.command_help(self, interaction)
+
+        async def menu_command(interaction: discord.Interaction) -> None:
+            await self.manager.command_menu(self, interaction)
 
         async def status_command(
             interaction: discord.Interaction, server: str | None = None
@@ -322,6 +367,7 @@ class ManagedDiscordClient(discord.Client):
             agent.command(name="reset", description="Start a new isolated AI context")(agent_reset),
         ]
         cs2.command(name="help", description="Show authorized CS2 Bot commands")(help_command)
+        cs2.command(name="menu", description="Open your private CS2 control menu")(menu_command)
         cs2.add_command(plugin)
         cs2.add_command(console)
         cs2.add_command(agent)
@@ -445,10 +491,15 @@ class DiscordBotManager:
                     bot and user and user.is_active and bot.enabled and bot.token_encrypted
                 )
                 encrypted = bot.token_encrypted if bot else None
+                message_trigger_mode = (
+                    bot.message_trigger_mode if bot else MESSAGE_TRIGGER_MENTION_ONLY
+                )
             if not should_run or not encrypted:
                 await self._stop_runtime(user_id, status="disabled")
                 return
-            fingerprint = hashlib.sha256(encrypted.encode()).hexdigest()
+            fingerprint = hashlib.sha256(
+                f"{encrypted}\0{message_trigger_mode}".encode()
+            ).hexdigest()
             binding_payload = [
                 {
                     "server_id": item.server_id,
@@ -493,7 +544,7 @@ class DiscordBotManager:
                 await redis_manager.release_lock(lease_key, lease_token)
                 await self._update_bot_status(user_id, "error", "Bot Token unavailable")
                 return
-            client = ManagedDiscordClient(self, user_id)
+            client = ManagedDiscordClient(self, user_id, message_trigger_mode)
             client_task = asyncio.create_task(client.start(token, reconnect=True))
             renew_task = asyncio.create_task(self._renew_lease(user_id, lease_token))
             self._runtimes[user_id] = _Runtime(
@@ -547,7 +598,14 @@ class DiscordBotManager:
         if not task.cancelled():
             with suppress(Exception):
                 exception = task.exception()
-                error = str(exception) if exception else None
+                if isinstance(exception, discord.PrivilegedIntentsRequired):
+                    error = (
+                        "Message Content Intent is not enabled for this Bot. Enable it under "
+                        "Discord Developer Portal → Bot → Privileged Gateway Intents, or switch "
+                        "the friendly-menu trigger to mention-only mode."
+                    )
+                else:
+                    error = str(exception) if exception else None
         await self._update_bot_status(
             user_id,
             "error" if error else "disconnected",
@@ -603,6 +661,199 @@ class DiscordBotManager:
 
     async def _guild_removed(self, user_id: int, guild_id: str) -> None:
         await self._mark_guild_invalid(user_id, guild_id, "bot_not_in_guild")
+
+    @staticmethod
+    def _locale(source: discord.Interaction | discord.Message) -> object:
+        locale = getattr(source, "locale", None)
+        guild = getattr(source, "guild", None)
+        return locale or getattr(guild, "preferred_locale", None) or "en-US"
+
+    async def _authorized_menu_pairs(
+        self,
+        client: ManagedDiscordClient,
+        *,
+        guild_id: int | None,
+        channel_id: int | None,
+        actor_user_id: int,
+        actor_role_ids: set[str],
+        required_capability: DiscordCapability | None = None,
+    ) -> list[tuple[ServerDiscordBinding, Server]]:
+        if guild_id is None or channel_id is None:
+            return []
+        async with async_session_maker() as db:
+            pairs = await authorized_bindings(
+                db,
+                bot_owner_user_id=client.owner_user_id,
+                guild_id=str(guild_id),
+                channel_id=str(channel_id),
+                actor_user_id=str(actor_user_id),
+                actor_role_ids=actor_role_ids,
+                required_capability=required_capability,
+            )
+        if required_capability is not None:
+            return pairs
+        known = {item.value for item in DiscordCapability}
+        return [
+            (binding, server)
+            for binding, server in pairs
+            if known & set(binding.capabilities or [])
+        ]
+
+    async def handle_message(self, client: ManagedDiscordClient, message: discord.Message) -> None:
+        """Publish a short-lived launcher only for authorized bound-channel messages."""
+        if (
+            message.guild is None
+            or message.webhook_id is not None
+            or getattr(message.author, "bot", False)
+            or client.user is None
+        ):
+            return
+        mentioned = client.user.id in set(getattr(message, "raw_mentions", []))
+        normalized = normalize_message_trigger(message.content, client.user.id)
+        exact_wake_word = is_exact_wake_word(message.content, client.user.id)
+        mention_trigger = mentioned and (not normalized or exact_wake_word)
+        greeting = client.message_trigger_mode == MESSAGE_TRIGGER_GREETINGS and exact_wake_word
+        if not mention_trigger and not greeting:
+            return
+        try:
+            pairs = await self._authorized_menu_pairs(
+                client,
+                guild_id=message.guild.id,
+                channel_id=message.channel.id,
+                actor_user_id=message.author.id,
+                actor_role_ids=_member_roles(message.author),
+            )
+            if not pairs:
+                return
+            allowed, _retry_after = await redis_manager.hit_rate_limit(
+                (
+                    f"discord_menu_trigger:{client.owner_user_id}:{message.guild.id}:"
+                    f"{message.channel.id}:{message.author.id}"
+                ),
+                1,
+                5,
+            )
+            if not allowed:
+                return
+            await message.reply(
+                view=launcher_view(self._locale(message)),
+                allowed_mentions=discord.AllowedMentions.none(),
+                mention_author=False,
+                delete_after=300,
+                silent=True,
+            )
+        except Exception:
+            logger.exception(
+                "Discord friendly-menu trigger failed for owner %s Guild %s channel %s",
+                client.owner_user_id,
+                message.guild.id,
+                message.channel.id,
+            )
+
+    async def _menu_pairs_for_interaction(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        required_capability: DiscordCapability | None = None,
+    ) -> list[tuple[ServerDiscordBinding, Server]]:
+        return await self._authorized_menu_pairs(
+            client,
+            guild_id=interaction.guild_id,
+            channel_id=interaction.channel_id,
+            actor_user_id=interaction.user.id,
+            actor_role_ids=_roles(interaction),
+            required_capability=required_capability,
+        )
+
+    @staticmethod
+    def _menu_server_payload(
+        pairs: list[tuple[ServerDiscordBinding, Server]],
+    ) -> list[dict]:
+        known = {item.value for item in DiscordCapability}
+        return [
+            {
+                "id": server.id,
+                "name": server.name,
+                "capability_count": len(known & set(binding.capabilities or [])),
+            }
+            for binding, server in pairs
+        ]
+
+    async def _private_menu_view(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        *,
+        issued_at: int | None = None,
+        page: int = 0,
+    ) -> discord.ui.LayoutView:
+        locale = self._locale(interaction)
+        pairs = await self._menu_pairs_for_interaction(client, interaction)
+        if not pairs:
+            return no_access_view(locale)
+        issued_at = issued_at or menu_issued_at()
+        if len(pairs) == 1:
+            binding, server = pairs[0]
+            return control_view(
+                locale,
+                server_id=server.id,
+                server_name=server.name,
+                capabilities=binding.capabilities or [],
+                issued_at=issued_at,
+            )
+        return server_picker_view(
+            locale,
+            self._menu_server_payload(pairs),
+            issued_at=issued_at,
+            page=page,
+        )
+
+    async def command_menu(
+        self, client: ManagedDiscordClient, interaction: discord.Interaction
+    ) -> None:
+        try:
+            view = await self._private_menu_view(client, interaction)
+            await interaction.response.send_message(view=view, ephemeral=True)
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def _menu_control_view(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        *,
+        issued_at: int,
+        server_id: int,
+    ) -> discord.ui.LayoutView:
+        pairs = await self._menu_pairs_for_interaction(client, interaction)
+        for binding, server in pairs:
+            if server.id == server_id:
+                return control_view(
+                    self._locale(interaction),
+                    server_id=server.id,
+                    server_name=server.name,
+                    capabilities=binding.capabilities or [],
+                    issued_at=issued_at,
+                )
+        raise DiscordAuthorizationDenied("Selected server is unavailable or unauthorized")
+
+    async def _resolve_menu_server(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        server_id: int,
+        capability: DiscordCapability,
+    ) -> Server:
+        pairs = await self._menu_pairs_for_interaction(client, interaction, capability)
+        for _binding, server in pairs:
+            if server.id == server_id:
+                return server
+        raise DiscordAuthorizationDenied("Selected server is unavailable or unauthorized")
+
+    async def _menu_expired_response(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
+            menu_text(self._locale(interaction), "expired"), ephemeral=True
+        )
 
     async def _resolve_server(
         self,
@@ -671,6 +922,7 @@ class DiscordBotManager:
             return
         await interaction.response.send_message(
             "`/cs2 status|start|stop|restart|update|validate`\n"
+            "`/cs2 menu`\n"
             "`/cs2 plugin search|list|install|upgrade`\n"
             "`/cs2 console send`\n"
             "`/cs2 agent ask|reset`\n"
@@ -689,35 +941,38 @@ class DiscordBotManager:
                 client, interaction, DiscordCapability.STATUS, server_value
             )
             await interaction.response.defer(ephemeral=False)
-            from services.a2s_query import a2s_service
-
-            host = server.a2s_query_host or server.host
-            port = server.a2s_query_port or server.game_port
-            ok, info = await a2s_service.query_server_info(host, port, timeout=5)
-            fields = [
-                ("Panel status", server.status.value if server.status else "unknown"),
-                ("Endpoint", f"{host}:{port}"),
-            ]
-            if ok and info:
-                fields.extend(
-                    [
-                        ("Map", str(info.get("map_name") or "unknown")),
-                        (
-                            "Players",
-                            f"{info.get('player_count', 0)}/{info.get('max_players', 0)}",
-                        ),
-                    ]
-                )
-            embed = discord.Embed(
-                title=server.name,
-                description="A2S online" if ok else "A2S unavailable",
-                color=discord.Color.green() if ok else discord.Color.orange(),
-            )
-            for name, value in fields:
-                embed.add_field(name=name, value=value, inline=True)
-            await interaction.edit_original_response(embed=embed)
+            await interaction.edit_original_response(embed=await self._status_embed(server))
         except Exception as exc:
             await self._respond_error(interaction, exc)
+
+    async def _status_embed(self, server: Server) -> discord.Embed:
+        from services.a2s_query import a2s_service
+
+        host = server.a2s_query_host or server.host
+        port = server.a2s_query_port or server.game_port
+        ok, info = await a2s_service.query_server_info(host, port, timeout=5)
+        fields = [
+            ("Panel status", server.status.value if server.status else "unknown"),
+            ("Endpoint", f"{host}:{port}"),
+        ]
+        if ok and info:
+            fields.extend(
+                [
+                    ("Map", str(info.get("map_name") or "unknown")),
+                    (
+                        "Players",
+                        f"{info.get('player_count', 0)}/{info.get('max_players', 0)}",
+                    ),
+                ]
+            )
+        embed = discord.Embed(
+            title=server.name,
+            description="A2S online" if ok else "A2S unavailable",
+            color=discord.Color.green() if ok else discord.Color.orange(),
+        )
+        for name, value in fields:
+            embed.add_field(name=name, value=value, inline=True)
+        return embed
 
     async def _send_confirmation(
         self,
@@ -730,11 +985,36 @@ class DiscordBotManager:
         *,
         warnings: bool = False,
     ) -> None:
+        operation, embed, view = await self._build_confirmation(
+            interaction,
+            server,
+            action,
+            capability,
+            arguments,
+            plan,
+            warnings=warnings,
+        )
+        await interaction.edit_original_response(embed=embed, view=view)
+        message = await interaction.original_response()
+        await self._save_operation_message(operation.id, message.id)
+
+    async def _build_confirmation(
+        self,
+        interaction: discord.Interaction,
+        server: Server,
+        action: str,
+        capability: DiscordCapability,
+        arguments: dict,
+        plan: dict,
+        *,
+        warnings: bool = False,
+    ) -> tuple[DiscordOperationRun, discord.Embed, _ConfirmView]:
         async with async_session_maker() as db:
             operation = await create_operation(
                 db,
                 server=server,
                 actor_user_id=str(interaction.user.id),
+                actor_role_ids=_roles(interaction),
                 guild_id=str(interaction.guild_id),
                 channel_id=str(interaction.channel_id),
                 action=action,
@@ -750,16 +1030,49 @@ class DiscordBotManager:
         embed.add_field(
             name="Immutable plan", value=f"```json\n{_safe_text(plan, 900)}\n```", inline=False
         )
-        await interaction.edit_original_response(
-            embed=embed, view=_ConfirmView(operation.id, warnings=warnings)
-        )
-        message = await interaction.original_response()
+        return operation, embed, _ConfirmView(operation.id, warnings=warnings)
+
+    async def _save_operation_message(self, operation_id: str, message_id: int) -> None:
         async with async_session_maker() as db:
-            saved = await db.get(DiscordOperationRun, operation.id)
+            saved = await db.get(DiscordOperationRun, operation_id)
             if saved:
-                saved.message_id = str(message.id)
+                saved.message_id = str(message_id)
                 db.add(saved)
                 await db.commit()
+
+    async def _publish_menu_confirmation(
+        self,
+        interaction: discord.Interaction,
+        server: Server,
+        action: str,
+        capability: DiscordCapability,
+        arguments: dict,
+        plan: dict,
+        *,
+        warnings: bool = False,
+    ) -> None:
+        operation, embed, view = await self._build_confirmation(
+            interaction,
+            server,
+            action,
+            capability,
+            arguments,
+            plan,
+            warnings=warnings,
+        )
+        message = await interaction.followup.send(
+            embed=embed,
+            view=view,
+            ephemeral=False,
+            wait=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        if message is None:
+            raise DiscordOperationDenied("Discord did not return the confirmation message")
+        await self._save_operation_message(operation.id, message.id)
+        await interaction.edit_original_response(
+            content=menu_text(self._locale(interaction), "published")
+        )
 
     async def command_write(
         self,
@@ -1017,6 +1330,586 @@ class DiscordBotManager:
             view=None,
         )
 
+    async def _render_ai_run_message(self, message: discord.WebhookMessage, run_id: str) -> None:
+        snapshot = await discord_run_snapshot(run_id)
+        if snapshot["status"] == "waiting_approval" and snapshot["tool"]:
+            tool = snapshot["tool"]
+            embed = discord.Embed(
+                title=f"AI confirmation: {tool['name']}",
+                description="Only the original requester can confirm. Expires in 15 minutes.",
+                color=discord.Color.orange(),
+            )
+            embed.add_field(
+                name="Plan", value=f"```json\n{_safe_text(tool['plan'], 900)}\n```", inline=False
+            )
+            await message.edit(embed=embed, view=_AIConfirmView(run_id, tool["id"]))
+            return
+        color = discord.Color.green() if snapshot["status"] == "completed" else discord.Color.red()
+        description = snapshot["message"] or snapshot["error"] or snapshot["status"]
+        await message.edit(
+            embed=discord.Embed(title="AI Agent", description=_safe_text(description), color=color),
+            view=None,
+        )
+
+    async def _publish_menu_status(self, interaction: discord.Interaction, server: Server) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.followup.send(
+            embed=await self._status_embed(server),
+            ephemeral=False,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        await interaction.edit_original_response(
+            content=menu_text(self._locale(interaction), "published")
+        )
+
+    @staticmethod
+    def _plugin_embed(plugin: MarketPlugin | ManagedPlugin) -> discord.Embed:
+        if isinstance(plugin, MarketPlugin):
+            embed = discord.Embed(
+                title=plugin.title,
+                description=_safe_text(plugin.description or "No description", 3000),
+                color=discord.Color.blurple(),
+            )
+            embed.add_field(name="Market ID", value=str(plugin.id), inline=True)
+            embed.add_field(name="Version", value=plugin.version or "unknown", inline=True)
+            embed.add_field(name="Author", value=plugin.author or "unknown", inline=True)
+            return embed
+        embed = discord.Embed(
+            title=plugin.display_name,
+            description="Managed plugin",
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(name="Plugin ID", value=str(plugin.id), inline=True)
+        embed.add_field(name="Installed", value=plugin.installed_version, inline=True)
+        embed.add_field(name="Latest", value=plugin.latest_version or "unknown", inline=True)
+        return embed
+
+    async def _managed_plugin_view(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        *,
+        issued_at: int,
+        server_id: int,
+        page: int,
+        mode: str,
+    ) -> discord.ui.LayoutView:
+        capability = (
+            DiscordCapability.PLUGIN_UPGRADE
+            if mode == "upgrade"
+            else DiscordCapability.PLUGIN_BROWSE
+        )
+        server = await self._resolve_menu_server(client, interaction, server_id, capability)
+        async with async_session_maker() as db:
+            total = int(
+                await db.scalar(
+                    select(func.count())
+                    .select_from(ManagedPlugin)
+                    .where(ManagedPlugin.server_id == server.id)
+                )
+                or 0
+            )
+            pages = max(1, math.ceil(total / PLUGIN_PAGE_SIZE))
+            page = min(max(page, 0), pages - 1)
+            result = await db.execute(
+                select(ManagedPlugin)
+                .where(ManagedPlugin.server_id == server.id)
+                .order_by(ManagedPlugin.display_name.asc(), ManagedPlugin.id.asc())
+                .offset(page * PLUGIN_PAGE_SIZE)
+                .limit(PLUGIN_PAGE_SIZE)
+            )
+            plugins = list(result.scalars().all())
+        options = [
+            discord.SelectOption(
+                label=item.display_name[:100],
+                value=str(item.id),
+                description=f"{item.installed_version} → {item.latest_version or 'unknown'}"[:100],
+                emoji="🧩",
+            )
+            for item in plugins
+            if item.id is not None
+        ]
+        locale = self._locale(interaction)
+        return plugin_picker_view(
+            locale,
+            title=menu_text(locale, "managed_plugins", server=server.name),
+            hint=menu_text(locale, "managed_hint"),
+            options=options,
+            custom_id=f"cs2:menu:managed_pick:{issued_at}:{server.id}:{mode}",
+            issued_at=issued_at,
+            server_id=server.id,
+            page=page,
+            pages=pages,
+            page_kind=f"managed_{mode}",
+        )
+
+    @staticmethod
+    def _search_state_key(
+        client: ManagedDiscordClient, interaction: discord.Interaction, nonce: str
+    ) -> str:
+        return f"discord_menu_search:{client.owner_user_id}:{interaction.user.id}:{nonce}"
+
+    async def _market_search_view(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        *,
+        issued_at: int,
+        server_id: int,
+        nonce: str,
+        page: int,
+    ) -> discord.ui.LayoutView:
+        state = await redis_manager.get(self._search_state_key(client, interaction, nonce))
+        if not isinstance(state, dict):
+            raise DiscordAuthorizationDenied("Plugin search expired; open a new menu")
+        query = str(state.get("query") or "").strip()
+        mode = str(state.get("mode") or "browse")
+        if mode not in {"browse", "install"} or state.get("server_id") != server_id:
+            raise DiscordAuthorizationDenied("Plugin search state does not match this menu")
+        capability = (
+            DiscordCapability.PLUGIN_INSTALL
+            if mode == "install"
+            else DiscordCapability.PLUGIN_BROWSE
+        )
+        await self._resolve_menu_server(client, interaction, server_id, capability)
+        async with async_session_maker() as db:
+            plugins, total = await MarketPlugin.search_plugins(
+                db,
+                search_query=query,
+                skip=max(0, page) * PLUGIN_PAGE_SIZE,
+                limit=PLUGIN_PAGE_SIZE,
+            )
+        pages = max(1, math.ceil(total / PLUGIN_PAGE_SIZE))
+        page = min(max(page, 0), pages - 1)
+        if page and not plugins:
+            async with async_session_maker() as db:
+                plugins, _total = await MarketPlugin.search_plugins(
+                    db,
+                    search_query=query,
+                    skip=page * PLUGIN_PAGE_SIZE,
+                    limit=PLUGIN_PAGE_SIZE,
+                )
+        options = [
+            discord.SelectOption(
+                label=item.title[:100],
+                value=str(item.id),
+                description=f"{item.version or 'unknown'} · {item.author or 'unknown'}"[:100],
+                emoji="📦",
+            )
+            for item in plugins
+            if item.id is not None
+        ]
+        locale = self._locale(interaction)
+        return plugin_picker_view(
+            locale,
+            title=menu_text(locale, "search_results", query=_safe_text(query, 100)),
+            hint=menu_text(locale, "search_result_hint"),
+            options=options,
+            custom_id=f"cs2:menu:market_pick:{issued_at}:{server_id}:{nonce}:{mode}",
+            issued_at=issued_at,
+            server_id=server_id,
+            page=page,
+            pages=pages,
+            page_kind=f"search_{nonce}",
+        )
+
+    async def _menu_search_submit(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        *,
+        issued_at: int,
+        server_id: int,
+        mode: str,
+        query: str,
+    ) -> None:
+        if mode not in {"browse", "install"}:
+            raise DiscordAuthorizationDenied("Invalid plugin search mode")
+        capability = (
+            DiscordCapability.PLUGIN_INSTALL
+            if mode == "install"
+            else DiscordCapability.PLUGIN_BROWSE
+        )
+        await self._resolve_menu_server(client, interaction, server_id, capability)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        nonce = uuid.uuid4().hex[:12]
+        saved = await redis_manager.set(
+            self._search_state_key(client, interaction, nonce),
+            {"query": query.strip(), "mode": mode, "server_id": server_id},
+            MENU_LIFETIME_SECONDS,
+        )
+        if not saved:
+            raise DiscordAuthorizationDenied("Plugin search state is temporarily unavailable")
+        view = await self._market_search_view(
+            client,
+            interaction,
+            issued_at=issued_at,
+            server_id=server_id,
+            nonce=nonce,
+            page=0,
+        )
+        await interaction.edit_original_response(content=None, view=view)
+
+    async def _menu_console_submit(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        *,
+        server_id: int,
+        command: str,
+    ) -> None:
+        data = GameConsoleCommandInput(command=command)
+        server = await self._resolve_menu_server(
+            client, interaction, server_id, DiscordCapability.GAME_CONSOLE
+        )
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        command_hash = hashlib.sha256(data.command.encode()).hexdigest()
+        await self._publish_menu_confirmation(
+            interaction,
+            server,
+            "game_console",
+            DiscordCapability.GAME_CONSOLE,
+            {
+                "command_encrypted": encrypt_credential(data.command),
+                "command_hash": command_hash,
+            },
+            _game_console_plan(server, data.command),
+        )
+
+    async def _menu_agent_submit(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        *,
+        server_id: int,
+        prompt: str,
+    ) -> None:
+        server = await self._resolve_menu_server(
+            client, interaction, server_id, DiscordCapability.AGENT_ASK
+        )
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        message = await interaction.followup.send(
+            embed=discord.Embed(title="AI Agent", description="Working…"),
+            ephemeral=False,
+            wait=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        if message is None:
+            raise DiscordAuthorizationDenied("Discord did not return the AI progress message")
+        try:
+            run_id = await ask_discord_agent(
+                owner_user_id=client.owner_user_id,
+                server_id=server.id,
+                actor_user_id=str(interaction.user.id),
+                guild_id=str(interaction.guild_id),
+                channel_id=str(interaction.channel_id),
+                prompt=prompt,
+            )
+            await self._render_ai_run_message(message, run_id)
+        except Exception:
+            with suppress(discord.HTTPException):
+                await message.edit(
+                    embed=discord.Embed(
+                        title="AI Agent",
+                        description="The request failed. Reopen the menu and try again.",
+                        color=discord.Color.red(),
+                    ),
+                    view=None,
+                )
+            raise
+        await interaction.edit_original_response(
+            content=menu_text(self._locale(interaction), "published")
+        )
+
+    async def _handle_menu_action(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        *,
+        issued_at: int,
+        server_id: int,
+        action: str,
+    ) -> None:
+        capability = action_capability(action)
+        if capability is None:
+            raise DiscordAuthorizationDenied("Unknown or unavailable menu action")
+        server = await self._resolve_menu_server(client, interaction, server_id, capability)
+        locale = self._locale(interaction)
+        if action in {"plugin_search", "plugin_install"}:
+            mode = "install" if action == "plugin_install" else "browse"
+            modal = MenuInputModal(
+                locale=locale,
+                title_key="search_title",
+                label_key="search_label",
+                placeholder_key="search_placeholder",
+                custom_id=f"cs2:menu:search_modal:{issued_at}:{server.id}:{mode}",
+                callback=lambda modal_interaction, value: self._menu_search_submit(
+                    client,
+                    modal_interaction,
+                    issued_at=issued_at,
+                    server_id=server.id,
+                    mode=mode,
+                    query=value,
+                ),
+                max_length=200,
+            )
+            await interaction.response.send_modal(modal)
+            return
+        if action == "game_console":
+            modal = MenuInputModal(
+                locale=locale,
+                title_key="console_title",
+                label_key="console_label",
+                placeholder_key="console_placeholder",
+                custom_id=f"cs2:menu:console_modal:{issued_at}:{server.id}",
+                callback=lambda modal_interaction, value: self._menu_console_submit(
+                    client, modal_interaction, server_id=server.id, command=value
+                ),
+                max_length=500,
+            )
+            await interaction.response.send_modal(modal)
+            return
+        if action == "agent_ask":
+            modal = MenuInputModal(
+                locale=locale,
+                title_key="agent_title",
+                label_key="agent_label",
+                placeholder_key="agent_placeholder",
+                custom_id=f"cs2:menu:agent_modal:{issued_at}:{server.id}",
+                callback=lambda modal_interaction, value: self._menu_agent_submit(
+                    client, modal_interaction, server_id=server.id, prompt=value
+                ),
+                style=discord.TextStyle.paragraph,
+                max_length=1000,
+            )
+            await interaction.response.send_modal(modal)
+            return
+        if action in {"plugin_list", "plugin_upgrade"}:
+            mode = "upgrade" if action == "plugin_upgrade" else "browse"
+            view = await self._managed_plugin_view(
+                client,
+                interaction,
+                issued_at=issued_at,
+                server_id=server.id,
+                page=0,
+                mode=mode,
+            )
+            await interaction.response.edit_message(view=view)
+            return
+        if action == "status":
+            await self._publish_menu_status(interaction, server)
+            return
+        if action in {"start", "stop", "restart", "update", "validate"}:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            await self._publish_menu_confirmation(
+                interaction,
+                server,
+                action,
+                capability,
+                {"action": action},
+                _simple_plan(server, action),
+            )
+            return
+        if action == "agent_reset":
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            await reset_discord_conversation(
+                owner_user_id=client.owner_user_id,
+                server_id=server.id,
+                actor_user_id=str(interaction.user.id),
+                guild_id=str(interaction.guild_id),
+                channel_id=str(interaction.channel_id),
+            )
+            await interaction.followup.send(
+                f"Started a new isolated AI context for **{server.name}**.",
+                ephemeral=False,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            await interaction.edit_original_response(content=menu_text(locale, "published"))
+            return
+        raise DiscordAuthorizationDenied("Unknown or unavailable menu action")
+
+    async def _handle_menu_component(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        parts: list[str],
+    ) -> None:
+        kind = parts[2] if len(parts) > 2 else ""
+        if kind == "open":
+            if len(parts) < 4:
+                raise DiscordAuthorizationDenied("Invalid menu launcher")
+            try:
+                launcher_issued_at = int(parts[3])
+            except ValueError as exc:
+                raise DiscordAuthorizationDenied("Invalid menu timestamp") from exc
+            if launcher_is_expired(launcher_issued_at):
+                await self._menu_expired_response(interaction)
+                return
+            view = await self._private_menu_view(client, interaction)
+            await interaction.response.send_message(view=view, ephemeral=True)
+            return
+        if len(parts) < 4:
+            raise DiscordAuthorizationDenied("Invalid menu component")
+        try:
+            issued_at = int(parts[3])
+        except ValueError as exc:
+            raise DiscordAuthorizationDenied("Invalid menu timestamp") from exc
+        if menu_is_expired(issued_at):
+            await self._menu_expired_response(interaction)
+            return
+        if kind == "page":
+            page = int(parts[4])
+            view = await self._private_menu_view(
+                client, interaction, issued_at=issued_at, page=page
+            )
+            await interaction.response.edit_message(view=view)
+            return
+        if kind == "server":
+            values = (interaction.data or {}).get("values") or []
+            server_id = int(values[0])
+            view = await self._menu_control_view(
+                client, interaction, issued_at=issued_at, server_id=server_id
+            )
+            await interaction.response.edit_message(view=view)
+            return
+        if kind == "control":
+            server_id = int(parts[4])
+            view = await self._menu_control_view(
+                client, interaction, issued_at=issued_at, server_id=server_id
+            )
+            await interaction.response.edit_message(view=view)
+            return
+        if kind == "action":
+            server_id = int(parts[4])
+            values = (interaction.data or {}).get("values") or []
+            if not values:
+                raise DiscordAuthorizationDenied("No menu action was selected")
+            await self._handle_menu_action(
+                client,
+                interaction,
+                issued_at=issued_at,
+                server_id=server_id,
+                action=str(values[0]),
+            )
+            return
+        if kind.startswith("managed_") and kind != "managed_pick":
+            mode = kind.removeprefix("managed_")
+            if mode not in {"browse", "upgrade"}:
+                raise DiscordAuthorizationDenied("Invalid managed plugin mode")
+            server_id = int(parts[4])
+            page = int(parts[5])
+            view = await self._managed_plugin_view(
+                client,
+                interaction,
+                issued_at=issued_at,
+                server_id=server_id,
+                page=page,
+                mode=mode,
+            )
+            await interaction.response.edit_message(view=view)
+            return
+        if kind == "managed_pick":
+            server_id = int(parts[4])
+            mode = parts[5]
+            if mode not in {"browse", "upgrade"}:
+                raise DiscordAuthorizationDenied("Invalid managed plugin mode")
+            values = (interaction.data or {}).get("values") or []
+            plugin_id = int(values[0])
+            capability = (
+                DiscordCapability.PLUGIN_UPGRADE
+                if mode == "upgrade"
+                else DiscordCapability.PLUGIN_BROWSE
+            )
+            server = await self._resolve_menu_server(client, interaction, server_id, capability)
+            async with async_session_maker() as db:
+                plugin = await db.get(ManagedPlugin, plugin_id)
+            if plugin is None or plugin.server_id != server.id:
+                raise DiscordAuthorizationDenied("Managed plugin is unavailable")
+            if mode == "browse":
+                await interaction.response.defer(ephemeral=True, thinking=True)
+                await interaction.followup.send(embed=self._plugin_embed(plugin), ephemeral=False)
+                await interaction.edit_original_response(
+                    content=menu_text(self._locale(interaction), "published")
+                )
+                return
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            from services.plugin_auto_update_service import plugin_auto_update_service
+
+            plan = await plugin_auto_update_service.build_plugin_upgrade_plan(server.id, plugin_id)
+            if plan["no_op"]:
+                await interaction.edit_original_response(
+                    content=f"{plan['name']} is already up to date."
+                )
+                return
+            await self._publish_menu_confirmation(
+                interaction,
+                server,
+                "plugin_upgrade",
+                DiscordCapability.PLUGIN_UPGRADE,
+                {"plugin_id": plugin_id},
+                plan,
+            )
+            return
+        if kind.startswith("search_"):
+            nonce = kind.removeprefix("search_")
+            server_id = int(parts[4])
+            page = int(parts[5])
+            view = await self._market_search_view(
+                client,
+                interaction,
+                issued_at=issued_at,
+                server_id=server_id,
+                nonce=nonce,
+                page=page,
+            )
+            await interaction.response.edit_message(view=view)
+            return
+        if kind == "market_pick":
+            server_id = int(parts[4])
+            nonce = parts[5]
+            mode = parts[6]
+            if mode not in {"browse", "install"}:
+                raise DiscordAuthorizationDenied("Invalid market plugin mode")
+            state = await redis_manager.get(self._search_state_key(client, interaction, nonce))
+            if (
+                not isinstance(state, dict)
+                or state.get("server_id") != server_id
+                or state.get("mode") != mode
+            ):
+                raise DiscordAuthorizationDenied("Plugin search state does not match this menu")
+            values = (interaction.data or {}).get("values") or []
+            plugin_id = int(values[0])
+            capability = (
+                DiscordCapability.PLUGIN_INSTALL
+                if mode == "install"
+                else DiscordCapability.PLUGIN_BROWSE
+            )
+            server = await self._resolve_menu_server(client, interaction, server_id, capability)
+            async with async_session_maker() as db:
+                plugin = await MarketPlugin.get_by_id(db, plugin_id)
+            if plugin is None:
+                raise DiscordAuthorizationDenied("Market plugin is unavailable")
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            if mode == "browse":
+                await interaction.followup.send(embed=self._plugin_embed(plugin), ephemeral=False)
+                await interaction.edit_original_response(
+                    content=menu_text(self._locale(interaction), "published")
+                )
+                return
+            plan, arguments, warnings = await self._market_plan(server, plugin_id)
+            await self._publish_menu_confirmation(
+                interaction,
+                server,
+                "plugin_install",
+                DiscordCapability.PLUGIN_INSTALL,
+                arguments,
+                plan,
+                warnings=warnings,
+            )
+            await redis_manager.delete(self._search_state_key(client, interaction, nonce))
+            return
+        raise DiscordAuthorizationDenied("Unknown menu component")
+
     async def handle_component(
         self,
         client: ManagedDiscordClient,
@@ -1025,7 +1918,9 @@ class DiscordBotManager:
     ) -> None:
         try:
             parts = custom_id.split(":")
-            if parts[1] == "op":
+            if parts[1] == "menu":
+                await self._handle_menu_component(client, interaction, parts)
+            elif parts[1] == "op":
                 operation_id, decision = parts[2], parts[3]
                 if decision == "cancel":
                     await self._cancel_operation(interaction, operation_id)

@@ -62,11 +62,13 @@ def _validate_snowflake(value: str) -> str:
 
 
 Snowflake = Annotated[str, AfterValidator(_validate_snowflake)]
+MessageTriggerMode = Literal["mention_only", "mention_and_greetings"]
 
 
 class DiscordBotSettingsUpdate(SQLModel):
     token: str | None = Field(default=None, min_length=20, max_length=4096)
     enabled: bool | None = None
+    message_trigger_mode: MessageTriggerMode | None = None
 
     @field_validator("token")
     @classmethod
@@ -82,6 +84,7 @@ class DiscordBotSettingsUpdate(SQLModel):
 class DiscordBotSettingsResponse(SQLModel):
     enabled: bool
     token_configured: bool
+    message_trigger_mode: MessageTriggerMode
     application_id: Snowflake | None = None
     bot_user_id: Snowflake | None = None
     username: str | None = None
@@ -137,6 +140,23 @@ class DiscordBotOptionsResponse(SQLModel):
     roles: list[DiscordRoleOption] = Field(default_factory=list)
 
 
+class DiscordMenuPushOptionsResponse(SQLModel):
+    guilds: list[DiscordGuildOption] = Field(default_factory=list)
+    channels: list[DiscordChannelOption] = Field(default_factory=list)
+
+
+class DiscordMenuPushRequest(SQLModel):
+    guild_id: Snowflake
+    channel_id: Snowflake
+
+
+class DiscordMenuPushResponse(SQLModel):
+    guild_id: Snowflake
+    channel_id: Snowflake
+    message_id: Snowflake
+    expires_in_seconds: int = 300
+
+
 class DiscordBindingUpdate(SQLModel):
     enabled: bool = False
     guild_id: Snowflake | None = None
@@ -179,6 +199,26 @@ class DiscordBindingResponse(SQLModel):
     user_ids: list[Snowflake] = Field(default_factory=list)
     capabilities: list[DiscordCapability] = Field(default_factory=list)
     response_visibility: Literal["public"] = "public"
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DiscordGlobalBindingUpdate(DiscordBindingUpdate):
+    sync_existing_servers: bool = False
+
+
+class DiscordGlobalBindingResponse(SQLModel):
+    configured: bool
+    enabled: bool
+    guild_id: Snowflake | None = None
+    channel_ids: list[Snowflake] = Field(default_factory=list)
+    role_ids: list[Snowflake] = Field(default_factory=list)
+    user_ids: list[Snowflake] = Field(default_factory=list)
+    capabilities: list[DiscordCapability] = Field(default_factory=list)
+    server_count: int = 0
+    matching_server_count: int = 0
+    synced_server_count: int = 0
+    inherited_by_new_servers: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 

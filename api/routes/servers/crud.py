@@ -6,6 +6,7 @@ import hashlib
 
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession
 from modules import ServerAgentPolicy
+from services.discord_binding_template_service import inherit_global_discord_binding
 
 from .common import *
 
@@ -154,6 +155,7 @@ async def create_server(
     db.add(server)
     await db.flush()
     db.add(ServerAgentPolicy(server_id=server.id))
+    await inherit_global_discord_binding(db, server)
     for default_path in DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS:
         db.add(
             PluginConfigSource(

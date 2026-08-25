@@ -35,7 +35,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def test_postgresql_models_and_static_baseline_are_the_schema_authority():
     assert len(SQLModel.metadata.tables) == 29
-    assert code_heads() == ("0003_ai_provider_protocol",)
+    assert code_heads() == ("0005_discord_global_binding",)
     assert "create_all" not in (PROJECT_ROOT / "modules/database.py").read_text()
 
     revision = PROJECT_ROOT / "alembic/versions/0001_postgresql_baseline.py"

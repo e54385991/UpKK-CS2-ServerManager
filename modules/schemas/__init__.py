@@ -60,8 +60,14 @@ from .discord import (
     DiscordBotTestResponse,
     DiscordCapability,
     DiscordChannelOption,
+    DiscordGlobalBindingResponse,
+    DiscordGlobalBindingUpdate,
     DiscordGuildOption,
+    DiscordMenuPushOptionsResponse,
+    DiscordMenuPushRequest,
+    DiscordMenuPushResponse,
     DiscordRoleOption,
+    MessageTriggerMode,
     Snowflake,
 )
 from .plugins import (
