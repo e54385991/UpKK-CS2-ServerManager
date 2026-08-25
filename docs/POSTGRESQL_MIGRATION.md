@@ -69,7 +69,7 @@ CI 会禁止多个 Alembic head，并在真实 PostgreSQL 18 上检查空库升�
 - 停止最后一个 MySQL 兼容版本的所有写入和后台任务；
 - MySQL 已升级并规范化到该版本的最终 schema；
 - 已完成并验证 MySQL 备份；
-- PostgreSQL 目标数据库为空，允许迁移器只用 Alembic 创建结构；
+- PostgreSQL 目标数据库为空；如果新应用曾启动并生成数据，必须明确选择事务式覆盖；
 - 保留旧应用和 MySQL 备份，直到 PostgreSQL 观察期结束。
 
 一次性 MySQL 读取依赖不属于应用运行依赖。可先安装用于检查环境：
@@ -90,6 +90,19 @@ LEGACY_MYSQL_DATABASE_URL=mysql+aiomysql://legacy_user:secret@mysql-host:3306/cs
 uv run --extra legacy-mysql-migration \
   python -m scripts.migrate_mysql_to_postgresql
 ```
+
+如果 PostgreSQL 已经启动过应用，且目标库中的全部应用数据都应由 MySQL 数据替换，
+先停止所有连接该目标库的应用实例，再显式执行：
+
+```bash
+uv run --extra legacy-mysql-migration \
+  python -m scripts.migrate_mysql_to_postgresql --replace-target-data
+```
+
+该开关会清理当前 Alembic schema 管理的 25 张应用表，但保留 schema 和
+`alembic_version`。目标清理、MySQL 复制和内容校验位于同一个 PostgreSQL 事务；
+复制或校验失败时原目标数据会回滚恢复，成功后原目标数据会被永久替换。默认不覆盖，
+以防配置错误时误清理其他 PostgreSQL 数据库。覆盖前仍应备份目标库。
 
 迁移器会：
 
@@ -144,5 +157,5 @@ Alembic 只升级应用 schema，不能升级 PostgreSQL 数据库集群。Postg
 - `timed out ... migration lock`：另一实例仍在迁移或持锁连接异常；先检查实例与数据库会话，不要绕过锁。
 - `expected exactly one Alembic head`：代码包含分叉 revision；开发者必须合并 head 后重新发布。
 - `database heads ... do not match code head`：部署代码与数据库版本不一致；核对镜像、revision 和迁移日志。
-- `target PostgreSQL application tables must be empty`：MySQL 离线迁移目标已有数据；换用明确的新空数据库，不要覆盖。
+- `target PostgreSQL application tables must be empty`：目标已有数据；停止目标应用，确认这些数据应由 MySQL 完全替换并完成备份后，使用 `--replace-target-data`。不要手工删除表或绕过校验。
 - `legacy MySQL schema is not at the final supported revision`：先用最后一个 MySQL 兼容版本完成规范化，再重新冻结写入并迁移。

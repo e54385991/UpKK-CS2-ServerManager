@@ -280,6 +280,32 @@ async def test_all_tables_copy_verify_sequences_and_roll_back_on_failures(monkey
         with pytest.raises(LegacyMigrationError, match="must be empty"):
             await migrate(source_engine, success_engine)
 
+        replacement_report = await migrate(
+            source_engine,
+            success_engine,
+            replace_target_data=True,
+        )
+        assert replacement_report.tables == report.tables
+        assert replacement_report.replaced_target_rows == report.total_rows + 1
+        async with success_engine.connect() as connection:
+            assert (
+                await connection.scalar(
+                    select(func.count())
+                    .select_from(users)
+                    .where(users.c.username == "after-migration")
+                )
+                == 0
+            )
+
+        async with success_engine.begin() as connection:
+            await connection.execute(
+                users.insert().values(
+                    username="rollback-sentinel",
+                    email="rollback@example.com",
+                    hashed_password="hash",
+                )
+            )
+
         original_hash = migration_module._hash_target_table
 
         async def mismatched_hash(connection, table):
@@ -289,6 +315,23 @@ async def test_all_tables_copy_verify_sequences_and_roll_back_on_failures(monkey
             return result
 
         monkeypatch.setattr(migration_module, "_hash_target_table", mismatched_hash)
+        with pytest.raises(LegacyMigrationError, match="verification failed for tables: users"):
+            await migrate(
+                source_engine,
+                success_engine,
+                replace_target_data=True,
+            )
+
+        async with success_engine.connect() as connection:
+            assert (
+                await connection.scalar(
+                    select(func.count())
+                    .select_from(users)
+                    .where(users.c.username == "rollback-sentinel")
+                )
+                == 1
+            )
+
         with pytest.raises(LegacyMigrationError, match="verification failed for tables: users"):
             await migrate(source_engine, failure_engine)
 

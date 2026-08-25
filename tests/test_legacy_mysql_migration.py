@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import Boolean, Column, DateTime, Integer, MetaData, Table
@@ -16,9 +17,13 @@ from scripts.migrate_mysql_to_postgresql import (
     LegacyMigrationError,
     MigrationReport,
     TableReport,
+    TableRowCount,
     _canonical_value,
+    _clear_target_tables,
+    _expected_tables,
     _legacy_url,
     _normalize_value,
+    _parse_args,
     _update_digest,
     _validate_source_schema,
 )
@@ -109,7 +114,10 @@ def test_known_deprecated_legacy_artifacts_are_allowed_but_unknown_ones_fail():
 
 
 def test_report_contains_only_counts_and_digests():
-    report = MigrationReport((TableReport("users", 2, "a" * 64),))
+    report = MigrationReport(
+        (TableReport("users", 2, "a" * 64),),
+        replaced_target=(TableRowCount("users", 1),),
+    )
     payload = json.loads(report.as_json())
 
     assert payload == {
@@ -125,4 +133,24 @@ def test_report_contains_only_counts_and_digests():
             }
         ],
         "deprecated_artifacts": [],
+        "replaced_target_rows": 1,
+        "replaced_target_tables": [{"table": "users", "rows": 1}],
     }
+
+
+@pytest.mark.asyncio
+async def test_target_replacement_clears_every_table_in_reverse_dependency_order():
+    tables = _expected_tables()
+    connection = AsyncMock()
+    connection.scalar.side_effect = [1 if table.name == "users" else 0 for table in tables]
+
+    replaced = await _clear_target_tables(connection)
+
+    assert replaced == (TableRowCount("users", 1),)
+    deleted_tables = [call.args[0].table.name for call in connection.execute.await_args_list]
+    assert deleted_tables == [table.name for table in reversed(tables)]
+
+
+def test_target_replacement_requires_explicit_cli_switch():
+    assert _parse_args([]).replace_target_data is False
+    assert _parse_args(["--replace-target-data"]).replace_target_data is True

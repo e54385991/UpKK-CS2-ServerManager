@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Copy a normalized legacy MySQL database into an empty PostgreSQL schema."""
+"""Copy normalized legacy MySQL data into PostgreSQL, with explicit replacement."""
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import hashlib
 import json
@@ -68,13 +69,24 @@ class TableReport:
 
 
 @dataclass(frozen=True, slots=True)
+class TableRowCount:
+    table: str
+    rows: int
+
+
+@dataclass(frozen=True, slots=True)
 class MigrationReport:
     tables: tuple[TableReport, ...]
     deprecated_artifacts: tuple[TableReport, ...] = ()
+    replaced_target: tuple[TableRowCount, ...] = ()
 
     @property
     def total_rows(self) -> int:
         return sum(item.rows for item in self.tables)
+
+    @property
+    def replaced_target_rows(self) -> int:
+        return sum(item.rows for item in self.replaced_target)
 
     def as_json(self) -> str:
         return json.dumps(
@@ -83,6 +95,8 @@ class MigrationReport:
                 "total_rows": self.total_rows,
                 "tables": [asdict(item) for item in self.tables],
                 "deprecated_artifacts": [asdict(item) for item in self.deprecated_artifacts],
+                "replaced_target_rows": self.replaced_target_rows,
+                "replaced_target_tables": [asdict(item) for item in self.replaced_target],
             },
             ensure_ascii=False,
             indent=2,
@@ -247,16 +261,32 @@ def _validate_target_schema(target_metadata: MetaData) -> None:
         )
 
 
-async def _validate_empty_target(connection: AsyncConnection) -> None:
-    non_empty: list[str] = []
+async def _target_row_counts(connection: AsyncConnection) -> tuple[TableRowCount, ...]:
+    counts = []
     for table in _expected_tables():
         count = int((await connection.scalar(select(func.count()).select_from(table))) or 0)
         if count:
-            non_empty.append(f"{table.name}={count}")
+            counts.append(TableRowCount(table.name, count))
+    return tuple(counts)
+
+
+async def _validate_empty_target(connection: AsyncConnection) -> None:
+    non_empty = await _target_row_counts(connection)
     if non_empty:
         raise LegacyMigrationError(
-            "target PostgreSQL application tables must be empty: " + ", ".join(non_empty)
+            "target PostgreSQL application tables must be empty: "
+            + ", ".join(f"{item.table}={item.rows}" for item in non_empty)
+            + "; stop the application and rerun with --replace-target-data "
+            "only when all target application data may be replaced"
         )
+
+
+async def _clear_target_tables(connection: AsyncConnection) -> tuple[TableRowCount, ...]:
+    """Delete target rows in dependency-safe order inside the caller's transaction."""
+    replaced = await _target_row_counts(connection)
+    for table in reversed(_expected_tables()):
+        await connection.execute(table.delete())
+    return replaced
 
 
 def _order_columns(table: Table) -> tuple[Any, ...]:
@@ -439,8 +469,13 @@ async def _reset_sequences(connection: AsyncConnection) -> None:
             ) from exc
 
 
-async def migrate(source_engine: AsyncEngine, target: AsyncEngine) -> MigrationReport:
-    """Copy all application rows while leaving the legacy source untouched."""
+async def migrate(
+    source_engine: AsyncEngine,
+    target: AsyncEngine,
+    *,
+    replace_target_data: bool = False,
+) -> MigrationReport:
+    """Copy source rows, optionally replacing target rows transactionally."""
     await upgrade_database(
         target,
         lock_timeout_seconds=settings.DB_MIGRATION_LOCK_TIMEOUT_SECONDS,
@@ -455,12 +490,21 @@ async def migrate(source_engine: AsyncEngine, target: AsyncEngine) -> MigrationR
         _validate_source_schema(source_metadata)
         _validate_target_schema(target_metadata)
 
-        await _validate_empty_target(destination)
+        if not replace_target_data:
+            await _validate_empty_target(destination)
         if destination.in_transaction():
             await destination.rollback()
 
         source = await source.execution_options(isolation_level="REPEATABLE READ")
         async with source.begin(), destination.begin():
+            replaced_target: tuple[TableRowCount, ...] = ()
+            if replace_target_data:
+                try:
+                    replaced_target = await _clear_target_tables(destination)
+                except Exception as exc:
+                    raise LegacyMigrationError(
+                        f"failed to clear target PostgreSQL data: {exc.__class__.__name__}"
+                    ) from exc
             try:
                 deprecated_reports = await _deprecated_artifact_reports(source, source_metadata)
             except Exception as exc:
@@ -487,7 +531,6 @@ async def migrate(source_engine: AsyncEngine, target: AsyncEngine) -> MigrationR
                         f"copy failed for table {target_table.name}: {exc.__class__.__name__}"
                     ) from exc
 
-            await _reset_sequences(destination)
             target_reports = []
             for table in _expected_tables():
                 try:
@@ -511,11 +554,16 @@ async def migrate(source_engine: AsyncEngine, target: AsyncEngine) -> MigrationR
                 raise LegacyMigrationError(
                     "target verification failed for tables: " + ", ".join(failed)
                 )
+            await _reset_sequences(destination)
 
-        return MigrationReport(tuple(source_reports), deprecated_reports)
+        return MigrationReport(
+            tables=tuple(source_reports),
+            deprecated_artifacts=deprecated_reports,
+            replaced_target=replaced_target,
+        )
 
 
-async def async_main() -> int:
+async def async_main(*, replace_target_data: bool = False) -> int:
     source_engine = create_async_engine(
         _legacy_url(),
         pool_pre_ping=True,
@@ -523,7 +571,11 @@ async def async_main() -> int:
         max_overflow=0,
     )
     try:
-        report = await migrate(source_engine, target_engine)
+        report = await migrate(
+            source_engine,
+            target_engine,
+            replace_target_data=replace_target_data,
+        )
         print(report.as_json())
         return 0
     except LegacyMigrationError as exc:
@@ -545,8 +597,24 @@ async def async_main() -> int:
         await target_engine.dispose()
 
 
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Copy the final legacy MySQL schema into PostgreSQL"
+    )
+    parser.add_argument(
+        "--replace-target-data",
+        action="store_true",
+        help=(
+            "delete all existing PostgreSQL application rows in the same transaction "
+            "before copying and verifying MySQL data"
+        ),
+    )
+    return parser.parse_args(argv)
+
+
 def main() -> int:
-    return asyncio.run(async_main())
+    args = _parse_args()
+    return asyncio.run(async_main(replace_target_data=args.replace_target_data))
 
 
 if __name__ == "__main__":
