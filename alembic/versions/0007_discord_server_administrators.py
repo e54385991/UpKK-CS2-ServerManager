@@ -29,7 +29,14 @@ def _ensure_boolean_column(table_name: str, column_name: str) -> None:
     op.execute(sa.text(f"ALTER TABLE {table_name} ALTER COLUMN {column_name} DROP DEFAULT"))
 
 
+def _widen_alembic_version_num() -> None:
+    # Alembic creates version_num as VARCHAR(32). This revision id is 34 chars,
+    # so the stamp UPDATE fails and rolls back the whole 0006→0007 transaction.
+    op.execute(sa.text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"))
+
+
 def upgrade() -> None:
+    _widen_alembic_version_num()
     _ensure_boolean_column("user_discord_bots", "global_allow_server_administrators")
     _ensure_boolean_column("server_discord_bindings", "allow_server_administrators")
 

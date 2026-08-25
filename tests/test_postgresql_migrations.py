@@ -46,6 +46,20 @@ def test_postgresql_models_and_static_baseline_are_the_schema_authority():
     assert "sqlmodel" not in source.casefold()
 
 
+def test_revision_ids_longer_than_alembic_default_widen_version_num():
+    long_ids: list[str] = []
+    for path in sorted((PROJECT_ROOT / "alembic/versions").glob("*.py")):
+        source = path.read_text()
+        marker = 'revision: str = "'
+        start = source.index(marker) + len(marker)
+        revision = source[start : source.index('"', start)]
+        if len(revision) > 32:
+            long_ids.append(revision)
+            assert "ALTER COLUMN version_num TYPE VARCHAR(128)" in source
+    assert long_ids == ["0007_discord_server_administrators"]
+    assert len("0007_discord_server_administrators") > 32
+
+
 def test_models_use_jsonb_nonnative_enums_and_expected_query_indexes():
     json_columns = []
     enum_columns = []
@@ -203,6 +217,11 @@ def test_upgrade_database_keeps_lock_and_schema_work_on_separate_connections():
         revision_source = (PROJECT_ROOT / "alembic/versions" / revision).read_text()
         assert "IF NOT EXISTS" in revision_source
         assert "_ensure_boolean_column" in revision_source
+    seventh = (PROJECT_ROOT / "alembic/versions/0007_discord_server_administrators.py").read_text()
+    upgrade_body = seventh.split("def upgrade() -> None:", 1)[1]
+    assert upgrade_body.index("_widen_alembic_version_num()") < upgrade_body.index(
+        "_ensure_boolean_column("
+    )
 
 
 @pytest.mark.asyncio
