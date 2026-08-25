@@ -848,8 +848,18 @@
                                 </div>
                                 <div class="row g-3">
                                     <div class="col-md-6">
-                                        <label class="form-label" data-i18n="discordBot.guild">Guild</label>
-                                        <select class="form-select" x-model="discordBotForm.guild_id" @change="discordBotForm.channel_ids=[]; discordBotForm.role_ids=[]; loadDiscordBotOptions(discordBotForm.guild_id)">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <label class="form-label" data-i18n="discordBot.guild">Guild</label>
+                                            <button class="btn btn-sm btn-link py-0 mb-2" type="button"
+                                                :disabled="loadingDiscordBotOptions"
+                                                @click="loadDiscordBotOptions(discordBotForm.guild_id)">
+                                                <i class="bi bi-arrow-clockwise"></i>
+                                                <span data-i18n="discordBot.refreshOptions">Refresh</span>
+                                            </button>
+                                        </div>
+                                        <select class="form-select" x-model="discordBotForm.guild_id"
+                                            :disabled="loadingDiscordBotOptions"
+                                            @change="onDiscordBotGuildChanged($event.target.value)">
                                             <option value="">Select a Guild</option>
                                             <template x-for="guild in discordBotOptions.guilds" :key="guild.id">
                                                 <option :value="guild.id" x-text="guild.name"></option>
@@ -858,11 +868,16 @@
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label" data-i18n="discordBot.channels">Allowed channels (one or more)</label>
-                                        <select class="form-select" multiple size="5" x-model="discordBotForm.channel_ids">
+                                        <select class="form-select" multiple size="5" x-model="discordBotForm.channel_ids"
+                                            :disabled="loadingDiscordBotOptions || !discordBotForm.guild_id">
                                             <template x-for="channel in discordBotOptions.channels" :key="channel.id">
                                                 <option :value="channel.id" x-text="'#' + channel.name"></option>
                                             </template>
                                         </select>
+                                        <div class="form-text" x-show="loadingDiscordBotOptions">
+                                            <span class="spinner-border spinner-border-sm"></span>
+                                            <span data-i18n="discordBot.loadingOptions">Loading channels and roles…</span>
+                                        </div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label" data-i18n="discordBot.roles">Allowed roles</label>

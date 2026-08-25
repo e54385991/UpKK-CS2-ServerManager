@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -27,8 +28,16 @@ from modules.utils import get_current_time
 from services.agent_policy_service import get_effective_agent_policy
 from services.ai_tools import TOOLS_BY_NAME, tool_definitions
 from services.discord_authorization_service import authorized_bindings
-from services.discord_bot_manager import ManagedDiscordClient, discord_bot_manager
-from services.discord_bot_service import MINIMUM_BOT_PERMISSIONS, build_invite_url
+from services.discord_bot_manager import (
+    DiscordBotManager,
+    ManagedDiscordClient,
+    discord_bot_manager,
+)
+from services.discord_bot_service import (
+    DISCORD_COMMAND_CHANNEL_TYPES,
+    MINIMUM_BOT_PERMISSIONS,
+    build_invite_url,
+)
 from services.discord_operation_service import (
     DiscordOperationDenied,
     canonical_payload,
@@ -182,6 +191,57 @@ def test_gateway_uses_only_guild_intent_and_has_expected_command_tree():
         "plugin",
         "agent",
     }
+
+
+def test_gateway_configuration_options_include_usable_channel_types_only():
+    manager = DiscordBotManager()
+    allowed_permissions = SimpleNamespace(
+        view_channel=True,
+        send_messages=True,
+        embed_links=True,
+        read_message_history=True,
+    )
+    denied_permissions = SimpleNamespace(
+        view_channel=True,
+        send_messages=False,
+        embed_links=True,
+        read_message_history=True,
+    )
+
+    def channel(channel_id: int, channel_type: int, permissions):
+        return SimpleNamespace(
+            id=channel_id,
+            name=f"channel-{channel_id}",
+            type=SimpleNamespace(value=channel_type),
+            permissions_for=lambda _member: permissions,
+        )
+
+    guild = SimpleNamespace(
+        id=100,
+        name="Guild",
+        icon=None,
+        me=object(),
+        channels=[
+            channel(200, 0, allowed_permissions),
+            channel(201, 15, allowed_permissions),
+            channel(202, 0, denied_permissions),
+            channel(203, 4, allowed_permissions),
+        ],
+        threads=[],
+        roles=[SimpleNamespace(id=300, name="Operator", position=1)],
+    )
+    client = Mock()
+    client.is_ready.return_value = True
+    client.guilds = [guild]
+    client.get_guild.return_value = guild
+    manager._runtimes[1] = SimpleNamespace(client=client)
+
+    snapshot = manager.configuration_options(1, "100")
+
+    assert snapshot is not None
+    assert [item["id"] for item in snapshot["channels"]] == ["200", "201"]
+    assert snapshot["roles"] == [{"id": "300", "name": "Operator", "position": 1}]
+    assert {2, 13, 15, 16}.issubset(DISCORD_COMMAND_CHANNEL_TYPES)
 
 
 def test_invite_and_confirmation_payloads_are_minimal_and_stable():

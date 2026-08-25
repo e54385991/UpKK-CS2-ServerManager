@@ -28,6 +28,7 @@ from modules import (
 from services.agent_policy_service import get_effective_agent_policy
 from services.ai_security import decrypt_credential, encrypt_credential, get_effective_provider
 from services.discord_bot_service import (
+    DISCORD_COMMAND_CHANNEL_TYPES,
     DiscordBotAPIError,
     build_invite_url,
     get_guild_options,
@@ -42,6 +43,25 @@ async def _notify_manager(user_id: int) -> None:
     from services.discord_bot_manager import discord_bot_manager
 
     await discord_bot_manager.reconcile_user(user_id)
+
+
+async def _load_discord_options(
+    user_id: int, token: str, guild_id: str | None = None
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Prefer the connected Gateway cache, with Discord REST as a safe fallback."""
+
+    from services.discord_bot_manager import discord_bot_manager
+
+    cached = discord_bot_manager.configuration_options(user_id, guild_id)
+    if cached is not None:
+        if cached.get("guild_missing"):
+            raise DiscordBotAPIError("The Bot is not a member of the selected Guild")
+        return cached["guilds"], cached["channels"], cached["roles"]
+    guilds = await list_guilds(token)
+    if guild_id is None:
+        return guilds, [], []
+    channels, roles = await get_guild_options(token, guild_id)
+    return guilds, channels, roles
 
 
 def _bot_response(bot: UserDiscordBot | None) -> DiscordBotSettingsResponse:
@@ -177,7 +197,7 @@ async def get_discord_bot_guilds(
 ) -> list[DiscordGuildOption]:
     _bot, token = await _stored_token(db, current_user.id)
     try:
-        guilds = await list_guilds(token)
+        guilds, _channels, _roles = await _load_discord_options(current_user.id, token)
     except DiscordBotAPIError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return [
@@ -244,14 +264,18 @@ async def update_server_discord_bot_settings(
     current_user: ActiveUser,
 ) -> DiscordBindingResponse:
     server = await _owned_server(db, current_user, server_id)
-    bot, token = await _stored_token(db, server.user_id)
+    _bot, token = await _stored_token(db, server.user_id)
     if request.guild_id is not None:
         try:
-            channels, roles = await get_guild_options(token, request.guild_id)
+            _guilds, channels, roles = await _load_discord_options(
+                server.user_id, token, request.guild_id
+            )
         except DiscordBotAPIError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         valid_channels = {
-            str(item["id"]) for item in channels if int(item.get("type", -1)) in {0, 5, 10, 11, 12}
+            str(item["id"])
+            for item in channels
+            if int(item.get("type", -1)) in DISCORD_COMMAND_CHANNEL_TYPES
         }
         valid_roles = {str(item["id"]) for item in roles if str(item["id"]) != request.guild_id}
         invalid_channels = set(request.channel_ids) - valid_channels
@@ -287,7 +311,9 @@ async def get_server_discord_bot_options(
     server = await _owned_server(db, current_user, server_id)
     _bot, token = await _stored_token(db, server.user_id)
     try:
-        guild_payload = await list_guilds(token)
+        guild_payload, channels, roles = await _load_discord_options(
+            server.user_id, token, guild_id
+        )
         guilds = [
             DiscordGuildOption(
                 id=str(item["id"]), name=str(item.get("name") or item["id"]), icon=item.get("icon")
@@ -296,7 +322,6 @@ async def get_server_discord_bot_options(
         ]
         if guild_id is None:
             return DiscordBotOptionsResponse(guilds=guilds)
-        channels, roles = await get_guild_options(token, guild_id)
     except DiscordBotAPIError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DiscordBotOptionsResponse(
@@ -309,7 +334,7 @@ async def get_server_discord_bot_options(
                 type=int(item.get("type", 0)),
             )
             for item in channels
-            if int(item.get("type", -1)) in {0, 5, 10, 11, 12}
+            if int(item.get("type", -1)) in DISCORD_COMMAND_CHANNEL_TYPES
         ],
         roles=[
             DiscordRoleOption(

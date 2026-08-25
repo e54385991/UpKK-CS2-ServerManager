@@ -44,6 +44,7 @@ from services.discord_authorization_service import (
     DiscordAuthorizationDenied,
     authorized_bindings,
 )
+from services.discord_bot_service import DISCORD_COMMAND_CHANNEL_TYPES
 from services.discord_operation_service import (
     DiscordOperationDenied,
     confirm_operation,
@@ -306,6 +307,56 @@ class DiscordBotManager:
         self._started = False
         self._reconcile_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+
+    def configuration_options(self, user_id: int, guild_id: str | None = None) -> dict | None:
+        """Return a permission-filtered snapshot from this worker's ready Gateway client."""
+
+        runtime = self._runtimes.get(user_id)
+        if runtime is None or not runtime.client.is_ready():
+            return None
+        client = runtime.client
+        guilds = [
+            {
+                "id": str(guild.id),
+                "name": guild.name,
+                "icon": str(guild.icon) if guild.icon else None,
+            }
+            for guild in client.guilds
+        ]
+        snapshot = {"guilds": guilds, "channels": [], "roles": []}
+        if guild_id is None:
+            return snapshot
+        guild = client.get_guild(int(guild_id))
+        if guild is None:
+            snapshot["guild_missing"] = True
+            return snapshot
+
+        member = guild.me
+        seen: set[int] = set()
+        channels = []
+        for channel in [*guild.channels, *guild.threads]:
+            if channel.id in seen:
+                continue
+            seen.add(channel.id)
+            channel_type = int(channel.type.value)
+            if channel_type not in DISCORD_COMMAND_CHANNEL_TYPES:
+                continue
+            if member is not None:
+                permissions = channel.permissions_for(member)
+                if not (
+                    permissions.view_channel
+                    and permissions.send_messages
+                    and permissions.embed_links
+                    and permissions.read_message_history
+                ):
+                    continue
+            channels.append({"id": str(channel.id), "name": channel.name, "type": channel_type})
+        snapshot["channels"] = channels
+        snapshot["roles"] = [
+            {"id": str(role.id), "name": role.name, "position": role.position}
+            for role in guild.roles
+        ]
+        return snapshot
 
     async def start(self) -> None:
         if self._started:

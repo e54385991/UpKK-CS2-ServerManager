@@ -482,8 +482,8 @@ function profileAIFetch(url, options = {}) {
 
 async function loadDiscordBotSettings() {
     const response = await profileAIFetch('/api/auth/discord-bot');
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || 'Failed to load Discord Bot settings');
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load Discord Bot settings'));
     document.getElementById('discord-bot-enabled').checked = !!data.enabled;
     document.getElementById('discord-bot-token').value = '';
     document.getElementById('discord-bot-token-status').textContent = data.token_configured
@@ -520,9 +520,9 @@ document.getElementById('discord-bot-form').addEventListener('submit', async (ev
         const response = await profileAIFetch('/api/auth/discord-bot', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Failed to save Discord Bot settings');
-        showDiscordBotResult('Discord Bot settings saved.', true);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to save Discord Bot settings'));
+        showDiscordBotResult('Discord Bot settings saved. Invite it to a Discord server before selecting channels.', true);
         await loadDiscordBotSettings();
     } catch (error) {
         showDiscordBotResult(error.message, false);
@@ -538,8 +538,8 @@ document.getElementById('discord-bot-test').addEventListener('click', async () =
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(token ? { token } : {})
         });
-        const data = await response.json();
-        if (!response.ok || !data.success) throw new Error(data.detail || data.message || 'Token test failed');
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) throw new Error(window.formatApiErrorDetail(data, 'Token test failed'));
         showDiscordBotResult(`${data.message}: ${data.username} (${data.bot_user_id})`, true);
     } catch (error) {
         showDiscordBotResult(error.message, false);
@@ -550,8 +550,8 @@ document.getElementById('discord-bot-clear').addEventListener('click', async () 
     if (!confirm('Clear the saved Bot Token and stop the Gateway connection? Server bindings will be retained but disabled.')) return;
     try {
         const response = await profileAIFetch('/api/auth/discord-bot', { method: 'DELETE' });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Failed to clear Bot Token');
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to clear Bot Token'));
         showDiscordBotResult('Bot Token cleared. Existing server bindings are retained but inactive.', true);
         await loadDiscordBotSettings();
     } catch (error) {

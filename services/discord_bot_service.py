@@ -10,6 +10,10 @@ from services.ai_security import redact_sensitive_text
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
 MINIMUM_BOT_PERMISSIONS = 1024 | 2048 | 16384 | 65536
+# Guild text, voice text chat, announcement, threads, stage text chat,
+# forum, and media channels. Categories and channels without a message surface
+# cannot receive application-command responses.
+DISCORD_COMMAND_CHANNEL_TYPES = frozenset({0, 2, 5, 10, 11, 12, 13, 15, 16})
 
 
 class DiscordBotAPIError(ValueError):

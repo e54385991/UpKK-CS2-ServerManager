@@ -251,6 +251,36 @@
                 'Authorization': `Bearer ${token}`
             };
         }
+
+        // Convert FastAPI/Pydantic structured validation details into readable text.
+        // Passing an object array directly to Error produces the useless "[object Object]".
+        function formatApiErrorDetail(payload, fallback = 'Request failed') {
+            const detail = payload?.detail ?? payload?.error ?? payload?.message;
+            if (typeof detail === 'string' && detail.trim()) return detail;
+            if (Array.isArray(detail)) {
+                const messages = detail.map((item) => {
+                    if (typeof item === 'string') return item;
+                    if (!item || typeof item !== 'object') return String(item);
+                    const location = Array.isArray(item.loc)
+                        ? item.loc.filter((part) => !['body', 'query', 'path'].includes(String(part))).join('.')
+                        : '';
+                    const message = item.msg || item.message || item.type || JSON.stringify(item);
+                    return location ? `${location}: ${message}` : String(message);
+                }).filter(Boolean);
+                if (messages.length) return messages.join('; ');
+            }
+            if (detail && typeof detail === 'object') {
+                if (typeof detail.msg === 'string') return detail.msg;
+                if (typeof detail.message === 'string') return detail.message;
+                try {
+                    return JSON.stringify(detail);
+                } catch (_) {
+                    return fallback;
+                }
+            }
+            return fallback;
+        }
+        window.formatApiErrorDetail = formatApiErrorDetail;
         
         // Helper function for authenticated fetch
         async function authFetch(url, options = {}) {

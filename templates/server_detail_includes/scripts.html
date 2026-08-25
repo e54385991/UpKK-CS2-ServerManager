@@ -159,6 +159,7 @@
         discordBotOptions: { guilds: [], channels: [], roles: [] },
         discordBotUserIdsText: '',
         discordBotError: '',
+        loadingDiscordBotOptions: false,
         savingDiscordBot: false,
         agentPolicy: { enabled: true, effective_enabled: false, capabilities: ['inspect_status', 'read_logs_files', 'browse_plan_plugins'] },
         agentPolicyForm: { enabled: true, capabilities: ['inspect_status', 'read_logs_files', 'browse_plan_plugins'] },
@@ -992,7 +993,7 @@
             try {
                 const response = await authFetch(`/servers/${this.serverId}/discord-bot-settings`);
                 const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Failed to load Discord Bot binding');
+                if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load Discord Bot binding'));
                 this.discordBotBinding = data;
                 this.discordBotForm = {
                     enabled: !!data.enabled,
@@ -1009,12 +1010,21 @@
             }
         },
 
+        async onDiscordBotGuildChanged(guildId) {
+            this.discordBotForm.guild_id = guildId || '';
+            this.discordBotForm.channel_ids = [];
+            this.discordBotForm.role_ids = [];
+            await this.loadDiscordBotOptions(this.discordBotForm.guild_id);
+        },
+
         async loadDiscordBotOptions(guildId = '') {
+            this.loadingDiscordBotOptions = true;
+            this.discordBotError = '';
             try {
                 const suffix = guildId ? `?guild_id=${encodeURIComponent(guildId)}` : '';
                 const response = await authFetch(`/servers/${this.serverId}/discord-bot-options${suffix}`);
                 const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Failed to load Discord options');
+                if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load Discord options'));
                 this.discordBotOptions = data;
                 if (guildId) {
                     const channels = new Set((data.channels || []).map(item => item.id));
@@ -1022,8 +1032,18 @@
                     this.discordBotForm.channel_ids = this.discordBotForm.channel_ids.filter(id => channels.has(id));
                     this.discordBotForm.role_ids = this.discordBotForm.role_ids.filter(id => roles.has(id));
                 }
+                if (!(data.guilds || []).length) {
+                    this.discordBotError = window.i18n?.t('discordBot.noGuilds')
+                        || 'The Bot has not joined any Discord server. Use the invite link on the profile page first.';
+                } else if (guildId && !(data.channels || []).length) {
+                    this.discordBotError = window.i18n?.t('discordBot.noChannels')
+                        || 'No usable channels were found. Check the Bot channel permissions and refresh.';
+                }
             } catch (error) {
+                this.discordBotOptions = { ...this.discordBotOptions, channels: [], roles: [] };
                 this.discordBotError = error.message;
+            } finally {
+                this.loadingDiscordBotOptions = false;
             }
         },
 
@@ -1050,7 +1070,7 @@
                     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
                 });
                 const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Failed to save Discord Bot binding');
+                if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to save Discord Bot binding'));
                 this.discordBotBinding = data;
                 this.showToast('Discord Bot binding saved', 'success');
             } catch (error) {
