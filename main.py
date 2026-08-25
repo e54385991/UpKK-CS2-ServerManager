@@ -13,6 +13,7 @@ from api.application import create_app, operation_busy_handler
 from api.lifecycle import start_application, stop_application
 from api.routes.health import health_check
 from api.routes.pages import (
+    audit_logs_page,
     console_popup,
     deployment_tutorial_page,
     file_editor_popup,
@@ -37,6 +38,7 @@ from modules import _get_log_level, settings, setup_logging
 __all__ = [
     "STATIC_ASSET_VERSION",
     "app",
+    "audit_logs_page",
     "console_popup",
     "deployment_tutorial_page",
     "file_editor_popup",

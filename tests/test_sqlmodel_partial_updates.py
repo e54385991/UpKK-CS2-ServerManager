@@ -1,7 +1,7 @@
 """Focused coverage for SQLModel partial-update route behavior."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -68,6 +68,7 @@ async def test_system_settings_update_keeps_protected_token_without_clear_flag(m
         ),
         db=db,
         current_user=SimpleNamespace(is_admin=True),
+        request=MagicMock(),
     )
 
     assert result is settings

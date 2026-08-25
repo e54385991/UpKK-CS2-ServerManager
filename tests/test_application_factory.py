@@ -26,6 +26,7 @@ LEGACY_PAGE_PATHS = {
     "/servers/{server_id}/ssh-console",
     "/setup-wizard",
     "/system-settings",
+    "/audit-logs",
 }
 
 
@@ -50,6 +51,7 @@ def test_application_factory_instances_keep_dependency_overrides_isolated():
 
 def test_main_keeps_legacy_endpoint_exports():
     assert main.file_editor_popup is pages.file_editor_popup
+    assert main.audit_logs_page is pages.audit_logs_page
     assert main.health_check is health.health_check
     assert STATIC_DIRECTORY.is_absolute()
 

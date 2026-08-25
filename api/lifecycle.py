@@ -120,6 +120,7 @@ class ApplicationLifecycle:
 
             from services.a2s_cache_service import a2s_cache_service
             from services.ai_retention_service import ai_retention_service
+            from services.audit_retention_service import audit_retention_service
             from services.auto_update_service import auto_update_service
             from services.discord_bot_manager import discord_bot_manager
             from services.plugin_auto_update_service import plugin_auto_update_service
@@ -136,6 +137,11 @@ class ApplicationLifecycle:
                 "AI retention service",
                 ai_retention_service.start,
                 ai_retention_service.stop,
+            )
+            await self._start_service(
+                "audit retention service",
+                audit_retention_service.start,
+                audit_retention_service.stop,
             )
             await self._start_service(
                 "Discord Bot manager",

@@ -80,6 +80,11 @@
                             <i class="bi bi-gear"></i> <span data-i18n="nav.systemSettings">System Settings</span>
                         </a>
                     </li>
+                    <li class="nav-item" id="audit-logs-nav" style="display: none;">
+                        <a class="nav-link {% if '/audit-logs' in request.url.path %}active{% endif %}" href="/audit-logs">
+                            <i class="bi bi-journal-text"></i> <span data-i18n="nav.auditLogs">Audit Logs</span>
+                        </a>
+                    </li>
                     <li class="nav-item" id="profile-nav" style="display: none;">
                         <a class="nav-link {% if '/profile' in request.url.path %}active{% endif %}" href="/profile">
                             <i class="bi bi-person-circle"></i> <span data-i18n="nav.profile">Profile</span>
@@ -314,6 +319,7 @@
             const profileNav = document.getElementById('profile-nav');
             const logoutNav = document.getElementById('logout-nav');
             const systemSettingsNav = document.getElementById('system-settings-nav');
+            const auditLogsNav = document.getElementById('audit-logs-nav');
             
             if (token) {
                 try {
@@ -339,8 +345,10 @@
                         // Show system settings link only for admin users
                         if (user.is_admin) {
                             systemSettingsNav.style.display = 'block';
+                            auditLogsNav.style.display = 'block';
                         } else {
                             systemSettingsNav.style.display = 'none';
+                            auditLogsNav.style.display = 'none';
                         }
 
                         window.dispatchEvent(new CustomEvent('authReady', { detail: { user } }));
@@ -362,6 +370,9 @@
             profileNav.style.display = 'none';
             logoutNav.style.display = 'none';
             systemSettingsNav.style.display = 'none';
+            if (auditLogsNav) {
+                auditLogsNav.style.display = 'none';
+            }
             window.dispatchEvent(new CustomEvent('authReady', { detail: { user: null } }));
             return false;
         }

@@ -7,7 +7,7 @@ import json
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -29,6 +29,7 @@ from modules.schemas.servers import (
     ServerConfigImportResult,
 )
 from services import redis_manager
+from services.audit_log_service import record_audit_event
 from services.discord_binding_template_service import inherit_global_discord_binding
 from services.server_config_transfer import config_entry_values, server_to_config_entry
 
@@ -138,6 +139,7 @@ async def import_server_configs(
     request: ServerConfigImportRequest,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ):
     """Import a configuration bundle into the current user's server list."""
     results: list[ServerConfigImportResult] = []
@@ -248,6 +250,20 @@ async def import_server_configs(
     await db.commit()
     for server_id in changed_server_ids:
         await redis_manager.clear_server_cache(server_id)
+    await record_audit_event(
+        category="server",
+        action="server.import",
+        status="success",
+        user=current_user,
+        request=http_request,
+        details={
+            "imported": imported,
+            "updated": updated,
+            "skipped": skipped,
+            "failed": failed,
+            "total": len(request.servers),
+        },
+    )
 
     return ServerConfigImportResponse(
         total=len(request.servers),

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import or_
 from sqlmodel import select
 
@@ -34,6 +34,7 @@ from modules import (
 )
 from services.agent_policy_service import get_effective_agent_policy
 from services.ai_security import decrypt_credential, encrypt_credential, get_effective_provider
+from services.audit_log_service import record_audit_event
 from services.discord_binding_template_service import (
     global_binding_counts,
     sync_global_discord_binding,
@@ -243,6 +244,7 @@ async def update_discord_bot(
     request: DiscordBotSettingsUpdate,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ) -> DiscordBotSettingsResponse:
     bot = await db.get(UserDiscordBot, current_user.id)
     if bot is None:
@@ -285,12 +287,26 @@ async def update_discord_bot(
     await db.commit()
     await db.refresh(bot)
     await _notify_manager(current_user.id)
+    await record_audit_event(
+        category="settings",
+        action="discord.bot.update",
+        status="success",
+        user=current_user,
+        request=http_request,
+        details={
+            "token_updated": request.token is not None,
+            "enabled": request.enabled,
+            "message_trigger_mode": request.message_trigger_mode,
+        },
+    )
     return _bot_response(bot)
 
 
 @router.delete("/api/auth/discord-bot", response_model=DiscordBotSettingsResponse)
 async def delete_discord_bot(
-    db: DatabaseSession, current_user: ActiveUser
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    request: Request,
 ) -> DiscordBotSettingsResponse:
     bot = await db.get(UserDiscordBot, current_user.id)
     if bot is None:
@@ -310,6 +326,13 @@ async def delete_discord_bot(
     db.add(bot)
     await db.commit()
     await _notify_manager(current_user.id)
+    await record_audit_event(
+        category="settings",
+        action="discord.bot.delete",
+        status="success",
+        user=current_user,
+        request=request,
+    )
     return _bot_response(bot)
 
 
@@ -386,6 +409,7 @@ async def update_discord_global_binding(
     request: DiscordGlobalBindingUpdate,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ) -> DiscordGlobalBindingResponse:
     bot, token = await _stored_token(db, current_user.id)
     await _validate_binding_selection(
@@ -411,6 +435,18 @@ async def update_discord_global_binding(
     await db.commit()
     if synced_server_count:
         await _notify_manager(current_user.id)
+    await record_audit_event(
+        category="settings",
+        action="discord.global_binding.update",
+        status="success",
+        user=current_user,
+        request=http_request,
+        details={
+            "enabled": request.enabled,
+            "synced_server_count": synced_server_count,
+            "guild_id": request.guild_id,
+        },
+    )
     return await _global_binding_response(db, bot, synced_server_count=synced_server_count)
 
 
@@ -567,6 +603,7 @@ async def update_server_discord_bot_settings(
     request: DiscordBindingUpdate,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ) -> DiscordBindingResponse:
     server = await _owned_server(db, current_user, server_id)
     _bot, token = await _stored_token(db, server.user_id)
@@ -593,6 +630,15 @@ async def update_server_discord_bot_settings(
     db.add(binding)
     await db.commit()
     await _notify_manager(server.user_id)
+    await record_audit_event(
+        category="settings",
+        action="discord.binding.update",
+        status="success",
+        user=current_user,
+        request=http_request,
+        server_id=server_id,
+        details={"enabled": request.enabled, "guild_id": request.guild_id},
+    )
     return await _binding_response(db, server.id, server.user_id)
 
 
@@ -643,6 +689,7 @@ async def update_server_agent_policy(
     request: AgentPolicyUpdate,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ) -> AgentPolicyResponse:
     server = await require_server_access(db, server_id, current_user)
     policy = await db.get(ServerAgentPolicy, server.id)
@@ -652,6 +699,18 @@ async def update_server_agent_policy(
     policy.capabilities = [item.value for item in request.capabilities]
     db.add(policy)
     await db.commit()
+    await record_audit_event(
+        category="settings",
+        action="discord.agent_policy.update",
+        status="success",
+        user=current_user,
+        request=http_request,
+        server_id=server_id,
+        details={
+            "enabled": request.enabled,
+            "capabilities": [item.value for item in request.capabilities],
+        },
+    )
     owner = (
         current_user if server.user_id == current_user.id else await db.get(User, server.user_id)
     )

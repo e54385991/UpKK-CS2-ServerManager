@@ -38,6 +38,7 @@ from services.ai_tools import (
     ServerOperationInput,
     ToolContext,
 )
+from services.audit_log_service import record_discord_operation_event
 from services.discord_ai_service import (
     approve_discord_tool,
     ask_discord_agent,
@@ -2199,6 +2200,7 @@ class DiscordBotManager:
             item.completed_at = get_current_time()
             db.add(item)
             await db.commit()
+        await record_discord_operation_event(item, "cancelled")
         await interaction.response.edit_message(
             embed=discord.Embed(title="Operation cancelled", color=discord.Color.greyple()),
             view=None,
@@ -2261,6 +2263,7 @@ class DiscordBotManager:
                     saved.completed_at = get_current_time()
                     db.add(saved)
                     await db.commit()
+                    await record_discord_operation_event(saved, "failure")
             await interaction.message.edit(
                 embed=discord.Embed(
                     title=f"{item.action} failed",
@@ -2277,6 +2280,9 @@ class DiscordBotManager:
                 saved.completed_at = get_current_time()
                 db.add(saved)
                 await db.commit()
+                await record_discord_operation_event(
+                    saved, "success" if saved.status == "completed" else "failure"
+                )
         await interaction.message.edit(
             embed=discord.Embed(
                 title=f"{item.action} completed",

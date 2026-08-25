@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs - CS2 Server Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-11">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title mb-3">
+                    <i class="bi bi-journal-text"></i> <span data-i18n="auditLogs.title">Audit Logs</span>
+                    <span class="badge bg-danger ms-2" data-i18n="auditLogs.adminOnly">Admin Only</span>
+                </h2>
+                <p class="text-muted" data-i18n="auditLogs.intro">Security and operations events from the last 30 days. Older rows are deleted automatically.</p>
+
+                <div id="error-message" class="alert alert-danger d-none" role="alert"></div>
+
+                <form id="audit-filters" class="row g-2 align-items-end mb-3">
+                    <div class="col-md-2">
+                        <label class="form-label" for="filter-category" data-i18n="auditLogs.category">Category</label>
+                        <select class="form-select" id="filter-category">
+                            <option value="" data-i18n="auditLogs.allCategories">All categories</option>
+                            <option value="auth" data-i18n="auditLogs.auth">Auth</option>
+                            <option value="discord" data-i18n="auditLogs.discord">Discord</option>
+                            <option value="server" data-i18n="auditLogs.server">Server</option>
+                            <option value="settings" data-i18n="auditLogs.settings">Settings</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="filter-status" data-i18n="auditLogs.status">Status</label>
+                        <select class="form-select" id="filter-status">
+                            <option value="" data-i18n="auditLogs.allStatuses">All statuses</option>
+                            <option value="success" data-i18n="auditLogs.success">Success</option>
+                            <option value="failure" data-i18n="auditLogs.failure">Failure</option>
+                            <option value="cancelled" data-i18n="auditLogs.cancelled">Cancelled</option>
+                            <option value="expired" data-i18n="auditLogs.expired">Expired</option>
+                            <option value="requested" data-i18n="auditLogs.requested">Requested</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="filter-username" data-i18n="auditLogs.username">Username</label>
+                        <input class="form-control" id="filter-username" type="text">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="filter-ip" data-i18n="auditLogs.ipAddress">IP address</label>
+                        <input class="form-control" id="filter-ip" type="text">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="filter-server" data-i18n="auditLogs.serverId">Server ID</label>
+                        <input class="form-control" id="filter-server" type="number" min="1">
+                    </div>
+                    <div class="col-md-2 d-flex gap-2">
+                        <button class="btn btn-primary" type="submit" data-i18n="auditLogs.apply">Apply filters</button>
+                        <button class="btn btn-outline-secondary" id="reset-filters" type="button" data-i18n="auditLogs.reset">Reset</button>
+                    </div>
+                </form>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th data-i18n="auditLogs.time">Time</th>
+                                <th data-i18n="auditLogs.category">Category</th>
+                                <th data-i18n="auditLogs.action">Action</th>
+                                <th data-i18n="auditLogs.status">Status</th>
+                                <th data-i18n="auditLogs.actor">Actor</th>
+                                <th data-i18n="auditLogs.ipAddress">IP address</th>
+                                <th data-i18n="auditLogs.serverId">Server ID</th>
+                                <th data-i18n="auditLogs.source">Source</th>
+                                <th data-i18n="auditLogs.details">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-rows">
+                            <tr>
+                                <td colspan="9" class="text-muted" data-i18n="auditLogs.empty">No audit events match these filters.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <div id="audit-page-label" class="text-muted small"></div>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-secondary btn-sm" id="prev-page" type="button" data-i18n="auditLogs.previous">Previous</button>
+                        <button class="btn btn-outline-secondary btn-sm" id="next-page" type="button" data-i18n="auditLogs.next">Next</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const PAGE_SIZE = 50;
+    let offset = 0;
+    let total = 0;
+
+    function statusBadge(status) {
+        const map = {
+            success: 'success',
+            failure: 'danger',
+            cancelled: 'secondary',
+            expired: 'warning',
+            requested: 'info',
+        };
+        return `<span class="badge bg-${map[status] || 'secondary'}">${escapeHtml(status)}</span>`;
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        }[char]));
+    }
+
+    function queryString() {
+        const params = new URLSearchParams();
+        const category = document.getElementById('filter-category').value;
+        const status = document.getElementById('filter-status').value;
+        const username = document.getElementById('filter-username').value.trim();
+        const ip = document.getElementById('filter-ip').value.trim();
+        const serverId = document.getElementById('filter-server').value.trim();
+        if (category) params.set('category', category);
+        if (status) params.set('status', status);
+        if (username) params.set('username', username);
+        if (ip) params.set('ip_address', ip);
+        if (serverId) params.set('server_id', serverId);
+        params.set('limit', String(PAGE_SIZE));
+        params.set('offset', String(offset));
+        return params.toString();
+    }
+
+    async function loadLogs() {
+        const errorBox = document.getElementById('error-message');
+        errorBox.classList.add('d-none');
+        try {
+            const response = await authFetch(`/api/system/audit-logs?${queryString()}`);
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+            if (response.status === 403) {
+                window.location.href = '/';
+                return;
+            }
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
+            const payload = await response.json();
+            total = payload.total || 0;
+            renderRows(payload.items || []);
+            const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+            const page = Math.floor(offset / PAGE_SIZE) + 1;
+            const template = (window.i18n && window.i18n.t('auditLogs.page')) || 'Page {page} of {pages} ({total} events)';
+            document.getElementById('audit-page-label').textContent = template
+                .replace('{page}', page)
+                .replace('{pages}', pages)
+                .replace('{total}', total);
+            document.getElementById('prev-page').disabled = offset <= 0;
+            document.getElementById('next-page').disabled = offset + PAGE_SIZE >= total;
+        } catch (error) {
+            errorBox.textContent = (window.i18n && window.i18n.t('auditLogs.loadFailed')) || 'Failed to load audit logs.';
+            errorBox.classList.remove('d-none');
+        }
+    }
+
+    function renderRows(items) {
+        const body = document.getElementById('audit-rows');
+        if (!items.length) {
+            body.innerHTML = `<tr><td colspan="9" class="text-muted">${escapeHtml((window.i18n && window.i18n.t('auditLogs.empty')) || 'No audit events match these filters.')}</td></tr>`;
+            return;
+        }
+        body.innerHTML = items.map((item, index) => {
+            const detailsId = `audit-details-${index}`;
+            const actor = [item.actor_username, item.actor_external_id].filter(Boolean).join(' / ') || '—';
+            return `
+                <tr>
+                    <td class="text-nowrap">${escapeHtml(item.created_at || '')}</td>
+                    <td>${escapeHtml(item.category)}</td>
+                    <td><code>${escapeHtml(item.action)}</code></td>
+                    <td>${statusBadge(item.status)}</td>
+                    <td>${escapeHtml(actor)}</td>
+                    <td>${escapeHtml(item.ip_address || '—')}</td>
+                    <td>${escapeHtml(item.server_id ?? '—')}</td>
+                    <td>${escapeHtml(item.source)}</td>
+                    <td>
+                        <button class="btn btn-link btn-sm p-0" type="button" data-bs-toggle="collapse" data-bs-target="#${detailsId}">
+                            ${escapeHtml((window.i18n && window.i18n.t('auditLogs.details')) || 'Details')}
+                        </button>
+                    </td>
+                </tr>
+                <tr class="collapse" id="${detailsId}">
+                    <td colspan="9"><pre class="mb-0 small">${escapeHtml(JSON.stringify(item.details || {}, null, 2))}</pre></td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    document.getElementById('audit-filters').addEventListener('submit', (event) => {
+        event.preventDefault();
+        offset = 0;
+        loadLogs();
+    });
+    document.getElementById('reset-filters').addEventListener('click', () => {
+        document.getElementById('audit-filters').reset();
+        offset = 0;
+        loadLogs();
+    });
+    document.getElementById('prev-page').addEventListener('click', () => {
+        offset = Math.max(0, offset - PAGE_SIZE);
+        loadLogs();
+    });
+    document.getElementById('next-page').addEventListener('click', () => {
+        offset += PAGE_SIZE;
+        loadLogs();
+    });
+
+    loadLogs();
+</script>
+{% endblock %}

@@ -2,7 +2,10 @@
 
 # ruff: noqa: F403,F405
 
+from fastapi import Request
+
 from api.dependencies import ActiveUser, DatabaseSession
+from services.audit_log_service import record_audit_event
 
 from .common import *
 
@@ -14,6 +17,7 @@ async def batch_server_actions(
     request: BatchActionRequest,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ):
     """
     Execute an action on multiple servers asynchronously (non-blocking).
@@ -67,6 +71,14 @@ async def batch_server_actions(
         )
         _store_task(task)
 
+    await record_audit_event(
+        category="server",
+        action=f"server.batch.{request.action}",
+        status="requested",
+        user=current_user,
+        request=http_request,
+        details={"server_ids": valid_server_ids, "batch_id": batch_id},
+    )
     return BatchActionResponse(
         success=True,
         message=f"Batch action '{request.action}' started for {len(valid_server_ids)} server(s)",
@@ -119,6 +131,7 @@ async def batch_install_plugins(
     request: BatchInstallPluginsRequest,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ):
     """
     Install plugins on multiple servers asynchronously (non-blocking).
@@ -173,6 +186,18 @@ async def batch_install_plugins(
         _store_task(task)
 
     plugins_str = ", ".join(request.plugins)
+    await record_audit_event(
+        category="server",
+        action="server.batch.install_plugins",
+        status="requested",
+        user=current_user,
+        request=http_request,
+        details={
+            "server_ids": valid_server_ids,
+            "plugins": request.plugins,
+            "batch_id": batch_id,
+        },
+    )
     return BatchActionResponse(
         success=True,
         message=f"Installing {plugins_str} on {len(valid_server_ids)} server(s) in background",
@@ -186,6 +211,7 @@ async def batch_send_command(
     request: BatchSendCommandRequest,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ):
     """
     Send a command to multiple game servers asynchronously (non-blocking).
@@ -238,6 +264,18 @@ async def batch_send_command(
         )
         _store_task(task)
 
+    await record_audit_event(
+        category="server",
+        action="server.batch.send_command",
+        status="requested",
+        user=current_user,
+        request=http_request,
+        details={
+            "server_ids": valid_server_ids,
+            "command_present": True,
+            "batch_id": batch_id,
+        },
+    )
     return BatchActionResponse(
         success=True,
         message=f"Sending command to {len(valid_server_ids)} server(s) in background",

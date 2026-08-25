@@ -141,6 +141,8 @@ from .servers import (
     ServerUpdate,
 )
 from .system import (
+    AuditLogListResponse,
+    AuditLogResponse,
     DiscordSettingsResponse,
     DiscordSettingsUpdate,
     DiscordTestRequest,

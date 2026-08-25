@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -122,6 +122,7 @@ async def test_single_stop_persists_intent_before_ssh_and_keeps_it_on_failure(mo
         db,
         SimpleNamespace(id=server.user_id, is_admin=False),
         server,
+        MagicMock(),
     )
 
     assert response.success is False
@@ -169,6 +170,7 @@ async def test_single_start_and_restart_clear_intent_before_ssh(monkeypatch, act
         db,
         SimpleNamespace(id=server.user_id, is_admin=False),
         server,
+        MagicMock(),
     )
 
     assert response.success is False

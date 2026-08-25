@@ -7,7 +7,7 @@ import json
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import discord
 import pytest
@@ -988,6 +988,7 @@ async def test_global_api_syncs_only_when_explicitly_requested(monkeypatch):
         ),
         db,
         SimpleNamespace(id=1),
+        MagicMock(),
     )
 
     assert result.synced_server_count == 3
@@ -1010,6 +1011,7 @@ async def test_global_api_syncs_only_when_explicitly_requested(monkeypatch):
         ),
         db,
         SimpleNamespace(id=1),
+        MagicMock(),
     )
     sync.assert_not_awaited()
     notify.assert_not_awaited()

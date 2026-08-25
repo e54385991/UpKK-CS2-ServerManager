@@ -39,6 +39,7 @@ from modules import (
     settings,
     verify_password_async,
 )
+from services.audit_log_service import INVALID_CREDENTIALS_DETAILS, record_audit_event
 from services.captcha_service import captcha_service
 from services.rate_limit import enforce_rate_limit
 from services.s3_backup_service import s3_backup_service
@@ -102,6 +103,14 @@ async def register(user_data: UserCreate, request: Request, db: DatabaseSession)
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    await record_audit_event(
+        category="auth",
+        action="register",
+        status="success",
+        user=user,
+        request=request,
+        details={"username": user.username},
+    )
 
     return user
 
@@ -122,6 +131,14 @@ async def login(user_data: UserLogin, request: Request, response: Response, db: 
     # Find user by username
     user = await User.get_by_username(db, user_data.username)
     if not user:
+        await record_audit_event(
+            category="auth",
+            action="login",
+            status="failure",
+            actor_username=user_data.username,
+            request=request,
+            details=INVALID_CREDENTIALS_DETAILS,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -129,6 +146,15 @@ async def login(user_data: UserLogin, request: Request, response: Response, db: 
         )
     await db.commit()
     if not await verify_password_async(user_data.password, user.hashed_password):
+        await record_audit_event(
+            category="auth",
+            action="login",
+            status="failure",
+            actor_user_id=user.id,
+            actor_username=user.username,
+            request=request,
+            details=INVALID_CREDENTIALS_DETAILS,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -136,6 +162,14 @@ async def login(user_data: UserLogin, request: Request, response: Response, db: 
         )
 
     if not user.is_active:
+        await record_audit_event(
+            category="auth",
+            action="login",
+            status="failure",
+            user=user,
+            request=request,
+            details={"reason": "inactive_user"},
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
 
     # Create access token
@@ -144,6 +178,13 @@ async def login(user_data: UserLogin, request: Request, response: Response, db: 
         data={"sub": str(user.id), "username": user.username}, expires_delta=access_token_expires
     )
     set_web_session_cookie(request, response, access_token)
+    await record_audit_event(
+        category="auth",
+        action="login",
+        status="success",
+        user=user,
+        request=request,
+    )
 
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -174,6 +215,7 @@ async def bootstrap_web_session(
 @router.post("/reset-password")
 async def reset_password(
     password_data: PasswordReset,
+    request: Request,
     current_user: ActiveUser,
     db: DatabaseSession,
 ):
@@ -206,6 +248,13 @@ async def reset_password(
     # Update password
     current_user.hashed_password = await get_password_hash_async(password_data.new_password)
     await db.commit()
+    await record_audit_event(
+        category="auth",
+        action="password_change",
+        status="success",
+        user=current_user,
+        request=request,
+    )
 
     return {"success": True, "message": "Password reset successfully"}
 
@@ -213,6 +262,7 @@ async def reset_password(
 @router.put("/profile", response_model=UserResponse)
 async def update_profile(
     profile_data: UserProfileUpdate,
+    request: Request,
     current_user: ActiveUser,
     db: DatabaseSession,
 ):
@@ -256,8 +306,25 @@ async def update_profile(
         else:
             current_user.github_token = profile_data.github_token.strip()
 
+    changed = [
+        name
+        for name, present in (
+            ("email", profile_data.email is not None),
+            ("steam_api_key", profile_data.steam_api_key is not None),
+            ("github_token", profile_data.github_token is not None),
+        )
+        if present
+    ]
     await db.commit()
     await db.refresh(current_user)
+    await record_audit_event(
+        category="settings",
+        action="profile.update",
+        status="success",
+        user=current_user,
+        request=request,
+        details={"changed_fields": changed},
+    )
 
     return current_user
 
@@ -282,6 +349,7 @@ async def get_api_key(
 @router.post("/api-key/generate", response_model=ApiKeyResponse)
 async def generate_user_api_key(
     api_key_data: ApiKeyGenerate,
+    request: Request,
     current_user: ActiveUser,
     db: DatabaseSession,
 ):
@@ -316,12 +384,19 @@ async def generate_user_api_key(
     current_user.api_key = new_api_key
     await db.commit()
     await db.refresh(current_user)
+    await record_audit_event(
+        category="settings",
+        action="api_key.generate",
+        status="success",
+        user=current_user,
+        request=request,
+    )
 
     return {"api_key": current_user.api_key, "created_at": current_user.updated_at}
 
 
 @router.delete("/api-key")
-async def revoke_api_key(current_user: ActiveUser, db: DatabaseSession):
+async def revoke_api_key(request: Request, current_user: ActiveUser, db: DatabaseSession):
     """Revoke (delete) the current user's API key"""
     if not current_user.api_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No API key to revoke")
@@ -329,6 +404,13 @@ async def revoke_api_key(current_user: ActiveUser, db: DatabaseSession):
     # Remove API key
     current_user.api_key = None
     await db.commit()
+    await record_audit_event(
+        category="settings",
+        action="api_key.revoke",
+        status="success",
+        user=current_user,
+        request=request,
+    )
 
     return {"success": True, "message": "API key revoked successfully"}
 
@@ -367,6 +449,7 @@ async def get_s3_settings(
 @router.put("/s3-settings", response_model=S3SettingsResponse)
 async def update_s3_settings(
     settings_data: S3SettingsUpdate,
+    request: Request,
     current_user: ActiveUser,
     db: DatabaseSession,
 ):
@@ -404,8 +487,39 @@ async def update_s3_settings(
     ):
         current_user.s3_secret_access_key = settings_data.secret_access_key.strip()
 
+    changed = [
+        name
+        for name in (
+            "enabled",
+            "endpoint_url",
+            "region",
+            "bucket",
+            "access_key_id",
+            "prefix",
+            "use_ssl",
+            "retention_count",
+            "clear_secret",
+            "secret_access_key",
+        )
+        if getattr(settings_data, name) is not None
+        or (name == "clear_secret" and settings_data.clear_secret)
+    ]
     await db.commit()
     await db.refresh(current_user)
+    await record_audit_event(
+        category="settings",
+        action="s3.update",
+        status="success",
+        user=current_user,
+        request=request,
+        details={
+            "changed_fields": [
+                "secret_access_key" if field == "secret_access_key" else field
+                for field in changed
+                if field != "secret_access_key" or settings_data.secret_access_key
+            ]
+        },
+    )
 
     return _build_s3_settings_response(current_user)
 
@@ -481,6 +595,14 @@ async def forgot_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
         )
+
+    await record_audit_event(
+        category="auth",
+        action="password_reset.request",
+        status="success",
+        request=request,
+        details={"email": reset_request.email},
+    )
 
     # Find user by email
     user = await User.get_by_email(db, reset_request.email)
@@ -559,6 +681,13 @@ async def reset_password_with_token(
     db.add(user)
     db.add(token)
     await db.commit()
+    await record_audit_event(
+        category="auth",
+        action="password_reset.complete",
+        status="success",
+        user=user,
+        request=request,
+    )
 
     return {
         "success": True,
@@ -613,6 +742,13 @@ async def google_oauth_login(
 
         except ValueError as e:
             logger.error(f"Invalid Google token: {e}")
+            await record_audit_event(
+                category="auth",
+                action="google_oauth",
+                status="failure",
+                request=request,
+                details={"reason": "invalid_token"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google ID token"
             ) from e
@@ -634,6 +770,14 @@ async def google_oauth_login(
                 expires_delta=access_token_expires,
             )
             set_web_session_cookie(request, response, access_token)
+            await record_audit_event(
+                category="auth",
+                action="google_oauth",
+                status="success",
+                user=user,
+                request=request,
+                details={"flow": "login"},
+            )
 
             return {"access_token": access_token, "token_type": "bearer"}
 
@@ -683,6 +827,14 @@ async def google_oauth_login(
                 expires_delta=access_token_expires,
             )
             set_web_session_cookie(request, response, access_token)
+            await record_audit_event(
+                category="auth",
+                action="google_oauth",
+                status="success",
+                user=new_user,
+                request=request,
+                details={"flow": "register"},
+            )
 
             return {"access_token": access_token, "token_type": "bearer"}
 
@@ -690,6 +842,13 @@ async def google_oauth_login(
         raise
     except Exception as e:
         logger.error(f"Error in Google OAuth login: {e}", exc_info=True)
+        await record_audit_event(
+            category="auth",
+            action="google_oauth",
+            status="failure",
+            request=request,
+            details={"reason": "oauth_error"},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Google OAuth login failed: {str(e)}",
@@ -697,7 +856,18 @@ async def google_oauth_login(
 
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(request: Request, response: Response, db: DatabaseSession):
     """Clear the HTTP-only browser session cookie."""
+    from modules.auth import WEB_SESSION_COOKIE, _get_active_user_for_token
+
+    token = request.cookies.get(WEB_SESSION_COOKIE)
+    user = await _get_active_user_for_token(token, db) if token else None
+    await record_audit_event(
+        category="auth",
+        action="logout",
+        status="success",
+        user=user,
+        request=request,
+    )
     clear_web_session_cookie(response)
     return {"success": True}

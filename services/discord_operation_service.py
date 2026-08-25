@@ -12,6 +12,7 @@ from sqlmodel import select
 from modules.models import DiscordOperationRun, Server, User
 from modules.schemas.discord import DiscordCapability
 from modules.utils import get_current_time
+from services.audit_log_service import record_discord_operation_event
 from services.discord_authorization_service import authorized_bindings
 
 CONFIRMATION_TTL_MINUTES = 15
@@ -116,6 +117,7 @@ async def confirm_operation(
         item.status = "expired"
         db.add(item)
         await db.commit()
+        await record_discord_operation_event(item, "expired")
         raise DiscordOperationDenied("Confirmation expired; request a new plan")
     if item.actor_user_id != actor_user_id:
         raise DiscordOperationDenied("Only the original requester may confirm this operation")

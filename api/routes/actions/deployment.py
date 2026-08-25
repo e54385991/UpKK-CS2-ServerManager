@@ -2,7 +2,10 @@
 
 # ruff: noqa: F403,F405
 
+from fastapi import Request
+
 from api.dependencies import ActiveUser, DatabaseSession
+from services.audit_log_service import record_audit_event
 
 from .common import *
 
@@ -174,6 +177,7 @@ async def server_action(
     db: DatabaseSession,
     current_user: ActiveUser,
     locked_server: ServerActionLock,
+    request: Request,
 ):
     """Execute action on server (deploy, start, stop, restart, status)"""
     server = (
@@ -204,6 +208,15 @@ async def server_action(
     log = DeploymentLog(server_id=server_id, action=action, status="in_progress")
     db.add(log)
     await db.commit()
+    await record_audit_event(
+        category="server",
+        action=f"server.{action}",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"server_name": server.name},
+    )
 
     if action in {"start", "stop", "restart"}:
         apply_user_lifecycle_intent(server, action)

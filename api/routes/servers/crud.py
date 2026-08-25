@@ -4,8 +4,11 @@
 
 import hashlib
 
+from fastapi import Request
+
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession
 from modules import ServerAgentPolicy
+from services.audit_log_service import record_audit_event
 from services.discord_binding_template_service import inherit_global_discord_binding
 
 from .common import *
@@ -20,6 +23,7 @@ async def create_server(
     server_data: ServerCreate,
     db: DatabaseSession,
     current_user: ActiveUser,
+    request: Request,
 ):
     """Create a new CS2 server"""
     # Validate CAPTCHA first
@@ -169,6 +173,15 @@ async def create_server(
         )
     await db.commit()
     await db.refresh(server)
+    await record_audit_event(
+        category="server",
+        action="server.create",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server.id,
+        details={"name": server.name, "host": server.host},
+    )
 
     return server
 
@@ -232,6 +245,7 @@ async def update_server(
     server_data: ServerUpdate,
     db: DatabaseSession,
     current_user: ActiveUser,
+    request: Request,
 ):
     """Update server - admins can update any server, users can only update their own"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -280,6 +294,27 @@ async def update_server(
 
     await db.commit()
     await db.refresh(server)
+    await record_audit_event(
+        category="server",
+        action="server.update",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "changed_fields": [
+                field
+                for field in update_data
+                if field
+                not in {
+                    "ssh_password",
+                    "server_password",
+                    "rcon_password",
+                    "steam_account_token",
+                }
+            ]
+        },
+    )
 
     # Handle monitoring status change
     from services.server_monitor import server_monitor
@@ -345,12 +380,23 @@ async def delete_server(
     server_id: int,
     db: DatabaseSession,
     current_user: ActiveUser,
+    request: Request,
 ):
     """Delete server - admins can delete any server, users can only delete their own"""
     server = await get_server_with_permission(server_id, current_user, db)
+    server_name = server.name
 
     await db.delete(server)
     await db.commit()
+    await record_audit_event(
+        category="server",
+        action="server.delete",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"name": server_name},
+    )
 
     # Clear cache
     await redis_manager.clear_server_cache(server_id)

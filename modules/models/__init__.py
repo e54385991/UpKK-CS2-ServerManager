@@ -10,6 +10,7 @@ from .ai import (
     AIToolRun,
     UserAISettings,
 )
+from .audit import AuditLog
 from .common import *
 from .discord import (
     DEFAULT_AGENT_CAPABILITIES,

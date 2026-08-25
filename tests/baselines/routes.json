@@ -1516,6 +1516,14 @@
     "methods": [
       "GET"
     ],
+    "name": "get_audit_logs",
+    "path": "/api/system/audit-logs"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "get_system_settings",
     "path": "/api/system/settings"
   },
@@ -1798,6 +1806,14 @@
     ],
     "name": "system_settings_page",
     "path": "/system-settings"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "audit_logs_page",
+    "path": "/audit-logs"
   },
   {
     "kind": "APIRoute",

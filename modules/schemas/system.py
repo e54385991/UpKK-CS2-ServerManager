@@ -5,6 +5,34 @@
 from .common import *
 
 
+class AuditLogResponse(SQLModel):
+    """One administrator-visible audit event."""
+
+    id: str
+    created_at: Optional[datetime]
+    category: str
+    action: str
+    status: str
+    actor_user_id: Optional[int] = None
+    actor_username: Optional[str] = None
+    actor_external_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    source: str
+    server_id: Optional[int] = None
+    details: dict = Field(default_factory=dict)
+
+
+class AuditLogListResponse(SQLModel):
+    """Paginated administrator audit log listing."""
+
+    items: list[AuditLogResponse]
+    total: int
+    limit: int
+    offset: int
+    retention_days: int
+
+
 class SystemSettingsResponse(SQLModel):
     """Schema for system settings response"""
 

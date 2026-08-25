@@ -223,6 +223,15 @@ async def system_settings_page(
     return templates.TemplateResponse(request, "system_settings.html")
 
 
+@router.get("/audit-logs", response_class=HTMLResponse)
+async def audit_logs_page(
+    request: Request,
+    _: WebAdmin,
+):
+    """Administrator audit log viewer for the last 30 days."""
+    return templates.TemplateResponse(request, "audit_logs.html")
+
+
 @router.get("/forgot-password", response_class=HTMLResponse)
 async def forgot_password_page(request: Request):
     """Forgot password page"""

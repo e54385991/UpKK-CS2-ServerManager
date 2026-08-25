@@ -190,6 +190,7 @@ async def test_restart_route_aborts_before_stop_when_preflight_fails(monkeypatch
         db,
         SimpleNamespace(id=server.user_id, is_admin=False),
         server,
+        SimpleNamespace(client=SimpleNamespace(host="test"), headers={}),
     )
 
     assert response.success is False

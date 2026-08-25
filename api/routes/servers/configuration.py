@@ -2,7 +2,10 @@
 
 # ruff: noqa: F403,F405
 
+from fastapi import Request
+
 from api.dependencies import ActiveUser, DatabaseSession
+from services.audit_log_service import record_audit_event
 from services.server_startup_arguments import (
     normalize_additional_parameters,
     normalize_default_map,
@@ -33,6 +36,7 @@ async def update_discord_settings(
     settings_data: DiscordSettingsUpdate,
     db: DatabaseSession,
     current_user: ActiveUser,
+    request: Request,
 ):
     """Update per-server Discord notification settings."""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -87,6 +91,20 @@ async def update_discord_settings(
     await db.commit()
     await db.refresh(server)
     await redis_manager.clear_server_cache(server_id)
+    await record_audit_event(
+        category="settings",
+        action="discord.notifications.update",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "changed_fields": [
+                field for field in update_data if field not in {"discord_webhook_url"}
+            ]
+            + (["webhook_updated"] if new_webhook or settings_data.clear_webhook else [])
+        },
+    )
 
     return build_discord_settings_response(server)
 
@@ -191,6 +209,7 @@ async def execute_one_time_custom_command(
     command_data: CustomCommandExecuteRequest,
     db: DatabaseSession,
     current_user: ActiveUser,
+    request: Request,
 ):
     """Execute one-time custom commands without saving them"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -199,6 +218,15 @@ async def execute_one_time_custom_command(
         server,
         command_data.target,
         command_data.commands,
+    )
+    await record_audit_event(
+        category="server",
+        action="server.custom_command",
+        status="success" if result["success"] else "failure",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"target": command_data.target, "command_present": True},
     )
     return ActionResponse(success=result["success"], message=result["message"], data=result)
 
@@ -211,6 +239,7 @@ async def execute_saved_custom_command(
     command_id: int,
     db: DatabaseSession,
     current_user: ActiveUser,
+    request: Request,
 ):
     """Execute a saved quick command"""
     server = await get_server_with_permission(server_id, current_user, db)
@@ -221,6 +250,19 @@ async def execute_saved_custom_command(
         custom_command.target,
         custom_command.commands,
         name=custom_command.name,
+    )
+    await record_audit_event(
+        category="server",
+        action="server.custom_command",
+        status="success" if result["success"] else "failure",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "target": custom_command.target,
+            "name": custom_command.name,
+            "command_present": True,
+        },
     )
     return ActionResponse(success=result["success"], message=result["message"], data=result)
 
