@@ -119,9 +119,7 @@ async def database_status(engine: AsyncEngine) -> DatabaseStatus:
     expected = tuple(sorted(code_heads()))
     async with engine.connect() as connection:
         version_num = await _server_version_num(connection)
-        current = await connection.run_sync(_current_heads)
-        if connection.in_transaction():
-            await connection.rollback()
+        current = await _read_current_heads(connection)
     return DatabaseStatus(version_num, current, expected)
 
 
@@ -133,12 +131,13 @@ async def _read_current_heads(connection: AsyncConnection) -> tuple[str, ...]:
 
 
 async def _apply_schema_upgrade(
-    connection: AsyncConnection,
+    engine: AsyncEngine,
     *,
     version_num: int,
     expected: tuple[str, ...],
 ) -> DatabaseStatus:
-    current = await _read_current_heads(connection)
+    async with engine.connect() as check_connection:
+        current = await _read_current_heads(check_connection)
     if current == expected:
         logger.info("Database schema is already current at %s", expected[0])
         return DatabaseStatus(version_num, current, expected)
@@ -148,10 +147,13 @@ async def _apply_schema_upgrade(
         ", ".join(current) or "empty",
         expected[0],
     )
-    await connection.run_sync(_upgrade)
-    if connection.in_transaction():
-        await connection.commit()
-    current = await _read_current_heads(connection)
+    # begin() commits on success. Never read-and-rollback on this connection:
+    # a leftover Alembic transaction would otherwise undo the just-applied head.
+    async with engine.begin() as work_connection:
+        await work_connection.execute(text("SET LOCAL lock_timeout = '5s'"))
+        await work_connection.run_sync(_upgrade)
+    async with engine.connect() as verify_connection:
+        current = await _read_current_heads(verify_connection)
     status = DatabaseStatus(version_num, current, expected)
     if not status.is_current:
         raise DatabaseMigrationError(f"database heads {current} do not match code head {expected}")
@@ -172,12 +174,11 @@ async def upgrade_database(engine: AsyncEngine, *, lock_timeout_seconds: int) ->
             await lock_connection.commit()
         await _acquire_migration_lock(lock_connection, lock_timeout_seconds)
         try:
-            async with engine.connect() as work_connection:
-                return await _apply_schema_upgrade(
-                    work_connection,
-                    version_num=version_num,
-                    expected=expected,
-                )
+            return await _apply_schema_upgrade(
+                engine,
+                version_num=version_num,
+                expected=expected,
+            )
         finally:
             await _release_migration_lock(lock_connection)
 

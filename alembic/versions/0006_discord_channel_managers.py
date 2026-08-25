@@ -20,14 +20,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _ensure_boolean_column(table_name: str, column_name: str) -> None:
-    inspector = sa.inspect(op.get_bind())
-    existing = {column["name"] for column in inspector.get_columns(table_name)}
-    if column_name not in existing:
-        op.add_column(
-            table_name,
-            sa.Column(column_name, sa.Boolean(), nullable=False, server_default="false"),
+    op.execute(
+        sa.text(
+            f"ALTER TABLE {table_name} "
+            f"ADD COLUMN IF NOT EXISTS {column_name} BOOLEAN NOT NULL DEFAULT false"
         )
-    op.alter_column(table_name, column_name, server_default=None)
+    )
+    op.execute(sa.text(f"ALTER TABLE {table_name} ALTER COLUMN {column_name} DROP DEFAULT"))
 
 
 def upgrade() -> None:

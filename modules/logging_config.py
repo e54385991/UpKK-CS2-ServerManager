@@ -5,6 +5,7 @@ Configures rotating file handler with automatic log rotation
 
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
@@ -64,6 +65,12 @@ def setup_logging(level: int = logging.INFO, asyncssh_level: Optional[str] = Non
     )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(level)
+
+    # Line-buffer Docker/1Panel pipes so startup lines are not lost on SIGKILL.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(line_buffering=True)
 
     # Create console handler for stdout
     console_handler = logging.StreamHandler()

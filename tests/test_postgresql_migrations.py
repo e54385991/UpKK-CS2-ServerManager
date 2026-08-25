@@ -141,6 +141,13 @@ class _FakeMigrationConnection:
         self.rollbacks += 1
         self._in_txn = False
 
+    async def execute(self, statement, parameters=None):
+        sql = str(statement)
+        self._in_txn = True
+        if "lock_timeout" in sql:
+            return None
+        raise AssertionError(sql)
+
     async def run_sync(self, fn):
         self._in_txn = True
         if fn is _current_heads:
@@ -155,6 +162,10 @@ class _FakeMigrationConnection:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        if exc_type is None and self._in_txn:
+            await self.commit()
+        elif exc_type is not None and self._in_txn:
+            await self.rollback()
         return False
 
 
@@ -162,21 +173,26 @@ class _FakeMigrationEngine:
     def __init__(self, lock: _FakeMigrationConnection, work: _FakeMigrationConnection):
         self._lock = lock
         self._work = work
-        self.uses = 0
+        self.connects = 0
+        self.begin_count = 0
 
     def connect(self):
-        self.uses += 1
-        if self.uses == 1:
+        self.connects += 1
+        if self.connects == 1:
             return self._lock
-        if self.uses == 2:
-            return self._work
-        raise AssertionError("upgrade_database opened more than two connections")
+        return self._work
+
+    def begin(self):
+        self.begin_count += 1
+        return self._work
 
 
 def test_upgrade_database_keeps_lock_and_schema_work_on_separate_connections():
     source = (PROJECT_ROOT / "modules/database_migrations.py").read_text()
     assert "lock_connection" in source
     assert "_apply_schema_upgrade" in source
+    assert "engine.begin()" in source
+    assert "SET LOCAL lock_timeout" in source
     assert source.index("await _read_current_heads") < source.index("run_sync(_upgrade)")
     env_source = (PROJECT_ROOT / "alembic/env.py").read_text()
     assert 'config.attributes.get("connection") is None' in env_source
@@ -185,7 +201,7 @@ def test_upgrade_database_keeps_lock_and_schema_work_on_separate_connections():
         "0007_discord_server_administrators.py",
     ):
         revision_source = (PROJECT_ROOT / "alembic/versions" / revision).read_text()
-        assert "get_columns" in revision_source
+        assert "IF NOT EXISTS" in revision_source
         assert "_ensure_boolean_column" in revision_source
 
 
@@ -194,9 +210,11 @@ async def test_upgrade_database_skips_alembic_when_already_at_head():
     expected = code_heads()
     lock = _FakeMigrationConnection(heads=expected)
     work = _FakeMigrationConnection(heads=expected)
-    status = await upgrade_database(_FakeMigrationEngine(lock, work), lock_timeout_seconds=5)  # type: ignore[arg-type]
+    engine = _FakeMigrationEngine(lock, work)
+    status = await upgrade_database(engine, lock_timeout_seconds=5)  # type: ignore[arg-type]
     assert status.is_current is True
     assert work.upgraded is False
+    assert engine.begin_count == 0
     assert lock.rollbacks == 0
 
 
@@ -204,8 +222,10 @@ async def test_upgrade_database_skips_alembic_when_already_at_head():
 async def test_upgrade_database_commits_schema_work_before_releasing_lock():
     lock = _FakeMigrationConnection(heads=("0005_discord_global_binding",))
     work = _FakeMigrationConnection(heads=("0005_discord_global_binding",))
-    status = await upgrade_database(_FakeMigrationEngine(lock, work), lock_timeout_seconds=5)  # type: ignore[arg-type]
+    engine = _FakeMigrationEngine(lock, work)
+    status = await upgrade_database(engine, lock_timeout_seconds=5)  # type: ignore[arg-type]
     assert work.upgraded is True
+    assert engine.begin_count == 1
     assert work.commits >= 1
     assert status.is_current is True
     assert status.current_heads == code_heads()
