@@ -203,6 +203,12 @@ async def server_action(
     db.add(log)
     await db.commit()
 
+    if action in {"start", "stop", "restart"}:
+        apply_user_lifecycle_intent(server, action)
+        # The intent must become visible before the remote lifecycle command.
+        # A failed Stop intentionally leaves the protection enabled.
+        await db.commit()
+
     # Clear previous websocket records before starting new operation
     # This is a non-critical operation - if it fails, continue with the action
     try:

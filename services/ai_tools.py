@@ -28,6 +28,7 @@ from services.plugin_inventory_service import (
     inspect_remote_plugin_inventory,
     installation_evidence,
 )
+from services.server_lifecycle_policy import apply_user_lifecycle_intent
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
@@ -1048,6 +1049,8 @@ async def control_server(ctx: ToolContext, data: ServerControlInput) -> dict[str
     async with maintenance_lock_service.get(
         server.id, operation=f"ai:{data.action}", wait=False, ttl=900
     ):
+        apply_user_lifecycle_intent(server, data.action)
+        await ctx.db.commit()
         if data.action == "stop":
             success, message = await manager.stop_server(server)
             server.status = ServerStatus.STOPPED if success else ServerStatus.ERROR

@@ -23,6 +23,7 @@ from services.discord_notification_service import (
 )
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.s3_backup_service import s3_backup_service
+from services.server_lifecycle_policy import automatic_start_block_reason
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,32 @@ class ScheduledTaskService:
                     )
                     return
 
+            operation_lock = maintenance_lock_service.get(
+                server.id,
+                operation=f"scheduled:{task.action}",
+                wait=False,
+                ttl=3600,
+            )
+            await operation_lock.acquire()
+
+            # Re-read after acquiring the operation lock. A user action may
+            # have changed lifecycle intent while this task was waiting.
+            async with async_session_maker() as db:
+                server = await db.get(Server, task.server_id)
+
+            if not server:
+                await self._update_task_status(
+                    task.id, "failed", f"Server {task.server_id} not found"
+                )
+                return
+
+            if task.action in {"start", "restart"}:
+                block_reason = automatic_start_block_reason(server)
+                if block_reason:
+                    logger.info("Skipping scheduled task %s: %s", task.id, block_reason)
+                    await self._update_task_status(task.id, "skipped", block_reason)
+                    return
+
             # Skip task if server is marked as down due to SSH failures
             if server.should_skip_background_checks():
                 logger.info(
@@ -155,14 +182,6 @@ class ScheduledTaskService:
                     task.id, "skipped", "Server marked as SSH down for 3+ consecutive days"
                 )
                 return
-
-            operation_lock = maintenance_lock_service.get(
-                server.id,
-                operation=f"scheduled:{task.action}",
-                wait=False,
-                ttl=3600,
-            )
-            await operation_lock.acquire()
 
             # Create SSH manager using the pattern from main.py
             ssh_manager = SSHManager()
@@ -242,6 +261,10 @@ class ScheduledTaskService:
     async def _execute_action(self, ssh_manager: SSHManager, server: Server, action: str):
         """Execute the specified action on the server"""
         try:
+            if action in {"start", "restart"}:
+                block_reason = automatic_start_block_reason(server)
+                if block_reason:
+                    return False, block_reason
 
             async def log_progress(msg: str):
                 logger.info(f"[Server {server.id}] {msg}")

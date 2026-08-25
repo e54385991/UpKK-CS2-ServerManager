@@ -11,6 +11,10 @@ from typing import Dict, List, Tuple
 
 from modules.utils import get_current_time
 from services.discord_notification_service import EVENT_CRASH_RESTART, discord_notification_service
+from services.maintenance_lock import OperationBusyError, maintenance_lock_service
+from services.server_lifecycle_policy import (
+    automatic_start_block_reason,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,8 @@ class ServerMonitor:
         self.monitoring_tasks: Dict[int, asyncio.Task] = {}
         # Track consecutive A2S failures: server_id -> failure_count
         self.a2s_failure_count: Dict[int, int] = {}
+        # Avoid repeating the same pause message on every monitoring interval.
+        self.manual_stop_suppressed: set[int] = set()
 
     def can_restart(self, server_id: int) -> Tuple[bool, str]:
         """
@@ -146,6 +152,92 @@ class ServerMonitor:
             rate_limit_scope="auto_restart",
         )
 
+    async def _perform_guarded_restart(
+        self,
+        server_id: int,
+        ssh_manager,
+        progress_callback=None,
+    ):
+        """Re-check policy under the server lock, then perform one restart.
+
+        ``None`` as the first return value means the restart was skipped rather
+        than attempted, so callers must not turn an intentional stop into an
+        error state or failure notification.
+        """
+        from modules.database import async_session_maker
+        from modules.models import Server
+        from services.plugin_diagnostic_service import has_diagnostic_blocker
+
+        try:
+            async with maintenance_lock_service.get(
+                server_id,
+                operation="monitor:auto_restart",
+                wait=False,
+                ttl=900,
+            ):
+                async with async_session_maker() as db:
+                    current_server = await db.get(Server, server_id)
+                    if current_server is None:
+                        return None, "Server no longer exists", None
+
+                    block_reason = automatic_start_block_reason(current_server)
+                    if block_reason:
+                        return None, block_reason, current_server
+                    if not current_server.enable_panel_monitoring:
+                        return None, "Panel monitoring was disabled", current_server
+                    if not current_server.auto_restart_on_crash:
+                        return None, "Automatic restart was disabled", current_server
+                    if await has_diagnostic_blocker(server_id, db):
+                        return (
+                            None,
+                            "Auto-restart paused by plugin diagnostic quarantine",
+                            current_server,
+                        )
+
+                self.record_restart(server_id)
+                (
+                    manager_ready,
+                    preflight_message,
+                ) = await ssh_manager.check_session_manager_available(current_server)
+                if not manager_ready:
+                    return (
+                        False,
+                        f"Auto-restart aborted before stopping: {preflight_message}. "
+                        "The existing game session was left untouched.",
+                        current_server,
+                    )
+
+                # Clean up a dead process with a lingering managed session before
+                # creating the replacement session. A failed cleanup remains
+                # non-fatal for compatibility with the existing guard behavior.
+                try:
+                    stop_success, stop_msg = await ssh_manager.stop_server(current_server)
+                    if stop_success:
+                        logger.info(
+                            "Server %s stopped before auto-restart: %s",
+                            server_id,
+                            stop_msg,
+                        )
+                    else:
+                        logger.warning(
+                            "Server %s stop attempt before auto-restart: %s",
+                            server_id,
+                            stop_msg,
+                        )
+                except Exception as stop_error:
+                    logger.warning(
+                        "Error stopping server %s before auto-restart: %s",
+                        server_id,
+                        stop_error,
+                    )
+
+                restart_success, restart_msg = await ssh_manager.start_server(
+                    current_server, progress_callback
+                )
+                return restart_success, restart_msg, current_server
+        except OperationBusyError as exc:
+            return None, str(exc), None
+
     async def monitor_server(self, server_id: int, ssh_manager, progress_callback=None):
         """
         Monitor a server and auto-restart on crash
@@ -220,6 +312,20 @@ class ServerMonitor:
                         check_interval = server.monitor_interval_seconds or 60
 
                 # DB session closed here - perform network/SSH operations without holding DB connection
+
+                block_reason = automatic_start_block_reason(server)
+                if block_reason:
+                    self.a2s_failure_count.pop(server_id, None)
+                    if server_id not in self.manual_stop_suppressed:
+                        logger.info(
+                            "Pausing monitoring guard for server %s: %s", server_id, block_reason
+                        )
+                        self.manual_stop_suppressed.add(server_id)
+                    await asyncio.sleep(check_interval)
+                    continue
+                if server_id in self.manual_stop_suppressed:
+                    self.manual_stop_suppressed.discard(server_id)
+                    logger.info("Resuming monitoring guard for server %s", server_id)
 
                 # Determine if server is down based on monitoring type
                 is_down = False
@@ -326,18 +432,7 @@ class ServerMonitor:
                         f"Exception logging status check to Redis: server={server_id}, error={e}"
                     )
 
-                # Handle down server. An interrupted diagnostic may have files
-                # intentionally outside loader roots, so never race it with an
-                # automatic restart.
-                from services.plugin_diagnostic_service import has_diagnostic_blocker
-
-                diagnostic_blocked = is_down and await has_diagnostic_blocker(server_id, db)
-                if diagnostic_blocked:
-                    logger.warning(
-                        "Server %s auto-restart paused by plugin diagnostic quarantine",
-                        server_id,
-                    )
-                elif is_down and server.auto_restart_on_crash:
+                if is_down and server.auto_restart_on_crash:
                     # Check if we can restart (respecting restart limits)
                     can_restart, reason = self.can_restart(server_id)
 
@@ -345,58 +440,43 @@ class ServerMonitor:
                         # Determine restart trigger source
                         if server.enable_a2s_monitoring:
                             restart_trigger = f"A2S monitoring ({self.a2s_failure_count.get(server_id, 0)} consecutive failures)"
-                            logger.info(f"Auto-restarting server {server_id} due to A2S failures")
                         else:
                             restart_trigger = "panel monitoring (process check)"
-                            logger.info(f"Auto-restarting server {server_id} via panel monitoring")
-
-                        # Log restart attempt to Redis
-                        try:
-                            await redis_manager.append_monitoring_log(
-                                server_id=server_id,
-                                event_type="auto_restart",
-                                status="info",
-                                message=f"Auto-restart triggered by {restart_trigger}",
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to log restart trigger to Redis: {e}")
-
-                        # Record restart attempt
-                        self.record_restart(server_id)
 
                         try:
                             (
-                                manager_ready,
-                                preflight_message,
-                            ) = await ssh_manager.check_session_manager_available(server)
-                            if not manager_ready:
-                                restart_success = False
-                                restart_msg = (
-                                    f"Auto-restart aborted before stopping: {preflight_message}. "
-                                    "The existing game session was left untouched."
+                                restart_success,
+                                restart_msg,
+                                current_server,
+                            ) = await self._perform_guarded_restart(
+                                server_id,
+                                ssh_manager,
+                                progress_callback,
+                            )
+                            if restart_success is None:
+                                logger.info(
+                                    "Skipping auto-restart for server %s: %s",
+                                    server_id,
+                                    restart_msg,
                                 )
-                            else:
-                                # Force stop existing server first to ensure clean restart.
-                                # Handles cases where the process is dead but its managed session lingers.
-                                try:
-                                    stop_success, stop_msg = await ssh_manager.stop_server(server)
-                                    if stop_success:
-                                        logger.info(
-                                            f"Server {server_id} stopped before auto-restart: {stop_msg}"
-                                        )
-                                    else:
-                                        logger.warning(
-                                            f"Server {server_id} stop attempt before auto-restart: {stop_msg}"
-                                        )
-                                except Exception as stop_e:
-                                    logger.warning(
-                                        f"Error stopping server {server_id} before auto-restart: {stop_e}"
-                                    )
+                                await asyncio.sleep(check_interval)
+                                continue
+                            server = current_server
 
-                                # Attempt restart
-                                restart_success, restart_msg = await ssh_manager.start_server(
-                                    server, progress_callback
+                            logger.info(
+                                "Auto-restarting server %s via %s",
+                                server_id,
+                                restart_trigger,
+                            )
+                            try:
+                                await redis_manager.append_monitoring_log(
+                                    server_id=server_id,
+                                    event_type="auto_restart",
+                                    status="info",
+                                    message=f"Auto-restart triggered by {restart_trigger}",
                                 )
+                            except Exception as e:
+                                logger.error(f"Failed to log restart trigger to Redis: {e}")
 
                             # Update server status in database in a separate quick session
                             async with async_session_maker() as db:
@@ -561,6 +641,8 @@ class ServerMonitor:
             raise
         except Exception as e:
             logger.error(f"Error monitoring server {server_id}: {e}", exc_info=True)
+        finally:
+            self.manual_stop_suppressed.discard(server_id)
 
     def start_monitoring(self, server_id: int, ssh_manager, progress_callback=None):
         """Start monitoring a server in the background"""
@@ -578,6 +660,7 @@ class ServerMonitor:
             self.monitoring_tasks[server_id].cancel()
             del self.monitoring_tasks[server_id]
             logger.info(f"Stopped monitoring for server {server_id}")
+        self.manual_stop_suppressed.discard(server_id)
 
     async def stop_all(self) -> None:
         """Cancel and await every monitoring task before shared resources close."""
@@ -588,6 +671,7 @@ class ServerMonitor:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self.monitoring_tasks.clear()
+        self.manual_stop_suppressed.clear()
 
 
 # Global monitor instance

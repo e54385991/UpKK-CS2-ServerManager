@@ -3,6 +3,21 @@
 # ruff: noqa: F403,F405
 
 from .common import *
+from .common import column_exists as schema_column_exists
+
+
+async def migrate_manual_stop_requested(conn: AsyncConnection) -> None:
+    """Add the persisted user-stop intent without changing existing rows."""
+    if not await schema_column_exists(conn, "servers", "manual_stop_requested"):
+        await conn.execute(
+            text("""
+                ALTER TABLE servers
+                ADD COLUMN manual_stop_requested TINYINT(1) NOT NULL DEFAULT 0
+            """)
+        )
+        print("✓ Migration completed: manual_stop_requested column added")
+    else:
+        print("✓ manual_stop_requested column exists")
 
 
 async def migrate_server_features(conn: AsyncConnection) -> None:
@@ -323,3 +338,5 @@ async def migrate_server_features(conn: AsyncConnection) -> None:
             print(f"✓ Migration completed: {column} column added")
         else:
             print(f"✓ {column} column exists")
+
+    await migrate_manual_stop_requested(conn)

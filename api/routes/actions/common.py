@@ -54,6 +54,7 @@ from services.game_session import (
 )
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.s3_backup_service import s3_backup_service
+from services.server_lifecycle_policy import apply_user_lifecycle_intent
 from services.server_monitor import server_monitor
 from services.task_registry import action_task_registry
 
@@ -310,6 +311,12 @@ async def execute_single_server_action(
                     batch_id, server_id, "failed", "Server not found"
                 )
                 return
+
+            if action in {"start", "stop", "restart"}:
+                apply_user_lifecycle_intent(server, action)
+                # Persist intent before SSH work so background services cannot
+                # race an explicit user stop or start request.
+                await db.commit()
 
         # DB session closed here - perform SSH operations without holding DB connection
         ssh_manager = SSHManager()

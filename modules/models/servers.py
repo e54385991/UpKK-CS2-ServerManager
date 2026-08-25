@@ -78,6 +78,10 @@ class Server(SQLModel, table=True):
     enable_panel_monitoring: bool = Field(default=False)
     monitor_interval_seconds: int = Field(default=60)
     auto_restart_on_crash: bool = Field(default=True)
+    # Persisted user intent. This is deliberately separate from ``status``,
+    # which records the last observed runtime state rather than whether
+    # background services are allowed to start the server.
+    manual_stop_requested: bool = Field(default=False)
 
     # A2S query configuration for server monitoring
     a2s_query_host: Optional[str] = Field(default=None, max_length=255)

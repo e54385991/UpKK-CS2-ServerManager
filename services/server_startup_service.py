@@ -14,6 +14,7 @@ from services.a2s_query import a2s_service
 from services.game_session import normalize_session_manager
 from services.maintenance_lock import maintenance_lock_service
 from services.redis_manager import redis_manager
+from services.server_lifecycle_policy import apply_user_lifecycle_intent
 from services.server_startup_arguments import (
     GAME_MODE_MAPPING,
     normalize_additional_parameters,
@@ -274,6 +275,8 @@ async def execute_server_startup_plan(
             }
 
         await report("restart_server", "running", "Restarting the CS2 server")
+        apply_user_lifecycle_intent(server, "restart")
+        await db.commit()
         try:
             stopped, stop_message = await manager.stop_server(server)
         except Exception as exc:
