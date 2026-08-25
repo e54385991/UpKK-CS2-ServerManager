@@ -232,3 +232,30 @@ def test_plugin_config_tab_is_lazy_loaded_and_localized():
             (PROJECT_ROOT / "static" / "locales" / f"{locale}.json").read_text(encoding="utf-8")
         )["pluginConfigs"]
         assert required <= messages.keys()
+
+
+def test_discord_profile_and_server_options_keep_visible_labels():
+    profile = (PROJECT_ROOT / "templates" / "profile.html").read_text(encoding="utf-8")
+    configuration = (
+        PROJECT_ROOT / "templates" / "server_detail_includes" / "configuration_tab.html"
+    ).read_text(encoding="utf-8")
+    scripts = (PROJECT_ROOT / "templates" / "server_detail_includes" / "scripts.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function discordBotText(" in profile
+    assert "refreshDiscordBotLocalizedText" in profile
+    assert "discordGlobalSelectedCapabilities()" in profile
+    assert 'id="discord-global-channel-managers"' in profile
+    assert "discordCapabilityLabel(cap)" in configuration
+    assert "discordCapabilityLabel(value)" in scripts
+    assert "localeTick" in scripts
+
+    for locale in ("en-US", "zh-CN"):
+        messages = json.loads(
+            (PROJECT_ROOT / "static" / "locales" / f"{locale}.json").read_text(encoding="utf-8")
+        )["discordBot"]
+        assert messages["globalSyncWarning"]
+        assert messages["allowChannelManagers"]
+        assert messages["capStatus"]
+        assert messages["whitelistRule"]

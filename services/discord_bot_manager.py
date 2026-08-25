@@ -107,6 +107,120 @@ def _member_roles(member: object) -> set[str]:
     }
 
 
+def _has_channel_manage_permission(permissions: object | None) -> bool:
+    """Discord Administrator implies every channel permission, including Manage Channels."""
+
+    if permissions is None:
+        return False
+    return bool(
+        getattr(permissions, "manage_channels", False)
+        or getattr(permissions, "administrator", False)
+    )
+
+
+def _is_channel_manager(source: discord.Interaction | discord.Message) -> bool:
+    """Return whether the actor can manage the current channel.
+
+    Interaction permission bitfields often set only the administrator flag for
+    Discord Administrators, so that flag is treated as Manage Channels.
+    """
+
+    if _has_channel_manage_permission(getattr(source, "permissions", None)):
+        return True
+    channel = getattr(source, "channel", None)
+    member = getattr(source, "user", None) or getattr(source, "author", None)
+    permissions_for = getattr(channel, "permissions_for", None)
+    if member is None or not callable(permissions_for):
+        return False
+    try:
+        return _has_channel_manage_permission(permissions_for(member))
+    except AttributeError, TypeError:
+        return False
+
+
+def status_card_fields(
+    server: Server,
+    *,
+    a2s_ok: bool,
+    info: dict | None,
+    locale: object = "en-US",
+) -> list[tuple[str, str]]:
+    """Build the public status card without inventing missing A2S values."""
+
+    unknown = menu_text(locale, "status_unknown")
+    host = server.a2s_query_host or server.host
+    query_port = server.a2s_query_port or server.game_port
+    fields: list[tuple[str, str]] = [
+        (
+            menu_text(locale, "status_panel"),
+            server.status.value if getattr(server, "status", None) else unknown,
+        ),
+        (menu_text(locale, "status_endpoint"), f"{host}:{query_port}"),
+    ]
+    game_host = getattr(server, "ip_address", None) or server.host
+    game_port = getattr(server, "game_port", None)
+    if game_port and f"{game_host}:{game_port}" != f"{host}:{query_port}":
+        fields.append((menu_text(locale, "status_game_address"), f"{game_host}:{game_port}"))
+
+    recorded = str(getattr(server, "current_game_version", None) or "").strip() or None
+    payload = info if a2s_ok and info else {}
+    if a2s_ok and payload:
+        raw_ping = payload.get("ping")
+        ping = (
+            f"{max(0, round(float(raw_ping) * 1000))} ms"
+            if isinstance(raw_ping, (int, float))
+            else unknown
+        )
+        a2s_version = str(payload.get("version") or "").strip() or None
+        fields.extend(
+            [
+                (
+                    menu_text(locale, "status_server_name"),
+                    str(payload.get("server_name") or server.server_name or server.name),
+                ),
+                (menu_text(locale, "status_cs2_version"), a2s_version or recorded or unknown),
+                (menu_text(locale, "status_map"), str(payload.get("map_name") or unknown)),
+                (
+                    menu_text(locale, "status_players"),
+                    (
+                        f"{payload.get('player_count', 0)}/{payload.get('max_players', 0)}"
+                        f" · {menu_text(locale, 'status_bots', count=payload.get('bot_count', 0))}"
+                    ),
+                ),
+                (
+                    menu_text(locale, "status_game"),
+                    str(payload.get("game") or "Counter-Strike 2"),
+                ),
+                (menu_text(locale, "status_platform"), str(payload.get("platform") or unknown)),
+                (
+                    menu_text(locale, "status_security"),
+                    (
+                        f"{menu_text(locale, 'status_vac_on' if payload.get('vac_enabled') else 'status_vac_off')}"
+                        f" · {menu_text(locale, 'status_password_yes' if payload.get('password_protected') else 'status_password_no')}"
+                    ),
+                ),
+                (menu_text(locale, "status_latency"), ping),
+            ]
+        )
+        if recorded and a2s_version and recorded != a2s_version:
+            fields.append((menu_text(locale, "status_recorded_version"), recorded))
+        return fields
+    fields.extend(
+        [
+            (menu_text(locale, "status_cs2_version"), recorded or unknown),
+            (
+                menu_text(locale, "status_configured_map"),
+                getattr(server, "default_map", None) or unknown,
+            ),
+            (
+                menu_text(locale, "status_configured_slots"),
+                str(getattr(server, "max_players", unknown)),
+            ),
+        ]
+    )
+    return fields
+
+
 def _simple_plan(server: Server, action: str) -> dict:
     return {
         "server_id": server.id,
@@ -260,6 +374,7 @@ class ManagedDiscordClient(discord.Client):
                     channel_id=str(interaction.channel_id),
                     actor_user_id=str(interaction.user.id),
                     actor_role_ids=_roles(interaction),
+                    actor_is_channel_manager=_is_channel_manager(interaction),
                 )
             except DiscordAuthorizationDenied:
                 return []
@@ -676,6 +791,7 @@ class DiscordBotManager:
         channel_id: int | None,
         actor_user_id: int,
         actor_role_ids: set[str],
+        actor_is_channel_manager: bool,
         required_capability: DiscordCapability | None = None,
     ) -> list[tuple[ServerDiscordBinding, Server]]:
         if guild_id is None or channel_id is None:
@@ -688,6 +804,7 @@ class DiscordBotManager:
                 channel_id=str(channel_id),
                 actor_user_id=str(actor_user_id),
                 actor_role_ids=actor_role_ids,
+                actor_is_channel_manager=actor_is_channel_manager,
                 required_capability=required_capability,
             )
         if required_capability is not None:
@@ -722,6 +839,7 @@ class DiscordBotManager:
                 channel_id=message.channel.id,
                 actor_user_id=message.author.id,
                 actor_role_ids=_member_roles(message.author),
+                actor_is_channel_manager=_is_channel_manager(message),
             )
             if not pairs:
                 return
@@ -762,6 +880,7 @@ class DiscordBotManager:
             channel_id=interaction.channel_id,
             actor_user_id=interaction.user.id,
             actor_role_ids=_roles(interaction),
+            actor_is_channel_manager=_is_channel_manager(interaction),
             required_capability=required_capability,
         )
 
@@ -874,6 +993,7 @@ class DiscordBotManager:
                 channel_id=str(interaction.channel_id),
                 actor_user_id=str(interaction.user.id),
                 actor_role_ids=_roles(interaction),
+                actor_is_channel_manager=_is_channel_manager(interaction),
                 required_capability=capability,
             )
             if server_value:
@@ -914,6 +1034,7 @@ class DiscordBotManager:
                     channel_id=str(interaction.channel_id),
                     actor_user_id=str(interaction.user.id),
                     actor_role_ids=_roles(interaction),
+                    actor_is_channel_manager=_is_channel_manager(interaction),
                 )
             if not pairs:
                 raise DiscordAuthorizationDenied("You are not on the server whitelist")
@@ -941,37 +1062,29 @@ class DiscordBotManager:
                 client, interaction, DiscordCapability.STATUS, server_value
             )
             await interaction.response.defer(ephemeral=False)
-            await interaction.edit_original_response(embed=await self._status_embed(server))
+            await interaction.edit_original_response(
+                embed=await self._status_embed(server, self._locale(interaction))
+            )
         except Exception as exc:
             await self._respond_error(interaction, exc)
 
-    async def _status_embed(self, server: Server) -> discord.Embed:
+    async def _status_embed(self, server: Server, locale: object = "en-US") -> discord.Embed:
         from services.a2s_query import a2s_service
 
         host = server.a2s_query_host or server.host
         port = server.a2s_query_port or server.game_port
         ok, info = await a2s_service.query_server_info(host, port, timeout=5)
-        fields = [
-            ("Panel status", server.status.value if server.status else "unknown"),
-            ("Endpoint", f"{host}:{port}"),
-        ]
-        if ok and info:
-            fields.extend(
-                [
-                    ("Map", str(info.get("map_name") or "unknown")),
-                    (
-                        "Players",
-                        f"{info.get('player_count', 0)}/{info.get('max_players', 0)}",
-                    ),
-                ]
-            )
         embed = discord.Embed(
             title=server.name,
-            description="A2S online" if ok else "A2S unavailable",
+            description=menu_text(locale, "status_a2s_online" if ok else "status_a2s_unavailable"),
             color=discord.Color.green() if ok else discord.Color.orange(),
         )
-        for name, value in fields:
-            embed.add_field(name=name, value=value, inline=True)
+        for name, value in status_card_fields(server, a2s_ok=ok, info=info, locale=locale):
+            embed.add_field(
+                name=name,
+                value=value or menu_text(locale, "status_unknown"),
+                inline=True,
+            )
         return embed
 
     async def _send_confirmation(
@@ -1015,6 +1128,7 @@ class DiscordBotManager:
                 server=server,
                 actor_user_id=str(interaction.user.id),
                 actor_role_ids=_roles(interaction),
+                actor_is_channel_manager=_is_channel_manager(interaction),
                 guild_id=str(interaction.guild_id),
                 channel_id=str(interaction.channel_id),
                 action=action,
@@ -1354,7 +1468,7 @@ class DiscordBotManager:
     async def _publish_menu_status(self, interaction: discord.Interaction, server: Server) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         await interaction.followup.send(
-            embed=await self._status_embed(server),
+            embed=await self._status_embed(server, self._locale(interaction)),
             ephemeral=False,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -1936,6 +2050,7 @@ class DiscordBotManager:
                         tool_run_id=tool_run_id,
                         actor_user_id=str(interaction.user.id),
                         actor_role_ids=_roles(interaction),
+                        actor_is_channel_manager=_is_channel_manager(interaction),
                         guild_id=str(interaction.guild_id),
                         channel_id=str(interaction.channel_id),
                     )
@@ -2015,6 +2130,7 @@ class DiscordBotManager:
                 operation_id=operation_id,
                 actor_user_id=str(interaction.user.id),
                 actor_role_ids=_roles(interaction),
+                actor_is_channel_manager=_is_channel_manager(interaction),
                 fresh_plan=fresh_plan,
             )
             item.status = "running"

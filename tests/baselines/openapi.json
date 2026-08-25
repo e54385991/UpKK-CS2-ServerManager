@@ -2201,6 +2201,11 @@
       },
       "DiscordBindingResponse": {
         "properties": {
+          "allow_channel_managers": {
+            "default": false,
+            "title": "Allow Channel Managers",
+            "type": "boolean"
+          },
           "capabilities": {
             "items": {
               "$ref": "#/components/schemas/DiscordCapability"
@@ -2280,6 +2285,11 @@
       },
       "DiscordBindingUpdate": {
         "properties": {
+          "allow_channel_managers": {
+            "default": false,
+            "title": "Allow Channel Managers",
+            "type": "boolean"
+          },
           "capabilities": {
             "items": {
               "$ref": "#/components/schemas/DiscordCapability"
@@ -2633,6 +2643,11 @@
       },
       "DiscordGlobalBindingResponse": {
         "properties": {
+          "allow_channel_managers": {
+            "default": false,
+            "title": "Allow Channel Managers",
+            "type": "boolean"
+          },
           "capabilities": {
             "items": {
               "$ref": "#/components/schemas/DiscordCapability"
@@ -2710,6 +2725,11 @@
       },
       "DiscordGlobalBindingUpdate": {
         "properties": {
+          "allow_channel_managers": {
+            "default": false,
+            "title": "Allow Channel Managers",
+            "type": "boolean"
+          },
           "capabilities": {
             "items": {
               "$ref": "#/components/schemas/DiscordCapability"

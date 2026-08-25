@@ -193,6 +193,7 @@ async def approve_discord_tool(
     tool_run_id: str,
     actor_user_id: str,
     actor_role_ids: set[str],
+    actor_is_channel_manager: bool = False,
     guild_id: str,
     channel_id: str,
 ) -> None:
@@ -236,6 +237,7 @@ async def approve_discord_tool(
             channel_id=channel_id,
             actor_user_id=actor_user_id,
             actor_role_ids=actor_role_ids,
+            actor_is_channel_manager=actor_is_channel_manager,
             required_capability=DiscordCapability.AGENT_ASK,
         )
         if run.server_id not in {server.id for _binding, server in bindings}:

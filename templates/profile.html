@@ -400,8 +400,13 @@
                             <div class="col-md-6">
                                 <label class="form-label" for="discord-global-users" data-i18n="discordBot.users">Allowed Discord User IDs</label>
                                 <textarea class="form-control font-monospace" id="discord-global-users" rows="5" placeholder="123456789012345678"></textarea>
-                                <div class="form-text" data-i18n="discordBot.whitelistRule">A user ID match or any role match grants access.</div>
+                                <div class="form-text" data-i18n="discordBot.whitelistRule">A user ID match, any role match, or the explicitly enabled channel-manager rule grants access.</div>
                             </div>
+                        </div>
+                        <div class="form-check form-switch mt-3">
+                            <input class="form-check-input" id="discord-global-channel-managers" type="checkbox">
+                            <label class="form-check-label" for="discord-global-channel-managers" data-i18n="discordBot.allowChannelManagers">Allow members who can manage the current channel</label>
+                            <div class="form-text" data-i18n="discordBot.allowChannelManagersHint">This is an explicit whitelist alternative. Discord permissions are checked again for the current channel before each action and confirmation.</div>
                         </div>
                         <hr>
                         <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -413,7 +418,7 @@
                         <div class="alert alert-warning py-2 mt-3 d-none" id="discord-global-write-warning">
                             <i class="bi bi-exclamation-triangle"></i> <span data-i18n="discordBot.writeWarning">Maintenance capabilities change remote server state. Every use still requires confirmation.</span>
                         </div>
-                        <div class="alert alert-danger py-2 mt-3" data-i18n="discordBot.globalSyncWarning">Synchronizing overwrites the Discord binding, whitelist, and command capabilities on every server you own.</div>
+                        <div class="alert alert-danger py-2 mt-3" data-i18n="discordBot.globalSyncWarning">同步会覆盖你拥有的每台服务器上的 Discord 绑定、白名单和固定命令能力。</div>
                         <div class="form-text mb-3" id="discord-global-stats"></div>
                         <div class="d-flex flex-wrap gap-2">
                             <button class="btn btn-outline-primary" id="discord-global-save" type="button">
@@ -620,7 +625,11 @@ function updateDiscordBotTriggerWarning() {
 document.getElementById('discord-bot-trigger-mode').addEventListener('change', updateDiscordBotTriggerWarning);
 
 function discordBotText(key, fallback) {
-    return window.i18n ? window.i18n.t(`discordBot.${key}`) : fallback;
+    const fullKey = `discordBot.${key}`;
+    const translated = window.i18n?.t(fullKey);
+    return typeof translated === 'string' && translated.trim() && translated !== fullKey
+        ? translated
+        : fallback;
 }
 
 const DISCORD_GLOBAL_CAPABILITIES = [
@@ -637,7 +646,10 @@ const DISCORD_GLOBAL_CAPABILITIES = [
     ['agent_ask', 'capAgentAsk', 'AI Agent']
 ];
 
+let lastDiscordGlobalStats = { matching_server_count: 0, server_count: 0 };
+
 function renderDiscordGlobalCapabilities() {
+    const selected = new Set(discordGlobalSelectedCapabilities());
     const container = document.getElementById('discord-global-capabilities');
     container.replaceChildren();
     DISCORD_GLOBAL_CAPABILITIES.forEach(([value, key, fallback]) => {
@@ -657,6 +669,21 @@ function renderDiscordGlobalCapabilities() {
         column.appendChild(label);
         container.appendChild(column);
     });
+    setDiscordGlobalCapabilities([...selected]);
+}
+
+function refreshDiscordSelectPlaceholder(selectId, key, fallback) {
+    const select = document.getElementById(selectId);
+    if (!select || !select.options.length || select.options[0].value !== '') return;
+    select.options[0].textContent = discordBotText(key, fallback);
+}
+
+function refreshDiscordBotLocalizedText() {
+    renderDiscordGlobalCapabilities();
+    updateDiscordGlobalStats(lastDiscordGlobalStats);
+    refreshDiscordSelectPlaceholder('discord-global-guild', 'pushSelectGuild', 'Select a Guild');
+    refreshDiscordSelectPlaceholder('discord-menu-push-guild', 'pushSelectGuild', 'Select a Guild');
+    refreshDiscordSelectPlaceholder('discord-menu-push-channel', 'pushSelectChannel', 'Select a bound channel');
 }
 
 function discordGlobalSelectedCapabilities() {
@@ -697,13 +724,14 @@ function setDiscordGlobalStatus(message, isError = false) {
 }
 
 function updateDiscordGlobalStats(data) {
+    lastDiscordGlobalStats = data || lastDiscordGlobalStats;
     const template = discordBotText(
         'globalStats',
         '{matching}/{total} existing servers currently match this template. New servers inherit it automatically.'
     );
     document.getElementById('discord-global-stats').textContent = template
-        .replace('{matching}', data.matching_server_count || 0)
-        .replace('{total}', data.server_count || 0);
+        .replace('{matching}', lastDiscordGlobalStats.matching_server_count || 0)
+        .replace('{total}', lastDiscordGlobalStats.server_count || 0);
 }
 
 async function loadDiscordGlobalOptions(guildId = '', selectedChannels = [], selectedRoles = []) {
@@ -742,6 +770,7 @@ async function loadDiscordGlobalBinding() {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load global Discord template'));
         document.getElementById('discord-global-enabled').checked = !!data.enabled;
+        document.getElementById('discord-global-channel-managers').checked = !!data.allow_channel_managers;
         document.getElementById('discord-global-users').value = (data.user_ids || []).join('\n');
         setDiscordGlobalCapabilities(data.capabilities || []);
         updateDiscordGlobalStats(data);
@@ -780,6 +809,7 @@ async function saveDiscordGlobalBinding(syncExisting) {
             channel_ids: selectedValues('discord-global-channels'),
             role_ids: selectedValues('discord-global-roles'),
             user_ids: [...new Set(userIds)],
+            allow_channel_managers: document.getElementById('discord-global-channel-managers').checked,
             capabilities: discordGlobalSelectedCapabilities(),
             response_visibility: 'public',
             sync_existing_servers: syncExisting
@@ -810,6 +840,10 @@ async function saveDiscordGlobalBinding(syncExisting) {
 }
 
 renderDiscordGlobalCapabilities();
+window.addEventListener('i18nReady', refreshDiscordBotLocalizedText);
+window.addEventListener('localeChanged', () => {
+    if (window.i18n?.isInitialized) refreshDiscordBotLocalizedText();
+});
 
 document.getElementById('discord-global-guild').addEventListener('change', async (event) => {
     await loadDiscordGlobalOptions(event.target.value, [], []);

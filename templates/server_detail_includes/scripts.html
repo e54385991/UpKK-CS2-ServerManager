@@ -155,12 +155,13 @@
             clear_webhook: false
         },
         discordBotBinding: { enabled: false, effective_enabled: false, capabilities: [], channel_ids: [], role_ids: [], user_ids: [] },
-        discordBotForm: { enabled: false, guild_id: '', channel_ids: [], role_ids: [], capabilities: [], response_visibility: 'public' },
+        discordBotForm: { enabled: false, guild_id: '', channel_ids: [], role_ids: [], allow_channel_managers: false, capabilities: [], response_visibility: 'public' },
         discordBotOptions: { guilds: [], channels: [], roles: [] },
         discordBotUserIdsText: '',
         discordBotError: '',
         loadingDiscordBotOptions: false,
         savingDiscordBot: false,
+        localeTick: 0,
         agentPolicy: { enabled: true, effective_enabled: false, capabilities: ['inspect_status', 'read_logs_files', 'browse_plan_plugins'] },
         agentPolicyForm: { enabled: true, capabilities: ['inspect_status', 'read_logs_files', 'browse_plan_plugins'] },
         agentPolicyError: '',
@@ -289,6 +290,9 @@
         },
 
                                             async init() {
+            const bumpLocale = () => { this.localeTick += 1; };
+            window.addEventListener('i18nReady', bumpLocale);
+            window.addEventListener('localeChanged', bumpLocale);
             this.loadConfigForm();
             this.loadServerEditForm();
             this.loadMonitoringForm();
@@ -988,6 +992,31 @@
             this.discordSettingsForm.discord_notifications_enabled = false;
         },
 
+        localizedText(key, fallback) {
+            const translated = window.i18n?.t(key);
+            return typeof translated === 'string' && translated.trim() && translated !== key
+                ? translated
+                : fallback;
+        },
+
+        discordCapabilityLabel(value) {
+            const labels = {
+                status: ['discordBot.capStatus', 'Status'],
+                start: ['discordBot.capStart', 'Start'],
+                stop: ['discordBot.capStop', 'Stop'],
+                restart: ['discordBot.capRestart', 'Restart'],
+                update: ['discordBot.capUpdate', 'CS2 update'],
+                validate: ['discordBot.capValidate', 'Validate'],
+                plugin_browse: ['discordBot.capPluginBrowse', 'Plugin browse'],
+                plugin_install: ['discordBot.capPluginInstall', 'Market install'],
+                plugin_upgrade: ['discordBot.capPluginUpgrade', 'Managed upgrade'],
+                game_console: ['discordBot.gameConsole', 'Game console input'],
+                agent_ask: ['discordBot.capAgentAsk', 'AI Agent']
+            };
+            const [key, fallback] = labels[value] || [null, value];
+            return key ? this.localizedText(key, fallback) : fallback;
+        },
+
         async loadDiscordBotBinding() {
             this.discordBotError = '';
             try {
@@ -1000,6 +1029,7 @@
                     guild_id: data.guild_id || '',
                     channel_ids: data.channel_ids || [],
                     role_ids: data.role_ids || [],
+                    allow_channel_managers: !!data.allow_channel_managers,
                     capabilities: data.capabilities || [],
                     response_visibility: 'public'
                 };

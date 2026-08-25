@@ -33,6 +33,7 @@ async def create_operation(
     server: Server,
     actor_user_id: str,
     actor_role_ids: set[str],
+    actor_is_channel_manager: bool = False,
     guild_id: str,
     channel_id: str,
     action: str,
@@ -56,6 +57,7 @@ async def create_operation(
         channel_id=channel_id,
         actor_user_id=actor_user_id,
         actor_role_ids=actor_role_ids,
+        actor_is_channel_manager=actor_is_channel_manager,
     )
     binding = next(
         (binding for binding, bound_server in bindings if bound_server.id == fresh_server.id), None
@@ -94,6 +96,7 @@ async def confirm_operation(
     operation_id: str,
     actor_user_id: str,
     actor_role_ids: set[str],
+    actor_is_channel_manager: bool = False,
     fresh_plan: dict,
 ) -> DiscordOperationRun:
     result = await db.execute(
@@ -128,6 +131,7 @@ async def confirm_operation(
         channel_id=item.channel_id,
         actor_user_id=actor_user_id,
         actor_role_ids=actor_role_ids,
+        actor_is_channel_manager=actor_is_channel_manager,
     )
     binding = next(
         (binding for binding, bound_server in bindings if bound_server.id == server.id), None

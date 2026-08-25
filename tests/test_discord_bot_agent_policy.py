@@ -24,6 +24,7 @@ from modules.models import (
     DiscordOperationRun,
     Server,
     ServerDiscordBinding,
+    ServerStatus,
     User,
     UserDiscordBot,
 )
@@ -51,7 +52,9 @@ from services.discord_binding_template_service import (
 from services.discord_bot_manager import (
     DiscordBotManager,
     ManagedDiscordClient,
+    _is_channel_manager,
     discord_bot_manager,
+    status_card_fields,
 )
 from services.discord_bot_service import (
     DISCORD_COMMAND_CHANNEL_TYPES,
@@ -112,6 +115,25 @@ def test_snowflakes_remain_strings_and_unknown_capabilities_fail_closed():
                 "guild_id": "123",
                 "channel_ids": [],
                 "role_ids": [],
+            }
+        )
+    managers_only = DiscordBindingUpdate.model_validate(
+        {
+            "enabled": True,
+            "guild_id": "123456789012345678",
+            "channel_ids": ["223456789012345678"],
+            "allow_channel_managers": True,
+        }
+    )
+    assert managers_only.allow_channel_managers is True
+    assert managers_only.role_ids == []
+    assert managers_only.user_ids == []
+    with pytest.raises(ValidationError):
+        DiscordBindingUpdate.model_validate(
+            {
+                "enabled": True,
+                "guild_id": "123456789012345678",
+                "channel_ids": ["223456789012345678"],
             }
         )
     push = DiscordMenuPushRequest(guild_id="123456789012345678", channel_id="223456789012345678")
@@ -206,8 +228,172 @@ async def test_whitelist_has_no_discord_administrator_bypass():
         channel_id="200",
         actor_user_id="999",
         actor_role_ids={"999999"},
+        actor_is_channel_manager=True,
     )
     assert denied == []
+
+
+def _auth_fixtures(*, allow_channel_managers: bool = False):
+    bot = UserDiscordBot(user_id=1, token_encrypted="encrypted", enabled=True)
+    owner = User(
+        id=1,
+        username="owner",
+        email="owner@example.com",
+        hashed_password="hash",
+        is_active=True,
+    )
+    server = Server(
+        id=10,
+        user_id=1,
+        name="Server",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+    )
+    binding = ServerDiscordBinding(
+        server_id=10,
+        user_id=1,
+        enabled=True,
+        guild_id="100",
+        channel_ids=["200"],
+        role_ids=[],
+        user_ids=[],
+        allow_channel_managers=allow_channel_managers,
+        capabilities=["status"],
+    )
+    db = AsyncMock()
+    db.get.side_effect = [bot, owner]
+    result = AsyncMock()
+    result.all = lambda: [(binding, server)]
+    db.execute.return_value = result
+    return db, binding, server
+
+
+@pytest.mark.asyncio
+async def test_channel_managers_are_authorized_only_when_explicitly_enabled():
+    db, binding, server = _auth_fixtures(allow_channel_managers=True)
+    allowed = await authorized_bindings(
+        db,
+        bot_owner_user_id=1,
+        guild_id="100",
+        channel_id="200",
+        actor_user_id="999",
+        actor_role_ids=set(),
+        actor_is_channel_manager=True,
+    )
+    assert [(item[0], item[1]) for item in allowed] == [(binding, server)]
+
+    db, _binding, _server = _auth_fixtures(allow_channel_managers=True)
+    denied_without_permission = await authorized_bindings(
+        db,
+        bot_owner_user_id=1,
+        guild_id="100",
+        channel_id="200",
+        actor_user_id="999",
+        actor_role_ids=set(),
+        actor_is_channel_manager=False,
+    )
+    assert denied_without_permission == []
+
+    db, _binding, _server = _auth_fixtures(allow_channel_managers=False)
+    denied_when_disabled = await authorized_bindings(
+        db,
+        bot_owner_user_id=1,
+        guild_id="100",
+        channel_id="200",
+        actor_user_id="999",
+        actor_role_ids=set(),
+        actor_is_channel_manager=True,
+    )
+    assert denied_when_disabled == []
+
+
+def test_channel_manager_detection_uses_manage_channels_or_administrator():
+    assert (
+        _is_channel_manager(
+            SimpleNamespace(permissions=SimpleNamespace(manage_channels=True, administrator=False))
+        )
+        is True
+    )
+    assert (
+        _is_channel_manager(
+            SimpleNamespace(permissions=SimpleNamespace(manage_channels=False, administrator=True))
+        )
+        is True
+    )
+    assert (
+        _is_channel_manager(
+            SimpleNamespace(
+                permissions=SimpleNamespace(manage_channels=False, administrator=False),
+                channel=None,
+                user=None,
+            )
+        )
+        is False
+    )
+    channel = SimpleNamespace(
+        permissions_for=lambda _member: SimpleNamespace(manage_channels=True, administrator=False)
+    )
+    assert (
+        _is_channel_manager(
+            SimpleNamespace(
+                permissions=None,
+                channel=channel,
+                author=SimpleNamespace(id=9),
+            )
+        )
+        is True
+    )
+
+
+def test_status_card_includes_version_and_does_not_invent_missing_values():
+    server = Server(
+        id=10,
+        user_id=1,
+        name="CS2-ZE",
+        host="fulldown.upkk.com",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+        game_port=27015,
+        server_name="ZE Panel Name",
+        default_map="de_dust2",
+        max_players=64,
+        current_game_version="1.40.9.4",
+        status=ServerStatus.RUNNING,
+    )
+    online = dict(
+        status_card_fields(
+            server,
+            a2s_ok=True,
+            info={
+                "server_name": "CS2-ZE",
+                "version": "1.41.1.1",
+                "map_name": "ze_demon_slayer",
+                "player_count": 1,
+                "max_players": 64,
+                "bot_count": 0,
+                "game": "Counter-Strike 2",
+                "platform": "l",
+                "vac_enabled": True,
+                "password_protected": False,
+                "ping": 0.012,
+            },
+            locale="zh-CN",
+        )
+    )
+    assert online["CS2 版本"] == "1.41.1.1"
+    assert online["已记录版本"] == "1.40.9.4"
+    assert online["地图"] == "ze_demon_slayer"
+    assert online["玩家"] == "1/64 · Bot 0"
+    assert online["查询地址"] == "fulldown.upkk.com:27015"
+    assert "1.41.1.1" in online.values()
+
+    offline = dict(status_card_fields(server, a2s_ok=False, info=None, locale="en-US"))
+    assert offline["CS2 version"] == "1.40.9.4"
+    assert offline["Configured map"] == "de_dust2"
+    missing_version = server.model_copy(update={"current_game_version": None})
+    unknown = dict(status_card_fields(missing_version, a2s_ok=False, info=None, locale="en-US"))
+    assert unknown["CS2 version"] == "unknown"
 
 
 def test_bot_token_is_not_part_of_any_response_contract():
@@ -298,6 +484,11 @@ def test_profile_guide_exposes_trigger_mode_and_bilingual_intent_warning():
     assert 'id="discord-menu-push-channel"' in profile
     assert 'id="discord-global-binding-panel"' in profile
     assert 'id="discord-global-sync"' in profile
+    assert 'id="discord-global-channel-managers"' in profile
+    assert "allow_channel_managers" in profile
+    assert "function discordBotText(" in profile
+    assert "discordGlobalSelectedCapabilities()" in profile
+    assert "refreshDiscordBotLocalizedText" in profile
     assert "/api/auth/discord-bot/menu-options" in profile
     assert "/api/auth/discord-bot/menu" in profile
     assert "/api/auth/discord-bot/global-settings" in profile
@@ -310,6 +501,9 @@ def test_profile_guide_exposes_trigger_mode_and_bilingual_intent_warning():
         assert "Message Content Intent" in messages["discordBot"]["messageContentWarning"]
         assert messages["discordBot"]["pushMenuTitle"]
         assert messages["discordBot"]["globalSyncWarning"]
+        assert messages["discordBot"]["allowChannelManagers"]
+        assert messages["discordBot"]["capStatus"]
+        assert messages["discordBot"]["whitelistRule"]
 
 
 def test_friendly_menu_wake_words_are_exact_normalized_and_mention_safe():
@@ -513,9 +707,33 @@ async def test_new_server_inherits_global_discord_template_without_committing():
     assert binding.guild_id == "100"
     assert binding.channel_ids == ["200"]
     assert binding.capabilities == ["status", "restart"]
+    assert binding.allow_channel_managers is False
     assert binding_matches_template(binding, bot) is True
     db.add.assert_called_once_with(binding)
     db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_new_server_inherits_explicit_channel_manager_switch():
+    bot = _global_bot()
+    bot.global_allow_channel_managers = True
+    server = Server(
+        id=12,
+        user_id=1,
+        name="Server",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+    )
+    db = AsyncMock()
+    db.add = Mock()
+    db.get.side_effect = [bot, None]
+
+    binding = await inherit_global_discord_binding(db, server)
+
+    assert binding is not None
+    assert binding.allow_channel_managers is True
+    assert binding_matches_template(binding, bot) is True
 
 
 @pytest.mark.asyncio
