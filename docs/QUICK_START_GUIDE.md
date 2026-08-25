@@ -2,16 +2,16 @@
 
 ## Setup Instructions
 
-### Step 1: Database Migration
+### Step 1: Automatic Database Migration
 
-The new features require database tables. When you start the application, the tables will be created automatically:
+The application requires PostgreSQL 18+. At startup, Alembic automatically upgrades the schema before any seed data or background task starts:
 
 ```bash
 pip install uv
 uv run --no-dev --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-The following tables will be created:
+No manual SQL is required. Use `uv run python -m modules.db_admin check` to verify that the database is at the code head. The following tables are among those managed by Alembic:
 - `system_settings` - Stores global configuration
 - `password_reset_tokens` - Stores password reset tokens
 
@@ -122,11 +122,7 @@ If your servers need to download from GitHub through a proxy:
 
 **Solutions**:
 1. Verify you're logged in as admin user
-2. Check if `is_admin=true` in database:
-   ```sql
-   SELECT id, username, is_admin FROM users WHERE username='admin';
-   UPDATE users SET is_admin=true WHERE username='admin';
-   ```
+2. Verify that the account has administrator privileges through the application UI or a controlled application maintenance procedure. Do not change production schema or account data with ad-hoc SQL.
 3. Clear browser cache and cookies
 4. Check browser console for JavaScript errors
 
@@ -184,24 +180,9 @@ Email templates are located in `services/email_service.py`. To customize:
 2. Modify HTML and text content
 3. Restart the application
 
-### Database Query Examples
+### Database Administration
 
-**View all system settings**:
-```sql
-SELECT * FROM system_settings;
-```
-
-**View password reset tokens**:
-```sql
-SELECT * FROM password_reset_tokens 
-WHERE used=false AND expires_at > NOW();
-```
-
-**Clear expired tokens**:
-```sql
-DELETE FROM password_reset_tokens 
-WHERE used=true OR expires_at < NOW();
-```
+Use the application service and the read-only `db-admin status/check` commands for normal diagnostics. Schema upgrades are committed as reviewed Alembic Python revisions and execute automatically at startup.
 
 ### Proxy Mode Behavior
 

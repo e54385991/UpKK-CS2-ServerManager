@@ -79,21 +79,7 @@ Users can configure mirror settings in the "Mirror Settings" section of their Pr
 
 ### 数据库表 (Database Table)
 
-新增 `user_settings` 表存储用户的镜像设置：
-
-```sql
-CREATE TABLE `user_settings` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `user_id` int NOT NULL,
-  `steamcmd_mirror_url` varchar(500) DEFAULT NULL,
-  `github_api_mirror_url` varchar(500) DEFAULT NULL,
-  `github_objects_mirror_url` varchar(500) DEFAULT NULL,
-  `created_at` datetime DEFAULT (now()),
-  `updated_at` datetime DEFAULT (now()),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `ix_user_settings_user_id` (`user_id`)
-);
-```
+用户级镜像设置由应用模型和版本化 Alembic schema 管理，不应单独创建或修改数据库表。
 
 ### API 端点 (API Endpoints)
 
@@ -111,17 +97,11 @@ CREATE TABLE `user_settings` (
 
 ## 数据库迁移 (Database Migration)
 
-执行以下SQL脚本创建 `user_settings` 表：
-
-Run the following SQL script to create the `user_settings` table:
+数据库结构由 Alembic 在 PostgreSQL 18+ 上自动升级，无需也不应执行功能专用 SQL。可使用以下命令确认 revision 已到代码 head：
 
 ```bash
-mysql -u cs2_manager -p cs2_manager < db/migrations/001_add_user_settings_table.sql
+uv run python -m modules.db_admin check
 ```
-
-或者手动执行 `db/migrations/001_add_user_settings_table.sql` 中的SQL语句。
-
-Or manually execute the SQL statements in `db/migrations/001_add_user_settings_table.sql`.
 
 ## 影响的功能 (Affected Features)
 

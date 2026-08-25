@@ -10,7 +10,6 @@ import pytest
 
 from api.routes import actions
 from api.routes.actions import common as action_common
-from modules.migrations.server_features import migrate_manual_stop_requested
 from modules.models import AuthType, Server, ServerStatus
 from modules.schemas import ServerAction
 from services import ai_tools
@@ -363,37 +362,3 @@ async def test_guard_rechecks_manual_stop_under_operation_lock(monkeypatch):
     manager.check_session_manager_available.assert_not_awaited()
     manager.stop_server.assert_not_awaited()
     manager.start_server.assert_not_awaited()
-
-
-class MigrationResult:
-    def __init__(self, row=None):
-        self.row = row
-
-    def fetchone(self):
-        return self.row
-
-
-class MigrationConnection:
-    def __init__(self):
-        self.column_exists = False
-        self.alter_count = 0
-
-    async def execute(self, statement, parameters=None):
-        sql = str(statement)
-        if "INFORMATION_SCHEMA.COLUMNS" in sql:
-            return MigrationResult(("manual_stop_requested",) if self.column_exists else None)
-        if "ADD COLUMN manual_stop_requested" in sql:
-            self.column_exists = True
-            self.alter_count += 1
-        return MigrationResult()
-
-
-@pytest.mark.asyncio
-async def test_manual_stop_migration_is_idempotent():
-    connection = MigrationConnection()
-
-    await migrate_manual_stop_requested(connection)
-    await migrate_manual_stop_requested(connection)
-
-    assert connection.alter_count == 1
-    assert server_fixture().manual_stop_requested is False

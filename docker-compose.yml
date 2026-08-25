@@ -1,22 +1,23 @@
-version: '3.8'
-
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: cs2_mysql
+  postgres:
+    image: postgres:18-alpine
+    container_name: cs2_postgres
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: cs2_manager
-      MYSQL_USER: cs2admin
-      MYSQL_PASSWORD: cs2password
+      POSTGRES_DB: ${POSTGRES_DATABASE:-cs2_manager}
+      POSTGRES_USER: ${POSTGRES_USER:-cs2_manager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     ports:
-      - "3306:3306"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql
     networks:
       - cs2_network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -37,7 +38,7 @@ services:
       retries: 5
 
 volumes:
-  mysql_data:
+  postgres_data:
   redis_data:
 
 networks:

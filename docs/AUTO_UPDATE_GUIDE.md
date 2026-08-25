@@ -45,13 +45,11 @@ The following fields have been added to the `servers` table:
 
 ### Migration
 
-Run the migration script to add the new fields:
+The PostgreSQL schema is upgraded automatically by Alembic at application startup. Verify it with:
 
-```sql
-mysql -u cs2admin -p cs2_manager < migrations/add_auto_update_version_fields.sql
+```bash
+uv run python -m modules.db_admin check
 ```
-
-Or the script will run automatically on application startup.
 
 ## UI Display
 

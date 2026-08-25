@@ -1,24 +1,20 @@
-"""
-Database connection and session management (Async)
-Using SQLModel for seamless FastAPI integration
-"""
+"""PostgreSQL connection, session and initial-data management."""
 
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
 
 from .config import settings
-from .migrations import run_migrations
 
 engine = create_async_engine(
-    settings.mysql_url,
-    pool_size=settings.MYSQL_POOL_SIZE,  # Number of connections to keep open
-    max_overflow=settings.MYSQL_MAX_OVERFLOW,  # Max overflow connections
-    pool_timeout=settings.MYSQL_POOL_TIMEOUT,  # Wait time for connection
-    pool_recycle=settings.MYSQL_POOL_RECYCLE,  # Connection recycle time
-    pool_pre_ping=settings.MYSQL_POOL_PRE_PING,  # Health check before use
-    echo=settings.MYSQL_ECHO,  # Enable/disable SQL query logging
+    settings.database_url,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
+    echo=settings.DB_ECHO,
+    connect_args={"application_name": "upkk-cs2-server-manager"},
 )
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -27,12 +23,7 @@ async_session_maker = AsyncSessionLocal
 
 
 async def init_db():
-    """Initialize database tables using SQLModel"""
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    print("Database initialized successfully!")
-
-    # Create default admin user if no users exist
+    """Seed initial application data after Alembic reaches the current head."""
     from sqlmodel import select
 
     from .auth import get_password_hash
@@ -60,9 +51,13 @@ async def init_db():
 
 
 async def migrate_db():
-    """Run ordered, compatibility-preserving schema migrations."""
-    async with engine.begin() as conn:
-        await run_migrations(conn)
+    """Upgrade the PostgreSQL schema to the single current Alembic head."""
+    from .database_migrations import upgrade_database
+
+    await upgrade_database(
+        engine,
+        lock_timeout_seconds=settings.DB_MIGRATION_LOCK_TIMEOUT_SECONDS,
+    )
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

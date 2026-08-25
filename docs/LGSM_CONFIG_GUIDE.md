@@ -249,13 +249,11 @@ curl -X PUT "http://localhost:8000/servers/1" \
 
 ## Database Migration
 
-For existing installations, run the migration script:
+For existing installations, update and start the application. Alembic upgrades these fields automatically under the PostgreSQL migration lock:
 
 ```bash
-mysql -u your_user -p your_database < migrations/add_lgsm_config_fields.sql
+uv run python -m modules.db_admin check
 ```
-
-Or if using the application's database connection, the new fields will be automatically created on next startup.
 
 ## Troubleshooting
 

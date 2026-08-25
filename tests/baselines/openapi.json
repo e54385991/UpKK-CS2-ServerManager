@@ -9487,7 +9487,7 @@
     }
   },
   "info": {
-    "description": "Manage multiple CS2 servers via FastAPI + Redis + MySQL with WebSocket support",
+    "description": "Manage multiple CS2 servers via FastAPI + Redis + PostgreSQL with WebSocket support",
     "title": "CS2 Server Manager",
     "version": "1.0.0"
   },

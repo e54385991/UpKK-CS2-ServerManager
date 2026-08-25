@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy.dialects import mysql
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
 from api.routes import ai as ai_routes
@@ -1733,7 +1733,7 @@ async def test_active_background_task_cannot_be_deleted(monkeypatch):
 
 
 def test_managed_plugin_file_unique_key_uses_fixed_size_path_digest():
-    ddl = str(CreateTable(ManagedPluginFile.__table__).compile(dialect=mysql.dialect()))
+    ddl = str(CreateTable(ManagedPluginFile.__table__).compile(dialect=postgresql.dialect()))
 
     assert "UNIQUE (managed_plugin_id, path_hash)" in ddl
     assert "UNIQUE (managed_plugin_id, relative_path)" not in ddl

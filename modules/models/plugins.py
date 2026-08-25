@@ -61,15 +61,23 @@ class MarketPlugin(SQLModel, table=True):
     """Plugin market model - stores plugins available for installation"""
 
     __tablename__ = "market_plugins"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('GAME_MODE', 'ENTERTAINMENT', 'UTILITY', 'ADMIN', "
+            "'PERFORMANCE', 'LIBRARY', 'OTHER')",
+            name="ck_market_plugins_plugin_category",
+        ),
+    )
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     github_url: str = Field(max_length=500, nullable=False, unique=True, index=True)
     title: str = Field(max_length=255, nullable=False, index=True)
     description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     author: Optional[str] = Field(default=None, max_length=255)
     version: Optional[str] = Field(default=None, max_length=50)
     category: PluginCategory = Field(
-        default=PluginCategory.OTHER, sa_column=Column(SQLEnum(PluginCategory), nullable=False)
+        default=PluginCategory.OTHER,
+        sa_column=Column(portable_enum(PluginCategory, name="plugin_category"), nullable=False),
     )
     tags: Optional[str] = Field(
         default=None, sa_column=Column(Text, nullable=True)
@@ -152,9 +160,9 @@ class MarketPlugin(SQLModel, table=True):
         if search_query and search_query.strip():
             search_pattern = f"%{search_query.strip()}%"
             search_condition = or_(
-                cls.title.like(search_pattern),
-                cls.description.like(search_pattern),
-                cls.author.like(search_pattern),
+                cls.title.ilike(search_pattern),
+                cls.description.ilike(search_pattern),
+                cls.author.ilike(search_pattern),
             )
             query = query.where(search_condition)
             count_query = count_query.where(search_condition)

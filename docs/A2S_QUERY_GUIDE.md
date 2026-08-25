@@ -11,21 +11,7 @@ The CS2 Server Manager now supports **A2S (Address to Server) Query Protocol** f
 
 ## Installation / Migration
 
-### Automatic Migration
-
-The database migration will run automatically when you start the application. The Python code in `modules/database.py` will check for and add the necessary columns.
-
-### Manual Migration
-
-If you prefer to run the migration manually, you have two options:
-
-#### Option 1: Simple Migration (Recommended)
-Run `migrations/add_a2s_query_support_simple.sql` - This runs each ALTER TABLE statement individually. If a column already exists, you'll get an error for that specific statement, which you can safely ignore.
-
-#### Option 2: Safe Migration with Checks
-Run `migrations/add_a2s_query_support.sql` - This uses prepared statements to check if columns exist before adding them. More complex but safer for repeated runs.
-
-**Note:** After running the migration, restart your application to ensure all changes take effect.
+The A2S fields are managed by the versioned PostgreSQL Alembic schema. Start the updated application to upgrade automatically, then run `uv run python -m modules.db_admin check`; do not apply feature-specific SQL files.
 
 ## What is A2S?
 

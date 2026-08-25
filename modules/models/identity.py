@@ -10,9 +10,9 @@ class User(SQLModel, table=True):
 
     __tablename__ = "users"
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
-    username: str = Field(max_length=100, unique=True, nullable=False, index=True)
-    email: str = Field(max_length=255, unique=True, nullable=False, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(max_length=100, nullable=False)
+    email: str = Field(max_length=255, nullable=False)
     hashed_password: str = Field(max_length=255, nullable=False)
     is_active: bool = Field(default=True)
     is_admin: bool = Field(default=False)
@@ -75,13 +75,15 @@ class User(SQLModel, table=True):
     @classmethod
     async def get_by_username(cls, session: AsyncSession, username: str) -> Optional["User"]:
         """Get user by username"""
-        result = await session.execute(select(cls).where(cls.username == username))
+        result = await session.execute(
+            select(cls).where(func.lower(cls.username) == username.casefold())
+        )
         return result.scalar_one_or_none()
 
     @classmethod
     async def get_by_email(cls, session: AsyncSession, email: str) -> Optional["User"]:
         """Get user by email"""
-        result = await session.execute(select(cls).where(cls.email == email))
+        result = await session.execute(select(cls).where(func.lower(cls.email) == email.casefold()))
         return result.scalar_one_or_none()
 
     @classmethod
@@ -102,7 +104,7 @@ class PasswordResetToken(SQLModel, table=True):
 
     __tablename__ = "password_reset_tokens"
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     token: str = Field(max_length=64, unique=True, nullable=False, index=True)
     expires_at: datetime = Field(nullable=False)
@@ -152,3 +154,7 @@ class PasswordResetToken(SQLModel, table=True):
         await session.commit()
         await session.refresh(reset_token)
         return reset_token
+
+
+Index("uq_users_username_ci", func.lower(User.__table__.c.username), unique=True)
+Index("uq_users_email_ci", func.lower(User.__table__.c.email), unique=True)

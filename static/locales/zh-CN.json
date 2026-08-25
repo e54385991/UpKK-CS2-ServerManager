@@ -173,7 +173,7 @@
       },
       "persistentStorage": {
         "title": "持久化存储",
-        "description": "使用 MySQL 数据库存储服务器配置，使用 Redis 缓存"
+        "description": "使用 PostgreSQL 数据库存储服务器配置，使用 Redis 缓存"
       },
       "deploymentLogs": {
         "title": "部署日志",

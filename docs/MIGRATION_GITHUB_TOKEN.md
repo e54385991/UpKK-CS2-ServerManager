@@ -1,62 +1,13 @@
-# Migration Instructions: GitHub Personal Access Token Support
+# GitHub Personal Access Token Upgrade Notes
 
 ## Overview
 This migration adds support for GitHub Fine-grained personal access tokens. Users can now configure their tokens in the profile center to access private repositories and get better API rate limits.
 
-## Prerequisites
-- Database access with ALTER TABLE permissions
-- Backup of current database (recommended)
-- Application downtime during migration (< 1 minute)
+## Upgrade
 
-## Step-by-Step Migration
+The current application supports PostgreSQL 18+ only. The `github_token` column is part of the reviewed Alembic schema and is upgraded automatically at application startup; do not run feature-specific SQL files.
 
-### 1. Backup Database (Recommended)
-```bash
-# Create a backup before migration
-mysqldump -u your_user -p cs2_manager > backup_$(date +%Y%m%d_%H%M%S).sql
-```
-
-### 2. Stop Application
-```bash
-# If using systemd
-sudo systemctl stop cs2-server-manager
-
-# If using 1Panel or direct uvicorn, stop the process
-```
-
-### 3. Run Migration
-```bash
-# Navigate to the repository directory
-cd /path/to/UpKK-CS2-ServerManager
-
-# Run the migration script
-mysql -u your_user -p cs2_manager < db/migrations/add_github_token.sql
-
-# Or manually execute the SQL:
-# ALTER TABLE `users` 
-# ADD COLUMN `github_token` VARCHAR(255) NULL DEFAULT NULL 
-# COMMENT 'GitHub Fine-grained personal access token for API authentication' 
-# AFTER `steam_api_key`;
-```
-
-### 4. Verify Migration
-```bash
-# Connect to database
-mysql -u your_user -p cs2_manager
-
-# Verify column was added
-DESC users;
-
-# Should show github_token column with:
-# - Type: varchar(255)
-# - Null: YES
-# - Default: NULL
-
-# Exit MySQL
-exit
-```
-
-### 5. Update Application Code
+### 1. Update Application Code
 ```bash
 # Pull latest code from the repository
 git pull origin main
@@ -66,7 +17,7 @@ git checkout copilot/add-fine-grained-tokens-support
 git pull
 ```
 
-### 6. Restart Application
+### 2. Restart Application
 ```bash
 # If using systemd
 sudo systemctl start cs2-server-manager
@@ -78,42 +29,22 @@ sudo systemctl status cs2-server-manager
 uv run --no-dev --python 3.14 --locked uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-### 7. Verify Application
+### 3. Verify Schema and Application
 ```bash
-# Check application logs for any errors
-tail -f /path/to/logs/app.log
-
-# Test login to the web interface
-# Navigate to: http://your-server:8000/login
+uv run python -m modules.db_admin check
 ```
 
-### 8. Test Token Configuration
+Then review the application startup log and test the login page.
+
+### 4. Test Token Configuration
 1. Log in to the web interface
 2. Navigate to Profile (Personal Center)
 3. Scroll to "GitHub Personal Access Token" field
 4. Verify the field is visible and functional
 
-## Rollback Instructions
+## Rollback
 
-If you need to rollback the migration:
-
-```bash
-# Stop the application
-sudo systemctl stop cs2-server-manager
-
-# Restore from backup
-mysql -u your_user -p cs2_manager < backup_YYYYMMDD_HHMMSS.sql
-
-# Or manually remove the column
-mysql -u your_user -p cs2_manager -e "ALTER TABLE users DROP COLUMN github_token;"
-
-# Revert application code
-git checkout main  # or your previous version
-git pull
-
-# Restart application
-sudo systemctl start cs2-server-manager
-```
+Production rollback uses a previously verified PostgreSQL backup together with the matching application version. Do not manually remove schema objects or automatically run a data-losing downgrade. See [PostgreSQL 18+ migration and operations](POSTGRESQL_MIGRATION.md).
 
 ## Post-Migration User Guide
 
@@ -138,24 +69,19 @@ After successful migration, inform users:
 
 ## Troubleshooting
 
-### Issue: Column already exists
-```
-ERROR 1060 (42S21): Duplicate column name 'github_token'
-```
-**Solution**: Column already exists, migration already applied. Skip to step 5.
+### Issue: Schema check fails
 
-### Issue: Migration script fails
-**Solution**: 
-1. Check database connection credentials
-2. Verify user has ALTER TABLE permissions
-3. Check database is accessible
+**Solution**:
+1. Confirm PostgreSQL is version 18 or newer
+2. Check database connection credentials
+3. Review the Alembic startup log and `uv run python -m modules.db_admin status`
 
 ### Issue: Application won't start after migration
 **Solution**:
 1. Check application logs for errors
 2. Verify Python dependencies are installed
 3. Ensure database connection is working
-4. Rollback and retry migration
+4. Restore the verified PostgreSQL backup and matching application version if rollback is required
 
 ### Issue: Token field not showing in UI
 **Solution**:

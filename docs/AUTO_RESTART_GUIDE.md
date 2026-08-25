@@ -225,11 +225,10 @@ The crash history will be cleared after the 10-minute window expires.
 
 ### Database Migration
 
-The database migration to add the `api_key` field is automatic and runs on application startup. For manual migration:
+The database migration to add the `api_key` field is managed by Alembic and runs automatically on application startup. Verify the current revision with:
 
 ```bash
-# Run the migration SQL script
-mysql -u cs2_manager -p cs2_manager < migrations/add_server_api_key.sql
+uv run python -m modules.db_admin check
 ```
 
 ### Existing Servers

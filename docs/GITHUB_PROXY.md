@@ -28,9 +28,8 @@ This feature provides two mutually exclusive proxy modes for CS2 Server Manager 
    - `use_panel_proxy` (boolean) - Enable panel server proxy mode
    - **Mutually exclusive**: Only one can be set at a time
 
-2. **Migration Scripts**:
-   - `db/migrations/001_add_github_proxy.sql` - Adds github_proxy column
-   - `db/migrations/002_add_use_panel_proxy.sql` - Adds use_panel_proxy column
+2. **Schema Migration**:
+   - The fields are part of the versioned Alembic schema and upgrade automatically at startup.
 
 ### Backend Changes
 
@@ -259,21 +258,13 @@ python3 tests/verify_github_proxy_implementation.py
 
 For existing deployments:
 
-1. **Backup Database**
+1. **Upgrade and Verify the Alembic Schema**
    ```bash
-   mysqldump cs2_manager > cs2_manager_backup_$(date +%Y%m%d_%H%M%S).sql
+   uv run python -m modules.db_admin upgrade
+   uv run python -m modules.db_admin check
    ```
 
-2. **Run Migrations** (in order)
-   ```bash
-   # First migration (if not already applied)
-   mysql cs2_manager < db/migrations/001_add_github_proxy.sql
-   
-   # Second migration (new)
-   mysql cs2_manager < db/migrations/002_add_use_panel_proxy.sql
-   ```
-
-3. **Restart Application**
+2. **Restart Application**
    ```bash
    # Using docker-compose
    docker-compose restart
@@ -282,7 +273,7 @@ For existing deployments:
    systemctl restart cs2-server-manager
    ```
 
-4. **Verify**
+3. **Verify**
    - Log in to the application
    - Navigate to any server's configuration tab
    - Verify "Download Proxy Configuration" section appears

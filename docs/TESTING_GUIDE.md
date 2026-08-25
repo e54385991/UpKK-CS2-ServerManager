@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-1. Database (MySQL) running
+1. PostgreSQL 18+ running and at the current Alembic head
 2. Redis running
 3. Python dependencies installed (`pip install uv && uv sync --locked`)
 4. CS2 server configured in the system

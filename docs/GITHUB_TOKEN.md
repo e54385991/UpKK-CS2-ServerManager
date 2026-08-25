@@ -67,11 +67,7 @@ The token is automatically used when:
 
 ### Database Schema
 
-```sql
-ALTER TABLE `users` 
-ADD COLUMN `github_token` VARCHAR(255) NULL DEFAULT NULL 
-COMMENT 'GitHub Fine-grained personal access token for API authentication';
-```
+The optional `users.github_token` field is part of the reviewed PostgreSQL Alembic schema. Application startup upgrades it automatically.
 
 ### API Changes
 
@@ -105,9 +101,9 @@ COMMENT 'GitHub Fine-grained personal access token for API authentication';
 
 If you're upgrading from a previous version:
 
-1. Run the migration script:
+1. Start the updated application so Alembic applies the reviewed PostgreSQL revision, then verify it:
    ```bash
-   mysql -u your_user -p cs2_manager < db/migrations/add_github_token.sql
+   uv run python -m modules.db_admin check
    ```
 
 2. Restart the application

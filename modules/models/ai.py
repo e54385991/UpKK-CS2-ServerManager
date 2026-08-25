@@ -95,6 +95,7 @@ class UserAISettings(SQLModel, table=True):
 
 class AIConversation(SQLModel, table=True):
     __tablename__ = "ai_conversations"
+    __table_args__ = (Index("ix_ai_conversations_user_updated", "user_id", "updated_at"),)
 
     id: str = Field(default_factory=_uuid, primary_key=True, max_length=36)
     user_id: int = Field(
@@ -120,6 +121,7 @@ class AIConversation(SQLModel, table=True):
 
 class AIMessage(SQLModel, table=True):
     __tablename__ = "ai_messages"
+    __table_args__ = (Index("ix_ai_messages_conversation_id_id", "conversation_id", "id"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
     conversation_id: str = Field(
@@ -178,7 +180,10 @@ class AIRun(SQLModel, table=True):
 
 class AIToolRun(SQLModel, table=True):
     __tablename__ = "ai_tool_runs"
-    __table_args__ = (UniqueConstraint("run_id", "tool_call_id", name="uq_ai_tool_run_call"),)
+    __table_args__ = (
+        UniqueConstraint("run_id", "tool_call_id", name="uq_ai_tool_run_call"),
+        Index("ix_ai_tool_runs_run_created", "run_id", "created_at", "id"),
+    )
 
     id: str = Field(default_factory=_uuid, primary_key=True, max_length=36)
     run_id: str = Field(

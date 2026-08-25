@@ -128,7 +128,7 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 
 ### 简介
 
-一个基于 **FastAPI + Redis + MySQL** 构建的现代化 CS2 (Counter-Strike 2) 服务器管理器。通过 SSH 远程管理多个服务器，支持一键部署、启动、停止等操作，让服务器管理变得简单高效！
+一个基于 **FastAPI + Redis + PostgreSQL** 构建的现代化 CS2 (Counter-Strike 2) 服务器管理器。通过 SSH 远程管理多个服务器，支持一键部署、启动、停止等操作，让服务器管理变得简单高效！
 
 ### ✨ 主要特性
 
@@ -158,7 +158,7 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 
 #### 管理端环境要求 (运行 Web 界面 您可使用[1Panel](https://github.com/1Panel-dev/1Panel)来快捷部署)
 - **Python**: 3.14+ (推荐 Python 3.14 或更高版本)
-- **MySQL**: 8.0+
+- **PostgreSQL**: 18+
 - **Redis**: 7.0+
 
 
@@ -208,17 +208,17 @@ REDIS_PASSWORD=
 
 ##### 使用 [1Panel](https://github.com/1Panel-dev/1Panel) 部署示例 (推荐使用 1Panel 运行环境-Python 3.14 来部署更容易)
 
-如果您使用 1Panel 部署 MySQL 和 Redis，参考配置如下：
+如果您使用 1Panel 部署 PostgreSQL 和 Redis，参考配置如下：
 
 ![1Panel 部署示例](images/1panel.png)
 
 ```dotenv
 # 文件位置: .env
-MYSQL_HOST=1Panel-mysql-KZBC
-MYSQL_PORT=3306
-MYSQL_USER=cs2_manager
-MYSQL_PASSWORD=请修改为你的数据库密码
-MYSQL_DATABASE=cs2_manager
+POSTGRES_HOST=1Panel-postgresql-KZBC
+POSTGRES_PORT=5432
+POSTGRES_USER=cs2_manager
+POSTGRES_PASSWORD=请修改为你的数据库密码
+POSTGRES_DATABASE=cs2_manager
 
 REDIS_HOST=1Panel-redis-oAZc
 REDIS_PORT=6379
@@ -228,6 +228,8 @@ REDIS_DB=0
 SECRET_KEY=请替换为至少32位的随机字符串
 JWT_SECRET_KEY=请替换为另一个至少32位的随机字符串
 ```
+
+应用启动时会在 PostgreSQL advisory lock 保护下自动执行 Alembic 升级；正常部署不需要执行 SQL。数据库状态可用 `uv run python -m modules.db_admin check` 检查。现有 MySQL 用户请先阅读 [PostgreSQL 迁移与运维指南](docs/POSTGRESQL_MIGRATION.md)。
 
 #### 步骤 4: 启动服务
 
@@ -311,7 +313,7 @@ server {
 
 ### Introduction
 
-A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + MySQL**. Manage multiple servers remotely via SSH with features like one-click deployment, start/stop controls, and more. Making server management simple and efficient!
+A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + PostgreSQL**. Manage multiple servers remotely via SSH with features like one-click deployment, start/stop controls, and more. Making server management simple and efficient!
 
 ### ✨ Key Features
 
@@ -371,7 +373,7 @@ For details: [Panel Proxy Documentation](docs/GITHUB_PROXY.md)
 
 #### Manager Host (Running Web Interface - You can use [1Panel](https://github.com/1Panel-dev/1Panel) for quick deployment)
 - **Python**: 3.14+ (Recommended Python 3.14 or higher)
-- **MySQL**: 8.0+
+- **PostgreSQL**: 18+
 - **Redis**: 7.0+
 
 #### Target Server (Running CS2)
@@ -432,17 +434,17 @@ REDIS_PASSWORD=
 
 ##### Example Deployment with [1Panel](https://github.com/1Panel-dev/1Panel) (Recommended: Use 1Panel Runtime Environment - Python 3.14 for easier deployment)
 
-If you're using 1Panel to deploy MySQL and Redis, refer to the configuration below:
+If you're using 1Panel to deploy PostgreSQL and Redis, refer to the configuration below:
 
 ![1Panel Deployment Example](images/1panel.png)
 
 ```dotenv
 # File: .env
-MYSQL_HOST=1Panel-mysql-KZBC
-MYSQL_PORT=3306
-MYSQL_USER=cs2_manager
-MYSQL_PASSWORD=replace_with_your_database_password
-MYSQL_DATABASE=cs2_manager
+POSTGRES_HOST=1Panel-postgresql-KZBC
+POSTGRES_PORT=5432
+POSTGRES_USER=cs2_manager
+POSTGRES_PASSWORD=replace_with_your_database_password
+POSTGRES_DATABASE=cs2_manager
 
 REDIS_HOST=1Panel-redis-oAZc
 REDIS_PORT=6379
@@ -452,6 +454,8 @@ REDIS_DB=0
 SECRET_KEY=replace_with_a_random_string_of_at_least_32_characters
 JWT_SECRET_KEY=replace_with_a_different_random_string_of_at_least_32_characters
 ```
+
+At startup, Alembic upgrades run automatically under a PostgreSQL advisory lock; normal deployments never execute SQL manually. Use `uv run python -m modules.db_admin check` for diagnostics. Existing MySQL installations should follow the [PostgreSQL migration and operations guide](docs/POSTGRESQL_MIGRATION.md).
 
 #### Step 5: Start Service
 

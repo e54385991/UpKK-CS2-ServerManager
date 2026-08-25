@@ -12,15 +12,13 @@
 
 ## 解决方案
 
-### 1. 检查表是否存在
+### 1. 检查 schema revision
 
-运行以下 SQL 命令检查表是否存在：
-
-```sql
-SHOW TABLES LIKE 'ssh_servers_sudo';
+```bash
+uv run python -m modules.db_admin status
 ```
 
-如果表不存在，请继续下一步。
+如果 `is_current` 不是 `true`，请继续下一步并检查应用启动日志。
 
 ### 2. 重启应用以运行迁移
 
@@ -33,49 +31,17 @@ docker-compose restart  # 如果使用 Docker
 systemctl restart cs2-manager  # 如果使用 systemd
 ```
 
-### 3. 手动创建表（如果重启后仍不存在）
+### 3. 验证自动迁移
 
-运行提供的 SQL 脚本：
+当前版本仅支持 PostgreSQL 18+，`ssh_servers_sudo` 表由 Alembic 管理。不要手动建表；如果重启后仍不可用，先检查迁移状态和启动日志：
 
 ```bash
-mysql -u your_user -p your_database < db/create_ssh_servers_sudo.sql
+uv run python -m modules.db_admin check
 ```
 
-或直接在 MySQL 中执行：
+检查失败时修复数据库版本、连接配置、Alembic revision 或迁移锁问题，然后重新启动应用。
 
-```sql
-CREATE TABLE IF NOT EXISTS ssh_servers_sudo (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    host VARCHAR(255) NOT NULL,
-    ssh_port INT NOT NULL DEFAULT 22,
-    sudo_user VARCHAR(100) NOT NULL,
-    sudo_password VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_ssh_sudo_config (user_id, host, ssh_port, sudo_user),
-    INDEX idx_ssh_servers_sudo_user_id (user_id),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-```
-
-### 4. 验证表结构
-
-```sql
-DESCRIBE ssh_servers_sudo;
-```
-
-应该显示以下字段：
-- id
-- user_id
-- host
-- ssh_port
-- sudo_user
-- sudo_password
-- created_at
-- updated_at
-
-### 5. 测试保存功能
+### 4. 测试保存功能
 
 使用**非 root 用户**进行服务器初始化测试：
 

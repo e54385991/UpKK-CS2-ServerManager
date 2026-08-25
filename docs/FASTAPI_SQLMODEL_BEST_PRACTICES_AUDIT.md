@@ -81,8 +81,9 @@
 2. 兼容 facade 和部分 schema/model 模块仍使用通配导入，静态分析边界不清晰。
 3. 首次启动仍会创建 `admin` / `admin123` 默认管理员凭据，应改为一次性随机
    凭据或强制初始化流程。
-4. 数据库升级依赖自定义有序迁移和 `SQLModel.metadata.create_all()`，尚未采用
-   Alembic 等带版本图、升级和回滚记录的标准迁移系统。
+4. 数据库已改为 PostgreSQL 18+，Alembic 是唯一 schema 权威；启动时在 PostgreSQL
+   advisory lock 下自动升级并验证唯一 head，生产路径不再调用
+   `SQLModel.metadata.create_all()` 或自定义 MySQL 迁移注册表。
 
-MySQL `8.0` 与 Redis `7-alpine` 镜像主版本不在本次依赖升级范围内；基础设施
-主版本升级应另行制定备份、兼容验证和回滚方案。
+PostgreSQL 数据库集群的主版本升级不属于 ORM/Alembic schema 升级，仍须使用
+`pg_upgrade`、dump/restore 或逻辑复制，并单独制定备份、兼容验证和回滚方案。

@@ -66,7 +66,7 @@ pip install uv && uv sync --locked
 cp .env.example .env
 # Edit .env with your database and Redis settings
 
-# Start dependencies (MySQL + Redis)
+# Start dependencies (PostgreSQL 18 + Redis)
 docker-compose up -d
 
 # Run the manager
@@ -213,7 +213,7 @@ pip install uv && uv sync --locked
 cp .env.example .env
 # 编辑 .env 文件，配置数据库和 Redis 设置
 
-# 启动依赖（MySQL + Redis）
+# 启动依赖（PostgreSQL 18 + Redis）
 docker-compose up -d
 
 # 运行管理器

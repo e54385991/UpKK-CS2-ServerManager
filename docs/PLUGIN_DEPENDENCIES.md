@@ -165,13 +165,7 @@ If dependencies install but main plugin fails:
 
 ## Migration
 
-The database migration automatically adds the `dependencies` column:
-```sql
-ALTER TABLE market_plugins 
-ADD COLUMN dependencies TEXT NULL
-```
-
-This runs automatically on application startup if the column doesn't exist.
+The optional `market_plugins.dependencies` field is managed by the versioned PostgreSQL Alembic schema and upgrades automatically at application startup.
 
 ## Best Practices
 

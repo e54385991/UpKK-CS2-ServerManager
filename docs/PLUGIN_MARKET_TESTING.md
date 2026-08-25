@@ -3,23 +3,14 @@
 ## Testing Instructions
 
 ### 1. Database Migration Testing
-The plugin_market_items table will be created automatically when the application starts. To verify:
+The plugin marketplace schema is upgraded automatically by Alembic when the application starts. To verify:
 
 1. Start the application:
    ```bash
    python3 main.py
    ```
 
-2. Check the startup logs for:
-   ```
-   Database initialized successfully!
-   ```
-
-3. Verify the table exists:
-   ```sql
-   SHOW TABLES LIKE 'plugin_market_items';
-   DESCRIBE plugin_market_items;
-   ```
+2. Run `uv run python -m modules.db_admin check` and confirm `is_current` is true.
 
 ### 2. Plugin Data Initialization
 

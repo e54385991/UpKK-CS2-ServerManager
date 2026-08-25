@@ -10,7 +10,7 @@ class SSHServerSudo(SQLModel, table=True):
 
     __tablename__ = "ssh_servers_sudo"
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     host: str = Field(max_length=255, nullable=False)
     ssh_port: int = Field(default=22, nullable=False)
@@ -83,7 +83,7 @@ class SystemSettings(SQLModel, table=True):
 
     __tablename__ = "system_settings"
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     # Proxy configuration
     default_proxy_mode: str = Field(default="panel", max_length=50)  # direct, panel, github_url
     github_proxy_url: Optional[str] = Field(default=None, max_length=500)

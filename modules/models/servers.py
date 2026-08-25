@@ -27,14 +27,26 @@ class Server(SQLModel, table=True):
     """CS2 Server model"""
 
     __tablename__ = "servers"
+    __table_args__ = (
+        CheckConstraint(
+            "auth_type IN ('PASSWORD', 'KEY_FILE')",
+            name="ck_servers_auth_type",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'DEPLOYING', 'RUNNING', 'STOPPED', 'ERROR', 'UNKNOWN')",
+            name="ck_servers_server_status",
+        ),
+    )
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     name: str = Field(max_length=255, nullable=False, index=True)
     host: str = Field(max_length=255, nullable=False)
     ssh_port: int = Field(default=22)
     ssh_user: str = Field(max_length=100, nullable=False)
-    auth_type: AuthType = Field(sa_column=Column(SQLEnum(AuthType), nullable=False))
+    auth_type: AuthType = Field(
+        sa_column=Column(portable_enum(AuthType, name="auth_type"), nullable=False)
+    )
     ssh_password: Optional[str] = Field(default=None, max_length=255)
     ssh_key_path: Optional[str] = Field(default=None, max_length=500)
     sudo_password: Optional[str] = Field(default=None, max_length=255)
@@ -44,7 +56,10 @@ class Server(SQLModel, table=True):
     game_directory: str = Field(default="/home/cs2server/cs2", max_length=500)
     status: ServerStatus = Field(
         default=ServerStatus.PENDING,
-        sa_column=Column(SQLEnum(ServerStatus), default=ServerStatus.PENDING),
+        sa_column=Column(
+            portable_enum(ServerStatus, name="server_status"),
+            default=ServerStatus.PENDING,
+        ),
     )
 
     # LGSM-style server start parameters
@@ -327,8 +342,9 @@ class DeploymentLog(SQLModel, table=True):
     """Deployment log model"""
 
     __tablename__ = "deployment_logs"
+    __table_args__ = (Index("ix_deployment_logs_server_created", "server_id", "created_at"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     server_id: int = Field(nullable=False, index=True)
     action: str = Field(max_length=50, nullable=False)
     status: str = Field(max_length=50, nullable=False)
@@ -361,7 +377,7 @@ class MonitoringLog(SQLModel, table=True):
 
     __tablename__ = "monitoring_logs"
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     server_id: int = Field(nullable=False, index=True)
     event_type: str = Field(max_length=50, nullable=False)
     status: str = Field(max_length=50, nullable=False)
@@ -378,8 +394,15 @@ class ScheduledTask(SQLModel, table=True):
     """Scheduled task model for automated server operations"""
 
     __tablename__ = "scheduled_tasks"
+    __table_args__ = (
+        Index(
+            "ix_scheduled_tasks_due",
+            "next_run",
+            postgresql_where=text("enabled IS TRUE"),
+        ),
+    )
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     server_id: int = Field(
         sa_column=Column(
             Integer, ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True
@@ -451,8 +474,17 @@ class CustomCommand(SQLModel, table=True):
     """Saved quick command for a server"""
 
     __tablename__ = "custom_commands"
+    __table_args__ = (
+        Index(
+            "ix_custom_commands_server_user_created",
+            "server_id",
+            "user_id",
+            "created_at",
+            "id",
+        ),
+    )
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(
         sa_column=Column(
             Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
@@ -506,8 +538,9 @@ class InitializedServer(SQLModel, table=True):
     """Initialized server configuration from setup wizard"""
 
     __tablename__ = "initialized_servers"
+    __table_args__ = (Index("ix_initialized_servers_user_created", "user_id", "created_at"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     name: str = Field(max_length=255, nullable=False)
     host: str = Field(max_length=255, nullable=False)

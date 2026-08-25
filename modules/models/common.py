@@ -7,9 +7,9 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import (
-    JSON,
     CheckConstraint,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -17,9 +17,36 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 from sqlmodel import Column, Field, SQLModel, select
+
+# PostgreSQL is the only supported runtime database. Keep the historical
+# ``JSON`` name used by model modules while emitting the queryable binary type.
+JSON = JSONB
+
+# Stable names are required for deterministic Alembic autogeneration and make
+# every constraint addressable by future migrations.
+SQLModel.metadata.naming_convention = {
+    "ix": "ix_%(table_name)s_%(column_0_N_name)s",
+    "uq": "uq_%(table_name)s_%(column_0_N_name)s",
+    "ck": "%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_N_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
+
+def portable_enum(enum_type: type[enum.Enum], *, name: str) -> SQLEnum:
+    """Store enums as constrained strings instead of PostgreSQL enum types."""
+    return SQLEnum(
+        enum_type,
+        name=name,
+        native_enum=False,
+        create_constraint=False,
+        validate_strings=True,
+    )
+
 
 DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS = (
     "cs2/game/csgo/addons/counterstrikesharp/configs",

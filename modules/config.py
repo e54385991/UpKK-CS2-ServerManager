@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
@@ -18,21 +19,21 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # MySQL Configuration
-    MYSQL_HOST: str
-    MYSQL_PORT: int
-    MYSQL_USER: str
-    MYSQL_PASSWORD: str
-    MYSQL_DATABASE: str
+    # PostgreSQL 18+ configuration
+    POSTGRES_HOST: str
+    POSTGRES_PORT: int = 5432
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_DATABASE: str
 
-    # MySQL Connection Pool Configuration
-    # These settings optimize database connection management for better performance
-    MYSQL_POOL_SIZE: int
-    MYSQL_MAX_OVERFLOW: int
-    MYSQL_POOL_TIMEOUT: int
-    MYSQL_POOL_RECYCLE: int
-    MYSQL_POOL_PRE_PING: bool
-    MYSQL_ECHO: bool
+    # SQLAlchemy connection pool and migration configuration
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 3600
+    DB_POOL_PRE_PING: bool = True
+    DB_ECHO: bool = False
+    DB_MIGRATION_LOCK_TIMEOUT_SECONDS: int = 300
 
     # Redis Configuration
     REDIS_HOST: str
@@ -81,9 +82,16 @@ class Settings(BaseSettings):
     # Google CallbackURL = https://your-domain.com/google-callback
 
     @property
-    def mysql_url(self) -> str:
-        """Get MySQL database URL for async"""
-        return f"mysql+aiomysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}"
+    def database_url(self) -> URL:
+        """Return a safely encoded Psycopg 3 SQLAlchemy URL."""
+        return URL.create(
+            "postgresql+psycopg",
+            username=self.POSTGRES_USER,
+            password=self.POSTGRES_PASSWORD,
+            host=self.POSTGRES_HOST,
+            port=self.POSTGRES_PORT,
+            database=self.POSTGRES_DATABASE,
+        )
 
     @property
     def redis_url(self) -> str:

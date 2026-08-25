@@ -6,6 +6,7 @@ This directory contains all the documentation for the CS2 Server Manager project
 
 - [Deployment Guide](DEPLOYMENT.md) - **START HERE** - Server preparation requirements and deployment instructions
 - [Quick Start Guide](QUICK_START.md) - Step-by-step walkthrough for getting started
+- [PostgreSQL 18+ Migration and Operations](POSTGRESQL_MIGRATION.md) - Automatic Alembic upgrades, backup/restore, and legacy MySQL migration
 - [Auto-Restart Guide](AUTO_RESTART_GUIDE.md) - Automatic restart and crash protection configuration
 - [Plugin Installation Guide](PLUGIN_INSTALLATION_GUIDE.md) - Installing Metamod and CounterStrikeSharp
 - [Auto-Update Guide](AUTO_UPDATE_GUIDE.md) - CS2 version automatic updates

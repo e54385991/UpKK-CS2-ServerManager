@@ -3,7 +3,8 @@
 ## Manual Testing Checklist
 
 ### 1. Database Migration
-- [ ] Run migration script: `mysql -u user -p cs2_manager < db/migrations/add_github_token.sql`
+- [ ] Start from a PostgreSQL 18 empty database and let Alembic upgrade automatically
+- [ ] Run `uv run python -m modules.db_admin check`
 - [ ] Verify `github_token` column exists in users table
 - [ ] Verify column is VARCHAR(255) NULL DEFAULT NULL
 - [ ] Verify existing users have NULL value for github_token
@@ -109,7 +110,7 @@ Prerequisites: Create a private GitHub repo with releases, configure fine-graine
 
 ### Required Setup
 - CS2 Server Manager running instance
-- MySQL database with migration applied
+- PostgreSQL 18+ database at the current Alembic head
 - GitHub account with:
   - Public repository with releases
   - Private repository with releases

@@ -173,7 +173,7 @@
       },
       "persistentStorage": {
         "title": "Persistent Storage",
-        "description": "MySQL database for server configurations and Redis for caching"
+        "description": "PostgreSQL database for server configurations and Redis for caching"
       },
       "deploymentLogs": {
         "title": "Deployment Logs",
