@@ -154,6 +154,16 @@
             discord_crash_restart_min_interval_minutes: 10,
             clear_webhook: false
         },
+        discordBotBinding: { enabled: false, effective_enabled: false, capabilities: [], channel_ids: [], role_ids: [], user_ids: [] },
+        discordBotForm: { enabled: false, guild_id: '', channel_ids: [], role_ids: [], capabilities: [], response_visibility: 'public' },
+        discordBotOptions: { guilds: [], channels: [], roles: [] },
+        discordBotUserIdsText: '',
+        discordBotError: '',
+        savingDiscordBot: false,
+        agentPolicy: { enabled: true, effective_enabled: false, capabilities: ['inspect_status', 'read_logs_files', 'browse_plan_plugins'] },
+        agentPolicyForm: { enabled: true, capabilities: ['inspect_status', 'read_logs_files', 'browse_plan_plugins'] },
+        agentPolicyError: '',
+        savingAgentPolicy: false,
         // CPU Affinity
         showCpuAffinityEdit: false,
         savingCpuAffinity: false,
@@ -283,6 +293,8 @@
             this.loadMonitoringForm();
             this.loadAutoUpdateForm();
             await this.loadDiscordSettings();
+            await this.loadDiscordBotBinding();
+            await this.loadAgentPolicy();
             await this.loadPluginAutoUpdate();
             await this.loadMarketPluginOptions();
             await this.loadPluginUpdateRunStatus();
@@ -973,6 +985,112 @@
             this.discordSettingsForm.discord_webhook_url = '';
             this.discordSettingsForm.clear_webhook = true;
             this.discordSettingsForm.discord_notifications_enabled = false;
+        },
+
+        async loadDiscordBotBinding() {
+            this.discordBotError = '';
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/discord-bot-settings`);
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Failed to load Discord Bot binding');
+                this.discordBotBinding = data;
+                this.discordBotForm = {
+                    enabled: !!data.enabled,
+                    guild_id: data.guild_id || '',
+                    channel_ids: data.channel_ids || [],
+                    role_ids: data.role_ids || [],
+                    capabilities: data.capabilities || [],
+                    response_visibility: 'public'
+                };
+                this.discordBotUserIdsText = (data.user_ids || []).join('\n');
+                await this.loadDiscordBotOptions(data.guild_id || '');
+            } catch (error) {
+                this.discordBotError = error.message;
+            }
+        },
+
+        async loadDiscordBotOptions(guildId = '') {
+            try {
+                const suffix = guildId ? `?guild_id=${encodeURIComponent(guildId)}` : '';
+                const response = await authFetch(`/servers/${this.serverId}/discord-bot-options${suffix}`);
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Failed to load Discord options');
+                this.discordBotOptions = data;
+                if (guildId) {
+                    const channels = new Set((data.channels || []).map(item => item.id));
+                    const roles = new Set((data.roles || []).map(item => item.id));
+                    this.discordBotForm.channel_ids = this.discordBotForm.channel_ids.filter(id => channels.has(id));
+                    this.discordBotForm.role_ids = this.discordBotForm.role_ids.filter(id => roles.has(id));
+                }
+            } catch (error) {
+                this.discordBotError = error.message;
+            }
+        },
+
+        applyDiscordBotPreset(name) {
+            if (name === 'readonly') {
+                this.discordBotForm.capabilities = ['status', 'plugin_browse'];
+            } else if (name === 'operations') {
+                this.discordBotForm.capabilities = ['status', 'start', 'stop', 'restart', 'update', 'validate', 'plugin_browse'];
+            }
+        },
+
+        async saveDiscordBotBinding() {
+            this.savingDiscordBot = true;
+            this.discordBotError = '';
+            try {
+                const userIds = this.discordBotUserIdsText.split(/[\s,]+/).map(item => item.trim()).filter(Boolean);
+                const payload = {
+                    ...this.discordBotForm,
+                    guild_id: this.discordBotForm.guild_id || null,
+                    user_ids: [...new Set(userIds)],
+                    response_visibility: 'public'
+                };
+                const response = await authFetch(`/servers/${this.serverId}/discord-bot-settings`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Failed to save Discord Bot binding');
+                this.discordBotBinding = data;
+                this.showToast('Discord Bot binding saved', 'success');
+            } catch (error) {
+                this.discordBotError = error.message;
+                this.showToast(error.message, 'error');
+            } finally {
+                this.savingDiscordBot = false;
+            }
+        },
+
+        async loadAgentPolicy() {
+            this.agentPolicyError = '';
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/agent-policy`);
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Failed to load AI policy');
+                this.agentPolicy = data;
+                this.agentPolicyForm = { enabled: !!data.enabled, capabilities: data.capabilities || [] };
+            } catch (error) {
+                this.agentPolicyError = error.message;
+            }
+        },
+
+        async saveAgentPolicy() {
+            this.savingAgentPolicy = true;
+            this.agentPolicyError = '';
+            try {
+                const response = await authFetch(`/servers/${this.serverId}/agent-policy`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.agentPolicyForm)
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Failed to save AI policy');
+                this.agentPolicy = data;
+                this.showToast('AI Agent policy saved', 'success');
+            } catch (error) {
+                this.agentPolicyError = error.message;
+                this.showToast(error.message, 'error');
+            } finally {
+                this.savingAgentPolicy = false;
+            }
         },
         
         async loadMonitoringLogs(eventType) {

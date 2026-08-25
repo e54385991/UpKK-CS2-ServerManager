@@ -11,6 +11,13 @@ from .ai import (
     UserAISettings,
 )
 from .common import *
+from .discord import (
+    DEFAULT_AGENT_CAPABILITIES,
+    DiscordOperationRun,
+    ServerAgentPolicy,
+    ServerDiscordBinding,
+    UserDiscordBot,
+)
 from .identity import (
     PasswordResetToken,
     User,

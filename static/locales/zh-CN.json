@@ -1881,5 +1881,41 @@
     "successMessage": "密码重置成功！正在跳转到登录页...",
     "errorMessage": "密码重置失败",
     "invalidToken": "无效或过期的重置令牌"
+  },
+  "discordBot": {
+    "title": "Discord Bot",
+    "stepCreate": "创建 Discord Application 和 Bot，然后复制 Bot Token；无需开启任何特权 Intent。",
+    "stepTest": "保存并测试 Token。Token 会加密存储，API 永不回传原文。",
+    "stepInvite": "使用生成的最小权限邀请链接，再到各服务器页面绑定 Guild、频道和角色。",
+    "enable": "启用 Gateway 连接",
+    "identity": "Bot 身份：",
+    "status": "连接状态：",
+    "save": "保存并验证",
+    "test": "测试 Token",
+    "invite": "邀请 Bot",
+    "clear": "清除 Token",
+    "serverTitle": "Discord Bot 命令",
+    "webhookSeparate": "此 Gateway Bot 与现有 Discord Webhook 通知完全独立。",
+    "configureProfile": "请先在个人资料中配置每用户独立 Bot。",
+    "enableServer": "为此服务器启用 Bot 命令",
+    "guild": "Guild",
+    "channels": "允许的频道（至少一个）",
+    "roles": "允许的角色",
+    "users": "允许的 Discord 用户 ID",
+    "noAdminBypass": "Discord Administrator 不会绕过此白名单。",
+    "whitelistRule": "用户 ID 命中或任一角色命中即授权；至少配置一个角色或用户。",
+    "commandCapabilities": "固定命令能力",
+    "presetReadonly": "只读",
+    "presetOperations": "常用运维",
+    "presetCustom": "自定义",
+    "writeWarning": "维护能力会改变远端服务器状态；每次使用仍必须由发起者在公开确认卡中确认。",
+    "saveBinding": "保存 Bot 绑定"
+  },
+  "agentPolicy": {
+    "title": "服务器 AI Agent 权限",
+    "sharedScope": "此策略同时约束 Web 与 Discord AI；能力被撤销后，批准和执行阶段会再次拒绝。",
+    "enable": "为此服务器启用 AI Agent",
+    "sshBoundary": "AI 永远不会获得任意 Shell。它只能列出已保存的 host 快捷命令，并在专用能力和逐次确认均满足时按 ID 执行。",
+    "save": "保存 AI 权限"
   }
 }

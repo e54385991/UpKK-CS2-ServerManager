@@ -44,6 +44,26 @@ from .auth import (
     UserResponse,
 )
 from .common import *
+from .discord import (
+    DEFAULT_AGENT_CAPABILITIES as DEFAULT_AGENT_CAPABILITY_ENUMS,
+)
+from .discord import (
+    AgentCapability,
+    AgentPolicyResponse,
+    AgentPolicyUpdate,
+    DiscordBindingResponse,
+    DiscordBindingUpdate,
+    DiscordBotOptionsResponse,
+    DiscordBotSettingsResponse,
+    DiscordBotSettingsUpdate,
+    DiscordBotTestRequest,
+    DiscordBotTestResponse,
+    DiscordCapability,
+    DiscordChannelOption,
+    DiscordGuildOption,
+    DiscordRoleOption,
+    Snowflake,
+)
 from .plugins import (
     ArchiveAnalysisResponse,
     ArchiveContentItem,

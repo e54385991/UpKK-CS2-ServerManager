@@ -34,8 +34,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_postgresql_models_and_static_baseline_are_the_schema_authority():
-    assert len(SQLModel.metadata.tables) == 25
-    assert code_heads() == ("0001_postgresql_baseline",)
+    assert len(SQLModel.metadata.tables) == 29
+    assert code_heads() == ("0002_discord_bot_agent_policy",)
     assert "create_all" not in (PROJECT_ROOT / "modules/database.py").read_text()
 
     revision = PROJECT_ROOT / "alembic/versions/0001_postgresql_baseline.py"
@@ -168,7 +168,7 @@ async def test_postgresql_18_empty_upgrade_concurrency_crud_and_drift_check():
                     "WHERE table_schema = 'public' AND data_type = 'jsonb'"
                 )
             )
-            assert application_table_count == 25
+            assert application_table_count == 29
             assert native_enum_count == 0
             assert jsonb_count and jsonb_count > 0
 

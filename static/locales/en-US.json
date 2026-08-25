@@ -1881,5 +1881,41 @@
     "successMessage": "Password reset successfully! Redirecting to login...",
     "errorMessage": "Failed to reset password",
     "invalidToken": "Invalid or expired reset token"
+  },
+  "discordBot": {
+    "title": "Discord Bot",
+    "stepCreate": "Create a Discord Application and Bot, then copy the Bot Token. Privileged Intents are not required.",
+    "stepTest": "Save and test the Token. The Token is encrypted and is never returned by the API.",
+    "stepInvite": "Use the generated minimum-permission invite link, then bind Guild channels and roles on each server page.",
+    "enable": "Enable Gateway connection",
+    "identity": "Bot identity:",
+    "status": "Connection status:",
+    "save": "Save and validate",
+    "test": "Test Token",
+    "invite": "Invite Bot",
+    "clear": "Clear Token",
+    "serverTitle": "Discord Bot Commands",
+    "webhookSeparate": "This Gateway Bot is independent from the existing Discord Webhook notifications.",
+    "configureProfile": "Configure the per-user Bot in your profile.",
+    "enableServer": "Enable Bot commands for this server",
+    "guild": "Guild",
+    "channels": "Allowed channels (one or more)",
+    "roles": "Allowed roles",
+    "users": "Allowed Discord User IDs",
+    "noAdminBypass": "Discord Administrator does not bypass this whitelist.",
+    "whitelistRule": "A user ID match or any role match grants access. At least one role or user is required.",
+    "commandCapabilities": "Fixed command capabilities",
+    "presetReadonly": "Read only",
+    "presetOperations": "Common operations",
+    "presetCustom": "Custom",
+    "writeWarning": "Maintenance capabilities change remote server state. Every use still requires a public, requester-only confirmation.",
+    "saveBinding": "Save Bot binding"
+  },
+  "agentPolicy": {
+    "title": "Server AI Agent Permissions",
+    "sharedScope": "This policy applies to both Web and Discord AI. Disabling a capability takes effect again at approval and execution time.",
+    "enable": "Enable AI Agent for this server",
+    "sshBoundary": "AI never receives arbitrary Shell access. It can only list saved host commands and execute one by ID when the dedicated capability and a fresh confirmation are present.",
+    "save": "Save AI policy"
   }
 }

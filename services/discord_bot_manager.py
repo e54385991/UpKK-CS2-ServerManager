@@ -1,0 +1,1094 @@
+"""Lifecycle-managed per-user Discord Gateway clients and Slash Commands."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import logging
+import uuid
+from contextlib import suppress
+from dataclasses import dataclass
+
+import discord
+from discord import app_commands
+from sqlmodel import select
+
+from modules.database import async_session_maker
+from modules.models import (
+    DiscordOperationRun,
+    ManagedPlugin,
+    MarketPlugin,
+    Server,
+    ServerDiscordBinding,
+    User,
+    UserDiscordBot,
+)
+from modules.schemas.discord import DiscordCapability
+from modules.utils import get_current_time
+from services.ai_security import decrypt_credential, redact_sensitive_text
+from services.ai_tools import (
+    TOOLS_BY_NAME,
+    ApplyPluginPlanInput,
+    ServerControlInput,
+    ServerOperationInput,
+    ToolContext,
+)
+from services.discord_ai_service import (
+    approve_discord_tool,
+    ask_discord_agent,
+    discord_run_snapshot,
+    reset_discord_conversation,
+)
+from services.discord_authorization_service import (
+    DiscordAuthorizationDenied,
+    authorized_bindings,
+)
+from services.discord_operation_service import (
+    DiscordOperationDenied,
+    confirm_operation,
+    create_operation,
+)
+from services.redis_manager import redis_manager
+
+logger = logging.getLogger(__name__)
+LEASE_TTL_SECONDS = 60
+LEASE_RENEW_SECONDS = 20
+RECONCILE_SECONDS = 30
+
+
+def _safe_text(value, limit: int = 3900) -> str:
+    if isinstance(value, str):
+        text = value
+    else:
+        text = json.dumps(value, ensure_ascii=False, indent=2, default=str)
+    return redact_sensitive_text(text, limit=limit)
+
+
+def _roles(interaction: discord.Interaction) -> set[str]:
+    member = interaction.user
+    return {
+        str(role.id)
+        for role in getattr(member, "roles", [])
+        if getattr(role, "id", None) is not None
+    }
+
+
+def _simple_plan(server: Server, action: str) -> dict:
+    return {
+        "server_id": server.id,
+        "server_name": server.name,
+        "action": action,
+        "steps": ["acquire maintenance lock", f"execute {action}", "report final result"],
+    }
+
+
+class _ConfirmView(discord.ui.View):
+    def __init__(self, operation_id: str, *, warnings: bool = False) -> None:
+        super().__init__(timeout=None)
+        self.add_item(
+            discord.ui.Button(
+                label="Confirm and accept warnings" if warnings else "Confirm",
+                style=discord.ButtonStyle.danger,
+                custom_id=f"cs2:op:{operation_id}:confirm",
+            )
+        )
+        self.add_item(
+            discord.ui.Button(
+                label="Cancel",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"cs2:op:{operation_id}:cancel",
+            )
+        )
+
+
+class _AIConfirmView(discord.ui.View):
+    def __init__(self, run_id: str, tool_run_id: str) -> None:
+        super().__init__(timeout=None)
+        self.add_item(
+            discord.ui.Button(
+                label="Confirm AI operation",
+                style=discord.ButtonStyle.danger,
+                custom_id=f"cs2:ai:{run_id}:{tool_run_id}:confirm",
+            )
+        )
+
+
+class ManagedDiscordClient(discord.Client):
+    def __init__(self, manager: "DiscordBotManager", owner_user_id: int) -> None:
+        intents = discord.Intents.none()
+        intents.guilds = True
+        super().__init__(intents=intents)
+        self.manager = manager
+        self.owner_user_id = owner_user_id
+        self.tree = app_commands.CommandTree(self)
+        self._register_commands()
+
+    async def on_ready(self) -> None:
+        await self.manager._client_ready(self)
+
+    async def on_guild_remove(self, guild: discord.Guild) -> None:
+        await self.manager._guild_removed(self.owner_user_id, str(guild.id))
+
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        if interaction.type != discord.InteractionType.component:
+            return
+        custom_id = str((interaction.data or {}).get("custom_id") or "")
+        if custom_id.startswith("cs2:op:") or custom_id.startswith("cs2:ai:"):
+            await self.manager.handle_component(self, interaction, custom_id)
+
+    async def sync_bound_guilds(self) -> None:
+        async with async_session_maker() as db:
+            result = await db.execute(
+                select(ServerDiscordBinding).where(
+                    ServerDiscordBinding.user_id == self.owner_user_id,
+                    ServerDiscordBinding.enabled.is_(True),
+                )
+            )
+            bindings = list(result.scalars().all())
+        bound_ids = {int(item.guild_id) for item in bindings if item.guild_id}
+        guild_ids = {guild.id for guild in self.guilds}
+        for guild_id in guild_ids:
+            guild = discord.Object(id=guild_id)
+            try:
+                self.tree.clear_commands(guild=guild)
+                if guild_id in bound_ids:
+                    self.tree.copy_global_to(guild=guild)
+                await self.tree.sync(guild=guild)
+            except Exception as exc:
+                logger.warning(
+                    "Discord command sync failed for owner %s Guild %s: %s",
+                    self.owner_user_id,
+                    guild_id,
+                    exc,
+                )
+                await self.manager._mark_guild_invalid(
+                    self.owner_user_id, str(guild_id), "command_sync_failed"
+                )
+            else:
+                await self.manager._clear_guild_invalid(self.owner_user_id, str(guild_id))
+        missing = bound_ids - guild_ids
+        for guild_id in missing:
+            await self.manager._mark_guild_invalid(
+                self.owner_user_id, str(guild_id), "bot_not_in_guild"
+            )
+
+    async def _autocomplete_server(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        if interaction.guild_id is None or interaction.channel_id is None:
+            return []
+        async with async_session_maker() as db:
+            try:
+                pairs = await authorized_bindings(
+                    db,
+                    bot_owner_user_id=self.owner_user_id,
+                    guild_id=str(interaction.guild_id),
+                    channel_id=str(interaction.channel_id),
+                    actor_user_id=str(interaction.user.id),
+                    actor_role_ids=_roles(interaction),
+                )
+            except DiscordAuthorizationDenied:
+                return []
+        needle = current.casefold().strip()
+        return [
+            app_commands.Choice(name=server.name[:100], value=str(server.id))
+            for _binding, server in pairs
+            if not needle or needle in server.name.casefold() or needle in str(server.id)
+        ][:25]
+
+    def _register_commands(self) -> None:
+        cs2 = app_commands.Group(name="cs2", description="Manage authorized CS2 servers")
+        plugin = app_commands.Group(name="plugin", description="Browse and manage plugins")
+        agent = app_commands.Group(name="agent", description="Use the server-scoped AI Agent")
+
+        async def help_command(interaction: discord.Interaction) -> None:
+            await self.manager.command_help(self, interaction)
+
+        async def status_command(
+            interaction: discord.Interaction, server: str | None = None
+        ) -> None:
+            await self.manager.command_status(self, interaction, server)
+
+        async def start_command(
+            interaction: discord.Interaction, server: str | None = None
+        ) -> None:
+            await self.manager.command_write(self, interaction, "start", server)
+
+        async def stop_command(interaction: discord.Interaction, server: str | None = None) -> None:
+            await self.manager.command_write(self, interaction, "stop", server)
+
+        async def restart_command(
+            interaction: discord.Interaction, server: str | None = None
+        ) -> None:
+            await self.manager.command_write(self, interaction, "restart", server)
+
+        async def update_command(
+            interaction: discord.Interaction, server: str | None = None
+        ) -> None:
+            await self.manager.command_write(self, interaction, "update", server)
+
+        async def validate_command(
+            interaction: discord.Interaction, server: str | None = None
+        ) -> None:
+            await self.manager.command_write(self, interaction, "validate", server)
+
+        async def plugin_search(
+            interaction: discord.Interaction, query: str, server: str | None = None
+        ) -> None:
+            await self.manager.command_plugin_search(self, interaction, query, server)
+
+        async def plugin_list(interaction: discord.Interaction, server: str | None = None) -> None:
+            await self.manager.command_plugin_list(self, interaction, server)
+
+        async def plugin_install(
+            interaction: discord.Interaction, plugin_id: int, server: str | None = None
+        ) -> None:
+            await self.manager.command_plugin_install(self, interaction, plugin_id, server)
+
+        async def plugin_upgrade(
+            interaction: discord.Interaction, plugin_id: int, server: str | None = None
+        ) -> None:
+            await self.manager.command_plugin_upgrade(self, interaction, plugin_id, server)
+
+        async def agent_ask(
+            interaction: discord.Interaction, prompt: str, server: str | None = None
+        ) -> None:
+            await self.manager.command_agent_ask(self, interaction, prompt, server)
+
+        async def agent_reset(interaction: discord.Interaction, server: str | None = None) -> None:
+            await self.manager.command_agent_reset(self, interaction, server)
+
+        commands = [
+            cs2.command(name="status", description="Show CS2 server status")(status_command),
+            cs2.command(name="start", description="Plan and confirm a server start")(start_command),
+            cs2.command(name="stop", description="Plan and confirm a server stop")(stop_command),
+            cs2.command(name="restart", description="Plan and confirm a server restart")(
+                restart_command
+            ),
+            cs2.command(name="update", description="Plan and confirm a CS2 update")(update_command),
+            cs2.command(name="validate", description="Plan and confirm CS2 validation")(
+                validate_command
+            ),
+            plugin.command(name="search", description="Search the plugin market")(plugin_search),
+            plugin.command(name="list", description="List managed plugins")(plugin_list),
+            plugin.command(name="install", description="Plan a market plugin install")(
+                plugin_install
+            ),
+            plugin.command(name="upgrade", description="Plan a managed plugin upgrade")(
+                plugin_upgrade
+            ),
+            agent.command(name="ask", description="Ask the server-scoped AI Agent")(agent_ask),
+            agent.command(name="reset", description="Start a new isolated AI context")(agent_reset),
+        ]
+        cs2.command(name="help", description="Show authorized CS2 Bot commands")(help_command)
+        cs2.add_command(plugin)
+        cs2.add_command(agent)
+        self.tree.add_command(cs2)
+        for command in commands:
+            if "server" in {parameter.name for parameter in command.parameters}:
+                command.autocomplete("server")(self._autocomplete_server)
+
+
+@dataclass(slots=True)
+class _Runtime:
+    client: ManagedDiscordClient
+    fingerprint: str
+    binding_fingerprint: str
+    lease_token: str
+    client_task: asyncio.Task
+    renew_task: asyncio.Task
+
+
+class DiscordBotManager:
+    def __init__(self) -> None:
+        self._runtimes: dict[int, _Runtime] = {}
+        self._started = False
+        self._reconcile_task: asyncio.Task | None = None
+        self._lock = asyncio.Lock()
+
+    async def start(self) -> None:
+        if self._started:
+            return
+        self._started = True
+        await self.reconcile_all()
+        self._reconcile_task = asyncio.create_task(self._reconcile_loop())
+
+    async def stop(self) -> None:
+        self._started = False
+        if self._reconcile_task is not None:
+            self._reconcile_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._reconcile_task
+            self._reconcile_task = None
+        for user_id in list(self._runtimes):
+            await self._stop_runtime(user_id, status="disabled")
+
+    async def _reconcile_loop(self) -> None:
+        while self._started:
+            await asyncio.sleep(RECONCILE_SECONDS)
+            try:
+                await self.reconcile_all()
+            except Exception:
+                logger.exception("Discord Bot reconciliation failed")
+
+    async def reconcile_all(self) -> None:
+        async with async_session_maker() as db:
+            result = await db.execute(select(UserDiscordBot.user_id))
+            user_ids = set(result.scalars().all()) | set(self._runtimes)
+        for user_id in user_ids:
+            await self.reconcile_user(user_id)
+
+    async def reconcile_user(self, user_id: int) -> None:
+        if not self._started:
+            return
+        async with self._lock:
+            async with async_session_maker() as db:
+                bot = await db.get(UserDiscordBot, user_id)
+                user = await db.get(User, user_id)
+                binding_result = await db.execute(
+                    select(ServerDiscordBinding).where(ServerDiscordBinding.user_id == user_id)
+                )
+                bindings = list(binding_result.scalars().all())
+                should_run = bool(
+                    bot and user and user.is_active and bot.enabled and bot.token_encrypted
+                )
+                encrypted = bot.token_encrypted if bot else None
+            if not should_run or not encrypted:
+                await self._stop_runtime(user_id, status="disabled")
+                return
+            fingerprint = hashlib.sha256(encrypted.encode()).hexdigest()
+            binding_payload = [
+                {
+                    "server_id": item.server_id,
+                    "enabled": item.enabled,
+                    "guild_id": item.guild_id,
+                    "channels": item.channel_ids,
+                    "roles": item.role_ids,
+                    "users": item.user_ids,
+                    "capabilities": item.capabilities,
+                    "invalid_reason": item.invalid_reason,
+                }
+                for item in sorted(bindings, key=lambda value: value.server_id)
+            ]
+            binding_fingerprint = hashlib.sha256(
+                json.dumps(binding_payload, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            runtime = self._runtimes.get(user_id)
+            if runtime is not None and runtime.fingerprint == fingerprint:
+                if runtime.binding_fingerprint != binding_fingerprint:
+                    runtime.binding_fingerprint = binding_fingerprint
+                    await runtime.client.sync_bound_guilds()
+                return
+            if runtime is not None:
+                await self._stop_runtime(user_id, status="restarting")
+            lease_token = uuid.uuid4().hex
+            lease_key = f"discord_gateway:user:{user_id}"
+            acquired = await redis_manager.acquire_lock(lease_key, lease_token, LEASE_TTL_SECONDS)
+            if acquired is None:
+                await self._update_bot_status(
+                    user_id, "redis_unavailable", "Redis lease unavailable; Gateway not started"
+                )
+                return
+            if not acquired:
+                return
+            try:
+                token = decrypt_credential(encrypted)
+            except Exception as exc:
+                await redis_manager.release_lock(lease_key, lease_token)
+                await self._update_bot_status(user_id, "error", str(exc))
+                return
+            if not token:
+                await redis_manager.release_lock(lease_key, lease_token)
+                await self._update_bot_status(user_id, "error", "Bot Token unavailable")
+                return
+            client = ManagedDiscordClient(self, user_id)
+            client_task = asyncio.create_task(client.start(token, reconnect=True))
+            renew_task = asyncio.create_task(self._renew_lease(user_id, lease_token))
+            self._runtimes[user_id] = _Runtime(
+                client=client,
+                fingerprint=fingerprint,
+                binding_fingerprint=binding_fingerprint,
+                lease_token=lease_token,
+                client_task=client_task,
+                renew_task=renew_task,
+            )
+            client_task.add_done_callback(
+                lambda task, uid=user_id: asyncio.create_task(self._client_stopped(uid, task))
+            )
+            await self._update_bot_status(user_id, "connecting", None)
+
+    async def _renew_lease(self, user_id: int, token: str) -> None:
+        key = f"discord_gateway:user:{user_id}"
+        while self._started:
+            await asyncio.sleep(LEASE_RENEW_SECONDS)
+            if not await redis_manager.refresh_lock(key, token, LEASE_TTL_SECONDS):
+                logger.error("Discord Gateway lease lost for user %s; closing client", user_id)
+                runtime = self._runtimes.get(user_id)
+                if runtime is not None and runtime.lease_token == token:
+                    self._runtimes.pop(user_id, None)
+                    await runtime.client.close()
+                    await self._update_bot_status(user_id, "lease_lost", "Redis lease lost")
+                return
+
+    async def _stop_runtime(self, user_id: int, *, status: str) -> None:
+        runtime = self._runtimes.pop(user_id, None)
+        if runtime is None:
+            await self._update_bot_status(user_id, status, None)
+            return
+        runtime.renew_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await runtime.renew_task
+        await runtime.client.close()
+        runtime.client_task.cancel()
+        await asyncio.gather(runtime.client_task, return_exceptions=True)
+        await redis_manager.release_lock(f"discord_gateway:user:{user_id}", runtime.lease_token)
+        await self._update_bot_status(user_id, status, None)
+
+    async def _client_stopped(self, user_id: int, task: asyncio.Task) -> None:
+        runtime = self._runtimes.get(user_id)
+        if runtime is None or runtime.client_task is not task:
+            return
+        self._runtimes.pop(user_id, None)
+        runtime.renew_task.cancel()
+        await redis_manager.release_lock(f"discord_gateway:user:{user_id}", runtime.lease_token)
+        error = None
+        if not task.cancelled():
+            with suppress(Exception):
+                exception = task.exception()
+                error = str(exception) if exception else None
+        await self._update_bot_status(
+            user_id,
+            "error" if error else "disconnected",
+            error or "Discord Gateway disconnected",
+        )
+
+    async def _client_ready(self, client: ManagedDiscordClient) -> None:
+        await self._update_bot_status(client.owner_user_id, "connected", None, connected=True)
+        await client.sync_bound_guilds()
+
+    async def _update_bot_status(
+        self, user_id: int, status: str, error: str | None, *, connected: bool = False
+    ) -> None:
+        async with async_session_maker() as db:
+            bot = await db.get(UserDiscordBot, user_id)
+            if bot is None:
+                return
+            bot.connection_status = status
+            bot.last_error = _safe_text(error, 1000) if error else None
+            if connected:
+                bot.last_connected_at = get_current_time()
+            db.add(bot)
+            await db.commit()
+
+    async def _mark_guild_invalid(self, user_id: int, guild_id: str, reason: str) -> None:
+        async with async_session_maker() as db:
+            result = await db.execute(
+                select(ServerDiscordBinding).where(
+                    ServerDiscordBinding.user_id == user_id,
+                    ServerDiscordBinding.guild_id == guild_id,
+                )
+            )
+            for binding in result.scalars().all():
+                binding.invalid_reason = reason
+                db.add(binding)
+            await db.commit()
+
+    async def _clear_guild_invalid(self, user_id: int, guild_id: str) -> None:
+        async with async_session_maker() as db:
+            result = await db.execute(
+                select(ServerDiscordBinding).where(
+                    ServerDiscordBinding.user_id == user_id,
+                    ServerDiscordBinding.guild_id == guild_id,
+                    ServerDiscordBinding.invalid_reason.in_(
+                        ["bot_not_in_guild", "command_sync_failed", "bot_token_missing"]
+                    ),
+                )
+            )
+            for binding in result.scalars().all():
+                binding.invalid_reason = None
+                db.add(binding)
+            await db.commit()
+
+    async def _guild_removed(self, user_id: int, guild_id: str) -> None:
+        await self._mark_guild_invalid(user_id, guild_id, "bot_not_in_guild")
+
+    async def _resolve_server(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        capability: DiscordCapability,
+        server_value: str | None,
+    ) -> Server:
+        if interaction.guild_id is None or interaction.channel_id is None:
+            raise DiscordAuthorizationDenied(
+                "Commands are only available in configured Guild channels"
+            )
+        async with async_session_maker() as db:
+            pairs = await authorized_bindings(
+                db,
+                bot_owner_user_id=client.owner_user_id,
+                guild_id=str(interaction.guild_id),
+                channel_id=str(interaction.channel_id),
+                actor_user_id=str(interaction.user.id),
+                actor_role_ids=_roles(interaction),
+                required_capability=capability,
+            )
+            if server_value:
+                with suppress(ValueError):
+                    server_id = int(server_value)
+                    for _binding, server in pairs:
+                        if server.id == server_id:
+                            return server
+                raise DiscordAuthorizationDenied("Selected server is unavailable or unauthorized")
+            if len(pairs) == 1:
+                return pairs[0][1]
+            if not pairs:
+                raise DiscordAuthorizationDenied(
+                    "No authorized server is available for this command"
+                )
+            raise DiscordAuthorizationDenied(
+                "Multiple servers are available; select one explicitly"
+            )
+
+    async def _respond_error(self, interaction: discord.Interaction, exc: Exception) -> None:
+        message = _safe_text(str(exc), 1800)
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+
+    async def command_help(
+        self, client: ManagedDiscordClient, interaction: discord.Interaction
+    ) -> None:
+        try:
+            if interaction.guild_id is None or interaction.channel_id is None:
+                raise DiscordAuthorizationDenied("Use this command in a configured Guild channel")
+            async with async_session_maker() as db:
+                pairs = await authorized_bindings(
+                    db,
+                    bot_owner_user_id=client.owner_user_id,
+                    guild_id=str(interaction.guild_id),
+                    channel_id=str(interaction.channel_id),
+                    actor_user_id=str(interaction.user.id),
+                    actor_role_ids=_roles(interaction),
+                )
+            if not pairs:
+                raise DiscordAuthorizationDenied("You are not on the server whitelist")
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+            return
+        await interaction.response.send_message(
+            "`/cs2 status|start|stop|restart|update|validate`\n"
+            "`/cs2 plugin search|list|install|upgrade`\n"
+            "`/cs2 agent ask|reset`\n"
+            "Write operations always require a public confirmation by the requester.",
+            ephemeral=False,
+        )
+
+    async def command_status(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        server_value: str | None,
+    ) -> None:
+        try:
+            server = await self._resolve_server(
+                client, interaction, DiscordCapability.STATUS, server_value
+            )
+            await interaction.response.defer(ephemeral=False)
+            from services.a2s_query import a2s_service
+
+            host = server.a2s_query_host or server.host
+            port = server.a2s_query_port or server.game_port
+            ok, info = await a2s_service.query_server_info(host, port, timeout=5)
+            fields = [
+                ("Panel status", server.status.value if server.status else "unknown"),
+                ("Endpoint", f"{host}:{port}"),
+            ]
+            if ok and info:
+                fields.extend(
+                    [
+                        ("Map", str(info.get("map_name") or "unknown")),
+                        (
+                            "Players",
+                            f"{info.get('player_count', 0)}/{info.get('max_players', 0)}",
+                        ),
+                    ]
+                )
+            embed = discord.Embed(
+                title=server.name,
+                description="A2S online" if ok else "A2S unavailable",
+                color=discord.Color.green() if ok else discord.Color.orange(),
+            )
+            for name, value in fields:
+                embed.add_field(name=name, value=value, inline=True)
+            await interaction.edit_original_response(embed=embed)
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def _send_confirmation(
+        self,
+        interaction: discord.Interaction,
+        server: Server,
+        action: str,
+        capability: DiscordCapability,
+        arguments: dict,
+        plan: dict,
+        *,
+        warnings: bool = False,
+    ) -> None:
+        async with async_session_maker() as db:
+            operation = await create_operation(
+                db,
+                server=server,
+                actor_user_id=str(interaction.user.id),
+                guild_id=str(interaction.guild_id),
+                channel_id=str(interaction.channel_id),
+                action=action,
+                required_capabilities=[capability],
+                arguments=arguments,
+                plan=plan,
+            )
+        embed = discord.Embed(
+            title=f"Confirm {action}",
+            description=f"Server: **{server.name}**\nExpires in 15 minutes.",
+            color=discord.Color.orange(),
+        )
+        embed.add_field(
+            name="Immutable plan", value=f"```json\n{_safe_text(plan, 900)}\n```", inline=False
+        )
+        await interaction.edit_original_response(
+            embed=embed, view=_ConfirmView(operation.id, warnings=warnings)
+        )
+        message = await interaction.original_response()
+        async with async_session_maker() as db:
+            saved = await db.get(DiscordOperationRun, operation.id)
+            if saved:
+                saved.message_id = str(message.id)
+                db.add(saved)
+                await db.commit()
+
+    async def command_write(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        action: str,
+        server_value: str | None,
+    ) -> None:
+        try:
+            capability = DiscordCapability(action)
+            server = await self._resolve_server(client, interaction, capability, server_value)
+            await interaction.response.defer(ephemeral=False)
+            await self._send_confirmation(
+                interaction,
+                server,
+                action,
+                capability,
+                {"action": action},
+                _simple_plan(server, action),
+            )
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def command_plugin_search(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        query: str,
+        server_value: str | None,
+    ) -> None:
+        try:
+            await self._resolve_server(
+                client, interaction, DiscordCapability.PLUGIN_BROWSE, server_value
+            )
+            async with async_session_maker() as db:
+                plugins, total = await MarketPlugin.search_plugins(db, search_query=query, limit=10)
+            lines = [
+                f"`{item.id}` **{item.title}** — {item.version or 'unknown'}" for item in plugins
+            ]
+            await interaction.response.send_message(
+                f"Found {total} plugin(s)\n" + ("\n".join(lines) or "No matches"),
+                ephemeral=False,
+            )
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def command_plugin_list(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        server_value: str | None,
+    ) -> None:
+        try:
+            server = await self._resolve_server(
+                client, interaction, DiscordCapability.PLUGIN_BROWSE, server_value
+            )
+            async with async_session_maker() as db:
+                result = await db.execute(
+                    select(ManagedPlugin)
+                    .where(ManagedPlugin.server_id == server.id)
+                    .order_by(ManagedPlugin.display_name.asc())
+                )
+                plugins = list(result.scalars().all())
+            lines = [
+                f"`{item.id}` **{item.display_name}** — {item.installed_version}"
+                for item in plugins[:25]
+            ]
+            await interaction.response.send_message(
+                "\n".join(lines) if lines else "No managed plugins", ephemeral=False
+            )
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def _market_plan(self, server: Server, plugin_id: int) -> tuple[dict, dict, bool]:
+        from services.plugin_conflict_service import build_plugin_install_plan
+
+        async with async_session_maker() as db:
+            plan = await build_plugin_install_plan(db, server.id, plugin_id, server=server)
+        if plan.get("hard_conflicts"):
+            raise ValueError("Hard plugin conflict: " + _safe_text(plan["hard_conflicts"], 1000))
+        warning_ids = [
+            int(item["rule_id"])
+            for item in plan.get("warnings", [])
+            if isinstance(item, dict) and item.get("rule_id") is not None
+        ]
+        stable_plan = {
+            "server_id": server.id,
+            "plugin": plan.get("plugin"),
+            "steps": plan.get("steps", []),
+            "warnings": plan.get("warnings", []),
+            "plan_hash": plan["plan_hash"],
+            "dependencies_limited_to_plan": True,
+        }
+        arguments = {
+            "plugin_id": plugin_id,
+            "expected_plan_hash": plan["plan_hash"],
+            "acknowledge_warning_rule_ids": warning_ids,
+        }
+        return stable_plan, arguments, bool(plan.get("warnings"))
+
+    async def command_plugin_install(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        plugin_id: int,
+        server_value: str | None,
+    ) -> None:
+        try:
+            server = await self._resolve_server(
+                client, interaction, DiscordCapability.PLUGIN_INSTALL, server_value
+            )
+            await interaction.response.defer(ephemeral=False)
+            plan, arguments, warnings = await self._market_plan(server, plugin_id)
+            await self._send_confirmation(
+                interaction,
+                server,
+                "plugin_install",
+                DiscordCapability.PLUGIN_INSTALL,
+                arguments,
+                plan,
+                warnings=warnings,
+            )
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def command_plugin_upgrade(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        plugin_id: int,
+        server_value: str | None,
+    ) -> None:
+        try:
+            server = await self._resolve_server(
+                client, interaction, DiscordCapability.PLUGIN_UPGRADE, server_value
+            )
+            await interaction.response.defer(ephemeral=False)
+            from services.plugin_auto_update_service import plugin_auto_update_service
+
+            plan = await plugin_auto_update_service.build_plugin_upgrade_plan(server.id, plugin_id)
+            if plan["no_op"]:
+                await interaction.edit_original_response(
+                    content=f"{plan['name']} is already up to date.", embed=None, view=None
+                )
+                return
+            await self._send_confirmation(
+                interaction,
+                server,
+                "plugin_upgrade",
+                DiscordCapability.PLUGIN_UPGRADE,
+                {"plugin_id": plugin_id},
+                plan,
+            )
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def command_agent_ask(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        prompt: str,
+        server_value: str | None,
+    ) -> None:
+        try:
+            server = await self._resolve_server(
+                client, interaction, DiscordCapability.AGENT_ASK, server_value
+            )
+            await interaction.response.defer(ephemeral=False)
+            await interaction.edit_original_response(
+                embed=discord.Embed(title="AI Agent", description="Working…")
+            )
+            run_id = await ask_discord_agent(
+                owner_user_id=client.owner_user_id,
+                server_id=server.id,
+                actor_user_id=str(interaction.user.id),
+                guild_id=str(interaction.guild_id),
+                channel_id=str(interaction.channel_id),
+                prompt=prompt,
+            )
+            await self._render_ai_run(interaction, run_id)
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def command_agent_reset(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        server_value: str | None,
+    ) -> None:
+        try:
+            server = await self._resolve_server(
+                client, interaction, DiscordCapability.AGENT_ASK, server_value
+            )
+            await reset_discord_conversation(
+                owner_user_id=client.owner_user_id,
+                server_id=server.id,
+                actor_user_id=str(interaction.user.id),
+                guild_id=str(interaction.guild_id),
+                channel_id=str(interaction.channel_id),
+            )
+            await interaction.response.send_message(
+                f"Started a new isolated AI context for **{server.name}**.", ephemeral=False
+            )
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def _render_ai_run(self, interaction: discord.Interaction, run_id: str) -> None:
+        snapshot = await discord_run_snapshot(run_id)
+        if snapshot["status"] == "waiting_approval" and snapshot["tool"]:
+            tool = snapshot["tool"]
+            embed = discord.Embed(
+                title=f"AI confirmation: {tool['name']}",
+                description="Only the original requester can confirm. Expires in 15 minutes.",
+                color=discord.Color.orange(),
+            )
+            embed.add_field(
+                name="Plan", value=f"```json\n{_safe_text(tool['plan'], 900)}\n```", inline=False
+            )
+            await interaction.edit_original_response(
+                embed=embed, view=_AIConfirmView(run_id, tool["id"])
+            )
+            return
+        color = discord.Color.green() if snapshot["status"] == "completed" else discord.Color.red()
+        description = snapshot["message"] or snapshot["error"] or snapshot["status"]
+        await interaction.edit_original_response(
+            embed=discord.Embed(title="AI Agent", description=_safe_text(description), color=color),
+            view=None,
+        )
+
+    async def handle_component(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        custom_id: str,
+    ) -> None:
+        try:
+            parts = custom_id.split(":")
+            if parts[1] == "op":
+                operation_id, decision = parts[2], parts[3]
+                if decision == "cancel":
+                    await self._cancel_operation(interaction, operation_id)
+                    return
+                await interaction.response.defer(ephemeral=False)
+                await self._confirm_and_execute(interaction, operation_id)
+            elif parts[1] == "ai":
+                run_id, tool_run_id = parts[2], parts[3]
+                await interaction.response.defer(ephemeral=False)
+                task = asyncio.create_task(
+                    approve_discord_tool(
+                        run_id=run_id,
+                        tool_run_id=tool_run_id,
+                        actor_user_id=str(interaction.user.id),
+                        actor_role_ids=_roles(interaction),
+                        guild_id=str(interaction.guild_id),
+                        channel_id=str(interaction.channel_id),
+                    )
+                )
+                while not task.done():
+                    snapshot = await discord_run_snapshot(run_id)
+                    progress = snapshot.get("progress") or {}
+                    detail = progress.get("snapshot") or {}
+                    message = (
+                        detail.get("message")
+                        or f"{progress.get('tool', 'AI tool')}: {progress.get('status', 'running')}"
+                    )
+                    with suppress(discord.HTTPException):
+                        await interaction.message.edit(
+                            embed=discord.Embed(
+                                title="AI Agent operation",
+                                description=_safe_text(message, 3500),
+                                color=discord.Color.blurple(),
+                            ),
+                            view=None,
+                        )
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=2)
+                    except TimeoutError:
+                        continue
+                await task
+                await self._render_ai_run(interaction, run_id)
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def _cancel_operation(self, interaction: discord.Interaction, operation_id: str) -> None:
+        async with async_session_maker() as db:
+            item = await db.get(DiscordOperationRun, operation_id)
+            if item is None or item.status != "pending":
+                raise DiscordOperationDenied("Operation is no longer pending")
+            if item.actor_user_id != str(interaction.user.id):
+                raise DiscordOperationDenied("Only the original requester may cancel")
+            item.status = "cancelled"
+            item.completed_at = get_current_time()
+            db.add(item)
+            await db.commit()
+        await interaction.response.edit_message(
+            embed=discord.Embed(title="Operation cancelled", color=discord.Color.greyple()),
+            view=None,
+        )
+
+    async def _fresh_plan(self, item: DiscordOperationRun, server: Server) -> dict:
+        if item.action == "plugin_install":
+            plan, _arguments, _warnings = await self._market_plan(
+                server, int(item.arguments["plugin_id"])
+            )
+            return plan
+        if item.action == "plugin_upgrade":
+            from services.plugin_auto_update_service import plugin_auto_update_service
+
+            return await plugin_auto_update_service.build_plugin_upgrade_plan(
+                server.id, int(item.arguments["plugin_id"])
+            )
+        return _simple_plan(server, item.action)
+
+    async def _confirm_and_execute(
+        self, interaction: discord.Interaction, operation_id: str
+    ) -> None:
+        async with async_session_maker() as db:
+            pending = await db.get(DiscordOperationRun, operation_id)
+            if pending is None:
+                raise DiscordOperationDenied("Operation not found")
+            server = await db.get(Server, pending.server_id)
+            if server is None:
+                raise DiscordOperationDenied("Server not found")
+        fresh_plan = await self._fresh_plan(pending, server)
+        async with async_session_maker() as db:
+            item = await confirm_operation(
+                db,
+                operation_id=operation_id,
+                actor_user_id=str(interaction.user.id),
+                actor_role_ids=_roles(interaction),
+                fresh_plan=fresh_plan,
+            )
+            item.status = "running"
+            db.add(item)
+            await db.commit()
+        await interaction.message.edit(
+            embed=discord.Embed(title=f"Running {item.action}", description="Starting…"),
+            view=None,
+        )
+        try:
+            result = await self._execute_operation(interaction, item)
+        except Exception as exc:
+            safe_error = _safe_text(str(exc), 1800)
+            async with async_session_maker() as db:
+                saved = await db.get(DiscordOperationRun, item.id)
+                if saved:
+                    saved.status = "failed"
+                    saved.error = safe_error
+                    saved.result = {"success": False, "error": safe_error}
+                    saved.completed_at = get_current_time()
+                    db.add(saved)
+                    await db.commit()
+            await interaction.message.edit(
+                embed=discord.Embed(
+                    title=f"{item.action} failed",
+                    description=safe_error,
+                    color=discord.Color.red(),
+                )
+            )
+            return
+        async with async_session_maker() as db:
+            saved = await db.get(DiscordOperationRun, item.id)
+            if saved:
+                saved.status = "completed" if result.get("success", True) else "failed"
+                saved.result = result
+                saved.completed_at = get_current_time()
+                db.add(saved)
+                await db.commit()
+        await interaction.message.edit(
+            embed=discord.Embed(
+                title=f"{item.action} completed",
+                description=_safe_text(result),
+                color=discord.Color.green() if result.get("success", True) else discord.Color.red(),
+            )
+        )
+
+    async def _execute_operation(
+        self, interaction: discord.Interaction, item: DiscordOperationRun
+    ) -> dict:
+        async with async_session_maker() as db:
+            server = await db.get(Server, item.server_id)
+            owner = await db.get(User, item.owner_user_id)
+            if server is None or owner is None or not owner.is_active or server.user_id != owner.id:
+                raise DiscordOperationDenied("Server ownership is no longer valid")
+
+            async def progress(_event: str, payload: dict) -> None:
+                message = payload.get("message") or "Working…"
+                with suppress(discord.HTTPException):
+                    await interaction.message.edit(
+                        embed=discord.Embed(
+                            title=f"Running {item.action}", description=_safe_text(message, 3500)
+                        )
+                    )
+
+            context = ToolContext(
+                db=db,
+                user=owner,
+                server=server,
+                emit=progress,
+                run_id=f"discord:{item.id}",
+                enforce_agent_policy=False,
+            )
+            if item.action in {"start", "stop", "restart"}:
+                spec = TOOLS_BY_NAME["control_server"]
+                data = ServerControlInput.model_validate({"action": item.action})
+                return await spec.handler(context, data)
+            if item.action in {"update", "validate"}:
+                spec = TOOLS_BY_NAME["run_server_operation"]
+                data = ServerOperationInput.model_validate({"operation": item.action})
+                return await spec.handler(context, data)
+            if item.action == "plugin_install":
+                spec = TOOLS_BY_NAME["apply_plugin_plan"]
+                data = ApplyPluginPlanInput.model_validate(item.arguments)
+                return await spec.handler(context, data)
+        if item.action == "plugin_upgrade":
+            from services.plugin_auto_update_service import plugin_auto_update_service
+
+            return await plugin_auto_update_service.check_plugin(
+                item.server_id, int(item.arguments["plugin_id"])
+            )
+        raise ValueError(f"Unsupported Discord operation: {item.action}")
+
+
+discord_bot_manager = DiscordBotManager()

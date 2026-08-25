@@ -10,14 +10,23 @@ import posixpath
 import re
 import shlex
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from modules.models import ManagedPlugin, MarketPlugin, PluginCategory, Server, ServerStatus, User
+from modules.models import (
+    CustomCommand,
+    ManagedPlugin,
+    MarketPlugin,
+    PluginCategory,
+    Server,
+    ServerStatus,
+    User,
+)
+from modules.schemas.discord import AgentCapability
 from modules.utils import get_current_time
 from services.ai_access import authorized_server, enforce_agent_rate_limit
 from services.ai_knowledge import KNOWLEDGE_TOPICS, lookup_knowledge
@@ -237,6 +246,19 @@ class ApplyWorkshopPlanInput(WorkshopPlanInput):
     acknowledge_warning_rule_ids: list[int] = Field(default_factory=list)
 
 
+class SavedHostCommandInput(ToolInput):
+    command_id: int = Field(gt=0)
+    expected_command_hash: str = Field(min_length=64, max_length=64)
+
+
+class ManagedPluginUpgradeInput(ToolInput):
+    plugin_id: int = Field(gt=0)
+
+
+class ApplyManagedPluginUpgradeInput(ManagedPluginUpgradeInput):
+    expected_plan_hash: str = Field(min_length=64, max_length=64)
+
+
 EventEmitter = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 
@@ -247,9 +269,11 @@ class ToolContext:
     server: Server | None
     emit: EventEmitter
     run_id: str | None = None
+    enforce_agent_policy: bool = True
 
 
 ToolHandler = Callable[[ToolContext, ToolInput], Awaitable[dict[str, Any]]]
+CapabilityResolver = Callable[[dict[str, Any]], frozenset[AgentCapability]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,6 +284,20 @@ class ToolSpec:
     input_model: type[ToolInput]
     handler: ToolHandler
     requires_server: bool = True
+    capability_options: tuple[frozenset[AgentCapability], ...] = ()
+    capability_resolver: CapabilityResolver | None = None
+
+    def required_capabilities(self, arguments: dict[str, Any]) -> frozenset[AgentCapability]:
+        if self.capability_resolver is not None:
+            return self.capability_resolver(arguments)
+        if len(self.capability_options) == 1:
+            return self.capability_options[0]
+        return frozenset()
+
+    def is_exposed(self, allowed: frozenset[AgentCapability]) -> bool:
+        return not self.capability_options or any(
+            option <= allowed for option in self.capability_options
+        )
 
     def api_definition(self) -> dict[str, Any]:
         return {
@@ -283,6 +321,60 @@ async def _require_active_user(ctx: ToolContext) -> User:
     if user is None or not user.is_active:
         raise PermissionError("The current user is no longer active")
     return user
+
+
+def _saved_command_hash(command: CustomCommand) -> str:
+    payload = {
+        "id": command.id,
+        "target": command.target,
+        "commands": command.commands,
+        "updated_at": command.updated_at.isoformat() if command.updated_at else None,
+    }
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode()).hexdigest()
+
+
+async def list_saved_host_commands(ctx: ToolContext, _data: EmptyInput) -> dict[str, Any]:
+    server = await _require_current_server(ctx)
+    result = await ctx.db.execute(
+        select(CustomCommand).where(
+            CustomCommand.server_id == server.id,
+            CustomCommand.user_id == server.user_id,
+            CustomCommand.target == "host",
+        )
+    )
+    commands = list(result.scalars().all())
+    return {
+        "commands": [
+            {
+                "id": item.id,
+                "name": item.name,
+                "command_hash": _saved_command_hash(item),
+                "command_preview": redact_sensitive_text(item.commands, limit=4000),
+            }
+            for item in commands
+        ]
+    }
+
+
+async def execute_saved_host_command(
+    ctx: ToolContext, data: SavedHostCommandInput
+) -> dict[str, Any]:
+    server = await _require_current_server(ctx)
+    command = await CustomCommand.get_by_id_server_and_user(
+        ctx.db, data.command_id, server.id, server.user_id
+    )
+    if command is None or command.target != "host":
+        raise ValueError("Saved host command is unavailable")
+    if _saved_command_hash(command) != data.expected_command_hash:
+        raise PermissionError("Saved host command changed after approval")
+    from services.custom_command_service import execute_custom_commands
+
+    async with maintenance_lock_service.get(
+        server.id, operation="ai:saved_host_command", wait=False, ttl=900
+    ):
+        result = await execute_custom_commands(server, command.target, command.commands)
+    return sanitize_tool_result(result)
 
 
 async def _optional_linux_runtime_profile(ctx: ToolContext) -> dict[str, Any] | None:
@@ -385,6 +477,12 @@ async def list_servers(ctx: ToolContext, _: EmptyInput) -> dict[str, Any]:
         if ctx.user.is_admin
         else await Server.get_all_by_user(ctx.db, ctx.user.id, limit=100)
     )
+    from services.agent_policy_service import get_effective_agent_policy
+
+    visible = []
+    for server in servers:
+        if server.id is not None and (await get_effective_agent_policy(ctx.db, server.id)).enabled:
+            visible.append(server)
     return {
         "servers": [
             {
@@ -394,7 +492,7 @@ async def list_servers(ctx: ToolContext, _: EmptyInput) -> dict[str, Any]:
                 "game_port": server.game_port,
                 "game_directory": server.game_directory,
             }
-            for server in servers
+            for server in visible
         ]
     }
 
@@ -1155,7 +1253,26 @@ async def patch_server_text_file(ctx: ToolContext, data: FilePatchInput) -> dict
 
 async def apply_plugin_plan(ctx: ToolContext, data: ApplyPluginPlanInput) -> dict[str, Any]:
     server = await _require_current_server(ctx)
-    from services.plugin_conflict_service import execute_plugin_install_plan
+    from services.plugin_conflict_service import (
+        build_plugin_install_plan,
+        execute_plugin_install_plan,
+    )
+
+    if ctx.enforce_agent_policy:
+        plan = await build_plugin_install_plan(ctx.db, server.id, data.plugin_id, server=server)
+        plugins = await MarketPlugin.get_by_ids(ctx.db, plan["installation_order"])
+        from services.plugin_conflict_service import _panel_framework_key
+
+        if any(
+            _panel_framework_key(plugin) is not None
+            and plugin.id not in set(plan["already_installed"])
+            for plugin in plugins
+        ):
+            from services.agent_policy_service import require_agent_capabilities
+
+            await require_agent_capabilities(
+                ctx.db, server.id, frozenset({AgentCapability.MANAGE_FRAMEWORKS})
+            )
 
     return await execute_plugin_install_plan(
         ctx.db,
@@ -1171,6 +1288,32 @@ async def apply_plugin_plan(ctx: ToolContext, data: ApplyPluginPlanInput) -> dic
         lock_operation="ai:plugin_install_plan",
         operation_id=ctx.run_id,
     )
+
+
+async def plan_managed_plugin_upgrade(
+    ctx: ToolContext, data: ManagedPluginUpgradeInput
+) -> dict[str, Any]:
+    server = await _require_current_server(ctx)
+    from services.plugin_auto_update_service import plugin_auto_update_service
+
+    plan = await plugin_auto_update_service.build_plugin_upgrade_plan(server.id, data.plugin_id)
+    _, plan_hash = canonical_arguments(plan)
+    return {**plan, "plan_hash": plan_hash}
+
+
+async def apply_managed_plugin_upgrade(
+    ctx: ToolContext, data: ApplyManagedPluginUpgradeInput
+) -> dict[str, Any]:
+    server = await _require_current_server(ctx)
+    from services.plugin_auto_update_service import plugin_auto_update_service
+
+    plan = await plugin_auto_update_service.build_plugin_upgrade_plan(server.id, data.plugin_id)
+    _, plan_hash = canonical_arguments(plan)
+    if plan_hash != data.expected_plan_hash:
+        raise PermissionError("Managed plugin upgrade plan changed after approval")
+    if plan["no_op"]:
+        return {"success": True, "message": "No plugin update available", "no_op": True}
+    return await plugin_auto_update_service.check_plugin(server.id, data.plugin_id)
 
 
 async def apply_workshop_map(ctx: ToolContext, data: ApplyWorkshopPlanInput) -> dict[str, Any]:
@@ -1193,7 +1336,7 @@ async def apply_workshop_map(ctx: ToolContext, data: ApplyWorkshopPlanInput) -> 
     )
 
 
-TOOL_SPECS = (
+_RAW_TOOL_SPECS = (
     ToolSpec(
         "list_servers",
         "List servers the current user may access.",
@@ -1326,6 +1469,13 @@ TOOL_SPECS = (
         plan_github_plugin_install,
     ),
     ToolSpec(
+        "plan_managed_plugin_upgrade",
+        "Build an immutable upgrade plan for one panel-managed plugin or framework, including version, asset, backup, configuration preservation, and restart policy.",
+        "read",
+        ManagedPluginUpgradeInput,
+        plan_managed_plugin_upgrade,
+    ),
+    ToolSpec(
         "run_server_operation",
         "Deploy, update, validate, or use the panel-native Metamod/CounterStrikeSharp installers. Framework installation requires a subsequent server restart before generated configs are inspected. Requires user approval.",
         "write",
@@ -1388,14 +1538,130 @@ TOOL_SPECS = (
         GitHubApplyInput,
         apply_github_plugin_install,
     ),
+    ToolSpec(
+        "apply_managed_plugin_upgrade",
+        "Apply an approved immutable upgrade plan to one panel-managed plugin or framework.",
+        "write",
+        ApplyManagedPluginUpgradeInput,
+        apply_managed_plugin_upgrade,
+    ),
+    ToolSpec(
+        "list_saved_host_commands",
+        "List only pre-saved host quick commands and their revision hashes; arbitrary shell is never accepted.",
+        "read",
+        EmptyInput,
+        list_saved_host_commands,
+    ),
+    ToolSpec(
+        "execute_saved_host_command",
+        "Execute one pre-saved host quick command by ID and exact revision hash. Requires approval.",
+        "write",
+        SavedHostCommandInput,
+        execute_saved_host_command,
+    ),
+)
+
+
+def _control_capabilities(arguments: dict[str, Any]) -> frozenset[AgentCapability]:
+    return frozenset({AgentCapability(str(arguments.get("action")))})
+
+
+def _server_operation_capabilities(arguments: dict[str, Any]) -> frozenset[AgentCapability]:
+    operation = str(arguments.get("operation"))
+    mapping = {
+        "deploy": AgentCapability.DEPLOY,
+        "update": AgentCapability.UPDATE,
+        "validate": AgentCapability.VALIDATE,
+        "install_metamod": AgentCapability.MANAGE_FRAMEWORKS,
+        "install_counterstrikesharp": AgentCapability.MANAGE_FRAMEWORKS,
+    }
+    capability = mapping.get(operation)
+    return frozenset({capability}) if capability is not None else frozenset()
+
+
+_TOOL_CAPABILITY_OPTIONS: dict[str, tuple[frozenset[AgentCapability], ...]] = {
+    "inspect_server": (frozenset({AgentCapability.INSPECT_STATUS}),),
+    "search_server_files": (frozenset({AgentCapability.READ_LOGS_FILES}),),
+    "read_server_text_file": (frozenset({AgentCapability.READ_LOGS_FILES}),),
+    "tail_server_log": (frozenset({AgentCapability.READ_LOGS_FILES}),),
+    "list_css_error_logs": (frozenset({AgentCapability.READ_LOGS_FILES}),),
+    "read_css_error_log": (frozenset({AgentCapability.READ_LOGS_FILES}),),
+    "list_installed_plugins": (frozenset({AgentCapability.BROWSE_PLAN_PLUGINS}),),
+    "plan_plugin_install": (frozenset({AgentCapability.BROWSE_PLAN_PLUGINS}),),
+    "plan_workshop_map": (frozenset({AgentCapability.MANAGE_WORKSHOP_MAPS}),),
+    "plan_server_startup_update": (frozenset({AgentCapability.WRITE_CONFIGURATION}),),
+    "plan_plugin_crash_isolation": (frozenset({AgentCapability.RUN_PLUGIN_DIAGNOSTICS}),),
+    "get_plugin_crash_isolation": (frozenset({AgentCapability.RUN_PLUGIN_DIAGNOSTICS}),),
+    "plan_github_plugin_install": (frozenset({AgentCapability.BROWSE_PLAN_PLUGINS}),),
+    "plan_managed_plugin_upgrade": (frozenset({AgentCapability.BROWSE_PLAN_PLUGINS}),),
+    "run_server_operation": tuple(
+        frozenset({item})
+        for item in (
+            AgentCapability.DEPLOY,
+            AgentCapability.UPDATE,
+            AgentCapability.VALIDATE,
+            AgentCapability.MANAGE_FRAMEWORKS,
+        )
+    ),
+    "control_server": tuple(
+        frozenset({item})
+        for item in (AgentCapability.START, AgentCapability.STOP, AgentCapability.RESTART)
+    ),
+    "apply_server_startup_update": (
+        frozenset({AgentCapability.WRITE_CONFIGURATION, AgentCapability.RESTART}),
+    ),
+    "patch_server_text_file": (frozenset({AgentCapability.WRITE_CONFIGURATION}),),
+    "apply_plugin_plan": (frozenset({AgentCapability.INSTALL_MARKET_PLUGINS}),),
+    "apply_workshop_map": (
+        frozenset(
+            {
+                AgentCapability.MANAGE_WORKSHOP_MAPS,
+                AgentCapability.INSTALL_MARKET_PLUGINS,
+                AgentCapability.MANAGE_FRAMEWORKS,
+            }
+        ),
+    ),
+    "execute_plugin_crash_isolation": (frozenset({AgentCapability.RUN_PLUGIN_DIAGNOSTICS}),),
+    "restore_plugin_quarantine": (frozenset({AgentCapability.RUN_PLUGIN_DIAGNOSTICS}),),
+    "apply_github_plugin_install": (
+        frozenset({AgentCapability.INSTALL_OR_UPGRADE_GITHUB_PLUGINS}),
+    ),
+    "apply_managed_plugin_upgrade": (frozenset({AgentCapability.UPGRADE_MANAGED_PLUGINS}),),
+    "list_saved_host_commands": (frozenset({AgentCapability.READ_LOGS_FILES}),),
+    "execute_saved_host_command": (frozenset({AgentCapability.EXECUTE_SAVED_HOST_COMMANDS}),),
+}
+
+_TOOL_CAPABILITY_RESOLVERS: dict[str, CapabilityResolver] = {
+    "control_server": _control_capabilities,
+    "run_server_operation": _server_operation_capabilities,
+}
+
+TOOL_SPECS = tuple(
+    replace(
+        spec,
+        capability_options=_TOOL_CAPABILITY_OPTIONS.get(spec.name, ()),
+        capability_resolver=_TOOL_CAPABILITY_RESOLVERS.get(spec.name),
+    )
+    for spec in _RAW_TOOL_SPECS
 )
 
 TOOLS_BY_NAME = {spec.name: spec for spec in TOOL_SPECS}
 
 
-def tool_definitions(*, server_selected: bool) -> list[dict[str, Any]]:
+def tool_definitions(
+    *,
+    server_selected: bool,
+    allowed_capabilities: frozenset[AgentCapability] | None = None,
+) -> list[dict[str, Any]]:
     return [
-        spec.api_definition() for spec in TOOL_SPECS if server_selected or not spec.requires_server
+        spec.api_definition()
+        for spec in TOOL_SPECS
+        if (server_selected or not spec.requires_server)
+        and (
+            not spec.requires_server
+            or allowed_capabilities is None
+            or spec.is_exposed(allowed_capabilities)
+        )
     ]
 
 
@@ -1408,6 +1674,14 @@ async def execute_tool(
     if spec.requires_server and context.server is None:
         raise ValueError("Select a server before using this tool")
     validated = spec.input_model.model_validate(arguments)
+    if spec.requires_server and context.server is not None and context.server.id is not None:
+        from services.agent_policy_service import require_agent_capabilities
+
+        await require_agent_capabilities(
+            context.db,
+            context.server.id,
+            spec.required_capabilities(validated.model_dump(mode="json")),
+        )
     return sanitize_tool_result(await spec.handler(context, validated))
 
 
@@ -1477,6 +1751,19 @@ async def build_approval_summary(
         plan = await build_plugin_install_plan(context.db, server.id, data.plugin_id, server=server)
         if plan["plan_hash"] != data.expected_plan_hash:
             raise ValueError("Plugin plan changed before approval")
+        plugins = await MarketPlugin.get_by_ids(context.db, plan["installation_order"])
+        from services.plugin_conflict_service import _panel_framework_key
+
+        if any(
+            _panel_framework_key(plugin) is not None
+            and plugin.id not in set(plan["already_installed"])
+            for plugin in plugins
+        ):
+            from services.agent_policy_service import require_agent_capabilities
+
+            await require_agent_capabilities(
+                context.db, server.id, frozenset({AgentCapability.MANAGE_FRAMEWORKS})
+            )
         from services.linux_runtime_service import detect_linux_runtime_profile
 
         linux_runtime_profile = await detect_linux_runtime_profile(server)
@@ -1641,5 +1928,36 @@ async def build_approval_summary(
             "expected_result": (
                 "Settings are saved, the server is restarted, and process/A2S state is verified"
             ),
+        }
+    if name == "execute_saved_host_command":
+        data = SavedHostCommandInput.model_validate(arguments)
+        command = await CustomCommand.get_by_id_server_and_user(
+            context.db, data.command_id, server.id, server.user_id
+        )
+        if command is None or command.target != "host":
+            raise ValueError("Saved host command is unavailable")
+        if _saved_command_hash(command) != data.expected_command_hash:
+            raise ValueError("Saved host command changed before approval")
+        return {
+            **base,
+            "command_id": command.id,
+            "command_name": command.name,
+            "command_hash": data.expected_command_hash,
+            "full_command": redact_sensitive_text(command.commands, limit=12_000),
+            "expected_result": "The exact saved host command revision is executed once",
+        }
+    if name == "apply_managed_plugin_upgrade":
+        data = ApplyManagedPluginUpgradeInput.model_validate(arguments)
+        from services.plugin_auto_update_service import plugin_auto_update_service
+
+        plan = await plugin_auto_update_service.build_plugin_upgrade_plan(server.id, data.plugin_id)
+        _, plan_hash = canonical_arguments(plan)
+        if plan_hash != data.expected_plan_hash:
+            raise ValueError("Managed plugin upgrade plan changed before approval")
+        return {
+            **base,
+            "upgrade_plan": plan,
+            "expected_plan_hash": plan_hash,
+            "expected_result": "Only the selected managed plugin/framework is upgraded",
         }
     return {**base, "arguments": arguments}

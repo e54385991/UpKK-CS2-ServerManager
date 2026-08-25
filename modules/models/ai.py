@@ -110,6 +110,10 @@ class AIConversation(SQLModel, table=True):
         ),
     )
     title: str = Field(default="New conversation", max_length=255)
+    source: str = Field(default="web", max_length=16, index=True)
+    external_actor_id: Optional[str] = Field(default=None, max_length=20, index=True)
+    discord_guild_id: Optional[str] = Field(default=None, max_length=20)
+    discord_channel_id: Optional[str] = Field(default=None, max_length=20)
     created_at: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
     )
@@ -167,6 +171,8 @@ class AIRun(SQLModel, table=True):
         sa_column=Column(Integer, ForeignKey("servers.id", ondelete="SET NULL"), nullable=True),
     )
     status: str = Field(default="queued", max_length=32, index=True)
+    source: str = Field(default="web", max_length=16, index=True)
+    external_actor_id: Optional[str] = Field(default=None, max_length=20)
     error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
@@ -206,6 +212,8 @@ class AIToolRun(SQLModel, table=True):
         default=None,
         sa_column=Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
     )
+    approved_actor_type: Optional[str] = Field(default=None, max_length=16)
+    approved_external_actor_id: Optional[str] = Field(default=None, max_length=20)
     approved_at: Optional[datetime] = Field(default=None)
     approval_expires_at: Optional[datetime] = Field(default=None, index=True)
     plan_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))

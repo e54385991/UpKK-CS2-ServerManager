@@ -1196,6 +1196,89 @@
         "title": "ActionResponse",
         "type": "object"
       },
+      "AgentCapability": {
+        "enum": [
+          "inspect_status",
+          "read_logs_files",
+          "browse_plan_plugins",
+          "start",
+          "stop",
+          "restart",
+          "deploy",
+          "update",
+          "validate",
+          "manage_frameworks",
+          "install_market_plugins",
+          "install_or_upgrade_github_plugins",
+          "upgrade_managed_plugins",
+          "write_configuration",
+          "manage_workshop_maps",
+          "run_plugin_diagnostics",
+          "execute_saved_host_commands"
+        ],
+        "title": "AgentCapability",
+        "type": "string"
+      },
+      "AgentPolicyResponse": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/AgentCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "disabled_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Reason"
+          },
+          "effective_enabled": {
+            "title": "Effective Enabled",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "server_id",
+          "enabled",
+          "effective_enabled",
+          "capabilities"
+        ],
+        "title": "AgentPolicyResponse",
+        "type": "object"
+      },
+      "AgentPolicyUpdate": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/AgentCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "AgentPolicyUpdate",
+        "type": "object"
+      },
       "ApiKeyGenerate": {
         "description": "Schema for generating API key",
         "properties": {
@@ -2074,6 +2157,470 @@
           "files"
         ],
         "title": "DirectoryListResponse",
+        "type": "object"
+      },
+      "DiscordBindingResponse": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/DiscordCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "channel_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channel Ids",
+            "type": "array"
+          },
+          "disabled_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Reason"
+          },
+          "effective_enabled": {
+            "title": "Effective Enabled",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "guild_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guild Id"
+          },
+          "response_visibility": {
+            "const": "public",
+            "default": "public",
+            "title": "Response Visibility",
+            "type": "string"
+          },
+          "role_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Role Ids",
+            "type": "array"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "User Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "server_id",
+          "enabled",
+          "effective_enabled"
+        ],
+        "title": "DiscordBindingResponse",
+        "type": "object"
+      },
+      "DiscordBindingUpdate": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/DiscordCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "channel_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channel Ids",
+            "type": "array"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "guild_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guild Id"
+          },
+          "response_visibility": {
+            "const": "public",
+            "default": "public",
+            "title": "Response Visibility",
+            "type": "string"
+          },
+          "role_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Role Ids",
+            "type": "array"
+          },
+          "user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "User Ids",
+            "type": "array"
+          }
+        },
+        "title": "DiscordBindingUpdate",
+        "type": "object"
+      },
+      "DiscordBotOptionsResponse": {
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/DiscordChannelOption"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "guilds": {
+            "items": {
+              "$ref": "#/components/schemas/DiscordGuildOption"
+            },
+            "title": "Guilds",
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/DiscordRoleOption"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "title": "DiscordBotOptionsResponse",
+        "type": "object"
+      },
+      "DiscordBotSettingsResponse": {
+        "properties": {
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
+          "bot_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot User Id"
+          },
+          "connection_status": {
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "discriminator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discriminator"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "invite_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Url"
+          },
+          "last_connected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Connected At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "token_configured": {
+            "title": "Token Configured",
+            "type": "boolean"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "enabled",
+          "token_configured",
+          "connection_status"
+        ],
+        "title": "DiscordBotSettingsResponse",
+        "type": "object"
+      },
+      "DiscordBotSettingsUpdate": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "title": "DiscordBotSettingsUpdate",
+        "type": "object"
+      },
+      "DiscordBotTestRequest": {
+        "properties": {
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "title": "DiscordBotTestRequest",
+        "type": "object"
+      },
+      "DiscordBotTestResponse": {
+        "properties": {
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
+          "bot_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot User Id"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "DiscordBotTestResponse",
+        "type": "object"
+      },
+      "DiscordCapability": {
+        "enum": [
+          "status",
+          "start",
+          "stop",
+          "restart",
+          "update",
+          "validate",
+          "plugin_browse",
+          "plugin_install",
+          "plugin_upgrade",
+          "agent_ask"
+        ],
+        "title": "DiscordCapability",
+        "type": "string"
+      },
+      "DiscordChannelOption": {
+        "properties": {
+          "guild_id": {
+            "title": "Guild Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "guild_id",
+          "name",
+          "type"
+        ],
+        "title": "DiscordChannelOption",
+        "type": "object"
+      },
+      "DiscordGuildOption": {
+        "properties": {
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "DiscordGuildOption",
+        "type": "object"
+      },
+      "DiscordRoleOption": {
+        "properties": {
+          "guild_id": {
+            "title": "Guild Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "default": 0,
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "guild_id",
+          "name"
+        ],
+        "title": "DiscordRoleOption",
         "type": "object"
       },
       "DiscordSettingsResponse": {
@@ -10316,6 +10863,176 @@
         ]
       }
     },
+    "/api/auth/discord-bot": {
+      "delete": {
+        "operationId": "delete_discord_bot_api_auth_discord_bot_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscordBotSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Discord Bot",
+        "tags": [
+          "discord-bot"
+        ]
+      },
+      "get": {
+        "operationId": "get_discord_bot_api_auth_discord_bot_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscordBotSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Discord Bot",
+        "tags": [
+          "discord-bot"
+        ]
+      },
+      "put": {
+        "operationId": "update_discord_bot_api_auth_discord_bot_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscordBotSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscordBotSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Discord Bot",
+        "tags": [
+          "discord-bot"
+        ]
+      }
+    },
+    "/api/auth/discord-bot/guilds": {
+      "get": {
+        "operationId": "get_discord_bot_guilds_api_auth_discord_bot_guilds_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DiscordGuildOption"
+                  },
+                  "title": "Response Get Discord Bot Guilds Api Auth Discord Bot Guilds Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Discord Bot Guilds",
+        "tags": [
+          "discord-bot"
+        ]
+      }
+    },
+    "/api/auth/discord-bot/test": {
+      "post": {
+        "operationId": "test_discord_bot_api_auth_discord_bot_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscordBotTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscordBotTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Test Discord Bot",
+        "tags": [
+          "discord-bot"
+        ]
+      }
+    },
     "/api/auth/forgot-password": {
       "post": {
         "description": "Request password reset email",
@@ -15502,6 +16219,108 @@
         ]
       }
     },
+    "/servers/{server_id}/agent-policy": {
+      "get": {
+        "operationId": "get_server_agent_policy_servers__server_id__agent_policy_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Server Agent Policy",
+        "tags": [
+          "discord-bot"
+        ]
+      },
+      "put": {
+        "operationId": "update_server_agent_policy_servers__server_id__agent_policy_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentPolicyUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Server Agent Policy",
+        "tags": [
+          "discord-bot"
+        ]
+      }
+    },
     "/servers/{server_id}/apply-system-defaults": {
       "post": {
         "description": "Apply system default proxy settings to a server",
@@ -16321,6 +17140,172 @@
         "summary": "Get Deployment Progress",
         "tags": [
           "actions"
+        ]
+      }
+    },
+    "/servers/{server_id}/discord-bot-options": {
+      "get": {
+        "operationId": "get_server_discord_bot_options_servers__server_id__discord_bot_options_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "guild_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[1-9][0-9]{0,19}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Guild Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscordBotOptionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Server Discord Bot Options",
+        "tags": [
+          "discord-bot"
+        ]
+      }
+    },
+    "/servers/{server_id}/discord-bot-settings": {
+      "get": {
+        "operationId": "get_server_discord_bot_settings_servers__server_id__discord_bot_settings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscordBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Server Discord Bot Settings",
+        "tags": [
+          "discord-bot"
+        ]
+      },
+      "put": {
+        "operationId": "update_server_discord_bot_settings_servers__server_id__discord_bot_settings_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscordBindingUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscordBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Server Discord Bot Settings",
+        "tags": [
+          "discord-bot"
         ]
       }
     },

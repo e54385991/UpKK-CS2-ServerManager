@@ -5,6 +5,7 @@
 import hashlib
 
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession
+from modules import ServerAgentPolicy
 
 from .common import *
 
@@ -152,6 +153,7 @@ async def create_server(
     server = Server(**server_dict, user_id=current_user.id, api_key=generate_api_key())
     db.add(server)
     await db.flush()
+    db.add(ServerAgentPolicy(server_id=server.id))
     for default_path in DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS:
         db.add(
             PluginConfigSource(

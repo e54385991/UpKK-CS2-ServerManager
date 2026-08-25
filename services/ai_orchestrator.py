@@ -26,6 +26,11 @@ from modules.models import (
     User,
 )
 from modules.utils import get_current_time
+from services.agent_policy_service import (
+    AgentCapabilityDenied,
+    get_effective_agent_policy,
+    require_agent_capabilities,
+)
 from services.ai_access import audit_security_event, authorized_server
 from services.ai_events import ai_event_hub
 from services.ai_prompt import build_system_prompt
@@ -334,6 +339,7 @@ async def _create_provider_response_with_retry(
     run_id: str,
     round_index: int,
     server_selected: bool,
+    allowed_capabilities=None,
 ) -> dict[str, Any]:
     for retry_attempt in range(AI_RETRY_MAX_ATTEMPTS + 1):
         delta_emitter = _AssistantDeltaEmitter(run_id, round_index)
@@ -341,7 +347,10 @@ async def _create_provider_response_with_retry(
             response = await create_chat_completion(
                 provider,
                 messages,
-                tools=tool_definitions(server_selected=server_selected),
+                tools=tool_definitions(
+                    server_selected=server_selected,
+                    allowed_capabilities=allowed_capabilities,
+                ),
                 stream=True,
                 on_text_delta=delta_emitter.add,
             )
@@ -886,12 +895,19 @@ async def process_ai_run(run_id: str) -> None:
                         "estimated": True,
                     },
                 )
+                allowed_capabilities = None
+                if server is not None and server.id is not None:
+                    effective_policy = await get_effective_agent_policy(db, server.id)
+                    if not effective_policy.enabled:
+                        raise AgentCapabilityDenied("AI Agent is disabled for this server")
+                    allowed_capabilities = effective_policy.capabilities
                 response = await _create_provider_response_with_retry(
                     provider,
                     messages,
                     run_id=run.id,
                     round_index=round_index,
                     server_selected=server is not None,
+                    allowed_capabilities=allowed_capabilities,
                 )
                 rounds_used += 1
                 provider_usage = _provider_token_usage(response)
@@ -984,6 +1000,12 @@ async def process_ai_run(run_id: str) -> None:
                             f"Invalid arguments for {name}: {exc.errors(include_url=False)}"
                         ) from exc
                     clean_arguments = validated.model_dump(mode="json")
+                    if spec.requires_server and server is not None and server.id is not None:
+                        await require_agent_capabilities(
+                            db,
+                            server.id,
+                            spec.required_capabilities(clean_arguments),
+                        )
                     _, arguments_hash = canonical_arguments(clean_arguments)
                     signatures[(name, arguments_hash)] += 1
                     if signatures[(name, arguments_hash)] > MAX_REPEATED_CALLS:

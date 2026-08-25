@@ -321,6 +321,43 @@
             </div>
         </div>
 
+        <!-- Discord Bot Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-discord"></i> <span data-i18n="discordBot.title">Discord Bot</span></h5>
+            </div>
+            <div class="card-body">
+                <div id="discord-bot-result" class="alert d-none"></div>
+                <ol class="mb-4">
+                    <li class="mb-2" data-i18n="discordBot.stepCreate">Create a Discord Application and Bot, then copy the Bot Token. Privileged Intents are not required.</li>
+                    <li class="mb-2" data-i18n="discordBot.stepTest">Save and test the Token. The Token is encrypted and is never returned by the API.</li>
+                    <li data-i18n="discordBot.stepInvite">Use the generated minimum-permission invite link, then bind Guild channels and roles on each server page.</li>
+                </ol>
+                <form id="discord-bot-form">
+                    <div class="mb-3">
+                        <label class="form-label" for="discord-bot-token">Bot Token</label>
+                        <input class="form-control" id="discord-bot-token" type="password" autocomplete="new-password" placeholder="Leave blank to keep the saved Token">
+                        <div id="discord-bot-token-status" class="form-text"></div>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" id="discord-bot-enabled" type="checkbox">
+                        <label class="form-check-label" for="discord-bot-enabled" data-i18n="discordBot.enable">Enable Gateway connection</label>
+                    </div>
+                    <div class="border rounded p-3 mb-3">
+                        <div><strong data-i18n="discordBot.identity">Bot identity:</strong> <span id="discord-bot-identity">-</span></div>
+                        <div><strong data-i18n="discordBot.status">Connection status:</strong> <span id="discord-bot-status">-</span></div>
+                        <div id="discord-bot-error" class="text-danger small mt-2"></div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-primary" id="discord-bot-save" type="submit"><i class="bi bi-save"></i> <span data-i18n="discordBot.save">Save and validate</span></button>
+                        <button class="btn btn-outline-primary" id="discord-bot-test" type="button"><i class="bi bi-wifi"></i> <span data-i18n="discordBot.test">Test Token</span></button>
+                        <a class="btn btn-outline-success d-none" id="discord-bot-invite" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> <span data-i18n="discordBot.invite">Invite Bot</span></a>
+                        <button class="btn btn-outline-danger" id="discord-bot-clear" type="button"><i class="bi bi-trash"></i> <span data-i18n="discordBot.clear">Clear Token</span></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Reset Password Card -->
         <div class="card shadow-sm mb-4">
             <div class="card-header">
@@ -442,6 +479,85 @@ function profileAIFetch(url, options = {}) {
         headers: { ...options.headers, 'Authorization': `Bearer ${token}` }
     });
 }
+
+async function loadDiscordBotSettings() {
+    const response = await profileAIFetch('/api/auth/discord-bot');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to load Discord Bot settings');
+    document.getElementById('discord-bot-enabled').checked = !!data.enabled;
+    document.getElementById('discord-bot-token').value = '';
+    document.getElementById('discord-bot-token-status').textContent = data.token_configured
+        ? 'A Token is encrypted and saved. Leave blank to keep it.'
+        : 'No Bot Token is configured.';
+    document.getElementById('discord-bot-identity').textContent = data.bot_user_id
+        ? `${data.username || 'Bot'} (${data.bot_user_id})`
+        : '-';
+    document.getElementById('discord-bot-status').textContent = data.connection_status;
+    document.getElementById('discord-bot-error').textContent = data.last_error || '';
+    const invite = document.getElementById('discord-bot-invite');
+    if (data.invite_url) {
+        invite.href = data.invite_url;
+        invite.classList.remove('d-none');
+    } else {
+        invite.classList.add('d-none');
+    }
+}
+
+function showDiscordBotResult(message, success) {
+    const target = document.getElementById('discord-bot-result');
+    target.textContent = message;
+    target.className = `alert ${success ? 'alert-success' : 'alert-danger'}`;
+}
+
+document.getElementById('discord-bot-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.getElementById('discord-bot-save');
+    button.disabled = true;
+    try {
+        const token = document.getElementById('discord-bot-token').value.trim();
+        const body = { enabled: document.getElementById('discord-bot-enabled').checked };
+        if (token) body.token = token;
+        const response = await profileAIFetch('/api/auth/discord-bot', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Failed to save Discord Bot settings');
+        showDiscordBotResult('Discord Bot settings saved.', true);
+        await loadDiscordBotSettings();
+    } catch (error) {
+        showDiscordBotResult(error.message, false);
+    } finally {
+        button.disabled = false;
+    }
+});
+
+document.getElementById('discord-bot-test').addEventListener('click', async () => {
+    const token = document.getElementById('discord-bot-token').value.trim();
+    try {
+        const response = await profileAIFetch('/api/auth/discord-bot/test', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(token ? { token } : {})
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.detail || data.message || 'Token test failed');
+        showDiscordBotResult(`${data.message}: ${data.username} (${data.bot_user_id})`, true);
+    } catch (error) {
+        showDiscordBotResult(error.message, false);
+    }
+});
+
+document.getElementById('discord-bot-clear').addEventListener('click', async () => {
+    if (!confirm('Clear the saved Bot Token and stop the Gateway connection? Server bindings will be retained but disabled.')) return;
+    try {
+        const response = await profileAIFetch('/api/auth/discord-bot', { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Failed to clear Bot Token');
+        showDiscordBotResult('Bot Token cleared. Existing server bindings are retained but inactive.', true);
+        await loadDiscordBotSettings();
+    } catch (error) {
+        showDiscordBotResult(error.message, false);
+    }
+});
 
 function showProfileAIResult(message, success) {
     const target = document.getElementById('profile-ai-result');
@@ -1214,5 +1330,6 @@ loadS3Captcha();
 loadApiKeyCaptcha();
 loadApiKey();
 loadUserAISettings().catch((error) => showProfileAIResult(error.message, false));
+loadDiscordBotSettings().catch((error) => showDiscordBotResult(error.message, false));
 </script>
 {% endblock %}

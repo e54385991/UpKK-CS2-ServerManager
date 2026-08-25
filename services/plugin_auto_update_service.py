@@ -540,6 +540,50 @@ class PluginAutoUpdateService:
         """
         return await self.check_server(server_id, force=True, plugin_id=plugin_id)
 
+    async def build_plugin_upgrade_plan(self, server_id: int, plugin_id: int) -> Dict[str, Any]:
+        """Build a stable, read-only plan for one tracked plugin or framework upgrade."""
+        async with async_session_maker() as db:
+            server = await db.get(Server, server_id)
+            item = await db.get(ManagedPlugin, plugin_id)
+            if server is None or item is None or item.server_id != server_id:
+                raise ValueError("Managed plugin not found")
+            user = await db.get(User, server.user_id)
+            if user is None or not user.is_active:
+                raise ValueError("Server owner not found or inactive")
+        from services.linux_runtime_service import detect_linux_runtime_profile
+
+        runtime = await detect_linux_runtime_profile(server)
+        if item.framework_key == "metamod":
+            ok, latest, error = await self._latest_metamod(server)
+        else:
+            ok, latest, error = await self._latest_github_release(item, user, runtime)
+        if not ok or latest is None:
+            raise ValueError(error or "Unable to resolve the latest release")
+        selected_asset = str(latest["asset"].get("name") or "")
+        same_release = bool(
+            item.installed_release_id == latest["release_id"]
+            or item.installed_version == latest["version"]
+        )
+        same_asset = bool(
+            not item.installed_asset_name or item.installed_asset_name == selected_asset
+        )
+        return {
+            "server_id": server_id,
+            "plugin_id": item.id,
+            "name": item.display_name,
+            "source_type": item.source_type,
+            "framework": item.framework_key,
+            "installed_version": item.installed_version,
+            "latest_version": latest["version"],
+            "release_id": latest["release_id"],
+            "asset": selected_asset,
+            "backup_before_update": bool(item.backup_before_update),
+            "config_policy": item.config_policy or "preserve",
+            "config_exclusions": list(CONFIG_EXCLUSIONS),
+            "restart_after_update": bool(item.restart_after_update),
+            "no_op": same_release and same_asset,
+        }
+
     @staticmethod
     def _normalize_command_ids(values) -> List[int]:
         if not values:

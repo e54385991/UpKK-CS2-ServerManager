@@ -254,6 +254,86 @@
     "methods": [
       "GET"
     ],
+    "name": "get_discord_bot",
+    "path": "/api/auth/discord-bot"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "update_discord_bot",
+    "path": "/api/auth/discord-bot"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_discord_bot",
+    "path": "/api/auth/discord-bot"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "test_discord_bot",
+    "path": "/api/auth/discord-bot/test"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_discord_bot_guilds",
+    "path": "/api/auth/discord-bot/guilds"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_server_discord_bot_settings",
+    "path": "/servers/{server_id}/discord-bot-settings"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "update_server_discord_bot_settings",
+    "path": "/servers/{server_id}/discord-bot-settings"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_server_discord_bot_options",
+    "path": "/servers/{server_id}/discord-bot-options"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_server_agent_policy",
+    "path": "/servers/{server_id}/agent-policy"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "update_server_agent_policy",
+    "path": "/servers/{server_id}/agent-policy"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "get_system_ai_settings",
     "path": "/api/system/ai-settings"
   },

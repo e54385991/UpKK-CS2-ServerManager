@@ -17,6 +17,7 @@ from modules import (
     AuthType,
     PluginConfigSource,
     Server,
+    ServerAgentPolicy,
     User,
     generate_api_key,
     get_current_time,
@@ -218,6 +219,7 @@ async def import_server_configs(
         server = Server(**entry_values)
         db.add(server)
         await db.flush()
+        db.add(ServerAgentPolicy(server_id=server.id))
 
         for default_path in DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS:
             db.add(

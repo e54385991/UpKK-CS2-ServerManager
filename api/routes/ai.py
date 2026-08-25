@@ -49,6 +49,11 @@ from modules import (
 )
 from modules.schemas.ai import AIBackgroundTaskResponse, AIBackgroundTaskToolResponse
 from modules.utils import get_current_time
+from services.agent_policy_service import (
+    AgentCapabilityDenied,
+    get_effective_agent_policy,
+    require_agent_capabilities,
+)
 from services.ai_access import audit_security_event
 from services.ai_events import ai_event_hub
 from services.ai_orchestrator import (
@@ -430,6 +435,7 @@ async def _conversation_for_user(
         select(AIConversation).where(
             AIConversation.id == conversation_id,
             AIConversation.user_id == user.id,
+            AIConversation.source == "web",
         )
     )
     conversation = result.scalar_one_or_none()
@@ -451,6 +457,9 @@ async def create_ai_conversation(
         )
     if request.server_id is not None:
         await _server_for_user(db, current_user, request.server_id)
+        policy = await get_effective_agent_policy(db, request.server_id)
+        if not policy.enabled:
+            raise HTTPException(status_code=403, detail="AI Agent is disabled for this server")
         await reconcile_waiting_approval_runs(db, user_id=current_user.id)
         await reconcile_stale_ai_server_lock(db, request.server_id)
     item = AIConversation(
@@ -471,7 +480,7 @@ async def list_ai_conversations(
 ) -> list[AIConversation]:
     result = await db.execute(
         select(AIConversation)
-        .where(AIConversation.user_id == current_user.id)
+        .where(AIConversation.user_id == current_user.id, AIConversation.source == "web")
         .order_by(AIConversation.updated_at.desc())
         .limit(100)
     )
@@ -542,6 +551,9 @@ async def send_ai_message(
         )
     if conversation.server_id is not None:
         await _server_for_user(db, current_user, conversation.server_id)
+        policy = await get_effective_agent_policy(db, conversation.server_id)
+        if not policy.enabled:
+            raise HTTPException(status_code=403, detail="AI Agent is disabled for this server")
     await reconcile_waiting_approval_runs(db, conversation_id=conversation.id)
     if conversation.server_id is not None:
         await reconcile_stale_ai_server_lock(db, conversation.server_id)
@@ -569,6 +581,7 @@ async def send_ai_message(
         user_id=current_user.id,
         server_id=conversation.server_id,
         status="queued",
+        source="web",
     )
     if conversation.title == "New conversation":
         conversation.title = request.content[:80]
@@ -597,7 +610,13 @@ async def interrupt_conversation(
 
 
 async def _run_for_user(db: AsyncSession, user: User, run_id: str) -> AIRun:
-    result = await db.execute(select(AIRun).where(AIRun.id == run_id, AIRun.user_id == user.id))
+    result = await db.execute(
+        select(AIRun).where(
+            AIRun.id == run_id,
+            AIRun.user_id == user.id,
+            AIRun.source == "web",
+        )
+    )
     run = result.scalar_one_or_none()
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -642,6 +661,7 @@ async def list_ai_background_tasks(
         .where(
             AIRun.user_id == current_user.id,
             AIRun.conversation_id == conversation_id,
+            AIRun.source == "web",
             AIToolRun.risk == "write",
         )
         .distinct()
@@ -774,6 +794,20 @@ async def decide_ai_tool(
         )
     if run.server_id is not None:
         await _server_for_user(db, current_user, run.server_id)
+        if request.decision == "approve":
+            from services.ai_tools import TOOLS_BY_NAME
+
+            spec = TOOLS_BY_NAME.get(item.tool_name)
+            if spec is None:
+                raise HTTPException(status_code=409, detail="Tool is no longer available")
+            try:
+                await require_agent_capabilities(
+                    db,
+                    run.server_id,
+                    spec.required_capabilities(item.arguments),
+                )
+            except AgentCapabilityDenied as exc:
+                raise HTTPException(status_code=403, detail=str(exc)) from exc
     item.status = (
         "queued"
         if request.decision == "approve" and item.risk == "write"
@@ -782,6 +816,7 @@ async def decide_ai_tool(
         else "rejected"
     )
     item.approved_by = current_user.id
+    item.approved_actor_type = "web"
     item.approved_at = get_current_time()
     db.add(item)
     await db.commit()
@@ -877,7 +912,11 @@ async def ai_run_events(
         return
     async with async_session_maker() as db:
         run_result = await db.execute(
-            select(AIRun).where(AIRun.id == run_id, AIRun.user_id == user.id)
+            select(AIRun).where(
+                AIRun.id == run_id,
+                AIRun.user_id == user.id,
+                AIRun.source == "web",
+            )
         )
         run = run_result.scalar_one_or_none()
         if run is None:

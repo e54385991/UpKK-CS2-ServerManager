@@ -828,6 +828,134 @@
                         </div>
                     </div>
 
+                    <!-- Discord Gateway Bot Card (separate from Webhook notifications) -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-robot"></i> <span data-i18n="discordBot.serverTitle">Discord Bot Commands</span></h5>
+                            <span class="badge" :class="discordBotBinding.effective_enabled ? 'bg-success' : 'bg-secondary'"
+                                x-text="discordBotBinding.effective_enabled ? 'Active' : (discordBotBinding.disabled_reason || 'Inactive')"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info py-2">
+                                <i class="bi bi-info-circle"></i>
+                                <span data-i18n="discordBot.webhookSeparate">This Gateway Bot is independent from the existing Discord Webhook notifications.</span>
+                                <a href="/profile" data-i18n="discordBot.configureProfile">Configure the per-user Bot in your profile.</a>
+                            </div>
+                            <form @submit.prevent="saveDiscordBotBinding()">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" id="discordBotBindingEnabled" type="checkbox" x-model="discordBotForm.enabled">
+                                    <label class="form-check-label fw-semibold" for="discordBotBindingEnabled" data-i18n="discordBot.enableServer">Enable Bot commands for this server</label>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label" data-i18n="discordBot.guild">Guild</label>
+                                        <select class="form-select" x-model="discordBotForm.guild_id" @change="discordBotForm.channel_ids=[]; discordBotForm.role_ids=[]; loadDiscordBotOptions(discordBotForm.guild_id)">
+                                            <option value="">Select a Guild</option>
+                                            <template x-for="guild in discordBotOptions.guilds" :key="guild.id">
+                                                <option :value="guild.id" x-text="guild.name"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" data-i18n="discordBot.channels">Allowed channels (one or more)</label>
+                                        <select class="form-select" multiple size="5" x-model="discordBotForm.channel_ids">
+                                            <template x-for="channel in discordBotOptions.channels" :key="channel.id">
+                                                <option :value="channel.id" x-text="'#' + channel.name"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" data-i18n="discordBot.roles">Allowed roles</label>
+                                        <select class="form-select" multiple size="5" x-model="discordBotForm.role_ids">
+                                            <template x-for="role in discordBotOptions.roles" :key="role.id">
+                                                <option :value="role.id" x-text="role.name"></option>
+                                            </template>
+                                        </select>
+                                        <div class="form-text" data-i18n="discordBot.noAdminBypass">Discord Administrator does not bypass this whitelist.</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" data-i18n="discordBot.users">Allowed Discord User IDs</label>
+                                        <textarea class="form-control font-monospace" rows="5" x-model="discordBotUserIdsText" placeholder="123456789012345678"></textarea>
+                                        <div class="form-text" data-i18n="discordBot.whitelistRule">A user ID match or any role match grants access. At least one role or user is required.</div>
+                                    </div>
+                                </div>
+                                <hr>
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                                    <strong data-i18n="discordBot.commandCapabilities">Fixed command capabilities</strong>
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" @click="applyDiscordBotPreset('readonly')" data-i18n="discordBot.presetReadonly">Read only</button>
+                                    <button class="btn btn-sm btn-outline-warning" type="button" @click="applyDiscordBotPreset('operations')" data-i18n="discordBot.presetOperations">Common operations</button>
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" data-i18n="discordBot.presetCustom">Custom</button>
+                                </div>
+                                <div class="alert alert-warning py-2" x-show="discordBotForm.capabilities.some(item => !['status','plugin_browse','agent_ask'].includes(item))">
+                                    <i class="bi bi-exclamation-triangle"></i> <span data-i18n="discordBot.writeWarning">Maintenance capabilities change remote server state. Every use still requires a public, requester-only confirmation.</span>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <template x-for="cap in [
+                                        ['status','Status'],['start','Start'],['stop','Stop'],['restart','Restart'],
+                                        ['update','CS2 update'],['validate','Validate'],['plugin_browse','Plugin browse'],
+                                        ['plugin_install','Market install'],['plugin_upgrade','Managed upgrade'],['agent_ask','AI Agent']
+                                    ]" :key="cap[0]">
+                                        <div class="col-md-4">
+                                            <label class="form-check">
+                                                <input class="form-check-input" type="checkbox" :value="cap[0]" x-model="discordBotForm.capabilities">
+                                                <span class="form-check-label" x-text="cap[1]"></span>
+                                            </label>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div class="alert alert-danger py-2" x-show="discordBotError" x-text="discordBotError"></div>
+                                <button class="btn btn-primary" type="submit" :disabled="savingDiscordBot">
+                                    <span x-show="!savingDiscordBot"><i class="bi bi-save"></i> <span data-i18n="discordBot.saveBinding">Save Bot binding</span></span>
+                                    <span x-show="savingDiscordBot"><span class="spinner-border spinner-border-sm"></span> Saving…</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Server-wide AI permission card -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-stars"></i> <span data-i18n="agentPolicy.title">Server AI Agent Permissions</span></h5>
+                            <span class="badge" :class="agentPolicy.effective_enabled ? 'bg-success' : 'bg-secondary'"
+                                x-text="agentPolicy.effective_enabled ? 'Active' : (agentPolicy.disabled_reason || 'Inactive')"></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-warning">
+                                <i class="bi bi-shield-exclamation"></i>
+                                <span data-i18n="agentPolicy.sharedScope">This policy applies to both Web and Discord AI. Disabling a capability takes effect again at approval and execution time.</span>
+                            </div>
+                            <form @submit.prevent="saveAgentPolicy()">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" id="agentPolicyEnabled" type="checkbox" x-model="agentPolicyForm.enabled">
+                                    <label class="form-check-label fw-semibold" for="agentPolicyEnabled" data-i18n="agentPolicy.enable">Enable AI Agent for this server</label>
+                                </div>
+                                <div class="row g-2">
+                                    <template x-for="cap in [
+                                        ['inspect_status','Status inspection',false],['read_logs_files','Read logs/files',false],['browse_plan_plugins','Plugin catalog/read-only plans',false],
+                                        ['start','Start',true],['stop','Stop',true],['restart','Restart',true],['deploy','Deploy',true],['update','CS2 update',true],['validate','Validate',true],
+                                        ['manage_frameworks','Framework management',true],['install_market_plugins','Market plugin install',true],['install_or_upgrade_github_plugins','GitHub plugin install/upgrade',true],
+                                        ['upgrade_managed_plugins','Managed plugin upgrade',true],['write_configuration','Configuration writes',true],['manage_workshop_maps','Workshop maps',true],
+                                        ['run_plugin_diagnostics','Plugin isolation/recovery',true],['execute_saved_host_commands','Execute saved host commands',true]
+                                    ]" :key="cap[0]">
+                                        <div class="col-md-6">
+                                            <label class="form-check border rounded p-2 ps-5 h-100" :class="cap[2] ? 'border-warning' : ''">
+                                                <input class="form-check-input" type="checkbox" :value="cap[0]" x-model="agentPolicyForm.capabilities">
+                                                <span class="form-check-label" x-text="cap[1]"></span>
+                                                <span class="badge bg-warning text-dark ms-1" x-show="cap[2]">Dangerous</span>
+                                            </label>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div class="alert alert-info mt-3 py-2" data-i18n="agentPolicy.sshBoundary">AI never receives arbitrary Shell access. It can only list saved host commands and execute one by ID when the dedicated capability and a fresh confirmation are present.</div>
+                                <div class="alert alert-danger py-2" x-show="agentPolicyError" x-text="agentPolicyError"></div>
+                                <button class="btn btn-primary" type="submit" :disabled="savingAgentPolicy">
+                                    <span x-show="!savingAgentPolicy"><i class="bi bi-save"></i> <span data-i18n="agentPolicy.save">Save AI policy</span></span>
+                                    <span x-show="savingAgentPolicy"><span class="spinner-border spinner-border-sm"></span> Saving…</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
                 </div>
                 
                 <!-- Steam Token Generator Modal -->
