@@ -102,6 +102,12 @@ uv run --extra legacy-mysql-migration \
 - 始终保持 MySQL 源库不变；
 - 成功时只输出表名、行数、主键范围和摘要，不输出业务字段或凭据。
 
+迁移器识别最后一个 MySQL 兼容版本可能遗留、但现行应用已不再使用的
+`global_settings`、`user_settings` 表，以及 `servers.auto_restart_enabled`、
+`servers.monitoring_interval`、`servers.tickrate` 字段。这些历史项不会写入当前
+PostgreSQL schema，但会在 `deprecated_artifacts` 中记录行数、主键范围和内容摘要；
+MySQL 源库及备份继续保留原值。除这组明确白名单外，任何未知表或字段仍会中止迁移。
+
 迁移成功后先运行：
 
 ```bash

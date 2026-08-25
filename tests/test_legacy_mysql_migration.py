@@ -102,4 +102,5 @@ def test_report_contains_only_counts_and_digests():
                 "primary_key_max": None,
             }
         ],
+        "deprecated_artifacts": [],
     }

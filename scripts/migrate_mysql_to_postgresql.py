@@ -30,6 +30,28 @@ from modules.database_migrations import upgrade_database
 
 BATCH_SIZE = 1000
 LEGACY_URL_ENV = "LEGACY_MYSQL_DATABASE_URL"
+KNOWN_DEPRECATED_TABLE_COLUMNS = {
+    "global_settings": {
+        "id",
+        "setting_key",
+        "setting_value",
+        "description",
+        "created_at",
+        "updated_at",
+    },
+    "user_settings": {
+        "id",
+        "user_id",
+        "steamcmd_mirror_url",
+        "github_api_mirror_url",
+        "github_objects_mirror_url",
+        "created_at",
+        "updated_at",
+    },
+}
+KNOWN_DEPRECATED_COLUMNS = {
+    "servers": {"auto_restart_enabled", "monitoring_interval", "tickrate"},
+}
 
 
 class LegacyMigrationError(RuntimeError):
@@ -48,6 +70,7 @@ class TableReport:
 @dataclass(frozen=True, slots=True)
 class MigrationReport:
     tables: tuple[TableReport, ...]
+    deprecated_artifacts: tuple[TableReport, ...] = ()
 
     @property
     def total_rows(self) -> int:
@@ -59,6 +82,9 @@ class MigrationReport:
                 "success": True,
                 "total_rows": self.total_rows,
                 "tables": [asdict(item) for item in self.tables],
+                "deprecated_artifacts": [
+                    asdict(item) for item in self.deprecated_artifacts
+                ],
             },
             ensure_ascii=False,
             indent=2,
@@ -159,9 +185,23 @@ def _validate_source_schema(source_metadata: MetaData) -> None:
     failures: list[str] = []
     expected_tables = _expected_tables()
     expected_names = {table.name for table in expected_tables}
-    unexpected_tables = sorted(set(source_metadata.tables) - expected_names)
+    deprecated_table_names = set(KNOWN_DEPRECATED_TABLE_COLUMNS)
+    unexpected_tables = sorted(
+        set(source_metadata.tables) - expected_names - deprecated_table_names
+    )
     if unexpected_tables:
         failures.append(f"unexpected tables {unexpected_tables}")
+    for table_name, allowed_columns in KNOWN_DEPRECATED_TABLE_COLUMNS.items():
+        deprecated_table = source_metadata.tables.get(table_name)
+        if deprecated_table is None:
+            continue
+        unexpected_columns = sorted(
+            set(deprecated_table.columns.keys()) - allowed_columns
+        )
+        if unexpected_columns:
+            failures.append(
+                f"{table_name} has unknown legacy columns {unexpected_columns}"
+            )
     for expected in expected_tables:
         source = source_metadata.tables.get(expected.name)
         if source is None:
@@ -169,11 +209,16 @@ def _validate_source_schema(source_metadata: MetaData) -> None:
             continue
         source_columns = set(source.columns.keys())
         missing_columns = [name for name in expected.columns.keys() if name not in source_columns]
-        unexpected_columns = sorted(source_columns - set(expected.columns.keys()))
+        unexpected_columns = source_columns - set(expected.columns.keys())
+        unsupported_columns = sorted(
+            unexpected_columns - KNOWN_DEPRECATED_COLUMNS.get(expected.name, set())
+        )
         if missing_columns:
             failures.append(f"{expected.name} missing columns {missing_columns}")
-        if unexpected_columns:
-            failures.append(f"{expected.name} unexpected columns {unexpected_columns}")
+        if unsupported_columns:
+            failures.append(
+                f"{expected.name} unexpected columns {unsupported_columns}"
+            )
         source_primary_key = tuple(column.name for column in source.primary_key)
         expected_primary_key = tuple(column.name for column in expected.primary_key)
         if source_primary_key != expected_primary_key:
@@ -232,6 +277,79 @@ def _primary_key_marker(row: dict[str, Any], table: Table) -> Any:
     if not values:
         return None
     return values[0] if len(values) == 1 else values
+
+
+async def _hash_projection(
+    connection: AsyncConnection,
+    table: Table,
+    columns: tuple[Any, ...],
+    artifact_name: str,
+) -> TableReport:
+    column_names = tuple(column.name for column in columns)
+    stream = await connection.stream(
+        select(*columns).order_by(*_order_columns(table))
+    )
+    mappings = stream.mappings()
+    digest = hashlib.sha256()
+    row_count = 0
+    primary_key_min = None
+    primary_key_max = None
+    while True:
+        rows = await mappings.fetchmany(BATCH_SIZE)
+        if not rows:
+            break
+        for row in rows:
+            values = dict(row)
+            _update_digest(digest, values, column_names)
+            marker = _primary_key_marker(values, table)
+            if primary_key_min is None:
+                primary_key_min = marker
+            primary_key_max = marker
+        row_count += len(rows)
+    return TableReport(
+        artifact_name,
+        row_count,
+        digest.hexdigest(),
+        primary_key_min,
+        primary_key_max,
+    )
+
+
+async def _deprecated_artifact_reports(
+    connection: AsyncConnection,
+    source_metadata: MetaData,
+) -> tuple[TableReport, ...]:
+    reports = []
+    for table_name in sorted(KNOWN_DEPRECATED_TABLE_COLUMNS):
+        table = source_metadata.tables.get(table_name)
+        if table is None:
+            continue
+        reports.append(
+            await _hash_projection(
+                connection,
+                table,
+                tuple(table.columns),
+                table_name,
+            )
+        )
+    for table_name, column_names in sorted(KNOWN_DEPRECATED_COLUMNS.items()):
+        table = source_metadata.tables.get(table_name)
+        if table is None:
+            continue
+        primary_key_columns = tuple(table.primary_key.columns)
+        for column_name in sorted(column_names):
+            if column_name not in table.columns:
+                continue
+            projection = (*primary_key_columns, table.c[column_name])
+            reports.append(
+                await _hash_projection(
+                    connection,
+                    table,
+                    projection,
+                    f"{table_name}.{column_name}",
+                )
+            )
+    return tuple(reports)
 
 
 async def _copy_table(
@@ -353,6 +471,15 @@ async def migrate(source_engine: AsyncEngine, target: AsyncEngine) -> MigrationR
 
         source = await source.execution_options(isolation_level="REPEATABLE READ")
         async with source.begin(), destination.begin():
+            try:
+                deprecated_reports = await _deprecated_artifact_reports(
+                    source, source_metadata
+                )
+            except Exception as exc:
+                raise LegacyMigrationError(
+                    "failed to audit known deprecated MySQL artifacts: "
+                    f"{exc.__class__.__name__}"
+                ) from exc
             source_reports: list[TableReport] = []
             for target_table in _expected_tables():
                 try:
@@ -398,7 +525,7 @@ async def migrate(source_engine: AsyncEngine, target: AsyncEngine) -> MigrationR
                     "target verification failed for tables: " + ", ".join(failed)
                 )
 
-        return MigrationReport(tuple(source_reports))
+        return MigrationReport(tuple(source_reports), deprecated_reports)
 
 
 async def async_main() -> int:
