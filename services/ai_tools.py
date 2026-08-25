@@ -157,6 +157,27 @@ class ServerControlInput(ToolInput):
     action: Literal["start", "stop", "restart"]
 
 
+class GameConsoleCommandInput(ToolInput):
+    command: str = Field(
+        min_length=1,
+        max_length=500,
+        description=(
+            "One literal CS2 console command. This is sent to the detached game process and "
+            "is never executed as host Shell."
+        ),
+    )
+
+    @field_validator("command")
+    @classmethod
+    def validate_command(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Game console command cannot be blank")
+        if "\x00" in value or "\r" in value or "\n" in value:
+            raise ValueError("Only one game console command is allowed per confirmation")
+        return value
+
+
 class ServerStartupPlanInput(ToolInput):
     default_map: str | None = Field(
         default=None,
@@ -1166,6 +1187,22 @@ async def control_server(ctx: ToolContext, data: ServerControlInput) -> dict[str
     return {"success": success, "message": redact_sensitive_text(message)}
 
 
+async def send_game_console_command(
+    ctx: ToolContext, data: GameConsoleCommandInput
+) -> dict[str, Any]:
+    """Send one confirmed literal command to the detached CS2 process, never host Shell."""
+
+    server = await _require_current_server(ctx)
+    await _require_active_user(ctx)
+    from services.custom_command_service import execute_custom_commands
+
+    async with maintenance_lock_service.get(
+        server.id, operation="game_console_command", wait=False, ttl=120
+    ):
+        result = await execute_custom_commands(server, "game_process", data.command)
+    return sanitize_tool_result(result)
+
+
 async def apply_server_startup_update(
     ctx: ToolContext, data: ApplyServerStartupPlanInput
 ) -> dict[str, Any]:
@@ -1490,6 +1527,13 @@ _RAW_TOOL_SPECS = (
         control_server,
     ),
     ToolSpec(
+        "send_game_console_command",
+        "Send one literal command to the selected running CS2 game console. It is never host Shell and requires user approval.",
+        "write",
+        GameConsoleCommandInput,
+        send_game_console_command,
+    ),
+    ToolSpec(
         "apply_server_startup_update",
         "Save an approved startup-settings plan, restart the selected CS2 server, and verify its process and A2S state. Requires user approval.",
         "write",
@@ -1607,6 +1651,7 @@ _TOOL_CAPABILITY_OPTIONS: dict[str, tuple[frozenset[AgentCapability], ...]] = {
         frozenset({item})
         for item in (AgentCapability.START, AgentCapability.STOP, AgentCapability.RESTART)
     ),
+    "send_game_console_command": (frozenset({AgentCapability.SEND_GAME_CONSOLE_COMMANDS}),),
     "apply_server_startup_update": (
         frozenset({AgentCapability.WRITE_CONFIGURATION, AgentCapability.RESTART}),
     ),
@@ -1905,6 +1950,23 @@ async def build_approval_summary(
             **base,
             "operation": arguments["action"],
             "expected_result": "The selected server process state changes",
+        }
+    if name == "send_game_console_command":
+        data = GameConsoleCommandInput.model_validate(arguments)
+        return {
+            **base,
+            "target": "Running CS2 game-process console (not host Shell)",
+            "command": redact_sensitive_text(data.command, limit=500),
+            "command_hash": hashlib.sha256(data.command.encode()).hexdigest(),
+            "steps": [
+                "acquire the server maintenance lock",
+                "locate the exact configured or legacy screen/tmux session",
+                "send the approved command as literal input followed by Enter",
+            ],
+            "expected_result": (
+                "The command is delivered once to the running game process; console output is "
+                "not interpreted as host Shell output"
+            ),
         }
     if name == "apply_server_startup_update":
         data = ApplyServerStartupPlanInput.model_validate(arguments)

@@ -416,6 +416,21 @@
             ],
             "title": "Api Key"
           },
+          "api_protocol": {
+            "anyOf": [
+              {
+                "enum": [
+                  "chat_completions",
+                  "responses"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Protocol"
+          },
           "base_url": {
             "anyOf": [
               {
@@ -693,6 +708,14 @@
             "title": "Api Key Configured",
             "type": "boolean"
           },
+          "api_protocol": {
+            "enum": [
+              "chat_completions",
+              "responses"
+            ],
+            "title": "Api Protocol",
+            "type": "string"
+          },
           "base_url": {
             "anyOf": [
               {
@@ -862,6 +885,7 @@
         },
         "required": [
           "enabled",
+          "api_protocol",
           "api_key_configured",
           "max_completion_tokens",
           "token_limit_parameter",
@@ -901,6 +925,21 @@
               }
             ],
             "title": "Api Key"
+          },
+          "api_protocol": {
+            "anyOf": [
+              {
+                "enum": [
+                  "chat_completions",
+                  "responses"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Protocol"
           },
           "base_url": {
             "anyOf": [
@@ -1214,6 +1253,7 @@
           "write_configuration",
           "manage_workshop_maps",
           "run_plugin_diagnostics",
+          "send_game_console_commands",
           "execute_saved_host_commands"
         ],
         "title": "AgentCapability",
@@ -2533,6 +2573,7 @@
           "plugin_browse",
           "plugin_install",
           "plugin_upgrade",
+          "game_console",
           "agent_ask"
         ],
         "title": "DiscordCapability",
@@ -9443,6 +9484,14 @@
             "title": "Api Key Configured",
             "type": "boolean"
           },
+          "api_protocol": {
+            "enum": [
+              "chat_completions",
+              "responses"
+            ],
+            "title": "Api Protocol",
+            "type": "string"
+          },
           "base_url": {
             "anyOf": [
               {
@@ -9606,6 +9655,7 @@
         },
         "required": [
           "mode",
+          "api_protocol",
           "api_key_configured",
           "max_completion_tokens",
           "token_limit_parameter",
@@ -9631,6 +9681,21 @@
               }
             ],
             "title": "Api Key"
+          },
+          "api_protocol": {
+            "anyOf": [
+              {
+                "enum": [
+                  "chat_completions",
+                  "responses"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Protocol"
           },
           "base_url": {
             "anyOf": [

@@ -11,6 +11,7 @@ from sqlmodel import Field, SQLModel
 ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
 Verbosity = Literal["low", "medium", "high"]
 TokenLimitParameter = Literal["max_completion_tokens", "max_tokens", "omit"]
+AIAPIProtocol = Literal["chat_completions", "responses"]
 
 
 class AIModelParameters(SQLModel):
@@ -35,6 +36,7 @@ class AISystemSettingsResponse(SQLModel):
     enabled: bool
     base_url: Optional[str] = None
     model: Optional[str] = None
+    api_protocol: AIAPIProtocol
     api_key_configured: bool
     admin_prompt: Optional[str] = None
     private_endpoint_allowlist: list[str] = Field(default_factory=list)
@@ -60,6 +62,7 @@ class AISystemSettingsUpdate(AIModelParameters):
     enabled: Optional[bool] = None
     base_url: Optional[str] = Field(default=None, max_length=500)
     model: Optional[str] = Field(default=None, max_length=255)
+    api_protocol: Optional[AIAPIProtocol] = None
     api_key: Optional[str] = Field(default=None, max_length=4096)
     clear_api_key: bool = False
     admin_prompt: Optional[str] = Field(default=None, max_length=8000)
@@ -74,6 +77,7 @@ class UserAISettingsResponse(SQLModel):
     mode: Literal["global", "custom"]
     base_url: Optional[str] = None
     model: Optional[str] = None
+    api_protocol: AIAPIProtocol
     api_key_configured: bool
     reasoning_effort: Optional[ReasoningEffort] = None
     temperature: Optional[float] = None
@@ -95,6 +99,7 @@ class UserAISettingsUpdate(AIModelParameters):
     mode: Literal["global", "custom"] = "global"
     base_url: Optional[str] = Field(default=None, max_length=500)
     model: Optional[str] = Field(default=None, max_length=255)
+    api_protocol: Optional[AIAPIProtocol] = None
     api_key: Optional[str] = Field(default=None, max_length=4096)
     clear_api_key: bool = False
 
@@ -102,6 +107,7 @@ class UserAISettingsUpdate(AIModelParameters):
 class AIProviderTestRequest(AIModelParameters):
     base_url: Optional[str] = Field(default=None, max_length=500)
     model: Optional[str] = Field(default=None, max_length=255)
+    api_protocol: Optional[AIAPIProtocol] = None
     api_key: Optional[str] = Field(default=None, max_length=4096)
 
 

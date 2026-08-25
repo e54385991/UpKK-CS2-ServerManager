@@ -20,6 +20,7 @@ class AISystemSettings(SQLModel, table=True):
     enabled: bool = Field(default=False)
     base_url: Optional[str] = Field(default=None, max_length=500)
     model: Optional[str] = Field(default=None, max_length=255)
+    api_protocol: str = Field(default="chat_completions", max_length=32)
     api_key_encrypted: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     admin_prompt: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     private_endpoint_allowlist: List[str] = Field(
@@ -71,6 +72,7 @@ class UserAISettings(SQLModel, table=True):
     mode: str = Field(default="global", max_length=16)
     base_url: Optional[str] = Field(default=None, max_length=500)
     model: Optional[str] = Field(default=None, max_length=255)
+    api_protocol: str = Field(default="chat_completions", max_length=32)
     api_key_encrypted: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     reasoning_effort: Optional[str] = Field(default=None, max_length=16)
     temperature: Optional[float] = Field(default=None)

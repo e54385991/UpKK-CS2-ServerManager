@@ -26,7 +26,8 @@ from modules.schemas.discord import (
 )
 from modules.utils import get_current_time
 from services.agent_policy_service import get_effective_agent_policy
-from services.ai_tools import TOOLS_BY_NAME, tool_definitions
+from services.ai_security import redact_sensitive_text
+from services.ai_tools import TOOLS_BY_NAME, GameConsoleCommandInput, tool_definitions
 from services.discord_authorization_service import authorized_bindings
 from services.discord_bot_manager import (
     DiscordBotManager,
@@ -108,6 +109,18 @@ def test_tool_visibility_and_parameter_resolvers_follow_capabilities():
     assert operation.required_capabilities({"operation": "install_metamod"}) == frozenset(
         {AgentCapability.MANAGE_FRAMEWORKS}
     )
+    game_console = TOOLS_BY_NAME["send_game_console_command"]
+    assert game_console.required_capabilities({"command": "status"}) == frozenset(
+        {AgentCapability.SEND_GAME_CONSOLE_COMMANDS}
+    )
+    assert game_console.is_exposed(readonly) is False
+
+
+def test_game_console_input_is_single_command_and_redacts_console_secrets():
+    assert GameConsoleCommandInput(command="  status  ").command == "status"
+    with pytest.raises(ValidationError, match="Only one game console command"):
+        GameConsoleCommandInput(command="status\nquit")
+    assert redact_sensitive_text('sv_password "do-not-show"') == "sv_password [REDACTED]"
 
 
 @pytest.mark.asyncio
@@ -189,8 +202,11 @@ def test_gateway_uses_only_guild_intent_and_has_expected_command_tree():
         "update",
         "validate",
         "plugin",
+        "console",
         "agent",
     }
+    console = next(command for command in cs2.commands if command.name == "console")
+    assert {command.name for command in console.commands} == {"send"}
 
 
 def test_gateway_configuration_options_include_usable_channel_types_only():

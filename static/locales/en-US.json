@@ -99,6 +99,10 @@
     "enabled": "Enable AI assistant",
     "baseUrl": "OpenAI-compatible Base URL",
     "model": "Model",
+    "apiProtocol": "API protocol",
+    "protocolChatCompletions": "Chat Completions (default)",
+    "protocolResponses": "Responses",
+    "apiProtocolHint": "Choose the endpoint contract supported by this provider; switching requires a new test.",
     "apiKey": "API key",
     "clearKey": "Remove saved key",
     "keyConfigured": "A key is configured",
@@ -1913,6 +1917,7 @@
     "presetOperations": "Common operations",
     "presetCustom": "Custom",
     "writeWarning": "Maintenance capabilities change remote server state. Every use still requires a public, requester-only confirmation.",
+    "gameConsole": "Allow input to the game server console",
     "saveBinding": "Save Bot binding"
   },
   "agentPolicy": {
@@ -1920,6 +1925,8 @@
     "sharedScope": "This policy applies to both Web and Discord AI. Disabling a capability takes effect again at approval and execution time.",
     "enable": "Enable AI Agent for this server",
     "sshBoundary": "AI never receives arbitrary Shell access. It can only list saved host commands and execute one by ID when the dedicated capability and a fresh confirmation are present.",
+    "gameConsole": "Allow input to the game server console",
+    "gameConsoleBoundary": "Game console commands are sent as literal input to the running CS2 screen/tmux session. They never execute as host Shell and require a separate confirmation each time.",
     "save": "Save AI policy"
   }
 }

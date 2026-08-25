@@ -26,10 +26,11 @@ from modules.models import (
 )
 from modules.schemas.discord import DiscordCapability
 from modules.utils import get_current_time
-from services.ai_security import decrypt_credential, redact_sensitive_text
+from services.ai_security import decrypt_credential, encrypt_credential, redact_sensitive_text
 from services.ai_tools import (
     TOOLS_BY_NAME,
     ApplyPluginPlanInput,
+    GameConsoleCommandInput,
     ServerControlInput,
     ServerOperationInput,
     ToolContext,
@@ -82,6 +83,35 @@ def _simple_plan(server: Server, action: str) -> dict:
         "action": action,
         "steps": ["acquire maintenance lock", f"execute {action}", "report final result"],
     }
+
+
+def _game_console_plan(server: Server, command: str) -> dict:
+    """Build a deterministic public plan without persisting the raw command in JSON."""
+
+    return {
+        "server_id": server.id,
+        "server_name": server.name,
+        "action": "game_console",
+        "target": "running CS2 game-process console (not host Shell)",
+        "command": redact_sensitive_text(command, limit=500),
+        "command_hash": hashlib.sha256(command.encode()).hexdigest(),
+        "steps": [
+            "acquire maintenance lock",
+            "locate the exact screen/tmux game session",
+            "send literal command input followed by Enter",
+        ],
+    }
+
+
+def _operation_game_console_command(item: DiscordOperationRun) -> str:
+    encrypted = str(item.arguments.get("command_encrypted") or "")
+    command = decrypt_credential(encrypted)
+    if not command:
+        raise DiscordOperationDenied("Game console command is unavailable")
+    expected_hash = str(item.arguments.get("command_hash") or "")
+    if hashlib.sha256(command.encode()).hexdigest() != expected_hash:
+        raise DiscordOperationDenied("Game console command changed after planning")
+    return GameConsoleCommandInput(command=command).command
 
 
 class _ConfirmView(discord.ui.View):
@@ -201,6 +231,7 @@ class ManagedDiscordClient(discord.Client):
     def _register_commands(self) -> None:
         cs2 = app_commands.Group(name="cs2", description="Manage authorized CS2 servers")
         plugin = app_commands.Group(name="plugin", description="Browse and manage plugins")
+        console = app_commands.Group(name="console", description="Send confirmed game commands")
         agent = app_commands.Group(name="agent", description="Use the server-scoped AI Agent")
 
         async def help_command(interaction: discord.Interaction) -> None:
@@ -252,6 +283,11 @@ class ManagedDiscordClient(discord.Client):
         ) -> None:
             await self.manager.command_plugin_upgrade(self, interaction, plugin_id, server)
 
+        async def console_send(
+            interaction: discord.Interaction, command: str, server: str | None = None
+        ) -> None:
+            await self.manager.command_game_console(self, interaction, command, server)
+
         async def agent_ask(
             interaction: discord.Interaction, prompt: str, server: str | None = None
         ) -> None:
@@ -279,11 +315,15 @@ class ManagedDiscordClient(discord.Client):
             plugin.command(name="upgrade", description="Plan a managed plugin upgrade")(
                 plugin_upgrade
             ),
+            console.command(name="send", description="Confirm and send one game command")(
+                console_send
+            ),
             agent.command(name="ask", description="Ask the server-scoped AI Agent")(agent_ask),
             agent.command(name="reset", description="Start a new isolated AI context")(agent_reset),
         ]
         cs2.command(name="help", description="Show authorized CS2 Bot commands")(help_command)
         cs2.add_command(plugin)
+        cs2.add_command(console)
         cs2.add_command(agent)
         self.tree.add_command(cs2)
         for command in commands:
@@ -632,6 +672,7 @@ class DiscordBotManager:
         await interaction.response.send_message(
             "`/cs2 status|start|stop|restart|update|validate`\n"
             "`/cs2 plugin search|list|install|upgrade`\n"
+            "`/cs2 console send`\n"
             "`/cs2 agent ask|reset`\n"
             "Write operations always require a public confirmation by the requester.",
             ephemeral=False,
@@ -738,6 +779,34 @@ class DiscordBotManager:
                 capability,
                 {"action": action},
                 _simple_plan(server, action),
+            )
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def command_game_console(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        command: str,
+        server_value: str | None,
+    ) -> None:
+        try:
+            data = GameConsoleCommandInput(command=command)
+            server = await self._resolve_server(
+                client, interaction, DiscordCapability.GAME_CONSOLE, server_value
+            )
+            await interaction.response.defer(ephemeral=False)
+            command_hash = hashlib.sha256(data.command.encode()).hexdigest()
+            await self._send_confirmation(
+                interaction,
+                server,
+                "game_console",
+                DiscordCapability.GAME_CONSOLE,
+                {
+                    "command_encrypted": encrypt_credential(data.command),
+                    "command_hash": command_hash,
+                },
+                _game_console_plan(server, data.command),
             )
         except Exception as exc:
             await self._respond_error(interaction, exc)
@@ -1030,6 +1099,8 @@ class DiscordBotManager:
             return await plugin_auto_update_service.build_plugin_upgrade_plan(
                 server.id, int(item.arguments["plugin_id"])
             )
+        if item.action == "game_console":
+            return _game_console_plan(server, _operation_game_console_command(item))
         return _simple_plan(server, item.action)
 
     async def _confirm_and_execute(
@@ -1132,6 +1203,10 @@ class DiscordBotManager:
             if item.action == "plugin_install":
                 spec = TOOLS_BY_NAME["apply_plugin_plan"]
                 data = ApplyPluginPlanInput.model_validate(item.arguments)
+                return await spec.handler(context, data)
+            if item.action == "game_console":
+                spec = TOOLS_BY_NAME["send_game_console_command"]
+                data = GameConsoleCommandInput(command=_operation_game_console_command(item))
                 return await spec.handler(context, data)
         if item.action == "plugin_upgrade":
             from services.plugin_auto_update_service import plugin_auto_update_service

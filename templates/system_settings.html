@@ -311,13 +311,21 @@
                         <label class="form-check-label" for="ai-admin-enabled" data-i18n="ai.enabled">Enable AI assistant</label>
                     </div>
                     <div class="row g-3">
-                        <div class="col-md-7">
+                        <div class="col-md-5">
                             <label class="form-label" for="ai-admin-base-url" data-i18n="ai.baseUrl">OpenAI-compatible Base URL</label>
                             <input class="form-control" id="ai-admin-base-url" type="url" placeholder="https://api.example.com/v1">
                         </div>
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <label class="form-label" for="ai-admin-model" data-i18n="ai.model">Model</label>
                             <input class="form-control" id="ai-admin-model" maxlength="255">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="ai-admin-protocol" data-i18n="ai.apiProtocol">API protocol</label>
+                            <select class="form-select" id="ai-admin-protocol">
+                                <option value="chat_completions" data-i18n="ai.protocolChatCompletions">Chat Completions (default)</option>
+                                <option value="responses" data-i18n="ai.protocolResponses">Responses</option>
+                            </select>
+                            <div class="form-text" data-i18n="ai.apiProtocolHint">Choose the endpoint contract supported by this provider.</div>
                         </div>
                         <div class="col-12">
                             <label class="form-label" for="ai-admin-key" data-i18n="ai.apiKey">API key</label>
@@ -545,6 +553,7 @@ async function loadAISettings() {
     document.getElementById('ai-admin-enabled').checked = data.enabled;
     document.getElementById('ai-admin-base-url').value = data.base_url || '';
     document.getElementById('ai-admin-model').value = data.model || '';
+    document.getElementById('ai-admin-protocol').value = data.api_protocol || 'chat_completions';
     document.getElementById('ai-admin-reasoning').value = data.reasoning_effort || '';
     document.getElementById('ai-admin-temperature').value = data.temperature ?? '';
     document.getElementById('ai-admin-top-p').value = data.top_p ?? '';
@@ -567,7 +576,7 @@ async function loadAISettings() {
         ? (window.i18n?.t('ai.keyConfigured') || 'A key is configured')
         : (window.i18n?.t('ai.keyMissing') || 'No key configured');
     document.getElementById('ai-admin-test-state').textContent =
-        `SSE: ${data.streaming_tested ? '✓' : '—'} · Text: ${data.provider_tested ? '✓' : '—'} · tool_calls: ${data.tool_calling_tested ? '✓' : '—'}`;
+        `${data.api_protocol === 'responses' ? 'Responses' : 'Chat Completions'} · SSE: ${data.streaming_tested ? '✓' : '—'} · Text: ${data.provider_tested ? '✓' : '—'} · tool_calls: ${data.tool_calling_tested ? '✓' : '—'}`;
 }
 
 document.getElementById('ai-admin-form').addEventListener('submit', async (event) => {
@@ -576,6 +585,7 @@ document.getElementById('ai-admin-form').addEventListener('submit', async (event
         enabled: document.getElementById('ai-admin-enabled').checked,
         base_url: document.getElementById('ai-admin-base-url').value.trim() || null,
         model: document.getElementById('ai-admin-model').value.trim() || null,
+        api_protocol: document.getElementById('ai-admin-protocol').value,
         reasoning_effort: document.getElementById('ai-admin-reasoning').value || null,
         temperature: aiAdminOptionalNumber('ai-admin-temperature'),
         top_p: aiAdminOptionalNumber('ai-admin-top-p'),

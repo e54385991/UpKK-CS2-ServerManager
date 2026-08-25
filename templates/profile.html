@@ -226,13 +226,21 @@
                     </div>
                     <div id="profile-ai-custom-fields">
                         <div class="row g-3">
-                            <div class="col-md-7">
+                            <div class="col-md-5">
                                 <label class="form-label" for="profile-ai-base-url" data-i18n="ai.baseUrl">OpenAI-compatible Base URL</label>
                                 <input class="form-control" id="profile-ai-base-url" type="url" placeholder="https://api.example.com/v1">
                             </div>
-                            <div class="col-md-5">
+                            <div class="col-md-4">
                                 <label class="form-label" for="profile-ai-model" data-i18n="ai.model">Model</label>
                                 <input class="form-control" id="profile-ai-model" maxlength="255">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label" for="profile-ai-protocol" data-i18n="ai.apiProtocol">API protocol</label>
+                                <select class="form-select" id="profile-ai-protocol">
+                                    <option value="chat_completions" data-i18n="ai.protocolChatCompletions">Chat Completions (default)</option>
+                                    <option value="responses" data-i18n="ai.protocolResponses">Responses</option>
+                                </select>
+                                <div class="form-text" data-i18n="ai.apiProtocolHint">Choose the endpoint contract supported by this provider.</div>
                             </div>
                             <div class="col-12">
                                 <label class="form-label" for="profile-ai-key" data-i18n="ai.apiKey">API key</label>
@@ -588,6 +596,7 @@ async function loadUserAISettings() {
     document.getElementById('profile-ai-mode').value = data.mode;
     document.getElementById('profile-ai-base-url').value = data.base_url || '';
     document.getElementById('profile-ai-model').value = data.model || '';
+    document.getElementById('profile-ai-protocol').value = data.api_protocol || 'chat_completions';
     document.getElementById('profile-ai-reasoning').value = data.reasoning_effort || '';
     document.getElementById('profile-ai-temperature').value = data.temperature ?? '';
     document.getElementById('profile-ai-top-p').value = data.top_p ?? '';
@@ -604,7 +613,7 @@ async function loadUserAISettings() {
         ? (window.i18n?.t('ai.keyConfigured') || 'A key is configured')
         : (window.i18n?.t('ai.keyMissing') || 'No key configured');
     document.getElementById('profile-ai-test-state').textContent =
-        `SSE: ${data.streaming_tested ? '✓' : '—'} · Text: ${data.provider_tested ? '✓' : '—'} · tool_calls: ${data.tool_calling_tested ? '✓' : '—'} · ` +
+        `${data.api_protocol === 'responses' ? 'Responses' : 'Chat Completions'} · SSE: ${data.streaming_tested ? '✓' : '—'} · Text: ${data.provider_tested ? '✓' : '—'} · tool_calls: ${data.tool_calling_tested ? '✓' : '—'} · ` +
         (data.effective_enabled ? (window.i18n?.t('ai.providerReady') || 'Provider ready') : (window.i18n?.t('ai.providerUnavailable') || 'Unavailable'));
     updateProfileAIMode();
 }
@@ -616,6 +625,7 @@ document.getElementById('profile-ai-form').addEventListener('submit', async (eve
         mode: document.getElementById('profile-ai-mode').value,
         base_url: document.getElementById('profile-ai-base-url').value.trim() || null,
         model: document.getElementById('profile-ai-model').value.trim() || null,
+        api_protocol: document.getElementById('profile-ai-protocol').value,
         reasoning_effort: document.getElementById('profile-ai-reasoning').value || null,
         temperature: profileAIOptionalNumber('profile-ai-temperature'),
         top_p: profileAIOptionalNumber('profile-ai-top-p'),

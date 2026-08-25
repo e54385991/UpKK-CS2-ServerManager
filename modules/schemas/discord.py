@@ -20,6 +20,7 @@ class DiscordCapability(StrEnum):
     PLUGIN_BROWSE = "plugin_browse"
     PLUGIN_INSTALL = "plugin_install"
     PLUGIN_UPGRADE = "plugin_upgrade"
+    GAME_CONSOLE = "game_console"
     AGENT_ASK = "agent_ask"
 
 
@@ -40,6 +41,7 @@ class AgentCapability(StrEnum):
     WRITE_CONFIGURATION = "write_configuration"
     MANAGE_WORKSHOP_MAPS = "manage_workshop_maps"
     RUN_PLUGIN_DIAGNOSTICS = "run_plugin_diagnostics"
+    SEND_GAME_CONSOLE_COMMANDS = "send_game_console_commands"
     EXECUTE_SAVED_HOST_COMMANDS = "execute_saved_host_commands"
 
 

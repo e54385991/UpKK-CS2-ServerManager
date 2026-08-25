@@ -139,6 +139,7 @@ def _system_response(item: AISystemSettings) -> AISystemSettingsResponse:
         enabled=item.enabled,
         base_url=item.base_url,
         model=item.model,
+        api_protocol=item.api_protocol,
         api_key_configured=bool(item.api_key_encrypted),
         admin_prompt=item.admin_prompt,
         private_endpoint_allowlist=item.private_endpoint_allowlist or [],
@@ -169,6 +170,7 @@ async def _user_response(
         mode=item.mode,
         base_url=item.base_url,
         model=item.model,
+        api_protocol=item.api_protocol,
         api_key_configured=bool(item.api_key_encrypted),
         **_model_parameters(item),
         provider_tested=item.provider_tested,
@@ -218,6 +220,9 @@ async def update_system_ai_settings(
             model = (request.model or "").strip() or None
             changed_provider |= model != item.model
             item.model = model
+        if "api_protocol" in request.model_fields_set and request.api_protocol is not None:
+            changed_provider |= request.api_protocol != item.api_protocol
+            item.api_protocol = request.api_protocol
         if request.api_key:
             item.api_key_encrypted = encrypt_credential(request.api_key)
             changed_provider = True
@@ -297,6 +302,7 @@ async def test_system_ai_settings(
             timeout_seconds=item.request_timeout_seconds,
             allowlist=tuple(item.private_endpoint_allowlist or []),
             source="global",
+            api_protocol=request.api_protocol or item.api_protocol,
             admin_prompt=item.admin_prompt or "",
             **_test_model_parameters(request, item),
         )
@@ -347,6 +353,9 @@ async def update_user_ai_settings(
             model = (request.model or "").strip() or None
             changed_provider |= model != item.model
             item.model = model
+        if "api_protocol" in request.model_fields_set and request.api_protocol is not None:
+            changed_provider |= request.api_protocol != item.api_protocol
+            item.api_protocol = request.api_protocol
         if request.api_key:
             item.api_key_encrypted = encrypt_credential(request.api_key)
             changed_provider = True
@@ -395,6 +404,7 @@ async def test_user_ai_settings(
             timeout_seconds=system.request_timeout_seconds,
             allowlist=tuple(system.private_endpoint_allowlist or []),
             source="custom",
+            api_protocol=request.api_protocol or item.api_protocol,
             admin_prompt=system.admin_prompt or "",
             **_test_model_parameters(request, item),
         )

@@ -908,7 +908,8 @@
                                     <template x-for="cap in [
                                         ['status','Status'],['start','Start'],['stop','Stop'],['restart','Restart'],
                                         ['update','CS2 update'],['validate','Validate'],['plugin_browse','Plugin browse'],
-                                        ['plugin_install','Market install'],['plugin_upgrade','Managed upgrade'],['agent_ask','AI Agent']
+                                        ['plugin_install','Market install'],['plugin_upgrade','Managed upgrade'],
+                                        ['game_console', window.i18n?.t('discordBot.gameConsole') || 'Game console input'],['agent_ask','AI Agent']
                                     ]" :key="cap[0]">
                                         <div class="col-md-4">
                                             <label class="form-check">
@@ -950,7 +951,9 @@
                                         ['start','Start',true],['stop','Stop',true],['restart','Restart',true],['deploy','Deploy',true],['update','CS2 update',true],['validate','Validate',true],
                                         ['manage_frameworks','Framework management',true],['install_market_plugins','Market plugin install',true],['install_or_upgrade_github_plugins','GitHub plugin install/upgrade',true],
                                         ['upgrade_managed_plugins','Managed plugin upgrade',true],['write_configuration','Configuration writes',true],['manage_workshop_maps','Workshop maps',true],
-                                        ['run_plugin_diagnostics','Plugin isolation/recovery',true],['execute_saved_host_commands','Execute saved host commands',true]
+                                        ['run_plugin_diagnostics','Plugin isolation/recovery',true],
+                                        ['send_game_console_commands', window.i18n?.t('agentPolicy.gameConsole') || 'Send game console commands',true],
+                                        ['execute_saved_host_commands','Execute saved host commands',true]
                                     ]" :key="cap[0]">
                                         <div class="col-md-6">
                                             <label class="form-check border rounded p-2 ps-5 h-100" :class="cap[2] ? 'border-warning' : ''">
@@ -962,6 +965,7 @@
                                     </template>
                                 </div>
                                 <div class="alert alert-info mt-3 py-2" data-i18n="agentPolicy.sshBoundary">AI never receives arbitrary Shell access. It can only list saved host commands and execute one by ID when the dedicated capability and a fresh confirmation are present.</div>
+                                <div class="alert alert-info py-2" data-i18n="agentPolicy.gameConsoleBoundary">Game console commands are sent as literal input to the running CS2 screen/tmux session. They never execute as host Shell and require a separate confirmation each time.</div>
                                 <div class="alert alert-danger py-2" x-show="agentPolicyError" x-text="agentPolicyError"></div>
                                 <button class="btn btn-primary" type="submit" :disabled="savingAgentPolicy">
                                     <span x-show="!savingAgentPolicy"><i class="bi bi-save"></i> <span data-i18n="agentPolicy.save">Save AI policy</span></span>

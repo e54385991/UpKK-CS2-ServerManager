@@ -40,6 +40,7 @@ class AIProviderConfig:
     timeout_seconds: int
     allowlist: tuple[str, ...]
     source: str
+    api_protocol: str = "chat_completions"
     admin_prompt: str = ""
     reasoning_effort: str | None = None
     temperature: float | None = None
@@ -258,6 +259,10 @@ _SECRET_INLINE = re.compile(
     r"""webhook(?:_url)?|authorization|ssh[_-]?(?:key|password))["']?\s*[:=]\s*["']?)"""
     r"""([^"'\s,}]+)"""
 )
+_SECRET_CONSOLE_COMMAND = re.compile(
+    r"(?im)\b(rcon_password|sv_password)"
+    r"(\s+)(\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s;\r\n]+)"
+)
 _PRIVATE_KEY = re.compile(
     r"-----BEGIN [^-\r\n]*PRIVATE KEY-----.*?-----END [^-\r\n]*PRIVATE KEY-----",
     re.DOTALL,
@@ -281,6 +286,7 @@ _SENSITIVE_KEYS = {
 def redact_sensitive_text(value: str, *, limit: int = MAX_TOOL_RESULT_CHARS) -> str:
     value = _SECRET_LINE.sub(r"\1[REDACTED]", value)
     value = _SECRET_INLINE.sub(r"\1[REDACTED]", value)
+    value = _SECRET_CONSOLE_COMMAND.sub(r"\1\2[REDACTED]", value)
     value = _BEARER.sub("Bearer [REDACTED]", value)
     value = _COMMON_TOKEN.sub("[REDACTED_TOKEN]", value)
     value = _PRIVATE_KEY.sub("[REDACTED_PRIVATE_KEY]", value)
@@ -339,6 +345,7 @@ async def get_effective_provider(
             timeout_seconds=system.request_timeout_seconds,
             allowlist=tuple(system.private_endpoint_allowlist or []),
             source="custom",
+            api_protocol=getattr(personal, "api_protocol", "chat_completions"),
             admin_prompt=(system.admin_prompt or "").strip(),
             reasoning_effort=personal.reasoning_effort,
             temperature=personal.temperature,
@@ -363,6 +370,7 @@ async def get_effective_provider(
         timeout_seconds=system.request_timeout_seconds,
         allowlist=tuple(system.private_endpoint_allowlist or []),
         source="global",
+        api_protocol=getattr(system, "api_protocol", "chat_completions"),
         admin_prompt=(system.admin_prompt or "").strip(),
         reasoning_effort=system.reasoning_effort,
         temperature=system.temperature,
