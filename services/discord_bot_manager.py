@@ -10,6 +10,7 @@ import math
 import uuid
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import datetime
 
 import discord
 from discord import app_commands
@@ -118,6 +119,53 @@ def _has_channel_manage_permission(permissions: object | None) -> bool:
     )
 
 
+def _has_administrator_permission(permissions: object | None) -> bool:
+    return bool(permissions is not None and getattr(permissions, "administrator", False))
+
+
+def _is_guild_owner(source: discord.Interaction | discord.Message) -> bool:
+    guild = getattr(source, "guild", None)
+    member = getattr(source, "user", None) or getattr(source, "author", None)
+    owner_id = getattr(guild, "owner_id", None)
+    member_id = getattr(member, "id", None)
+    return owner_id is not None and member_id is not None and owner_id == member_id
+
+
+def _actor_privileges(source: discord.Interaction | discord.Message) -> tuple[bool, bool]:
+    """Return `(is_server_administrator, is_channel_manager)`.
+
+    These flags only describe Discord privileges. Binding switches still decide
+    whether either flag grants access.
+    """
+
+    if _is_guild_owner(source):
+        return True, True
+
+    permissions = getattr(source, "permissions", None)
+    is_admin = _has_administrator_permission(permissions)
+    is_channel_manager = _has_channel_manage_permission(permissions)
+    if is_admin and is_channel_manager:
+        return True, True
+
+    channel = getattr(source, "channel", None)
+    member = getattr(source, "user", None) or getattr(source, "author", None)
+    permissions_for = getattr(channel, "permissions_for", None)
+    if member is None or not callable(permissions_for):
+        return is_admin, is_channel_manager
+    try:
+        resolved = permissions_for(member)
+    except AttributeError, TypeError:
+        return is_admin, is_channel_manager
+    return (
+        is_admin or _has_administrator_permission(resolved),
+        is_channel_manager or _has_channel_manage_permission(resolved),
+    )
+
+
+def _is_server_administrator(source: discord.Interaction | discord.Message) -> bool:
+    return _actor_privileges(source)[0]
+
+
 def _is_channel_manager(source: discord.Interaction | discord.Message) -> bool:
     """Return whether the actor can manage the current channel.
 
@@ -125,17 +173,65 @@ def _is_channel_manager(source: discord.Interaction | discord.Message) -> bool:
     Discord Administrators, so that flag is treated as Manage Channels.
     """
 
-    if _has_channel_manage_permission(getattr(source, "permissions", None)):
-        return True
-    channel = getattr(source, "channel", None)
-    member = getattr(source, "user", None) or getattr(source, "author", None)
-    permissions_for = getattr(channel, "permissions_for", None)
-    if member is None or not callable(permissions_for):
-        return False
+    return _actor_privileges(source)[1]
+
+
+def format_panel_update_age(timestamp: object | None) -> str | None:
+    """Mirror the panel overview `formatTimestamp` relative age."""
+
+    if timestamp in (None, ""):
+        return None
+    raw = str(timestamp).strip()
+    if not raw:
+        return None
     try:
-        return _has_channel_manage_permission(permissions_for(member))
-    except AttributeError, TypeError:
-        return False
+        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    now = get_current_time()
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=now.tzinfo)
+    else:
+        now = now.astimezone(value.tzinfo)
+    diff_sec = int((now - value).total_seconds())
+    if diff_sec < 0:
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if diff_sec < 60:
+        return f"{diff_sec}s ago"
+    if diff_sec < 3600:
+        return f"{diff_sec // 60}m ago"
+    if diff_sec < 86400:
+        return f"{diff_sec // 3600}h ago"
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _status_unknown(locale: object) -> str:
+    return menu_text(locale, "status_unknown")
+
+
+def _real_status_text(value: object | None, locale: object) -> str:
+    if value is None:
+        return _status_unknown(locale)
+    text = str(value).strip()
+    return text or _status_unknown(locale)
+
+
+def _format_disk_gb(value: object | None, locale: object) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return _status_unknown(locale)
+    return f"{float(value):.2f} GB"
+
+
+def _format_disk_percent(value: object | None, locale: object) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return _status_unknown(locale)
+    return f"{float(value):.2f}%"
+
+
+def _format_latency_ms(value: object | None, locale: object) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return _status_unknown(locale)
+    return f"{max(0, int(value))}ms"
 
 
 def status_card_fields(
@@ -144,81 +240,83 @@ def status_card_fields(
     a2s_ok: bool,
     info: dict | None,
     locale: object = "en-US",
+    response_time_ms: object | None = None,
+    last_updated: object | None = None,
+    disk_info: dict | None = None,
 ) -> list[tuple[str, str]]:
-    """Build the public status card without inventing missing A2S values."""
+    """Build the public status card from the same A2S/disk fields as the panel."""
 
-    unknown = menu_text(locale, "status_unknown")
-    host = server.a2s_query_host or server.host
-    query_port = server.a2s_query_port or server.game_port
-    fields: list[tuple[str, str]] = [
-        (
-            menu_text(locale, "status_panel"),
-            server.status.value if getattr(server, "status", None) else unknown,
-        ),
-        (menu_text(locale, "status_endpoint"), f"{host}:{query_port}"),
-    ]
-    game_host = getattr(server, "ip_address", None) or server.host
-    game_port = getattr(server, "game_port", None)
-    if game_port and f"{game_host}:{game_port}" != f"{host}:{query_port}":
-        fields.append((menu_text(locale, "status_game_address"), f"{game_host}:{game_port}"))
-
-    recorded = str(getattr(server, "current_game_version", None) or "").strip() or None
-    payload = info if a2s_ok and info else {}
-    if a2s_ok and payload:
-        raw_ping = payload.get("ping")
-        ping = (
-            f"{max(0, round(float(raw_ping) * 1000))} ms"
-            if isinstance(raw_ping, (int, float))
-            else unknown
-        )
-        a2s_version = str(payload.get("version") or "").strip() or None
-        fields.extend(
-            [
-                (
-                    menu_text(locale, "status_server_name"),
-                    str(payload.get("server_name") or server.server_name or server.name),
-                ),
-                (menu_text(locale, "status_cs2_version"), a2s_version or recorded or unknown),
-                (menu_text(locale, "status_map"), str(payload.get("map_name") or unknown)),
-                (
-                    menu_text(locale, "status_players"),
-                    (
-                        f"{payload.get('player_count', 0)}/{payload.get('max_players', 0)}"
-                        f" · {menu_text(locale, 'status_bots', count=payload.get('bot_count', 0))}"
-                    ),
-                ),
-                (
-                    menu_text(locale, "status_game"),
-                    str(payload.get("game") or "Counter-Strike 2"),
-                ),
-                (menu_text(locale, "status_platform"), str(payload.get("platform") or unknown)),
-                (
-                    menu_text(locale, "status_security"),
-                    (
-                        f"{menu_text(locale, 'status_vac_on' if payload.get('vac_enabled') else 'status_vac_off')}"
-                        f" · {menu_text(locale, 'status_password_yes' if payload.get('password_protected') else 'status_password_no')}"
-                    ),
-                ),
-                (menu_text(locale, "status_latency"), ping),
-            ]
-        )
-        if recorded and a2s_version and recorded != a2s_version:
-            fields.append((menu_text(locale, "status_recorded_version"), recorded))
-        return fields
-    fields.extend(
-        [
-            (menu_text(locale, "status_cs2_version"), recorded or unknown),
-            (
-                menu_text(locale, "status_configured_map"),
-                getattr(server, "default_map", None) or unknown,
-            ),
-            (
-                menu_text(locale, "status_configured_slots"),
-                str(getattr(server, "max_players", unknown)),
-            ),
-        ]
+    _ = server
+    unknown = _status_unknown(locale)
+    payload = info if a2s_ok and isinstance(info, dict) else {}
+    player_count = payload.get("player_count")
+    max_players = payload.get("max_players")
+    players = (
+        f"{player_count}/{max_players}"
+        if isinstance(player_count, int) and isinstance(max_players, int)
+        else unknown
     )
-    return fields
+    disk = disk_info if isinstance(disk_info, dict) else {}
+    return [
+        (
+            menu_text(locale, "status_online_state"),
+            menu_text(locale, "status_online" if a2s_ok else "status_offline"),
+        ),
+        (
+            menu_text(locale, "status_server_name"),
+            _real_status_text(payload.get("server_name"), locale),
+        ),
+        (menu_text(locale, "status_map"), _real_status_text(payload.get("map_name"), locale)),
+        (menu_text(locale, "status_players"), players),
+        (menu_text(locale, "status_latency"), _format_latency_ms(response_time_ms, locale)),
+        (
+            menu_text(locale, "status_cs2_version"),
+            _real_status_text(payload.get("version"), locale),
+        ),
+        (menu_text(locale, "status_updated"), format_panel_update_age(last_updated) or unknown),
+        (menu_text(locale, "status_disk_directory"), _format_disk_gb(disk.get("used_gb"), locale)),
+        (menu_text(locale, "status_disk_total"), _format_disk_gb(disk.get("total_gb"), locale)),
+        (
+            menu_text(locale, "status_disk_usage"),
+            _format_disk_percent(disk.get("used_percent"), locale),
+        ),
+    ]
+
+
+async def load_panel_status_sources(server: Server) -> dict:
+    """Reuse the panel A2S cache and disk-space cache.
+
+    Live A2S is used only when the panel cache is missing. Disk space stays
+    cache-only so Discord never invents values or opens a second SSH path.
+    """
+
+    from services.a2s_cache_service import a2s_cache_service
+    from services.a2s_query import a2s_service
+    from services.disk_space_service import disk_space_service
+
+    cached = await a2s_cache_service.get_cached_info(server.id)
+    if isinstance(cached, dict):
+        ok = bool(cached.get("success") and cached.get("server_info"))
+        info = cached.get("server_info") if ok else None
+        response_time_ms = cached.get("response_time_ms")
+        last_updated = cached.get("last_updated") or cached.get("timestamp")
+    else:
+        host = server.a2s_query_host or server.host
+        port = server.a2s_query_port or server.game_port
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        ok, info = await a2s_service.query_server_info(host, port, timeout=5)
+        response_time_ms = int((loop.time() - started) * 1000) if ok else None
+        last_updated = get_current_time().isoformat() if ok else None
+
+    disk_ok, disk_info = await disk_space_service.get_disk_space(server, cache_only=True)
+    return {
+        "a2s_ok": ok,
+        "info": info if ok else None,
+        "response_time_ms": response_time_ms,
+        "last_updated": last_updated,
+        "disk_info": disk_info if disk_ok else None,
+    }
 
 
 def _simple_plan(server: Server, action: str) -> dict:
@@ -375,6 +473,7 @@ class ManagedDiscordClient(discord.Client):
                     actor_user_id=str(interaction.user.id),
                     actor_role_ids=_roles(interaction),
                     actor_is_channel_manager=_is_channel_manager(interaction),
+                    actor_is_server_administrator=_is_server_administrator(interaction),
                 )
             except DiscordAuthorizationDenied:
                 return []
@@ -792,6 +891,7 @@ class DiscordBotManager:
         actor_user_id: int,
         actor_role_ids: set[str],
         actor_is_channel_manager: bool,
+        actor_is_server_administrator: bool = False,
         required_capability: DiscordCapability | None = None,
     ) -> list[tuple[ServerDiscordBinding, Server]]:
         if guild_id is None or channel_id is None:
@@ -805,6 +905,7 @@ class DiscordBotManager:
                 actor_user_id=str(actor_user_id),
                 actor_role_ids=actor_role_ids,
                 actor_is_channel_manager=actor_is_channel_manager,
+                actor_is_server_administrator=actor_is_server_administrator,
                 required_capability=required_capability,
             )
         if required_capability is not None:
@@ -840,6 +941,7 @@ class DiscordBotManager:
                 actor_user_id=message.author.id,
                 actor_role_ids=_member_roles(message.author),
                 actor_is_channel_manager=_is_channel_manager(message),
+                actor_is_server_administrator=_is_server_administrator(message),
             )
             if not pairs:
                 return
@@ -881,6 +983,7 @@ class DiscordBotManager:
             actor_user_id=interaction.user.id,
             actor_role_ids=_roles(interaction),
             actor_is_channel_manager=_is_channel_manager(interaction),
+            actor_is_server_administrator=_is_server_administrator(interaction),
             required_capability=required_capability,
         )
 
@@ -994,6 +1097,7 @@ class DiscordBotManager:
                 actor_user_id=str(interaction.user.id),
                 actor_role_ids=_roles(interaction),
                 actor_is_channel_manager=_is_channel_manager(interaction),
+                actor_is_server_administrator=_is_server_administrator(interaction),
                 required_capability=capability,
             )
             if server_value:
@@ -1035,6 +1139,7 @@ class DiscordBotManager:
                     actor_user_id=str(interaction.user.id),
                     actor_role_ids=_roles(interaction),
                     actor_is_channel_manager=_is_channel_manager(interaction),
+                    actor_is_server_administrator=_is_server_administrator(interaction),
                 )
             if not pairs:
                 raise DiscordAuthorizationDenied("You are not on the server whitelist")
@@ -1069,17 +1174,17 @@ class DiscordBotManager:
             await self._respond_error(interaction, exc)
 
     async def _status_embed(self, server: Server, locale: object = "en-US") -> discord.Embed:
-        from services.a2s_query import a2s_service
-
-        host = server.a2s_query_host or server.host
-        port = server.a2s_query_port or server.game_port
-        ok, info = await a2s_service.query_server_info(host, port, timeout=5)
+        sources = await load_panel_status_sources(server)
+        payload = sources["info"] if sources["a2s_ok"] and isinstance(sources["info"], dict) else {}
+        title_name = str(payload.get("server_name") or "").strip() or server.name
         embed = discord.Embed(
-            title=server.name,
-            description=menu_text(locale, "status_a2s_online" if ok else "status_a2s_unavailable"),
-            color=discord.Color.green() if ok else discord.Color.orange(),
+            title=title_name,
+            description=menu_text(
+                locale, "status_online" if sources["a2s_ok"] else "status_offline"
+            ),
+            color=discord.Color.green() if sources["a2s_ok"] else discord.Color.orange(),
         )
-        for name, value in status_card_fields(server, a2s_ok=ok, info=info, locale=locale):
+        for name, value in status_card_fields(server, locale=locale, **sources):
             embed.add_field(
                 name=name,
                 value=value or menu_text(locale, "status_unknown"),
@@ -1129,6 +1234,7 @@ class DiscordBotManager:
                 actor_user_id=str(interaction.user.id),
                 actor_role_ids=_roles(interaction),
                 actor_is_channel_manager=_is_channel_manager(interaction),
+                actor_is_server_administrator=_is_server_administrator(interaction),
                 guild_id=str(interaction.guild_id),
                 channel_id=str(interaction.channel_id),
                 action=action,
@@ -2051,6 +2157,7 @@ class DiscordBotManager:
                         actor_user_id=str(interaction.user.id),
                         actor_role_ids=_roles(interaction),
                         actor_is_channel_manager=_is_channel_manager(interaction),
+                        actor_is_server_administrator=_is_server_administrator(interaction),
                         guild_id=str(interaction.guild_id),
                         channel_id=str(interaction.channel_id),
                     )
@@ -2131,6 +2238,7 @@ class DiscordBotManager:
                 actor_user_id=str(interaction.user.id),
                 actor_role_ids=_roles(interaction),
                 actor_is_channel_manager=_is_channel_manager(interaction),
+                actor_is_server_administrator=_is_server_administrator(interaction),
                 fresh_plan=fresh_plan,
             )
             item.status = "running"

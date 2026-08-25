@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+from pathlib import Path
 
 import pytest
 
 from api import lifecycle as lifecycle_module
 from api.lifecycle import ApplicationLifecycle
+from modules.database import migrate_db
 from services.task_registry import BackgroundTaskRegistry
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.asyncio
@@ -102,3 +107,32 @@ async def test_background_task_registry_reports_failures():
     assert len(errors) == 1
     assert isinstance(errors[0], ValueError)
     assert registry.tasks == set()
+
+
+def test_startup_upgrades_alembic_head_before_any_service():
+    source = inspect.getsource(ApplicationLifecycle.start)
+    migrate_at = source.index("await migrate_db()")
+    init_at = source.index("await init_db()")
+    discord_at = source.index("discord_bot_manager.start")
+    ready_at = source.index("self._started = True")
+    assert migrate_at < init_at < discord_at < ready_at
+    assert "upgrade_database" in inspect.getsource(migrate_db)
+    agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "uv run python scripts/check_baseline.py" in agents
+    assert "Do not tell the user to run `alembic upgrade`" in agents
+    assert "rely on startup auto-migrate" in agents
+
+
+@pytest.mark.asyncio
+async def test_migrate_db_delegates_to_locked_alembic_upgrade(monkeypatch):
+    called: dict[str, object] = {}
+
+    async def fake_upgrade(engine, *, lock_timeout_seconds):
+        called["engine"] = engine
+        called["lock_timeout_seconds"] = lock_timeout_seconds
+
+    monkeypatch.setattr("modules.database_migrations.upgrade_database", fake_upgrade)
+    await migrate_db()
+
+    assert called["engine"] is lifecycle_module.engine
+    assert called["lock_timeout_seconds"] >= 1

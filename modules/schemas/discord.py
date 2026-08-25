@@ -164,6 +164,7 @@ class DiscordBindingUpdate(SQLModel):
     role_ids: list[Snowflake] = Field(default_factory=list)
     user_ids: list[Snowflake] = Field(default_factory=list)
     allow_channel_managers: bool = False
+    allow_server_administrators: bool = False
     capabilities: list[DiscordCapability] = Field(default_factory=list)
     response_visibility: Literal["public"] = "public"
 
@@ -184,10 +185,15 @@ class DiscordBindingUpdate(SQLModel):
                 raise ValueError("An enabled Discord binding requires a Guild")
             if not self.channel_ids:
                 raise ValueError("An enabled Discord binding requires at least one channel")
-            if not self.role_ids and not self.user_ids and not self.allow_channel_managers:
+            if (
+                not self.role_ids
+                and not self.user_ids
+                and not self.allow_channel_managers
+                and not self.allow_server_administrators
+            ):
                 raise ValueError(
-                    "An enabled Discord binding requires at least one role, user, or the "
-                    "channel-manager option"
+                    "An enabled Discord binding requires at least one role, user, "
+                    "server-administrator option, or channel-manager option"
                 )
         return self
 
@@ -202,6 +208,7 @@ class DiscordBindingResponse(SQLModel):
     role_ids: list[Snowflake] = Field(default_factory=list)
     user_ids: list[Snowflake] = Field(default_factory=list)
     allow_channel_managers: bool = False
+    allow_server_administrators: bool = False
     capabilities: list[DiscordCapability] = Field(default_factory=list)
     response_visibility: Literal["public"] = "public"
 
@@ -220,6 +227,7 @@ class DiscordGlobalBindingResponse(SQLModel):
     role_ids: list[Snowflake] = Field(default_factory=list)
     user_ids: list[Snowflake] = Field(default_factory=list)
     allow_channel_managers: bool = False
+    allow_server_administrators: bool = False
     capabilities: list[DiscordCapability] = Field(default_factory=list)
     server_count: int = 0
     matching_server_count: int = 0

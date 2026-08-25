@@ -4,7 +4,10 @@ Alembic is the only schema authority. Application startup acquires a
 PostgreSQL advisory lock and upgrades to the single checked-in head before any
 session or background service starts.
 
-Operational commands:
+Normal application startup already upgrades to head. Do not ask operators to
+run Alembic or `db_admin upgrade` by hand.
+
+Optional diagnostic commands:
 
 ```bash
 uv run python -m modules.db_admin status

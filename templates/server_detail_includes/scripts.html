@@ -155,7 +155,7 @@
             clear_webhook: false
         },
         discordBotBinding: { enabled: false, effective_enabled: false, capabilities: [], channel_ids: [], role_ids: [], user_ids: [] },
-        discordBotForm: { enabled: false, guild_id: '', channel_ids: [], role_ids: [], allow_channel_managers: false, capabilities: [], response_visibility: 'public' },
+        discordBotForm: { enabled: false, guild_id: '', channel_ids: [], role_ids: [], allow_channel_managers: false, allow_server_administrators: false, capabilities: [], response_visibility: 'public' },
         discordBotOptions: { guilds: [], channels: [], roles: [] },
         discordBotUserIdsText: '',
         discordBotError: '',
@@ -999,6 +999,31 @@
                 : fallback;
         },
 
+        discordAllowedSummary() {
+            const parts = [];
+            const users = this.discordBotUserIdsText.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean).length;
+            const roles = (this.discordBotForm.role_ids || []).length;
+            if (users) {
+                parts.push(this.localizedText('discordBot.allowedUsers', '{count} user IDs').replace('{count}', users));
+            }
+            if (roles) {
+                parts.push(this.localizedText('discordBot.allowedRoles', '{count} roles').replace('{count}', roles));
+            }
+            if (this.discordBotForm.allow_server_administrators) {
+                parts.push(this.localizedText('discordBot.allowedServerAdministratorsOn', 'Discord server administrators'));
+            }
+            if (this.discordBotForm.allow_channel_managers) {
+                parts.push(this.localizedText('discordBot.allowedChannelManagersOn', 'current-channel managers'));
+            }
+            if (!parts.length) {
+                return this.localizedText(
+                    'discordBot.allowedNone',
+                    'Currently allowed: no grant path is selected. Enable at least one user, role, server-administrator, or channel-manager option before turning the binding on.'
+                );
+            }
+            return this.localizedText('discordBot.allowedSummary', 'Currently allowed: {paths}').replace('{paths}', parts.join(', '));
+        },
+
         discordCapabilityLabel(value) {
             const labels = {
                 status: ['discordBot.capStatus', 'Status'],
@@ -1030,6 +1055,7 @@
                     channel_ids: data.channel_ids || [],
                     role_ids: data.role_ids || [],
                     allow_channel_managers: !!data.allow_channel_managers,
+                    allow_server_administrators: !!data.allow_server_administrators,
                     capabilities: data.capabilities || [],
                     response_visibility: 'public'
                 };

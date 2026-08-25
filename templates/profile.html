@@ -400,13 +400,23 @@
                             <div class="col-md-6">
                                 <label class="form-label" for="discord-global-users" data-i18n="discordBot.users">Allowed Discord User IDs</label>
                                 <textarea class="form-control font-monospace" id="discord-global-users" rows="5" placeholder="123456789012345678"></textarea>
-                                <div class="form-text" data-i18n="discordBot.whitelistRule">A user ID match, any role match, or the explicitly enabled channel-manager rule grants access.</div>
+                                <div class="form-text" data-i18n="discordBot.whitelistRule">A user ID match, any role match, or an explicitly enabled server-administrator or channel-manager switch grants access.</div>
                             </div>
                         </div>
-                        <div class="form-check form-switch mt-3">
-                            <input class="form-check-input" id="discord-global-channel-managers" type="checkbox">
-                            <label class="form-check-label" for="discord-global-channel-managers" data-i18n="discordBot.allowChannelManagers">Allow members who can manage the current channel</label>
-                            <div class="form-text" data-i18n="discordBot.allowChannelManagersHint">This is an explicit whitelist alternative. Discord permissions are checked again for the current channel before each action and confirmation.</div>
+                        <div class="border rounded p-3 mt-3">
+                            <strong data-i18n="discordBot.privilegeSwitches">Privilege switches</strong>
+                            <p class="form-text mb-2" data-i18n="discordBot.privilegeSwitchesHint">These two switches are independent explicit grants. Discord server administrators and current-channel managers are not authorized unless their own switch is enabled.</p>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" id="discord-global-server-administrators" type="checkbox">
+                                <label class="form-check-label" for="discord-global-server-administrators" data-i18n="discordBot.allowServerAdministrators">Allow Discord server administrators</label>
+                                <div class="form-text" data-i18n="discordBot.allowServerAdministratorsHint">Only when enabled, the Guild owner or members with the Administrator permission are treated as a whitelist alternative. The permission is checked again before every action and confirmation.</div>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" id="discord-global-channel-managers" type="checkbox">
+                                <label class="form-check-label" for="discord-global-channel-managers" data-i18n="discordBot.allowChannelManagers">Allow members who can manage the current channel</label>
+                                <div class="form-text" data-i18n="discordBot.allowChannelManagersHint">This is an explicit whitelist alternative. Discord permissions are checked again for the current channel before each action and confirmation.</div>
+                            </div>
+                            <div class="alert alert-info py-2 mb-0" id="discord-global-allowed-summary"></div>
                         </div>
                         <hr>
                         <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -681,9 +691,47 @@ function refreshDiscordSelectPlaceholder(selectId, key, fallback) {
 function refreshDiscordBotLocalizedText() {
     renderDiscordGlobalCapabilities();
     updateDiscordGlobalStats(lastDiscordGlobalStats);
+    refreshDiscordGlobalAllowedSummary();
     refreshDiscordSelectPlaceholder('discord-global-guild', 'pushSelectGuild', 'Select a Guild');
     refreshDiscordSelectPlaceholder('discord-menu-push-guild', 'pushSelectGuild', 'Select a Guild');
     refreshDiscordSelectPlaceholder('discord-menu-push-channel', 'pushSelectChannel', 'Select a bound channel');
+}
+
+function discordAllowedGrantPaths({ userCount, roleCount, allowChannelManagers, allowServerAdministrators }) {
+    const parts = [];
+    if (userCount) {
+        parts.push(discordBotText('allowedUsers', '{count} user IDs').replace('{count}', userCount));
+    }
+    if (roleCount) {
+        parts.push(discordBotText('allowedRoles', '{count} roles').replace('{count}', roleCount));
+    }
+    if (allowServerAdministrators) {
+        parts.push(discordBotText('allowedServerAdministratorsOn', 'Discord server administrators'));
+    }
+    if (allowChannelManagers) {
+        parts.push(discordBotText('allowedChannelManagersOn', 'current-channel managers'));
+    }
+    if (!parts.length) {
+        return discordBotText(
+            'allowedNone',
+            'Currently allowed: no grant path is selected. Enable at least one user, role, server-administrator, or channel-manager option before turning the binding on.'
+        );
+    }
+    return discordBotText('allowedSummary', 'Currently allowed: {paths}').replace('{paths}', parts.join(', '));
+}
+
+function refreshDiscordGlobalAllowedSummary() {
+    const summary = document.getElementById('discord-global-allowed-summary');
+    if (!summary) return;
+    const userCount = document.getElementById('discord-global-users').value
+        .split(/[\s,]+/).map((item) => item.trim()).filter(Boolean).length;
+    const roleCount = document.getElementById('discord-global-roles').selectedOptions.length;
+    summary.textContent = discordAllowedGrantPaths({
+        userCount,
+        roleCount,
+        allowChannelManagers: document.getElementById('discord-global-channel-managers').checked,
+        allowServerAdministrators: document.getElementById('discord-global-server-administrators').checked
+    });
 }
 
 function discordGlobalSelectedCapabilities() {
@@ -771,6 +819,7 @@ async function loadDiscordGlobalBinding() {
         if (!response.ok) throw new Error(window.formatApiErrorDetail(data, 'Failed to load global Discord template'));
         document.getElementById('discord-global-enabled').checked = !!data.enabled;
         document.getElementById('discord-global-channel-managers').checked = !!data.allow_channel_managers;
+        document.getElementById('discord-global-server-administrators').checked = !!data.allow_server_administrators;
         document.getElementById('discord-global-users').value = (data.user_ids || []).join('\n');
         setDiscordGlobalCapabilities(data.capabilities || []);
         updateDiscordGlobalStats(data);
@@ -779,6 +828,7 @@ async function loadDiscordGlobalBinding() {
             data.channel_ids || [],
             data.role_ids || []
         );
+        refreshDiscordGlobalAllowedSummary();
         if (!document.getElementById('discord-global-status').classList.contains('text-danger')) {
             setDiscordGlobalStatus('');
         }
@@ -810,6 +860,7 @@ async function saveDiscordGlobalBinding(syncExisting) {
             role_ids: selectedValues('discord-global-roles'),
             user_ids: [...new Set(userIds)],
             allow_channel_managers: document.getElementById('discord-global-channel-managers').checked,
+            allow_server_administrators: document.getElementById('discord-global-server-administrators').checked,
             capabilities: discordGlobalSelectedCapabilities(),
             response_visibility: 'public',
             sync_existing_servers: syncExisting
@@ -840,6 +891,14 @@ async function saveDiscordGlobalBinding(syncExisting) {
 }
 
 renderDiscordGlobalCapabilities();
+refreshDiscordGlobalAllowedSummary();
+['discord-global-users', 'discord-global-roles', 'discord-global-channel-managers', 'discord-global-server-administrators']
+    .forEach((id) => {
+        const target = document.getElementById(id);
+        if (!target) return;
+        target.addEventListener('input', refreshDiscordGlobalAllowedSummary);
+        target.addEventListener('change', refreshDiscordGlobalAllowedSummary);
+    });
 window.addEventListener('i18nReady', refreshDiscordBotLocalizedText);
 window.addEventListener('localeChanged', () => {
     if (window.i18n?.isInitialized) refreshDiscordBotLocalizedText();
@@ -847,6 +906,7 @@ window.addEventListener('localeChanged', () => {
 
 document.getElementById('discord-global-guild').addEventListener('change', async (event) => {
     await loadDiscordGlobalOptions(event.target.value, [], []);
+    refreshDiscordGlobalAllowedSummary();
 });
 
 document.getElementById('discord-global-preset-readonly').addEventListener('click', () => {

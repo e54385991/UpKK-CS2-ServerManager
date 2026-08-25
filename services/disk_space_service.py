@@ -24,7 +24,7 @@ class DiskSpaceService:
         pass
 
     async def get_disk_space(
-        self, server: Server, force_refresh: bool = False
+        self, server: Server, force_refresh: bool = False, cache_only: bool = False
     ) -> Tuple[bool, Optional[Dict]]:
         """
         Get disk space information for server directory
@@ -32,6 +32,7 @@ class DiskSpaceService:
         Args:
             server: Server instance
             force_refresh: If True, bypass cache and read from system
+            cache_only: If True, return only cached values and never SSH
 
         Returns:
             Tuple[bool, Optional[Dict]]: (success, disk_info)
@@ -50,6 +51,8 @@ class DiskSpaceService:
             if cached_info and isinstance(cached_info, dict):
                 logger.debug(f"Using cached disk space for server {server.id}")
                 return True, cached_info
+            if cache_only:
+                return False, None
 
         # Read from system
         success, disk_info = await self._read_disk_space(server)

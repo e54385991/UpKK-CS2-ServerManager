@@ -16,6 +16,7 @@ def _copy_template(binding: ServerDiscordBinding, bot: UserDiscordBot) -> None:
     binding.role_ids = list(bot.global_role_ids or [])
     binding.user_ids = list(bot.global_user_ids or [])
     binding.allow_channel_managers = bot.global_allow_channel_managers
+    binding.allow_server_administrators = bot.global_allow_server_administrators
     binding.capabilities = list(bot.global_capabilities or [])
     binding.response_visibility = "public"
     binding.invalid_reason = None
@@ -30,6 +31,7 @@ def binding_matches_template(binding: ServerDiscordBinding, bot: UserDiscordBot)
         and set(binding.role_ids or []) == set(bot.global_role_ids or [])
         and set(binding.user_ids or []) == set(bot.global_user_ids or [])
         and binding.allow_channel_managers == bot.global_allow_channel_managers
+        and binding.allow_server_administrators == bot.global_allow_server_administrators
         and set(binding.capabilities or []) == set(bot.global_capabilities or [])
         and binding.response_visibility == "public"
     )

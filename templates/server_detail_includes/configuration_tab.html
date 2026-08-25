@@ -891,13 +891,23 @@
                                     <div class="col-md-6">
                                         <label class="form-label" data-i18n="discordBot.users">Allowed Discord User IDs</label>
                                         <textarea class="form-control font-monospace" rows="5" x-model="discordBotUserIdsText" placeholder="123456789012345678"></textarea>
-                                        <div class="form-text" data-i18n="discordBot.whitelistRule">A user ID match, any role match, or the explicitly enabled channel-manager rule grants access.</div>
+                                        <div class="form-text" data-i18n="discordBot.whitelistRule">A user ID match, any role match, or an explicitly enabled server-administrator or channel-manager switch grants access.</div>
                                     </div>
                                 </div>
-                                <div class="form-check form-switch mt-3 mb-3">
-                                    <input class="form-check-input" id="discordAllowChannelManagers" type="checkbox" x-model="discordBotForm.allow_channel_managers">
-                                    <label class="form-check-label" for="discordAllowChannelManagers" data-i18n="discordBot.allowChannelManagers">Allow members who can manage the current channel</label>
-                                    <div class="form-text" data-i18n="discordBot.allowChannelManagersHint">This is an explicit whitelist alternative. Discord permissions are checked again for the current channel before each action and confirmation.</div>
+                                <div class="border rounded p-3 mt-3 mb-3">
+                                    <strong data-i18n="discordBot.privilegeSwitches">Privilege switches</strong>
+                                    <p class="form-text mb-2" data-i18n="discordBot.privilegeSwitchesHint">These two switches are independent explicit grants. Discord server administrators and current-channel managers are not authorized unless their own switch is enabled.</p>
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" id="discordAllowServerAdministrators" type="checkbox" x-model="discordBotForm.allow_server_administrators">
+                                        <label class="form-check-label" for="discordAllowServerAdministrators" data-i18n="discordBot.allowServerAdministrators">Allow Discord server administrators</label>
+                                        <div class="form-text" data-i18n="discordBot.allowServerAdministratorsHint">Only when enabled, the Guild owner or members with the Administrator permission are treated as a whitelist alternative. The permission is checked again before every action and confirmation.</div>
+                                    </div>
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" id="discordAllowChannelManagers" type="checkbox" x-model="discordBotForm.allow_channel_managers">
+                                        <label class="form-check-label" for="discordAllowChannelManagers" data-i18n="discordBot.allowChannelManagers">Allow members who can manage the current channel</label>
+                                        <div class="form-text" data-i18n="discordBot.allowChannelManagersHint">This is an explicit whitelist alternative. Discord permissions are checked again for the current channel before each action and confirmation.</div>
+                                    </div>
+                                    <div class="alert alert-info py-2 mb-0" x-text="discordAllowedSummary(localeTick)"></div>
                                 </div>
                                 <hr>
                                 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">

@@ -38,6 +38,7 @@ class UserDiscordBot(SQLModel, table=True):
     global_binding_configured: bool = Field(default=False)
     global_binding_enabled: bool = Field(default=False)
     global_allow_channel_managers: bool = Field(default=False)
+    global_allow_server_administrators: bool = Field(default=False)
     global_guild_id: Optional[str] = Field(default=None, max_length=20)
     global_channel_ids: List[str] = Field(
         default_factory=list, sa_column=Column(JSON, nullable=False)
@@ -82,6 +83,7 @@ class ServerDiscordBinding(SQLModel, table=True):
     role_ids: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     user_ids: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     allow_channel_managers: bool = Field(default=False)
+    allow_server_administrators: bool = Field(default=False)
     capabilities: List[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     response_visibility: str = Field(default="public", max_length=16)
     invalid_reason: Optional[str] = Field(default=None, max_length=255)

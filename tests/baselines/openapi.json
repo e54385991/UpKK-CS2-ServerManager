@@ -2206,6 +2206,11 @@
             "title": "Allow Channel Managers",
             "type": "boolean"
           },
+          "allow_server_administrators": {
+            "default": false,
+            "title": "Allow Server Administrators",
+            "type": "boolean"
+          },
           "capabilities": {
             "items": {
               "$ref": "#/components/schemas/DiscordCapability"
@@ -2288,6 +2293,11 @@
           "allow_channel_managers": {
             "default": false,
             "title": "Allow Channel Managers",
+            "type": "boolean"
+          },
+          "allow_server_administrators": {
+            "default": false,
+            "title": "Allow Server Administrators",
             "type": "boolean"
           },
           "capabilities": {
@@ -2648,6 +2658,11 @@
             "title": "Allow Channel Managers",
             "type": "boolean"
           },
+          "allow_server_administrators": {
+            "default": false,
+            "title": "Allow Server Administrators",
+            "type": "boolean"
+          },
           "capabilities": {
             "items": {
               "$ref": "#/components/schemas/DiscordCapability"
@@ -2728,6 +2743,11 @@
           "allow_channel_managers": {
             "default": false,
             "title": "Allow Channel Managers",
+            "type": "boolean"
+          },
+          "allow_server_administrators": {
+            "default": false,
+            "title": "Allow Server Administrators",
             "type": "boolean"
           },
           "capabilities": {

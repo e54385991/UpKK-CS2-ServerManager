@@ -247,8 +247,15 @@ def test_discord_profile_and_server_options_keep_visible_labels():
     assert "refreshDiscordBotLocalizedText" in profile
     assert "discordGlobalSelectedCapabilities()" in profile
     assert 'id="discord-global-channel-managers"' in profile
+    assert 'id="discord-global-server-administrators"' in profile
+    assert 'id="discord-global-allowed-summary"' in profile
+    assert "refreshDiscordGlobalAllowedSummary" in profile
+    assert 'id="discordAllowServerAdministrators"' in configuration
+    assert "discordAllowedSummary(localeTick)" in configuration
     assert "discordCapabilityLabel(cap)" in configuration
     assert "discordCapabilityLabel(value)" in scripts
+    assert "discordAllowedSummary()" in scripts
+    assert "allow_server_administrators" in scripts
     assert "localeTick" in scripts
 
     for locale in ("en-US", "zh-CN"):
@@ -257,5 +264,8 @@ def test_discord_profile_and_server_options_keep_visible_labels():
         )["discordBot"]
         assert messages["globalSyncWarning"]
         assert messages["allowChannelManagers"]
+        assert messages["allowServerAdministrators"]
+        assert messages["allowedSummary"]
+        assert messages["privilegeSwitches"]
         assert messages["capStatus"]
         assert messages["whitelistRule"]

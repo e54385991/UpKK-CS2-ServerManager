@@ -223,6 +223,7 @@ async def _global_binding_response(
         role_ids=list(bot.global_role_ids or []),
         user_ids=list(bot.global_user_ids or []),
         allow_channel_managers=bot.global_allow_channel_managers,
+        allow_server_administrators=bot.global_allow_server_administrators,
         capabilities=list(bot.global_capabilities or []),
         server_count=server_count,
         matching_server_count=matching_server_count,
@@ -401,6 +402,7 @@ async def update_discord_global_binding(
     bot.global_role_ids = list(request.role_ids)
     bot.global_user_ids = list(request.user_ids)
     bot.global_allow_channel_managers = request.allow_channel_managers
+    bot.global_allow_server_administrators = request.allow_server_administrators
     bot.global_capabilities = [item.value for item in request.capabilities]
     db.add(bot)
     synced_server_count = 0
@@ -545,6 +547,7 @@ async def _binding_response(
         role_ids=list(binding.role_ids or []) if binding else [],
         user_ids=list(binding.user_ids or []) if binding else [],
         allow_channel_managers=binding.allow_channel_managers if binding else False,
+        allow_server_administrators=binding.allow_server_administrators if binding else False,
         capabilities=list(binding.capabilities or []) if binding else [],
         response_visibility="public",
     )
@@ -583,6 +586,7 @@ async def update_server_discord_bot_settings(
     binding.role_ids = list(request.role_ids)
     binding.user_ids = list(request.user_ids)
     binding.allow_channel_managers = request.allow_channel_managers
+    binding.allow_server_administrators = request.allow_server_administrators
     binding.capabilities = [item.value for item in request.capabilities]
     binding.response_visibility = "public"
     binding.invalid_reason = None

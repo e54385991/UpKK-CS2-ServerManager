@@ -22,6 +22,7 @@ async def authorized_bindings(
     actor_user_id: str,
     actor_role_ids: set[str],
     actor_is_channel_manager: bool = False,
+    actor_is_server_administrator: bool = False,
     required_capability: DiscordCapability | None = None,
 ) -> list[tuple[ServerDiscordBinding, Server]]:
     bot = await db.get(UserDiscordBot, bot_owner_user_id)
@@ -52,9 +53,15 @@ async def authorized_bindings(
         user_match = actor_user_id in set(binding.user_ids or [])
         role_match = bool(actor_role_ids & set(binding.role_ids or []))
         channel_manager_match = binding.allow_channel_managers and actor_is_channel_manager
-        # Elevated Discord permissions are considered only through the explicit,
-        # binding-scoped channel-manager switch. There is no implicit bypass.
-        if not user_match and not role_match and not channel_manager_match:
+        server_admin_match = binding.allow_server_administrators and actor_is_server_administrator
+        # Elevated Discord permissions are considered only through the explicit
+        # binding-scoped switches. There is no implicit Administrator bypass.
+        if (
+            not user_match
+            and not role_match
+            and not channel_manager_match
+            and not server_admin_match
+        ):
             continue
         if required_capability is not None and required_capability.value not in set(
             binding.capabilities or []

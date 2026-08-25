@@ -40,6 +40,8 @@ from modules.schemas.discord import (
     DiscordMenuPushRequest,
 )
 from modules.utils import get_current_time
+from services.a2s_cache_service import a2s_cache_service
+from services.a2s_query import a2s_service
 from services.agent_policy_service import get_effective_agent_policy
 from services.ai_security import redact_sensitive_text
 from services.ai_tools import TOOLS_BY_NAME, GameConsoleCommandInput, tool_definitions
@@ -53,7 +55,10 @@ from services.discord_bot_manager import (
     DiscordBotManager,
     ManagedDiscordClient,
     _is_channel_manager,
+    _is_server_administrator,
     discord_bot_manager,
+    format_panel_update_age,
+    load_panel_status_sources,
     status_card_fields,
 )
 from services.discord_bot_service import (
@@ -81,6 +86,7 @@ from services.discord_operation_service import (
     confirm_operation,
     create_operation,
 )
+from services.disk_space_service import disk_space_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -126,8 +132,19 @@ def test_snowflakes_remain_strings_and_unknown_capabilities_fail_closed():
         }
     )
     assert managers_only.allow_channel_managers is True
+    assert managers_only.allow_server_administrators is False
     assert managers_only.role_ids == []
     assert managers_only.user_ids == []
+    admins_only = DiscordBindingUpdate.model_validate(
+        {
+            "enabled": True,
+            "guild_id": "123456789012345678",
+            "channel_ids": ["223456789012345678"],
+            "allow_server_administrators": True,
+        }
+    )
+    assert admins_only.allow_server_administrators is True
+    assert admins_only.allow_channel_managers is False
     with pytest.raises(ValidationError):
         DiscordBindingUpdate.model_validate(
             {
@@ -233,7 +250,11 @@ async def test_whitelist_has_no_discord_administrator_bypass():
     assert denied == []
 
 
-def _auth_fixtures(*, allow_channel_managers: bool = False):
+def _auth_fixtures(
+    *,
+    allow_channel_managers: bool = False,
+    allow_server_administrators: bool = False,
+):
     bot = UserDiscordBot(user_id=1, token_encrypted="encrypted", enabled=True)
     owner = User(
         id=1,
@@ -259,6 +280,7 @@ def _auth_fixtures(*, allow_channel_managers: bool = False):
         role_ids=[],
         user_ids=[],
         allow_channel_managers=allow_channel_managers,
+        allow_server_administrators=allow_server_administrators,
         capabilities=["status"],
     )
     db = AsyncMock()
@@ -308,6 +330,46 @@ async def test_channel_managers_are_authorized_only_when_explicitly_enabled():
     assert denied_when_disabled == []
 
 
+@pytest.mark.asyncio
+async def test_server_administrators_are_authorized_only_when_explicitly_enabled():
+    db, binding, server = _auth_fixtures(allow_server_administrators=True)
+    allowed = await authorized_bindings(
+        db,
+        bot_owner_user_id=1,
+        guild_id="100",
+        channel_id="200",
+        actor_user_id="999",
+        actor_role_ids=set(),
+        actor_is_server_administrator=True,
+    )
+    assert [(item[0], item[1]) for item in allowed] == [(binding, server)]
+
+    db, _binding, _server = _auth_fixtures(allow_server_administrators=True)
+    denied_without_permission = await authorized_bindings(
+        db,
+        bot_owner_user_id=1,
+        guild_id="100",
+        channel_id="200",
+        actor_user_id="999",
+        actor_role_ids=set(),
+        actor_is_server_administrator=False,
+        actor_is_channel_manager=True,
+    )
+    assert denied_without_permission == []
+
+    db, _binding, _server = _auth_fixtures(allow_server_administrators=False)
+    denied_when_disabled = await authorized_bindings(
+        db,
+        bot_owner_user_id=1,
+        guild_id="100",
+        channel_id="200",
+        actor_user_id="999",
+        actor_role_ids=set(),
+        actor_is_server_administrator=True,
+    )
+    assert denied_when_disabled == []
+
+
 def test_channel_manager_detection_uses_manage_channels_or_administrator():
     assert (
         _is_channel_manager(
@@ -346,7 +408,43 @@ def test_channel_manager_detection_uses_manage_channels_or_administrator():
     )
 
 
-def test_status_card_includes_version_and_does_not_invent_missing_values():
+def test_server_administrator_detection_uses_administrator_or_guild_owner():
+    assert (
+        _is_server_administrator(
+            SimpleNamespace(permissions=SimpleNamespace(manage_channels=False, administrator=True))
+        )
+        is True
+    )
+    assert (
+        _is_server_administrator(
+            SimpleNamespace(permissions=SimpleNamespace(manage_channels=True, administrator=False))
+        )
+        is False
+    )
+    assert (
+        _is_server_administrator(
+            SimpleNamespace(
+                permissions=SimpleNamespace(manage_channels=False, administrator=False),
+                guild=SimpleNamespace(owner_id=9),
+                user=SimpleNamespace(id=9),
+            )
+        )
+        is True
+    )
+    assert (
+        _is_server_administrator(
+            SimpleNamespace(
+                permissions=SimpleNamespace(manage_channels=False, administrator=False),
+                guild=SimpleNamespace(owner_id=1),
+                user=SimpleNamespace(id=9),
+                channel=None,
+            )
+        )
+        is False
+    )
+
+
+def test_status_card_matches_panel_overview_and_does_not_invent_missing_values():
     server = Server(
         id=10,
         user_id=1,
@@ -361,39 +459,95 @@ def test_status_card_includes_version_and_does_not_invent_missing_values():
         current_game_version="1.40.9.4",
         status=ServerStatus.RUNNING,
     )
+    last_updated = (get_current_time() - timedelta(seconds=2)).isoformat()
     online = dict(
         status_card_fields(
             server,
             a2s_ok=True,
             info={
-                "server_name": "CS2-ZE",
-                "version": "1.41.1.1",
-                "map_name": "ze_demon_slayer",
-                "player_count": 1,
-                "max_players": 64,
-                "bot_count": 0,
-                "game": "Counter-Strike 2",
-                "platform": "l",
-                "vac_enabled": True,
-                "password_protected": False,
-                "ping": 0.012,
+                "server_name": "[UPKK]CS2 KZ #1",
+                "version": "1.41.7.7",
+                "map_name": "kz_justin",
+                "player_count": 0,
+                "max_players": 13,
+                "ping": 0.069,
             },
             locale="zh-CN",
+            response_time_ms=69,
+            last_updated=last_updated,
+            disk_info={"used_gb": 129.93, "total_gb": 489.0, "used_percent": 26.57},
         )
     )
-    assert online["CS2 版本"] == "1.41.1.1"
-    assert online["已记录版本"] == "1.40.9.4"
-    assert online["地图"] == "ze_demon_slayer"
-    assert online["玩家"] == "1/64 · Bot 0"
-    assert online["查询地址"] == "fulldown.upkk.com:27015"
-    assert "1.41.1.1" in online.values()
+    assert online["在线状态"] == "服务器在线"
+    assert online["服务器名称"] == "[UPKK]CS2 KZ #1"
+    assert online["地图"] == "kz_justin"
+    assert online["玩家"] == "0/13"
+    assert online["延迟"] == "69ms"
+    assert online["版本"] == "1.41.7.7"
+    assert online["更新时间"] == format_panel_update_age(last_updated)
+    assert online["目录占用"] == "129.93 GB"
+    assert online["磁盘总量"] == "489.00 GB"
+    assert online["占用率"] == "26.57%"
+    assert "ZE Panel Name" not in online.values()
+    assert "de_dust2" not in online.values()
+    assert "1.40.9.4" not in online.values()
 
     offline = dict(status_card_fields(server, a2s_ok=False, info=None, locale="en-US"))
-    assert offline["CS2 version"] == "1.40.9.4"
-    assert offline["Configured map"] == "de_dust2"
-    missing_version = server.model_copy(update={"current_game_version": None})
-    unknown = dict(status_card_fields(missing_version, a2s_ok=False, info=None, locale="en-US"))
-    assert unknown["CS2 version"] == "unknown"
+    assert offline["Availability"] == "Server offline or query failed"
+    assert offline["Version"] == "unknown"
+    assert offline["Map"] == "unknown"
+    assert offline["Players"] == "unknown"
+    assert offline["Ping"] == "unknown"
+    assert offline["Directory"] == "unknown"
+    assert offline["Updated"] == "unknown"
+    assert "de_dust2" not in offline.values()
+    assert "1.40.9.4" not in offline.values()
+
+
+def test_panel_update_age_matches_overview_relative_format():
+    now = get_current_time()
+    assert format_panel_update_age((now - timedelta(seconds=2)).isoformat()) == "2s ago"
+    assert format_panel_update_age((now - timedelta(minutes=3)).isoformat()) == "3m ago"
+    assert format_panel_update_age("not-a-timestamp") is None
+    assert format_panel_update_age(None) is None
+
+
+@pytest.mark.asyncio
+async def test_status_sources_reuse_panel_a2s_and_disk_caches(monkeypatch):
+    server = Server(
+        id=10,
+        user_id=1,
+        name="CS2-ZE",
+        host="fulldown.upkk.com",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+        game_port=27015,
+    )
+    cached = {
+        "success": True,
+        "server_info": {"server_name": "[UPKK]CS2 KZ #1", "map_name": "kz_justin"},
+        "response_time_ms": 69,
+        "last_updated": "2026-08-26T00:00:00+08:00",
+    }
+    live_query = AsyncMock(side_effect=AssertionError("live A2S must not run when cache exists"))
+
+    async def cached_info(_server_id):
+        return cached
+
+    async def disk_space(_server, cache_only=False):
+        assert cache_only is True
+        return True, {"used_gb": 129.93, "total_gb": 489.0, "used_percent": 26.57}
+
+    monkeypatch.setattr(a2s_cache_service, "get_cached_info", cached_info)
+    monkeypatch.setattr(a2s_service, "query_server_info", live_query)
+    monkeypatch.setattr(disk_space_service, "get_disk_space", disk_space)
+
+    sources = await load_panel_status_sources(server)
+    assert sources["a2s_ok"] is True
+    assert sources["info"]["server_name"] == "[UPKK]CS2 KZ #1"
+    assert sources["response_time_ms"] == 69
+    assert sources["disk_info"]["used_percent"] == 26.57
+    live_query.assert_not_called()
 
 
 def test_bot_token_is_not_part_of_any_response_contract():
@@ -708,6 +862,7 @@ async def test_new_server_inherits_global_discord_template_without_committing():
     assert binding.channel_ids == ["200"]
     assert binding.capabilities == ["status", "restart"]
     assert binding.allow_channel_managers is False
+    assert binding.allow_server_administrators is False
     assert binding_matches_template(binding, bot) is True
     db.add.assert_called_once_with(binding)
     db.commit.assert_not_awaited()
@@ -733,6 +888,31 @@ async def test_new_server_inherits_explicit_channel_manager_switch():
 
     assert binding is not None
     assert binding.allow_channel_managers is True
+    assert binding.allow_server_administrators is False
+    assert binding_matches_template(binding, bot) is True
+
+
+@pytest.mark.asyncio
+async def test_new_server_inherits_explicit_server_administrator_switch():
+    bot = _global_bot()
+    bot.global_allow_server_administrators = True
+    server = Server(
+        id=13,
+        user_id=1,
+        name="Server",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+    )
+    db = AsyncMock()
+    db.add = Mock()
+    db.get.side_effect = [bot, None]
+
+    binding = await inherit_global_discord_binding(db, server)
+
+    assert binding is not None
+    assert binding.allow_server_administrators is True
+    assert binding.allow_channel_managers is False
     assert binding_matches_template(binding, bot) is True
 
 
