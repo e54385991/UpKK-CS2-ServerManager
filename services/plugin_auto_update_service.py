@@ -3,7 +3,6 @@
 import asyncio
 import fnmatch
 import logging
-import re
 from datetime import timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -26,6 +25,12 @@ from services.discord_notification_service import (
 )
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.plugin_installation import install_github_plugin
+from services.plugins.tracking import (
+    canonical_repo_url,
+    derive_asset_glob,
+    repo_api_url,
+    upsert_managed_plugin,
+)
 from services.redis_manager import redis_manager
 from services.ssh_manager import SSHManager
 
@@ -45,86 +50,6 @@ FRAMEWORKS = {
     },
 }
 ARCHIVE_EXTENSIONS = (".tar.gz", ".zip", ".tgz", ".tar", ".7z")
-
-
-def canonical_repo_url(repo_url: str) -> str:
-    match = re.match(
-        r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/?$", (repo_url or "").strip()
-    )
-    if not match:
-        raise ValueError("Invalid GitHub repository URL")
-    return f"https://github.com/{match.group(1)}/{match.group(2).removesuffix('.git')}"
-
-
-def repo_api_url(repo_url: str) -> str:
-    canonical = canonical_repo_url(repo_url)
-    owner, repo = canonical.removeprefix("https://github.com/").split("/", 1)
-    return f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
-
-
-def derive_asset_glob(asset_name: Optional[str], release_tag: Optional[str]) -> Optional[str]:
-    if not asset_name:
-        return None
-    pattern = asset_name
-    if release_tag:
-        candidates = {release_tag, release_tag.lstrip("vV")}
-        for candidate in sorted((value for value in candidates if value), key=len, reverse=True):
-            pattern = re.sub(re.escape(candidate), "*", pattern, flags=re.IGNORECASE)
-    return pattern if pattern != asset_name else asset_name
-
-
-async def upsert_managed_plugin(
-    *,
-    server_id: int,
-    source_type: str,
-    source_key: str,
-    display_name: str,
-    repo_url: Optional[str] = None,
-    market_plugin_id: Optional[int] = None,
-    framework_key: Optional[str] = None,
-    installed_release_id: Optional[str] = None,
-    installed_version: str = "unknown",
-    installed_asset_name: Optional[str] = None,
-    asset_glob: Optional[str] = None,
-    custom_install_path: Optional[str] = None,
-    exclude_dirs: Optional[List[str]] = None,
-    exclude_files: Optional[List[str]] = None,
-) -> ManagedPlugin:
-    """Create or refresh tracking metadata without enabling automatic updates."""
-    async with async_session_maker() as db:
-        result = await db.execute(
-            select(ManagedPlugin).where(
-                ManagedPlugin.server_id == server_id,
-                ManagedPlugin.source_type == source_type,
-                ManagedPlugin.source_key == source_key,
-            )
-        )
-        item = result.scalar_one_or_none()
-        if item is None:
-            item = ManagedPlugin(
-                server_id=server_id,
-                source_type=source_type,
-                source_key=source_key,
-                display_name=display_name,
-                auto_update_enabled=False,
-            )
-        item.display_name = display_name
-        item.repo_url = canonical_repo_url(repo_url) if repo_url else item.repo_url
-        item.market_plugin_id = market_plugin_id
-        item.framework_key = framework_key
-        item.installed_release_id = installed_release_id
-        item.installed_version = installed_version or "unknown"
-        item.installed_asset_name = installed_asset_name or item.installed_asset_name
-        item.asset_glob = asset_glob or item.asset_glob
-        item.custom_install_path = custom_install_path
-        item.exclude_dirs = list(exclude_dirs or [])
-        item.exclude_files = list(exclude_files or [])
-        item.last_status = "installed"
-        item.last_error = None
-        db.add(item)
-        await db.commit()
-        await db.refresh(item)
-        return item
 
 
 class PluginAutoUpdateService:
@@ -754,7 +679,7 @@ class PluginAutoUpdateService:
                 log=f"{run_label} started",
             )
             async with async_session_maker() as db:
-                from services.plugin_diagnostic_service import has_diagnostic_blocker
+                from services.plugins.diagnostic_policy import has_diagnostic_blocker
 
                 if await has_diagnostic_blocker(server_id, db):
                     return {

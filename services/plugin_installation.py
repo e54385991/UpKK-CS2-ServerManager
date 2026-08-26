@@ -217,7 +217,7 @@ async def install_github_plugin(
     async def record_installation() -> None:
         if not request.record_installation or not request.repo_url:
             return
-        from services.plugin_auto_update_service import (
+        from services.plugins.tracking import (
             canonical_repo_url,
             derive_asset_glob,
             upsert_managed_plugin,
@@ -296,7 +296,9 @@ async def install_github_plugin(
         # release cannot redirect the managed host to an arbitrary destination.
         secure_plan_download = bool(request.expected_archive_sha256)
         if secure_plan_download:
-            from services.github_plugin_plan_service import _download_release_asset
+            from services.plugins.github_assets import (
+                download_release_asset as _download_release_asset,
+            )
 
             await progress("Downloading approved release through the secure GitHub gateway...")
             local_archive_path, local_digest, _local_size = await _download_release_asset(

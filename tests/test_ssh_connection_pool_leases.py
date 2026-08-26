@@ -96,6 +96,25 @@ async def test_same_key_concurrent_acquires_open_only_one_connection(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_explicit_lease_always_releases_exact_generation(monkeypatch):
+    pool = isolated_pool()
+    server = server_fixture()
+    connection = FakeSSHConnection(1)
+    monkeypatch.setattr(pool, "_open_connection", AsyncMock(return_value=connection))
+
+    with pytest.raises(RuntimeError, match="operation failed"):
+        async with pool.lease(server) as leased:
+            assert leased is connection
+            key = pool._create_connection_key(server)
+            assert pool.connections[key].in_use_count == 1
+            raise RuntimeError("operation failed")
+
+    key = pool._create_connection_key(server)
+    assert pool.connections[key].in_use_count == 0
+    await pool.close_all()
+
+
+@pytest.mark.asyncio
 async def test_expired_generation_drains_without_touching_new_lease(monkeypatch):
     pool = isolated_pool(max_lifetime=10)
     server = server_fixture()

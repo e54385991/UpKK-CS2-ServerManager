@@ -166,7 +166,7 @@ class ServerMonitor:
         """
         from modules.database import async_session_maker
         from modules.models import Server
-        from services.plugin_diagnostic_service import has_diagnostic_blocker
+        from services.plugins.diagnostic_policy import has_diagnostic_blocker
 
         try:
             async with maintenance_lock_service.get(

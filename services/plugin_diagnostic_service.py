@@ -30,6 +30,16 @@ from services.a2s_query import a2s_service
 from services.ai_access import AgentAccessDenied, authorized_server
 from services.ai_security import redact_sensitive_text
 from services.maintenance_lock import maintenance_lock_service
+from services.plugins.common import parse_dependency_ids
+from services.plugins.diagnostic_policy import (
+    ACTIVE_DIAGNOSTIC_STATUSES,
+)
+from services.plugins.diagnostic_policy import (
+    blocked_servers as _blocked_servers,
+)
+from services.plugins.diagnostic_policy import (
+    has_diagnostic_blocker as _has_diagnostic_blocker,
+)
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
@@ -40,19 +50,16 @@ MAX_START_ATTEMPTS = 12
 MAX_DURATION_SECONDS = 20 * 60
 HEALTH_OBSERVE_SECONDS = 60
 A2S_RECHECK_SECONDS = 2
-ACTIVE_DIAGNOSTIC_STATUSES = (
-    "running",
-    "interrupted",
-    "failed",
-    "inconclusive",
-    "completed_with_quarantine",
-)
-_blocked_servers: set[int] = set()
 FATAL_LOG_PATTERN = re.compile(
     r"segmentation fault|sigsegv|core dumped|fatal error|failed to load.*(?:\.so|plugin)|"
     r"unhandled exception.*terminat|server crashed",
     re.IGNORECASE,
 )
+
+
+async def has_diagnostic_blocker(server_id: int, db: AsyncSession | None = None) -> bool:
+    """Compatibility facade for the shared diagnostic coordination policy."""
+    return await _has_diagnostic_blocker(server_id, db)
 
 
 def _plan_hash(payload: dict[str, Any]) -> str:
@@ -187,8 +194,6 @@ async def _group_candidates(
     market_ids = sorted(market_to_candidate)
     if market_ids:
         market_plugins = await MarketPlugin.get_by_ids(db, market_ids)
-        from services.plugin_conflict_service import parse_dependency_ids
-
         for plugin in market_plugins:
             candidate_key = market_to_candidate.get(plugin.id)
             if candidate_key is None:
@@ -875,28 +880,6 @@ async def restore_diagnostic_run(
         finally:
             await manager.disconnect()
         return await diagnostic_run_payload(db, run)
-
-
-async def has_diagnostic_blocker(server_id: int, db: AsyncSession | None = None) -> bool:
-    """Return whether background automation must leave the server untouched."""
-    if server_id in _blocked_servers:
-        return True
-
-    async def query(session: AsyncSession) -> bool:
-        result = await session.execute(
-            select(PluginDiagnosticRun.id).where(
-                PluginDiagnosticRun.server_id == server_id,
-                PluginDiagnosticRun.status.in_(ACTIVE_DIAGNOSTIC_STATUSES),
-            )
-        )
-        if result is None or not hasattr(result, "first"):
-            return False
-        blocked = result.first() is not None
-        if blocked:
-            _blocked_servers.add(server_id)
-        return blocked
-
-    return await query(db) if db is not None else False
 
 
 async def interrupt_active_plugin_diagnostics() -> int:

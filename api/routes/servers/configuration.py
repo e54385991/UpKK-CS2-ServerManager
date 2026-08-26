@@ -5,12 +5,12 @@
 from fastapi import Request
 
 from api.dependencies import ActiveUser, DatabaseSession
-from services.audit_log_service import record_audit_event
-from services.server_startup_arguments import (
+from modules.server_startup import (
     normalize_additional_parameters,
     normalize_default_map,
     resolved_game_mode,
 )
+from services.audit_log_service import record_audit_event
 
 from .common import *
 

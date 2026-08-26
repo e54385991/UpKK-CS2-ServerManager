@@ -33,6 +33,7 @@ def main() -> None:
     ruff = executable("ruff")
     pytest = executable("pytest")
     pip_audit = executable("pip-audit")
+    lint_imports = executable("lint-imports")
     npm = executable("npm")
 
     checks = (
@@ -40,6 +41,11 @@ def main() -> None:
         ("Pre-commit hooks", [pre_commit, "run", "--all-files", "--show-diff-on-failure"]),
         ("Ruff format", [ruff, "format", "--check", "."]),
         ("Ruff lint", [ruff, "check", "."]),
+        ("Layer dependency contracts", [lint_imports, "--no-cache"]),
+        (
+            "Acyclic service imports",
+            [sys.executable, "scripts/check_architecture.py"],
+        ),
         ("Tests and compatibility contracts", [pytest, "-q"]),
         (
             "Templates and vendored static files",

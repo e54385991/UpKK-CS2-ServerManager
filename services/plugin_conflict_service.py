@@ -26,7 +26,6 @@ from modules import (
 from modules.http_helper import http_helper
 from services.github_credentials import get_effective_github_token
 from services.maintenance_lock import maintenance_lock_service
-from services.plugin_auto_update_service import derive_asset_glob, upsert_managed_plugin
 from services.plugin_installation import (
     PLUGIN_INSTALL_MAX_RETRIES,
     _is_retryable_install_failure,
@@ -38,6 +37,9 @@ from services.plugin_inventory_service import (
     installation_evidence,
     verified_market_plugin_ids,
 )
+from services.plugins.common import PluginPlanError, parse_dependency_ids
+from services.plugins.market_integration import configure_market_plan_handlers
+from services.plugins.tracking import derive_asset_glob, upsert_managed_plugin
 
 ProgressCallback = Callable[..., Awaitable[None]]
 logger = logging.getLogger(__name__)
@@ -151,10 +153,6 @@ async def _install_panel_framework(
     return result
 
 
-class PluginPlanError(ValueError):
-    """Raised when a dependency graph or conflict acknowledgement is invalid."""
-
-
 async def _emit_plan_progress(
     progress: ProgressCallback | None,
     message: str,
@@ -183,23 +181,6 @@ async def _emit_plan_progress(
         await progress(message, "status", metadata)
     else:
         await progress(message, "status")
-
-
-def parse_dependency_ids(value: str | None) -> list[int]:
-    """Parse the legacy comma-separated dependency field without duplicates."""
-    if not value:
-        return []
-    result: list[int] = []
-    for item in value.split(","):
-        normalized = item.strip()
-        if not normalized:
-            continue
-        if not normalized.isdigit():
-            raise PluginPlanError(f"Invalid dependency ID: {normalized}")
-        plugin_id = int(normalized)
-        if plugin_id not in result:
-            result.append(plugin_id)
-    return result
 
 
 def _plugin_plan_confirmation_payload(plan: dict[str, Any]) -> dict[str, Any]:
@@ -836,3 +817,9 @@ async def execute_plugin_install_plan(
         "remaining": [],
         **_restart_payload(completed),
     }
+
+
+# Register the compatibility facade as the implementation behind the leaf
+# integration port. GitHub planning can now depend on the port instead of this
+# module, so the two workflows no longer form an import cycle.
+configure_market_plan_handlers(build_plugin_install_plan, execute_plugin_install_plan)

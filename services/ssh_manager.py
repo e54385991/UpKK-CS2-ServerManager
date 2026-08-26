@@ -2,6 +2,8 @@
 
 # ruff: noqa: F401,F403,F405
 
+from typing import TYPE_CHECKING
+
 from .ssh import (
     ConnectionMixin,
     GameLifecycleMixin,
@@ -14,14 +16,44 @@ from .ssh import files as _files
 from .ssh import game as _game
 from .ssh import plugins as _plugins
 from .ssh.common import *
+from .ssh.runtime import SSHRuntimeState
+from .steam_inf_service import configure_ssh_manager_factory
+
+if TYPE_CHECKING:
+
+    class _SSHCapabilities(
+        ConnectionMixin,
+        GameLifecycleMixin,
+        PluginOperationsMixin,
+        RemoteFileMixin,
+    ): ...
+
+else:
+
+    class _SSHCapabilities: ...
 
 
-class SSHManager(
+def _compose_capabilities(*capabilities):
+    """Copy capability descriptors onto a facade without multiple inheritance."""
+
+    def decorate(facade):
+        for capability in capabilities:
+            for name, value in vars(capability).items():
+                if name.startswith("__") or hasattr(facade, name):
+                    continue
+                setattr(facade, name, value)
+        return facade
+
+    return decorate
+
+
+@_compose_capabilities(
     ConnectionMixin,
     GameLifecycleMixin,
     PluginOperationsMixin,
     RemoteFileMixin,
-):
+)
+class SSHManager(_SSHCapabilities):
     """Async SSH manager retaining the long-standing public API."""
 
     MIN_EXPECTED_FILE_SIZE = 1000  # Minimum file size in bytes (1KB) for downloaded packages
@@ -96,14 +128,42 @@ class SSHManager(
         "no connection",
     ]
 
-    def __init__(self, use_pool: bool = True):
+    def __init__(self, use_pool: bool = True, runtime: Optional[SSHRuntimeState] = None):
         """
         Initialize SSH Manager
 
         Args:
             use_pool: Whether to use connection pooling (default: True)
         """
-        self.conn: Optional[asyncssh.SSHClientConnection] = None
+        self._runtime = runtime or SSHRuntimeState()
         self.use_pool = use_pool
-        self.current_server: Optional[Server] = None
-        self.last_plugin_backup: Optional[Dict[str, Any]] = None
+
+    @property
+    def conn(self) -> Optional[asyncssh.SSHClientConnection]:
+        return self._runtime.connection
+
+    @conn.setter
+    def conn(self, value: Optional[asyncssh.SSHClientConnection]) -> None:
+        self._runtime.connection = value
+
+    @property
+    def current_server(self) -> Optional[Server]:
+        return self._runtime.server
+
+    @current_server.setter
+    def current_server(self, value: Optional[Server]) -> None:
+        self._runtime.server = value
+
+    @property
+    def last_plugin_backup(self) -> Optional[Dict[str, Any]]:
+        return self._runtime.last_plugin_backup
+
+    @last_plugin_backup.setter
+    def last_plugin_backup(self, value: Optional[Dict[str, Any]]) -> None:
+        self._runtime.last_plugin_backup = value
+
+
+# Register the compatibility facade as the default factory for services that
+# depend on SSH capabilities. This keeps their module dependency pointing at a
+# narrow port instead of importing the facade back through the mixin graph.
+configure_ssh_manager_factory(SSHManager)

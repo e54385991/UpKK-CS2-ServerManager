@@ -2,7 +2,7 @@
 
 # ruff: noqa: F403,F405
 
-from services.server_startup_arguments import (
+from modules.server_startup import (
     normalize_additional_parameters,
     normalize_default_map,
     resolved_game_mode,

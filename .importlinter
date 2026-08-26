@@ -1,0 +1,23 @@
+[importlinter]
+root_packages =
+    api
+    modules
+    services
+include_external_packages = true
+
+[importlinter:contract:modules-are-foundational]
+name = Modules do not depend on API or services
+type = forbidden
+source_modules =
+    modules
+forbidden_modules =
+    api
+    services
+
+[importlinter:contract:services-are-transport-independent]
+name = Services do not depend on API transport code
+type = forbidden
+source_modules =
+    services
+forbidden_modules =
+    api

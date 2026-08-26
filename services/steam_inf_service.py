@@ -8,13 +8,31 @@ import asyncio
 import logging
 import re
 import shlex
-from typing import Optional, Tuple
+from collections.abc import Callable
+from typing import Any, Optional, Protocol, Tuple
 
 from modules.models import Server
 from services.redis_manager import redis_manager
-from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
+
+
+class SSHSession(Protocol):
+    async def connect(self, server: Server) -> tuple[bool, str]: ...
+
+    async def execute_command(self, command: str) -> tuple[bool, str, str]: ...
+
+    async def disconnect(self) -> Any: ...
+
+
+SSHManagerFactory = Callable[[], SSHSession]
+_ssh_manager_factory: SSHManagerFactory | None = None
+
+
+def configure_ssh_manager_factory(factory: SSHManagerFactory) -> None:
+    """Inject the SSH facade without importing it back from this service."""
+    global _ssh_manager_factory
+    _ssh_manager_factory = factory
 
 
 class SteamInfService:
@@ -158,7 +176,9 @@ class SteamInfService:
         Returns:
             Tuple[bool, Optional[str]]: (success, version_string)
         """
-        ssh_manager = SSHManager()
+        if _ssh_manager_factory is None:
+            raise RuntimeError("Steam.inf SSH manager factory is not configured")
+        ssh_manager = _ssh_manager_factory()
 
         try:
             # Wrap the entire operation in a timeout to prevent blocking

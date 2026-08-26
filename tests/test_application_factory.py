@@ -6,6 +6,7 @@ import main
 from api.application import create_app
 from api.routes import health, pages
 from api.templating import STATIC_DIRECTORY, templates
+from services.container import ServiceContainer, build_service_container
 
 LEGACY_PAGE_PATHS = {
     "/",
@@ -47,6 +48,15 @@ def test_application_factory_instances_keep_dependency_overrides_isolated():
     first.dependency_overrides[dependency] = lambda: "first"
 
     assert dependency not in second.dependency_overrides
+    assert first.state.services is not second.state.services
+
+
+def test_application_factory_accepts_an_explicit_service_container():
+    container = build_service_container()
+    app = create_app(lifespan=None, container_factory=lambda: container)
+
+    assert isinstance(app.state.services, ServiceContainer)
+    assert app.state.services is container
 
 
 def test_main_keeps_legacy_endpoint_exports():

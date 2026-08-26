@@ -31,6 +31,7 @@ from api.routes import (
     system_settings,
 )
 from api.templating import STATIC_DIRECTORY, templates
+from services.container import ContainerFactory, build_service_container
 from services.maintenance_lock import OperationBusyError
 
 # Ordering is intentional: unauthenticated endpoints are registered before the
@@ -82,6 +83,7 @@ def register_routes(app: FastAPI) -> None:
 def create_app(
     *,
     lifespan: Lifespan[FastAPI] | None = application_lifespan,
+    container_factory: ContainerFactory = build_service_container,
 ) -> FastAPI:
     """Create and configure a FastAPI application instance."""
     app = FastAPI(
@@ -91,6 +93,8 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.templates = templates
+    app.state.container_factory = container_factory
+    app.state.services = container_factory()
 
     register_exception_handlers(app)
     if STATIC_DIRECTORY.is_dir():

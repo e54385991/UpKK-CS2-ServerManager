@@ -6,6 +6,7 @@ Optimizes SSH operations by sharing connections for the same host
 import asyncio
 import logging
 import time
+from contextlib import asynccontextmanager
 from typing import Dict, List, Optional, Tuple
 from weakref import WeakValueDictionary
 
@@ -448,6 +449,17 @@ class SSHConnectionPool:
                 return False, None, str(e)
             except Exception as e:
                 return False, None, f"Connection error: {str(e)}"
+
+    @asynccontextmanager
+    async def lease(self, server: Server):
+        """Yield one exact connection generation and always release that lease."""
+        success, connection, message = await self.get_connection(server)
+        if not success or connection is None:
+            raise ConnectionError(message)
+        try:
+            yield connection
+        finally:
+            await self.release_connection(server, connection)
 
     async def reconnect(
         self, server: Server

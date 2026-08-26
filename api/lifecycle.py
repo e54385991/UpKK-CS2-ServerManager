@@ -9,13 +9,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from modules.database import async_session_maker, engine, init_db, migrate_db
-from modules.http_helper import http_helper
+from modules import database as database_module
+from modules.database import init_db, migrate_db
 from modules.models import Server
-from services import redis_manager
+from services.container import ServiceContainer, build_service_container
 from services.task_registry import shutdown_background_tasks
 
 logger = logging.getLogger(__name__)
+
+# Compatibility export used by diagnostics and tests.
+engine = database_module.engine
 
 Cleanup = Callable[[], Awaitable[object]]
 
@@ -41,17 +44,11 @@ async def _cleanup_runtime_tasks() -> None:
             )
 
 
-async def _close_ssh_pool() -> None:
-    from services.ssh_connection_pool import ssh_connection_pool
-
-    await ssh_connection_pool.stop_cleanup()
-    await ssh_connection_pool.close_all()
-
-
 class ApplicationLifecycle:
     """Own one application's successfully started resources."""
 
-    def __init__(self) -> None:
+    def __init__(self, container: ServiceContainer | None = None) -> None:
+        self.container = container or build_service_container()
         self._cleanups: list[tuple[str, Cleanup]] = []
         self._started = False
         self._lock = asyncio.Lock()
@@ -83,13 +80,15 @@ class ApplicationLifecycle:
             if self._started:
                 return
 
+            resources = self.container.resources
+
             # Shared transports are created at import time. Register their
             # cleanup before database work so failed startup cannot leak them.
             # The stack is reversed during shutdown, yielding the legacy order:
             # SSH pool, Redis, HTTP client, then database engine.
-            self._add_cleanup("database engine", engine.dispose)
-            self._add_cleanup("HTTP client", http_helper.close)
-            self._add_cleanup("Redis client", redis_manager.close)
+            self._add_cleanup("database engine", resources.database_engine.dispose)
+            self._add_cleanup("HTTP client", resources.http.close)
+            self._add_cleanup("Redis client", resources.redis.close)
 
             from services.ai_security import (
                 AIConfigurationError,
@@ -106,14 +105,17 @@ class ApplicationLifecycle:
             await migrate_db()
             await init_db()
 
-            from services.ssh_connection_pool import ssh_connection_pool
+            await resources.ssh_pool.start_cleanup()
 
-            await ssh_connection_pool.start_cleanup()
-            self._add_cleanup("SSH connection pool", _close_ssh_pool)
+            async def close_ssh_pool() -> None:
+                await resources.ssh_pool.stop_cleanup()
+                await resources.ssh_pool.close_all()
+
+            self._add_cleanup("SSH connection pool", close_ssh_pool)
 
             logger.info("Clearing old A2S cache")
             try:
-                deleted = await redis_manager.delete_by_pattern("a2s:server:*")
+                deleted = await resources.redis.delete_by_pattern("a2s:server:*")
                 logger.info("Cleared %s old A2S cache entries", deleted or 0)
             except Exception:
                 logger.exception("Failed to clear old A2S cache")
@@ -178,7 +180,7 @@ class ApplicationLifecycle:
             from services.ssh_manager import SSHManager
 
             self._add_cleanup("server monitor", server_monitor.stop_all)
-            async with async_session_maker() as db:
+            async with resources.session_factory() as db:
                 monitored_servers = await Server.get_all_with_panel_monitoring(db)
                 for server in monitored_servers:
                     server_monitor.start_monitoring(server.id, SSHManager())
@@ -228,7 +230,7 @@ async def stop_application() -> None:
 @asynccontextmanager
 async def application_lifespan(app: FastAPI):
     """Own lifecycle state per application-factory instance."""
-    lifecycle = ApplicationLifecycle()
+    lifecycle = ApplicationLifecycle(app.state.services)
     app.state.lifecycle = lifecycle
     try:
         await lifecycle.start()

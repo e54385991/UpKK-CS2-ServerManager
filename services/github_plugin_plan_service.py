@@ -11,11 +11,11 @@ import re
 import shlex
 import stat
 import tarfile
-import tempfile
 import zipfile
+from collections.abc import Awaitable, Callable
 from pathlib import PurePosixPath
 from typing import Any, Literal
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 import anyio
 import httpx
@@ -34,20 +34,25 @@ from modules.schemas.plugins import GitHubPluginInstallPlanRequest, GitHubPlugin
 from services.ai_access import authorized_server
 from services.github_credentials import get_effective_github_token
 from services.maintenance_lock import maintenance_lock_service
-from services.plugin_conflict_service import ProgressCallback
 from services.plugin_installation import install_github_plugin_with_retry
+from services.plugins.github_assets import (
+    GitHubPlanError,
+    download_release_asset,
+    validate_download_url,
+)
+from services.plugins.market_integration import (
+    build_market_plan,
+    execute_market_plan,
+)
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
+ProgressCallback = Callable[..., Awaitable[None]]
+_download_release_asset = download_release_asset
+_validate_download_url = validate_download_url
 
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 ARCHIVE_EXTENSIONS = (".tar.gz", ".tgz", ".tar", ".zip", ".7z")
-DOWNLOAD_HOSTS = {
-    "github.com",
-    "objects.githubusercontent.com",
-    "release-assets.githubusercontent.com",
-}
-MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_EXPANDED_BYTES = 2 * 1024 * 1024 * 1024
 MAX_ARCHIVE_ENTRIES = 20_000
 MAX_AUTOMATIC_FILES = 5_000
@@ -72,10 +77,6 @@ BLOCKED_RELEASE_SUFFIXES = {
     ".csproj",
     ".vcxproj",
 }
-
-
-class GitHubPlanError(ValueError):
-    pass
 
 
 def _panel_managed_framework(owner: str, repository: str) -> str | None:
@@ -345,77 +346,6 @@ async def search_github_plugins(
         "recommended_repo_url": selected[0]["repo_url"] if selected else None,
         "linux_runtime_profile": linux_runtime_profile,
     }
-
-
-def _validate_download_url(value: str) -> None:
-    parsed = urlsplit(value)
-    try:
-        has_port = parsed.port is not None
-    except ValueError as exc:
-        raise GitHubPlanError("Invalid GitHub release asset port") from exc
-    if (
-        parsed.scheme != "https"
-        or parsed.hostname != "github.com"
-        or has_port
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.query
-        or parsed.fragment
-        or "/releases/download/" not in parsed.path
-    ):
-        raise GitHubPlanError("Release asset URL is not a canonical GitHub download URL")
-
-
-async def _download_release_asset(url: str) -> tuple[str, str, int]:
-    _validate_download_url(url)
-    temp = tempfile.NamedTemporaryFile(prefix="upkk-github-plan-", suffix=".archive", delete=False)
-    path = temp.name
-    temp.close()
-    digest = hashlib.sha256()
-    total = 0
-    current = url
-    try:
-        async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
-            for _redirect in range(6):
-                parsed = urlsplit(current)
-                if (
-                    parsed.scheme != "https"
-                    or parsed.hostname not in DOWNLOAD_HOSTS
-                    or parsed.port is not None
-                    or parsed.username is not None
-                    or parsed.password is not None
-                ):
-                    raise GitHubPlanError("GitHub release redirected to an unapproved host")
-                async with client.stream(
-                    "GET", current, headers={"User-Agent": "UpKK-CS2-ServerManager"}
-                ) as response:
-                    if response.status_code in {301, 302, 303, 307, 308}:
-                        location = response.headers.get("location")
-                        if not location:
-                            raise GitHubPlanError(
-                                "GitHub release redirect did not include a location"
-                            )
-                        current = urljoin(current, location)
-                        continue
-                    if response.status_code >= 400:
-                        raise GitHubPlanError(
-                            f"Release asset download failed with HTTP {response.status_code}"
-                        )
-                    async with await anyio.open_file(path, "wb") as handle:
-                        async for chunk in response.aiter_bytes(1024 * 1024):
-                            total += len(chunk)
-                            if total > MAX_ARCHIVE_BYTES:
-                                raise GitHubPlanError("Release archive exceeds the 512 MiB limit")
-                            digest.update(chunk)
-                            await handle.write(chunk)
-                    return path, digest.hexdigest(), total
-            raise GitHubPlanError("GitHub release exceeded the redirect limit")
-    except Exception:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
-        raise
 
 
 def _safe_entry_name(name: str) -> str:
@@ -912,11 +842,7 @@ async def build_github_install_plan(
             "Compatibility is unknown because this repository is not in the plugin market"
         )
     else:
-        from services.plugin_conflict_service import build_plugin_install_plan
-
-        market_plan = await build_plugin_install_plan(
-            db, server.id, market_plugin.id, server=server
-        )
+        market_plan = await build_market_plan(db, server.id, market_plugin.id, server=server)
     if mapping_required:
         warnings.append("Archive layout is ambiguous; an administrator-approved recipe is required")
     plan_core = {
@@ -1022,11 +948,6 @@ async def _execute_github_install_plan_locked(
     completed_dependencies: list[dict[str, Any]] = []
     installed_ids = {int(item) for item in plan["already_installed"]}
     if plan["dependencies"]:
-        from services.plugin_conflict_service import (
-            build_plugin_install_plan,
-            execute_plugin_install_plan,
-        )
-
         for dependency in plan["dependencies"]:
             dependency_id = int(dependency["id"])
             if dependency_id in installed_ids:
@@ -1034,10 +955,8 @@ async def _execute_github_install_plan_locked(
                     {"plugin_id": dependency_id, "success": True, "skipped": True}
                 )
                 continue
-            dependency_plan = await build_plugin_install_plan(
-                db, server.id, dependency_id, server=server
-            )
-            dependency_result = await execute_plugin_install_plan(
+            dependency_plan = await build_market_plan(db, server.id, dependency_id, server=server)
+            dependency_result = await execute_market_plan(
                 db,
                 server,
                 user,

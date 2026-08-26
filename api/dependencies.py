@@ -15,6 +15,7 @@ from modules import (
     get_current_web_user,
     get_db,
 )
+from services.container import ServiceContainer
 from services.maintenance_lock import maintenance_lock_service
 from services.ssh_manager import SSHManager
 
@@ -26,9 +27,17 @@ WebUser = Annotated[User, Depends(get_current_web_user)]
 WebAdmin = Annotated[User, Depends(get_current_web_admin)]
 
 
-def get_ssh_manager() -> SSHManager:
+def get_service_container(request: Request) -> ServiceContainer:
+    """Return dependencies owned by the current application instance."""
+    return request.app.state.services
+
+
+ServiceDependencies = Annotated[ServiceContainer, Depends(get_service_container)]
+
+
+def get_ssh_manager(services: ServiceDependencies) -> SSHManager:
     """Create an operation-scoped SSH facade that tests can override."""
-    return SSHManager()
+    return services.ssh_manager_factory()
 
 
 SSHManagerProvider = Annotated[SSHManager, Depends(get_ssh_manager)]

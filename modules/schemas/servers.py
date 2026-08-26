@@ -5,7 +5,7 @@
 from pydantic import ConfigDict
 
 from modules.models import AuthType
-from services.server_startup_arguments import (
+from modules.server_startup import (
     normalize_additional_parameters,
     normalize_default_map,
     normalize_game_mode,

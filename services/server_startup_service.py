@@ -10,18 +10,18 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.models import Server, ServerStatus, User
-from services.a2s_query import a2s_service
-from services.game_session import normalize_session_manager
-from services.maintenance_lock import maintenance_lock_service
-from services.redis_manager import redis_manager
-from services.server_lifecycle_policy import apply_user_lifecycle_intent
-from services.server_startup_arguments import (
+from modules.server_startup import (
     GAME_MODE_MAPPING,
     normalize_additional_parameters,
     normalize_default_map,
     normalize_game_mode,
     normalize_game_type,
 )
+from services.a2s_query import a2s_service
+from services.game_session import normalize_session_manager
+from services.maintenance_lock import maintenance_lock_service
+from services.redis_manager import redis_manager
+from services.server_lifecycle_policy import apply_user_lifecycle_intent
 from services.ssh_manager import SSHManager
 
 ProgressCallback = Callable[..., Awaitable[None]]
