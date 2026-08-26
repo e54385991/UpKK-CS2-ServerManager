@@ -1,3 +1,8 @@
+# 🚀 支持 Docker 与 1Panel 快速部署
+
+> 本项目支持 **Docker Compose 一键部署**和 **1Panel 本地应用快速部署**：
+> [Docker 快速部署文档](docs/DOCKER_QUICKSTART.md) · [1Panel 快速部署文档](docs/1PANEL_QUICKSTART.md)
+
 # 🐳 Docker 快速使用 / Docker Quick Start
 
 ## 中文：一键安装与部署
