@@ -1,6 +1,6 @@
 # Docker 一键部署
 
-生产镜像发布到 Docker Hub 后，准备一台安装 Docker Compose v2 的主机即可启动：
+准备一台安装 Docker Compose v2 的主机即可启动：
 
 ```bash
 mkdir cs2-manager && cd cs2-manager
