@@ -154,6 +154,31 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 - 🐳 **Docker 一键部署**: 应用、PostgreSQL 和 Redis 可通过 `docker compose up -d` 启动，无需手工填写配置
 - 🎨 **现代化 Web 界面**: 基于 Bootstrap 5 + Alpine.js 的响应式界面，所有资源完全本地化
 
+### 🐳 Docker 一键安装（推荐）
+
+适用于全新的 Ubuntu 24.04+ / Debian 13+ 管理端主机。下面的命令会安装 Docker
+Engine 与 Compose 插件，并直接启动公开镜像；不需要手动 `docker pull`、创建 `.env`
+或配置数据库/Redis：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+curl -fsSL https://get.docker.com | sudo sh
+sudo apt-get install -y docker-compose-plugin
+sudo systemctl enable --now docker
+
+mkdir -p "$HOME/cs2-manager" && cd "$HOME/cs2-manager"
+curl -fsSLO https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-compose.yml
+sudo docker compose up -d
+sudo docker compose ps
+```
+
+启动后访问 <http://你的服务器IP:8000>。首次登录使用 `admin` / `admin123`，登录后
+请立即修改密码。应用、PostgreSQL 和 Redis 数据保存在 Docker volumes 中，升级时不要
+删除 `app_data`、`postgres_data` 和 `redis_data`。
+
+更多运维命令和安全建议见 [Docker 一键部署文档](docs/DOCKER_QUICKSTART.md)。
+
 ### 📋 系统要求
 
 #### 管理端环境要求 (运行 Web 界面 您可使用[1Panel](https://github.com/1Panel-dev/1Panel)来快捷部署)
@@ -338,6 +363,30 @@ A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + Po
 - 📝 **Operation Logs**: Records all deployment and operation history
 - 🐳 **One-Command Docker Deployment**: Start the application, PostgreSQL, and Redis with `docker compose up -d`
 - 🎨 **Modern Web Interface**: Responsive UI based on Bootstrap 5 + Alpine.js, all resources fully localized
+
+### 🐳 One-command Docker installation (recommended)
+
+For a fresh Ubuntu 24.04+ or Debian 13+ manager host, the following installs Docker Engine
+and the Compose plugin, then starts the public image without a manual `docker pull`, `.env`,
+database, or Redis setup:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+curl -fsSL https://get.docker.com | sudo sh
+sudo apt-get install -y docker-compose-plugin
+sudo systemctl enable --now docker
+
+mkdir -p "$HOME/cs2-manager" && cd "$HOME/cs2-manager"
+curl -fsSLO https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-compose.yml
+sudo docker compose up -d
+sudo docker compose ps
+```
+
+Open <http://your-server-ip:8000>. The first login is `admin` / `admin123`; change it
+immediately. Keep the Docker volumes `app_data`, `postgres_data`, and `redis_data` when
+upgrading. See the [Docker quick-start guide](docs/DOCKER_QUICKSTART.md) for operations and
+security guidance.
 
 ### 🌍 Recommended Deployment (For Users in China)
 
