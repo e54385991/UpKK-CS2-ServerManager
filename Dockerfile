@@ -1,4 +1,7 @@
-FROM python:3.14-slim
+# Alpine keeps the production image small and avoids shipping Debian's
+# perl/apt runtime packages.  The Python 3.14 wheels exported by uv include
+# musllinux artifacts for every native dependency used by the application.
+FROM python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,16 +9,27 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Pull security fixes that may have landed after the Python base image was
+# published without persisting repository indexes or download caches.
+RUN apk upgrade --no-cache
+
 # The production export is hash-pinned, so the image build is reproducible
 # without installing the development toolchain or frontend dependencies.
 COPY requirements.txt /tmp/requirements.txt
+# pip is only a build-time tool; removing it also removes its vendored
+# msgpack copy from the runtime vulnerability inventory.
 RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
+    && rm /tmp/requirements.txt \
+    && rm -rf /usr/local/lib/python3.14/site-packages/pip \
+        /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
+        /usr/local/lib/python3.14/ensurepip \
+        /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
 
 COPY . /app
 RUN mkdir -p /app/data \
     && chmod 755 /app/docker-entrypoint.sh \
-    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin app \
+    && addgroup -S -g 10001 app \
+    && adduser -S -D -H -u 10001 -s /sbin/nologin -G app app \
     && chown -R app:app /app
 
 USER app

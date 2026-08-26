@@ -2577,6 +2577,7 @@ wheels = [
 name = "websockets"
 version = "17.1"
 source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/72/fba934cb3dff7a85d811820efffcd141ddd52b5a2a01637f64551373ff4d/websockets-17.1.tar.gz", hash = "sha256:acfea4c20bf54384883ea33b1240fc1db4f52e190823a4e2b334bc3e8bfca96a", size = 187520, upload-time = "2026-08-26T17:25:33.063Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/90/0d/500cf5daea09d4669dff3a7d67159094a0bd6c4ef130381404f6edd3eb5f/websockets-17.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:0c9982938980e086da59f70d05f9418cd143401a601a0faac10fa48f7bb1cd3e", size = 217048, upload-time = "2026-08-26T14:56:36.03Z" },
     { url = "https://files.pythonhosted.org/packages/97/12/5b12c6168aa269cffbfd24d177cd492b130120403a418c7e89462e27b4ac/websockets-17.1-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:57b39dc8541cf7ed3f639da82bf7451060483967f9e733da1f8173e4095f0642", size = 214737, upload-time = "2026-08-26T14:56:37.43Z" },
@@ -2658,6 +2659,7 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/4e/f5/99857c3dd9676749f33e3668665a34ad6099505fb8d75eb084f49f7807a9/websockets-17.1-cp315-cp315t-win32.whl", hash = "sha256:f78a3ffb1994304db2c0c4588e4d1a518079b557054fa3bb985a6f5e50ff49a3", size = 217130, upload-time = "2026-08-26T14:58:20.037Z" },
     { url = "https://files.pythonhosted.org/packages/2c/84/77599922ab441bfe61508f97dab2c71f8e114d31793993ea54011db16199/websockets-17.1-cp315-cp315t-win_amd64.whl", hash = "sha256:ad68c28a27246fed109a4409393d677b7e1388345cbbd2f5aee5c182d8506110", size = 217448, upload-time = "2026-08-26T14:58:21.382Z" },
     { url = "https://files.pythonhosted.org/packages/ce/3c/8b9a225b523f06a9389be81f1b0ab07c49bec6014742e6aa359c1f920f1f/websockets-17.1-cp315-cp315t-win_arm64.whl", hash = "sha256:e552e0037230ac16e5f568de7012041344d1b18c9feed30ec2891b8eba55af81", size = 217372, upload-time = "2026-08-26T14:58:22.807Z" },
+    { url = "https://files.pythonhosted.org/packages/41/63/23572870e01836a98346075b9e17a8bc24a6ddd9800a3204ceee58677f3c/websockets-17.1-py3-none-any.whl", hash = "sha256:f221081107b8c48184d99f7019604486376e7ef826037e70aad6b02540732c23", size = 211134, upload-time = "2026-08-26T17:25:31.397Z" },
 ]
 
 [[package]]
