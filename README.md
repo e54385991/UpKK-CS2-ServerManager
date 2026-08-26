@@ -40,7 +40,7 @@ CS2 Server Manager 是一个现代化的 **Counter-Strike 2 多服务器 Web 管
 
 ## 先更新下软件包 和 确保 CURL存在
 ```bash
-sudo apt update && apt install curl
+sudo apt update && sudo apt install -y curl
 ```
 
 ## Docker 快速部署
