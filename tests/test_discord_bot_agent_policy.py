@@ -639,6 +639,7 @@ def test_global_binding_contract_reuses_strict_single_server_rules():
 
 def test_profile_guide_exposes_trigger_mode_and_bilingual_intent_warning():
     profile = (PROJECT_ROOT / "templates/profile.html").read_text(encoding="utf-8")
+    profile += (PROJECT_ROOT / "static/js/profile.js").read_text(encoding="utf-8")
     assert 'id="discord-bot-trigger-mode"' in profile
     assert "message_trigger_mode" in profile
     assert "discord-bot-message-content-warning" in profile

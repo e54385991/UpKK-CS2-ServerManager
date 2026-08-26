@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 
 import pytest
 
+from services.deployment_progress import DeploymentWebSocket
 from services.redis_manager import RedisManager
 
 
@@ -99,3 +102,30 @@ async def test_deployment_progress_replay_reads_only_the_bounded_tail():
         -1,
     )
     assert progress == [{"type": "output", "message": "tail", "timestamp": "now"}]
+
+
+@pytest.mark.asyncio
+async def test_websocket_fanout_does_not_let_slow_client_block_fast_client():
+    class SlowSocket:
+        async def send_json(self, _message):
+            await asyncio.sleep(1)
+
+    class FastSocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    manager = DeploymentWebSocket(send_timeout=0.02)
+    slow = SlowSocket()
+    fast = FastSocket()
+    manager.active_connections[7] = [slow, fast]
+
+    started = time.perf_counter()
+    await manager.send_message(7, {"type": "status"})
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 0.2
+    assert fast.messages == [{"type": "status"}]
+    assert manager.active_connections[7] == [fast]

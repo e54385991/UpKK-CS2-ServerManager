@@ -383,6 +383,30 @@ class RedisManager:
             print(f"Redis set batch action status error: {e}")
             return False
 
+    async def set_batch_action_statuses(
+        self,
+        batch_id: str,
+        server_ids: list[int],
+        status: str,
+        message: str = "",
+        expire: int = 3600,
+    ) -> bool:
+        """Initialize a batch in one non-transactional Redis pipeline."""
+        timestamp = time.time()
+        try:
+            async with self.client.pipeline(transaction=False) as pipeline:
+                for server_id in server_ids:
+                    key = f"batch_action:{batch_id}:{server_id}"
+                    data = json.dumps(
+                        {"status": status, "message": message, "timestamp": timestamp}
+                    )
+                    pipeline.setex(key, expire, data)
+                await pipeline.execute()
+            return True
+        except Exception as e:
+            print(f"Redis set batch action statuses error: {e}")
+            return False
+
     async def get_batch_action_status(self, batch_id: str) -> dict:
         """
         Get status for all servers in a batch action
@@ -401,11 +425,16 @@ class RedisManager:
             cursor = 0
             while True:
                 cursor, keys = await self.client.scan(cursor, match=pattern, count=100)
-                for key in keys:
-                    server_id = key.split(":")[-1]
-                    data = await self.get(key)
-                    if data:
-                        results[server_id] = data
+                values = await self.client.mget(keys) if keys else []
+                for key, value in zip(keys, values, strict=True):
+                    if not value:
+                        continue
+                    normalized_key = key.decode() if isinstance(key, bytes) else key
+                    server_id = normalized_key.rsplit(":", 1)[-1]
+                    try:
+                        results[server_id] = json.loads(value)
+                    except TypeError, json.JSONDecodeError:
+                        results[server_id] = value
                 if cursor == 0:
                     break
             return results

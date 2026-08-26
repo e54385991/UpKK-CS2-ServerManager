@@ -39,6 +39,7 @@ from services.ai_tools import (
     ToolContext,
 )
 from services.audit_log_service import record_discord_operation_event
+from services.discord.commands import register_commands
 from services.discord_ai_service import (
     approve_discord_tool,
     ask_discord_agent,
@@ -475,7 +476,7 @@ class ManagedDiscordClient(discord.Client):
         self.owner_user_id = owner_user_id
         self.message_trigger_mode = message_trigger_mode
         self.tree = app_commands.CommandTree(self)
-        self._register_commands()
+        register_commands(self)
 
     async def on_ready(self) -> None:
         await self.manager._client_ready(self)
@@ -554,112 +555,6 @@ class ManagedDiscordClient(discord.Client):
             for _binding, server in pairs
             if not needle or needle in server.name.casefold() or needle in str(server.id)
         ][:25]
-
-    def _register_commands(self) -> None:
-        cs2 = app_commands.Group(name="cs2", description="Manage authorized CS2 servers")
-        plugin = app_commands.Group(name="plugin", description="Browse and manage plugins")
-        console = app_commands.Group(name="console", description="Send confirmed game commands")
-        agent = app_commands.Group(name="agent", description="Use the server-scoped AI Agent")
-
-        async def help_command(interaction: discord.Interaction) -> None:
-            await self.manager.command_help(self, interaction)
-
-        async def menu_command(interaction: discord.Interaction) -> None:
-            await self.manager.command_menu(self, interaction)
-
-        async def status_command(
-            interaction: discord.Interaction, server: str | None = None
-        ) -> None:
-            await self.manager.command_status(self, interaction, server)
-
-        async def start_command(
-            interaction: discord.Interaction, server: str | None = None
-        ) -> None:
-            await self.manager.command_write(self, interaction, "start", server)
-
-        async def stop_command(interaction: discord.Interaction, server: str | None = None) -> None:
-            await self.manager.command_write(self, interaction, "stop", server)
-
-        async def restart_command(
-            interaction: discord.Interaction, server: str | None = None
-        ) -> None:
-            await self.manager.command_write(self, interaction, "restart", server)
-
-        async def update_command(
-            interaction: discord.Interaction, server: str | None = None
-        ) -> None:
-            await self.manager.command_write(self, interaction, "update", server)
-
-        async def validate_command(
-            interaction: discord.Interaction, server: str | None = None
-        ) -> None:
-            await self.manager.command_write(self, interaction, "validate", server)
-
-        async def plugin_search(
-            interaction: discord.Interaction, query: str, server: str | None = None
-        ) -> None:
-            await self.manager.command_plugin_search(self, interaction, query, server)
-
-        async def plugin_list(interaction: discord.Interaction, server: str | None = None) -> None:
-            await self.manager.command_plugin_list(self, interaction, server)
-
-        async def plugin_install(
-            interaction: discord.Interaction, plugin_id: int, server: str | None = None
-        ) -> None:
-            await self.manager.command_plugin_install(self, interaction, plugin_id, server)
-
-        async def plugin_upgrade(
-            interaction: discord.Interaction, plugin_id: int, server: str | None = None
-        ) -> None:
-            await self.manager.command_plugin_upgrade(self, interaction, plugin_id, server)
-
-        async def console_send(
-            interaction: discord.Interaction, command: str, server: str | None = None
-        ) -> None:
-            await self.manager.command_game_console(self, interaction, command, server)
-
-        async def agent_ask(
-            interaction: discord.Interaction, prompt: str, server: str | None = None
-        ) -> None:
-            await self.manager.command_agent_ask(self, interaction, prompt, server)
-
-        async def agent_reset(interaction: discord.Interaction, server: str | None = None) -> None:
-            await self.manager.command_agent_reset(self, interaction, server)
-
-        commands = [
-            cs2.command(name="status", description="Show CS2 server status")(status_command),
-            cs2.command(name="start", description="Plan and confirm a server start")(start_command),
-            cs2.command(name="stop", description="Plan and confirm a server stop")(stop_command),
-            cs2.command(name="restart", description="Plan and confirm a server restart")(
-                restart_command
-            ),
-            cs2.command(name="update", description="Plan and confirm a CS2 update")(update_command),
-            cs2.command(name="validate", description="Plan and confirm CS2 validation")(
-                validate_command
-            ),
-            plugin.command(name="search", description="Search the plugin market")(plugin_search),
-            plugin.command(name="list", description="List managed plugins")(plugin_list),
-            plugin.command(name="install", description="Plan a market plugin install")(
-                plugin_install
-            ),
-            plugin.command(name="upgrade", description="Plan a managed plugin upgrade")(
-                plugin_upgrade
-            ),
-            console.command(name="send", description="Confirm and send one game command")(
-                console_send
-            ),
-            agent.command(name="ask", description="Ask the server-scoped AI Agent")(agent_ask),
-            agent.command(name="reset", description="Start a new isolated AI context")(agent_reset),
-        ]
-        cs2.command(name="help", description="Show authorized CS2 Bot commands")(help_command)
-        cs2.command(name="menu", description="Open your private CS2 control menu")(menu_command)
-        cs2.add_command(plugin)
-        cs2.add_command(console)
-        cs2.add_command(agent)
-        self.tree.add_command(cs2)
-        for command in commands:
-            if "server" in {parameter.name for parameter in command.parameters}:
-                command.autocomplete("server")(self._autocomplete_server)
 
 
 @dataclass(slots=True)

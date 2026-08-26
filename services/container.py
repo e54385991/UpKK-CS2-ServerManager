@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from modules.database import async_session_maker, engine
 from modules.http_helper import HTTPHelper, http_helper
+from services.ai.transport import AIProviderTransport, ai_provider_transport
 from services.redis_manager import RedisManager, redis_manager
 from services.ssh_connection_pool import SSHConnectionPool, ssh_connection_pool
 from services.ssh_manager import SSHManager
@@ -21,6 +22,7 @@ class RuntimeResources:
     database_engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
     http: HTTPHelper
+    ai_http: AIProviderTransport
     redis: RedisManager
     ssh_pool: SSHConnectionPool
 
@@ -61,6 +63,7 @@ def build_service_container() -> ServiceContainer:
             database_engine=engine,
             session_factory=async_session_maker,
             http=http_helper,
+            ai_http=ai_provider_transport,
             redis=redis_manager,
             ssh_pool=ssh_connection_pool,
         )

@@ -15,6 +15,9 @@ This directory contains all the documentation for the CS2 Server Manager project
 - [Frontend Guide](FRONTEND.md) - Frontend architecture and customization
 - [LinuxGSM Config Guide](LGSM_CONFIG_GUIDE.md) - LinuxGSM-style configuration
 - [CS2 Startup Guide](CS2_STARTUP_GUIDE.md) - Server startup parameters and options
+- [Architecture Boundaries](ARCHITECTURE.md) - Service boundaries, lifecycle ownership, and performance contracts
+- [Dependency Matrix](DEPENDENCY_MATRIX.md) - Runtime versions, lockfiles, and update workflow
+- [Redis 8 Upgrade](REDIS8_UPGRADE.md) - Upgrade checks and rollback procedure
 
 ## Getting Started
 

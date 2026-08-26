@@ -123,3 +123,25 @@ jobs:
         run: >-
           uv run --extra legacy-mysql-migration pytest -q
           tests/test_legacy_mysql_postgresql_integration.py
+
+  compose-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate and start Compose services
+        run: |
+          docker compose config --quiet
+          docker compose up -d --wait
+
+      - name: Verify service health endpoints
+        run: |
+          test "$(docker compose exec -T redis redis-cli ping)" = "PONG"
+          docker compose exec -T postgres pg_isready -U cs2_manager -d cs2_manager
+
+      - name: Tear down Compose services
+        if: always()
+        run: docker compose down -v

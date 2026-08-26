@@ -6,6 +6,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def page_script(name: str) -> str:
+    return (PROJECT_ROOT / "static" / "js" / name).read_text(encoding="utf-8")
+
+
 def test_bootstrap_icons_reference_the_served_font_directory():
     stylesheet = (PROJECT_ROOT / "static" / "css" / "bootstrap-icons.min.css").read_text(
         encoding="utf-8"
@@ -80,7 +84,7 @@ def test_manual_deployment_confirmation_is_available_and_localized():
 
 
 def test_plugin_market_loads_admin_accessible_servers_for_plugin_management():
-    template = (PROJECT_ROOT / "templates" / "plugin_market.html").read_text(encoding="utf-8")
+    template = page_script("plugin-market.js")
 
     assert "async function getServersAvailableForPluginManagement()" in template
     assert "currentUser?.is_admin ? '/servers/admin/all' : '/servers'" in template
@@ -89,7 +93,7 @@ def test_plugin_market_loads_admin_accessible_servers_for_plugin_management():
 
 
 def test_plugin_market_runtime_selection_requires_one_recommendation():
-    template = (PROJECT_ROOT / "templates" / "plugin_market.html").read_text(encoding="utf-8")
+    template = page_script("plugin-market.js")
 
     assert "linuxRuntimeProfile = data.linux_runtime_profile || null" in template
     assert "recommendedAssets.length === 1" in template
@@ -111,7 +115,7 @@ def test_plugin_market_runtime_selection_requires_one_recommendation():
 
 
 def test_server_admin_view_refreshes_admin_authorized_a2s_cache():
-    template = (PROJECT_ROOT / "templates" / "servers.html").read_text(encoding="utf-8")
+    template = page_script("servers.js")
 
     assert "? '/a2s-cache?admin_view=true'" in template
     toggle_start = template.index("async toggleAdminView()")
@@ -235,7 +239,9 @@ def test_plugin_config_tab_is_lazy_loaded_and_localized():
 
 
 def test_discord_profile_and_server_options_keep_visible_labels():
-    profile = (PROJECT_ROOT / "templates" / "profile.html").read_text(encoding="utf-8")
+    profile = (PROJECT_ROOT / "templates" / "profile.html").read_text(
+        encoding="utf-8"
+    ) + page_script("profile.js")
     configuration = (
         PROJECT_ROOT / "templates" / "server_detail_includes" / "configuration_tab.html"
     ).read_text(encoding="utf-8")
@@ -269,3 +275,18 @@ def test_discord_profile_and_server_options_keep_visible_labels():
         assert messages["privilegeSwitches"]
         assert messages["capStatus"]
         assert messages["whitelistRule"]
+
+
+def test_large_pages_load_responsibility_scoped_static_assets():
+    expected = {
+        "plugin_market.html": ("js/plugin-market.js", "css/plugin-market.css"),
+        "profile.html": ("js/profile.js",),
+        "servers.html": ("js/servers.js", "css/servers.css"),
+    }
+    for template_name, assets in expected.items():
+        template = (PROJECT_ROOT / "templates" / template_name).read_text(encoding="utf-8")
+        assert "<script>" not in template
+        assert "<style>" not in template
+        for asset in assets:
+            assert asset in template
+            assert (PROJECT_ROOT / "static" / asset).is_file()

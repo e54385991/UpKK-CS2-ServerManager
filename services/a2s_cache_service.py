@@ -15,6 +15,7 @@ from services.redis_manager import redis_manager
 logger = logging.getLogger(__name__)
 
 MAX_CONCURRENT_A2S_QUERIES = 8
+DEFAULT_A2S_SCAN_TIMEOUT = 30.0
 
 
 class A2SCacheService:
@@ -22,6 +23,9 @@ class A2SCacheService:
 
     def __init__(self):
         self.query_interval = 30  # Query every 30 seconds
+        # A full scan is a bounded background operation.  A slow or unreachable
+        # server must not defer the next scan indefinitely.
+        self.scan_timeout = DEFAULT_A2S_SCAN_TIMEOUT
         self.cache_ttl = 60  # Cache TTL in seconds
         self.steam_version_cache_ttl = 3600  # Cache Steam version for 1 hour
         self.task: Optional[asyncio.Task] = None
@@ -110,8 +114,13 @@ class A2SCacheService:
             logger.error(f"Error getting cached Steam version: {e}")
             return None
 
-    async def _query_all_servers(self):
-        """Query all servers and cache results"""
+    async def _query_all_servers(self, *, timeout: float | None = None):
+        """Query all servers with bounded fan-out and an optional scan deadline.
+
+        The server list is snapshotted before any network I/O.  This keeps the
+        database lease short and lets cancellation enforce the total scan
+        budget when a batch contains unreachable servers.
+        """
         from sqlmodel import select
 
         from modules.database import async_session_maker
@@ -143,7 +152,18 @@ class A2SCacheService:
                 async with limiter.slot(server.id):
                     await self._query_and_cache_server(server)
 
-            await asyncio.gather(*(query(server) for server in servers))
+            scan_timeout = self.scan_timeout if timeout is None else timeout
+            if scan_timeout is None:
+                await asyncio.gather(*(query(server) for server in servers))
+            else:
+                async with asyncio.timeout(scan_timeout):
+                    await asyncio.gather(*(query(server) for server in servers))
+
+        except TimeoutError:
+            logger.warning(
+                "A2S scan exceeded its %.1fs deadline; unfinished server queries were cancelled",
+                self.scan_timeout if timeout is None else timeout,
+            )
 
         except Exception as e:
             logger.error(f"Error querying servers: {e}")

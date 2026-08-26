@@ -4,7 +4,9 @@
   "description": "Pinned sources for the browser assets vendored under static/.",
   "scripts": {
     "vendor:frontend": "node scripts/vendor_frontend.mjs",
-    "audit:frontend": "npm audit --omit=dev"
+    "audit:frontend": "npm audit --omit=dev",
+    "test:frontend": "node --test tests/frontend/*.test.mjs",
+    "check:frontend": "node --check static/js/plugin-market.js && node --check static/js/profile.js && node --check static/js/servers.js"
   },
   "dependencies": {
     "@xterm/addon-attach": "0.12.0",

@@ -88,6 +88,7 @@ class ApplicationLifecycle:
             # SSH pool, Redis, HTTP client, then database engine.
             self._add_cleanup("database engine", resources.database_engine.dispose)
             self._add_cleanup("HTTP client", resources.http.close)
+            self._add_cleanup("AI HTTP client", resources.ai_http.close)
             self._add_cleanup("Redis client", resources.redis.close)
 
             from services.ai_security import (

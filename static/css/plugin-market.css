@@ -1,0 +1,91 @@
+    .plugin-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        background-color: #fff;
+    }
+    
+    .plugin-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .plugin-icon {
+        width: 64px;
+        height: 64px;
+        object-fit: cover;
+        border-radius: 8px;
+        margin-right: 15px;
+        flex-shrink: 0;
+    }
+    
+    .plugin-icon-placeholder {
+        width: 64px;
+        height: 64px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        margin-right: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 24px;
+        flex-shrink: 0;
+    }
+    
+    .plugin-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+        margin-right: 5px;
+    }
+    
+    .badge-recommended {
+        background-color: #ffc107;
+        color: #000;
+    }
+    
+    .badge-category {
+        background-color: #6c757d;
+        color: #fff;
+    }
+    
+    .plugin-stats {
+        font-size: 14px;
+        color: #6c757d;
+        background-color: transparent;
+        z-index: 1;
+        position: relative;
+    }
+    
+    .plugin-stats i {
+        margin-right: 4px;
+    }
+    
+    .filter-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+    }
+    
+    .pagination-controls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        margin-top: 30px;
+    }
+    
+    .admin-section {
+        background: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 30px;
+    }
+

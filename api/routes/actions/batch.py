@@ -6,6 +6,7 @@ from fastapi import Request
 
 from api.dependencies import ActiveUser, DatabaseSession
 from services.audit_log_service import record_audit_event
+from services.servers.batch import authorized_server_ids
 
 from .common import *
 
@@ -37,22 +38,19 @@ async def batch_server_actions(
     # Generate cryptographically secure batch ID (16 bytes = 32 hex chars)
     batch_id = secrets.token_hex(16)
 
-    # Validate all servers exist and belong to current user
-    valid_server_ids = []
-    for server_id in request.server_ids:
-        server = await db.get(Server, server_id)
-
-        if server and server.user_id == current_user.id:
-            valid_server_ids.append(server_id)
-            # Set initial status as pending
-            await redis_manager.set_batch_action_status(
-                batch_id, server_id, "pending", "Queued for processing"
-            )
+    valid_server_ids = await authorized_server_ids(db, request.server_ids, current_user.id)
 
     if not valid_server_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No valid servers found in the request"
         )
+
+    await redis_manager.set_batch_action_statuses(
+        batch_id,
+        valid_server_ids,
+        "pending",
+        "Queued for processing",
+    )
 
     await _reserve_batch_capacity(current_user.id, len(valid_server_ids))
     # Spawn background tasks for each server - these run in parallel
@@ -151,22 +149,19 @@ async def batch_install_plugins(
     # Generate cryptographically secure batch ID (16 bytes = 32 hex chars)
     batch_id = secrets.token_hex(16)
 
-    # Validate all servers exist and belong to current user
-    valid_server_ids = []
-    for server_id in request.server_ids:
-        server = await db.get(Server, server_id)
-
-        if server and server.user_id == current_user.id:
-            valid_server_ids.append(server_id)
-            # Set initial status as pending
-            await redis_manager.set_batch_action_status(
-                batch_id, server_id, "pending", "Queued for plugin installation"
-            )
+    valid_server_ids = await authorized_server_ids(db, request.server_ids, current_user.id)
 
     if not valid_server_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No valid servers found in the request"
         )
+
+    await redis_manager.set_batch_action_statuses(
+        batch_id,
+        valid_server_ids,
+        "pending",
+        "Queued for plugin installation",
+    )
 
     await _reserve_batch_capacity(current_user.id, len(valid_server_ids))
     # Spawn background tasks for each server - these run in parallel
@@ -230,22 +225,19 @@ async def batch_send_command(
     # Generate cryptographically secure batch ID (16 bytes = 32 hex chars)
     batch_id = secrets.token_hex(16)
 
-    # Validate all servers exist and belong to current user
-    valid_server_ids = []
-    for server_id in request.server_ids:
-        server = await db.get(Server, server_id)
-
-        if server and server.user_id == current_user.id:
-            valid_server_ids.append(server_id)
-            # Set initial status as pending
-            await redis_manager.set_batch_action_status(
-                batch_id, server_id, "pending", "Queued for command execution"
-            )
+    valid_server_ids = await authorized_server_ids(db, request.server_ids, current_user.id)
 
     if not valid_server_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No valid servers found in the request"
         )
+
+    await redis_manager.set_batch_action_statuses(
+        batch_id,
+        valid_server_ids,
+        "pending",
+        "Queued for command execution",
+    )
 
     await _reserve_batch_capacity(current_user.id, len(valid_server_ids))
     # Spawn background tasks for each server - these run in parallel

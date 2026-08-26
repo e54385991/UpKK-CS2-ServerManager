@@ -194,6 +194,7 @@ def test_ai_paths_and_argument_hashes_are_canonical():
 @pytest.mark.asyncio
 async def test_standard_chat_completions_tool_call_probe(monkeypatch):
     original_client = httpx.AsyncClient
+    client_creations = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
@@ -241,6 +242,8 @@ async def test_standard_chat_completions_tool_call_probe(monkeypatch):
         )
 
     def client_factory(**kwargs):
+        nonlocal client_creations
+        client_creations += 1
         return original_client(transport=httpx.MockTransport(handler), **kwargs)
 
     monkeypatch.setattr(ai_provider.httpx, "AsyncClient", client_factory)
@@ -264,6 +267,7 @@ async def test_standard_chat_completions_tool_call_probe(monkeypatch):
         True,
         "Provider SSE text and streamed tool-calling tests passed",
     )
+    assert client_creations == 1
 
 
 @pytest.mark.asyncio

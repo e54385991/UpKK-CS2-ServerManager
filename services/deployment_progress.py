@@ -13,7 +13,10 @@ from services.redis_manager import redis_manager
 class DeploymentWebSocket:
     """Track active deployment WebSockets by server."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, send_timeout: float = 2.0) -> None:
+        if send_timeout <= 0:
+            raise ValueError("send_timeout must be positive")
+        self.send_timeout = send_timeout
         self.active_connections: dict[int, list[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, server_id: int) -> None:
@@ -36,7 +39,7 @@ class DeploymentWebSocket:
 
         async def send_with_timeout(connection: WebSocket) -> WebSocket | None:
             try:
-                await asyncio.wait_for(connection.send_json(message), timeout=2.0)
+                await asyncio.wait_for(connection.send_json(message), timeout=self.send_timeout)
                 return None
             except Exception:
                 return connection
