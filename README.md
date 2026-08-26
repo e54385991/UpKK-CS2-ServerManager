@@ -1,3 +1,58 @@
+# 🐳 Docker 快速使用 / Docker Quick Start
+
+## 中文：一键安装与部署
+
+适用于全新的 Ubuntu 24.04+ 或 Debian 13+ 管理端主机。下面的命令会安装 Docker
+Engine 与 Docker Compose 插件，并直接启动公开镜像；无需手动 `docker pull`、创建
+`.env` 或配置 PostgreSQL/Redis：
+
+```bash
+# 安装 Docker Engine（官方脚本）和 Compose 插件
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+curl -fsSL https://get.docker.com | sudo sh
+sudo apt-get install -y docker-compose-plugin
+sudo systemctl enable --now docker
+
+# 下载配置并启动（Compose 会自动拉取镜像）
+mkdir -p "$HOME/cs2-manager" && cd "$HOME/cs2-manager"
+curl -fsSLO https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-compose.yml
+sudo docker compose up -d
+sudo docker compose ps
+```
+
+启动后访问 `http://你的服务器IP:8000`，首次登录 `admin` / `admin123`，然后立即修改
+密码。应用、PostgreSQL 和 Redis 数据保存在 Docker volumes 中，升级时不要删除
+`app_data`、`postgres_data` 和 `redis_data`。完整运维说明见
+[Docker 一键部署文档](docs/DOCKER_QUICKSTART.md)。
+
+## English: one-command installation and deployment
+
+For a fresh Ubuntu 24.04+ or Debian 13+ manager host, the commands below install Docker
+Engine and the Compose plugin, then start the public image. No manual `docker pull`, `.env`,
+PostgreSQL, or Redis setup is required:
+
+```bash
+# Install Docker Engine (official script) and the Compose plugin
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+curl -fsSL https://get.docker.com | sudo sh
+sudo apt-get install -y docker-compose-plugin
+sudo systemctl enable --now docker
+
+# Download the config and start (Compose pulls the image automatically)
+mkdir -p "$HOME/cs2-manager" && cd "$HOME/cs2-manager"
+curl -fsSLO https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-compose.yml
+sudo docker compose up -d
+sudo docker compose ps
+```
+
+Open `http://your-server-ip:8000`, sign in with `admin` / `admin123`, and change the
+password immediately. Keep the Docker volumes `app_data`, `postgres_data`, and `redis_data`
+when upgrading. See the [Docker quick-start guide](docs/DOCKER_QUICKSTART.md) for operations.
+
+---
+
 # CS2 Server Manager | CS2 服务器管理器
 
 

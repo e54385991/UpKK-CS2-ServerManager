@@ -83,6 +83,17 @@ services:
   redis:
     image: redis:8.10.1-alpine
     container_name: cs2_redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        if [ -n "$${REDIS_PASSWORD:-}" ]; then
+          exec redis-server --requirepass "$${REDIS_PASSWORD}"
+        else
+          exec redis-server
+        fi
     ports:
       - "6379:6379"
     volumes:
@@ -90,7 +101,11 @@ services:
     networks:
       - cs2_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          "if [ -n \"$${REDIS_PASSWORD:-}\" ]; then redis-cli -a \"$${REDIS_PASSWORD}\" ping; else redis-cli ping; fi",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
