@@ -51,6 +51,14 @@ Open `http://your-server-ip:8000`, sign in with `admin` / `admin123`, and change
 password immediately. Keep the Docker volumes `app_data`, `postgres_data`, and `redis_data`
 when upgrading. See the [Docker quick-start guide](docs/DOCKER_QUICKSTART.md) for operations.
 
+> **Docker 用户说明：** 如果您使用 Docker 部署，到这里即可完成安装；后文的系统要求、
+> 源码克隆、手动配置 PostgreSQL/Redis 以及手动启动 `uvicorn` 等步骤都不必阅读或执行。
+> 只有不使用 Docker 时，才需要按照后面的手动部署说明操作。
+>
+> **For Docker users:** If you deploy with Docker, the setup is complete here. You can skip
+> the manual system requirements, source checkout, PostgreSQL/Redis configuration, and
+> `uvicorn` startup steps below. Read the manual deployment section only when Docker is not used.
+
 ---
 
 # CS2 Server Manager | CS2 服务器管理器
