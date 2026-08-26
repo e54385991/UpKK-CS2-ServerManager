@@ -151,7 +151,7 @@ GitHub ──────> 海外面板服务器 ──────> 国内游�
 - 🔴 **WebSocket 实时更新**: 部署过程实时查看 SSH 状态和输出
 - 💾 **Redis 缓存**: 使用 Redis 缓存服务器状态
 - 📝 **操作日志**: 记录所有部署和操作历史
-- 🐳 **Docker 支持**: 提供 Docker Compose 快速部署依赖
+- 🐳 **Docker 一键部署**: 应用、PostgreSQL 和 Redis 可通过 `docker compose up -d` 启动，无需手工填写配置
 - 🎨 **现代化 Web 界面**: 基于 Bootstrap 5 + Alpine.js 的响应式界面，所有资源完全本地化
 
 ### 📋 系统要求
@@ -336,7 +336,7 @@ A modern CS2 (Counter-Strike 2) server manager built with **FastAPI + Redis + Po
 - 🔴 **WebSocket Real-time Updates**: Live SSH status and output during deployment
 - 💾 **Redis Caching**: Server status caching with Redis
 - 📝 **Operation Logs**: Records all deployment and operation history
-- 🐳 **Docker Support**: Docker Compose for quick dependency deployment
+- 🐳 **One-Command Docker Deployment**: Start the application, PostgreSQL, and Redis with `docker compose up -d`
 - 🎨 **Modern Web Interface**: Responsive UI based on Bootstrap 5 + Alpine.js, all resources fully localized
 
 ### 🌍 Recommended Deployment (For Users in China)
