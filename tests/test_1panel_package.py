@@ -23,8 +23,7 @@ def test_1panel_package_validator_passes() -> None:
 
 def test_init_script_upgrades_short_secrets(tmp_path: Path) -> None:
     workdir = tmp_path / "app"
-    data_dir = workdir / "data"
-    data_dir.mkdir(parents=True)
+    workdir.mkdir(parents=True)
     (workdir / ".env").write_text(
         "SECRET_KEY=_short\nJWT_SECRET_KEY=operator-provided-key-that-is-long-enough\n",
         encoding="utf-8",
@@ -43,6 +42,7 @@ def test_init_script_upgrades_short_secrets(tmp_path: Path) -> None:
         [str(script)], cwd=workdir, env=env, capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    assert (workdir / "data").is_dir()
     values = dict(line.split("=", 1) for line in (workdir / ".env").read_text().splitlines())
     assert len(values["SECRET_KEY"]) == 64
     assert all(char in "0123456789abcdef" for char in values["SECRET_KEY"])

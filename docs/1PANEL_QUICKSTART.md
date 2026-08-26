@@ -34,7 +34,15 @@ This guide covers two deployment paths: the root Docker Compose keeps its bundle
 sudo mkdir -p /opt/1panel/resource/apps/local/cs2-server-manager
 sudo cp -a deploy/1panel/apps/cs2-server-manager/. \
   /opt/1panel/resource/apps/local/cs2-server-manager/
+# 确认应用根目录和版本目录都包含 data.yml
+test -f /opt/1panel/resource/apps/local/cs2-server-manager/data.yml
+test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
 ```
+
+`cs2-server-manager` 必须是应用包根目录，不能只复制 `1.0.0` 目录，也不能把整个
+代码仓库直接作为本地应用目录。若日志提示 `data.yml 文件不存在`，先删除错误的
+`/opt/1panel/resource/apps/local/cs2-server-manager` 目录，再按上面的命令复制；复制
+完成后目录应至少包含 `data.yml`、`logo.png` 和 `1.0.0/data.yml`。
 
 然后打开 1Panel：**应用商店 → 本地应用 → 刷新**，找到 **CS2 Server Manager** 并点击安装。
 
@@ -44,8 +52,13 @@ sudo cp -a deploy/1panel/apps/cs2-server-manager/. \
 - 填写专用数据库名、用户和密码；
 - Redis 服务选择已安装的 Redis 实例，并填写密码和 DB 编号；
 - HTTP 端口默认 `8000`，如端口冲突可更换；
-- `SECRET_KEY` 和 `JWT_SECRET_KEY` 保持 1Panel 自动生成的随机值；
-- `BACKEND_URL` 填写用户实际访问地址；如果使用反向代理，应填写 HTTPS 公网地址。
+- `SECRET_KEY` 和 `JWT_SECRET_KEY` 保持 1Panel 自动生成的随机值；安装脚本会把表单
+  生成的短占位值升级为 64 位十六进制（256-bit SHA-256）随机密钥；已有长度不少于
+  32 位的自定义值不会被轮换；
+- 应用监听地址 `API_HOST` 已固定为 `0.0.0.0`，因此会监听所有网卡；`BACKEND_URL` 默认
+  是可通过 1Panel 校验的 `http://0.0.0.0:8000` 占位值。首次安装后，如果要生成密码
+  重置链接、OAuth 回调或反向代理链接，请改成用户实际访问地址；反向代理场景应填写
+  HTTPS 公网地址。
 
 应用首次启动会自动执行 Alembic 数据库迁移，无需手工运行 SQL 或迁移命令。
 
@@ -100,11 +113,16 @@ From the repository checkout, copy the package into 1Panel's local app directory
 sudo mkdir -p /opt/1panel/resource/apps/local/cs2-server-manager
 sudo cp -a deploy/1panel/apps/cs2-server-manager/. \
   /opt/1panel/resource/apps/local/cs2-server-manager/
+test -f /opt/1panel/resource/apps/local/cs2-server-manager/data.yml
+test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
 ```
+
+Copy the package root, not only `1.0.0` and not the whole repository. If the sync log says
+`data.yml is missing`, remove the incomplete directory and repeat the copy command above.
 
 Open **App Store → Local Apps → Refresh**, select **CS2 Server Manager**, and install it.
 
-In the form, select the PostgreSQL and Redis service instances, enter the dedicated PostgreSQL credentials, keep the generated application and JWT secrets, choose an HTTP port, and set `BACKEND_URL` to the public URL (HTTPS when using a reverse proxy).
+In the form, select the PostgreSQL and Redis service instances, enter the dedicated PostgreSQL credentials, keep the generated application and JWT secrets, choose an HTTP port, and set `BACKEND_URL` to the public URL (HTTPS when using a reverse proxy). The container listens on all interfaces through `API_HOST=0.0.0.0`; the default `BACKEND_URL` is the validation-safe placeholder `http://0.0.0.0:8000` and should be replaced with the real public URL for reset links and OAuth callbacks. The init script upgrades short 1Panel placeholders to 64-character hexadecimal (256-bit SHA-256) secrets while preserving custom values of at least 32 characters.
 
 The application automatically runs the reviewed Alembic migrations at startup. No manual SQL or migration command is required.
 

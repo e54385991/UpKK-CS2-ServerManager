@@ -3,6 +3,9 @@
 CS2 Server Manager 是一个基于 FastAPI 的 Counter-Strike 2 服务器管理面板，支持通过
 SSH 远程管理多个游戏服务器，并提供部署、启停、监控、插件和实时控制台功能。
 
+将此目录完整复制到 `/opt/1panel/resource/apps/local/cs2-server-manager/`，确保应用根目录
+同时存在 `data.yml`、`logo.png` 和 `1.0.0/data.yml`；不要只复制 `1.0.0` 目录。
+
 ## 主要功能
 
 - Web 界面管理多个 CS2 服务器；
