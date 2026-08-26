@@ -64,6 +64,11 @@ test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
 
 应用首次启动会自动执行 Alembic 数据库迁移，无需手工运行 SQL 或迁移命令。
 
+全新数据库首次启动时会自动创建管理员账户。安装完成后访问
+`http://服务器IP:外部端口`，使用默认用户名 `admin`、默认密码 `admin123` 登录，
+并在首次登录后立即修改默认密码。复用已有数据库时，系统会继续使用已有账户，
+不会重新创建或重置默认管理员密码。
+
 ### 3. 运维与升级
 
 - 通过 1Panel 查看应用日志、启动、停止和重启；
@@ -126,6 +131,11 @@ Open **App Store → Local Apps → Refresh**, select **CS2 Server Manager**, an
 In the form, select the PostgreSQL and Redis service instances. 1Panel automatically generates `PANEL_DB_NAME`, `PANEL_DB_USER`, and `PANEL_DB_USER_PASSWORD` and creates the PostgreSQL database/user during the install task; keep the generated application and JWT secrets, choose an external HTTP port (default `8000`, or any unused host port such as `18000`), and set `BACKEND_URL` to the public URL (HTTPS when using a reverse proxy). The external port maps to the container's fixed port `8000`; open the selected host port in your firewall/security group and access `http://server-ip:<port>`. To reuse an existing database/user, register it in 1Panel first and replace the generated values without colliding with an existing resource. The container listens on all interfaces through `API_HOST=0.0.0.0`; the default `BACKEND_URL` is the validation-safe placeholder `http://0.0.0.0:8000` and should be replaced with the real public URL for reset links and OAuth callbacks. The init script upgrades short 1Panel placeholders to 64-character hexadecimal (256-bit SHA-256) secrets while preserving custom values of at least 32 characters.
 
 The application automatically runs the reviewed Alembic migrations at startup. No manual SQL or migration command is required.
+
+On the first startup with a new database, the application creates the default administrator
+account. Open `http://server-ip:<port>` and sign in with username `admin` and password
+`admin123`, then change the default password immediately. When reusing an existing database,
+existing accounts are preserved and the administrator password is not reset.
 
 ### 3. Operations and upgrades
 

@@ -13,7 +13,14 @@ docker compose up -d
 `docker pull`，Compose 会自动拉取镜像。
 
 默认会启动应用、PostgreSQL 18 和 Redis 8，应用启动时自动执行 Alembic 数据库迁移。
-访问 <http://localhost:8000> 后直接注册第一个账户。
+全新数据卷首次启动时会自动创建管理员账户。访问 <http://localhost:8000> 后使用以下
+默认凭据登录：
+
+- 用户名：`admin`
+- 密码：`admin123`
+
+> ⚠️ **首次登录后请立即修改默认密码。** 如果复用已有数据卷，系统会继续使用已有账户，
+> 不会重新创建或重置默认管理员密码。
 
 首次启动会在 `app_data` 卷中自动生成并持久化 `SECRET_KEY`、`JWT_SECRET_KEY` 和 AI
 凭据加密密钥；不需要填写 `.env`。升级或重启时不要删除 `app_data`、`postgres_data`

@@ -2,6 +2,9 @@
 
 > 本项目支持 **Docker Compose 一键部署**和 **1Panel 本地应用快速部署**：
 > [Docker 快速部署文档](docs/DOCKER_QUICKSTART.md) · [1Panel 快速部署文档](docs/1PANEL_QUICKSTART.md)
+>
+> ⚠️ **Docker 部署完成后请使用默认用户名 `admin`、默认密码 `admin123` 登录，
+> 并在首次登录后立即修改默认密码。**
 
 # 🐳 Docker 快速使用 / Docker Quick Start
 
