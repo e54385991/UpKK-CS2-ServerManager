@@ -63,7 +63,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DATABASE:-cs2_manager}
       POSTGRES_USER: ${POSTGRES_USER:-cs2_manager}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cs2-manager-db}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
