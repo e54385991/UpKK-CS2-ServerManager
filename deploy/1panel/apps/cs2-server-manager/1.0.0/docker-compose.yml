@@ -1,0 +1,58 @@
+services:
+  app:
+    image: docker.io/e54385991/upkk-cs2-server-manager:b6d5284@sha256:7e100ad1d049f50d3b588aba6e9029750f79ed8394ad3b31621b311a744dc5b9
+    container_name: ${CONTAINER_NAME}
+    restart: always
+    environment:
+      PANEL_DB_TYPE: ${PANEL_DB_TYPE}
+      POSTGRES_HOST: ${PANEL_DB_HOST}
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${PANEL_DB_USER}
+      POSTGRES_PASSWORD: ${PANEL_DB_USER_PASSWORD}
+      POSTGRES_DATABASE: ${PANEL_DB_NAME}
+      PANEL_REDIS_TYPE: ${PANEL_REDIS_TYPE}
+      REDIS_HOST: ${PANEL_REDIS_HOST}
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${PANEL_REDIS_PASSWORD}
+      REDIS_DB: ${PANEL_REDIS_DB}
+      REDIS_POOL_SIZE: "10"
+      REDIS_HEALTH_CHECK_INTERVAL: "30"
+      REDIS_SOCKET_CONNECT_TIMEOUT: "5"
+      REDIS_SOCKET_TIMEOUT: "5"
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      DEBUG: "False"
+      BACKEND_URL: ${BACKEND_URL}
+      LOG_LEVEL: INFO
+      ASYNCSSH_LOG_LEVEL: WARNING
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+      AI_CREDENTIAL_ENCRYPTION_KEY: ""
+      SSH_AUTH_MODE: password
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    ports:
+      - ${PANEL_APP_PORT_HTTP}:8000
+    volumes:
+      - ./data:/app/data
+    networks:
+      - 1panel-network
+    labels:
+      createdBy: "Apps"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+networks:
+  1panel-network:
+    external: true

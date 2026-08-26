@@ -19,6 +19,7 @@ This directory contains all the documentation for the CS2 Server Manager project
 - [Dependency Matrix](DEPENDENCY_MATRIX.md) - Runtime versions, lockfiles, and update workflow
 - [Redis 8 Upgrade](REDIS8_UPGRADE.md) - Upgrade checks and rollback procedure
 - [Docker Quick Start](DOCKER_QUICKSTART.md) - One-command application, PostgreSQL, Redis deployment, and Docker Hub publishing
+- [1Panel Quick Start](1PANEL_QUICKSTART.md) - Reuse 1Panel PostgreSQL/Redis with the local app package
 
 ## Getting Started
 

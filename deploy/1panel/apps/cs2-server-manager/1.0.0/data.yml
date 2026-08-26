@@ -1,0 +1,260 @@
+additionalProperties:
+  formFields:
+    - child:
+        default: ""
+        envKey: PANEL_DB_HOST
+        labelEn: PostgreSQL Service
+        labelZh: PostgreSQL 服务
+        label:
+          en: PostgreSQL Service
+          es-es: Servicio PostgreSQL
+          ja: PostgreSQL サービス
+          ms: Perkhidmatan PostgreSQL
+          pt-br: Serviço PostgreSQL
+          ru: Сервис PostgreSQL
+          ko: PostgreSQL 서비스
+          zh-Hant: PostgreSQL 服務
+          zh: PostgreSQL 服务
+          tr: PostgreSQL hizmeti
+        required: true
+        type: service
+      default: postgresql
+      envKey: PANEL_DB_TYPE
+      labelEn: Database Service
+      labelZh: 数据库服务
+      label:
+        en: Database Service
+        es-es: Servicio de base de datos
+        ja: データベースサービス
+        ms: Perkhidmatan pangkalan data
+        pt-br: Serviço de banco de dados
+        ru: Сервис базы данных
+        ko: 데이터베이스 서비스
+        zh-Hant: 資料庫服務
+        zh: 数据库服务
+        tr: Veritabanı hizmeti
+      required: true
+      type: apps
+      values:
+        - label: PostgreSQL
+          value: postgresql
+    - default: cs2_manager
+      envKey: PANEL_DB_NAME
+      labelEn: Database Name
+      labelZh: 数据库名
+      label:
+        en: Database Name
+        es-es: Nombre de la base de datos
+        ja: データベース名
+        ms: Nama pangkalan data
+        pt-br: Nome do banco de dados
+        ru: Имя базы данных
+        ko: 데이터베이스 이름
+        zh-Hant: 資料庫名稱
+        zh: 数据库名
+        tr: Veritabanı adı
+      required: true
+      rule: paramCommon
+      type: text
+    - default: cs2_manager
+      envKey: PANEL_DB_USER
+      labelEn: Database User
+      labelZh: 数据库用户
+      label:
+        en: Database User
+        es-es: Usuario de base de datos
+        ja: データベースユーザー
+        ms: Pengguna pangkalan data
+        pt-br: Usuário do banco de dados
+        ru: Пользователь базы данных
+        ko: 데이터베이스 사용자
+        zh-Hant: 資料庫使用者
+        zh: 数据库用户
+        tr: Veritabanı kullanıcısı
+      required: true
+      rule: paramCommon
+      type: text
+    - default: ""
+      envKey: PANEL_DB_USER_PASSWORD
+      labelEn: Database Password
+      labelZh: 数据库密码
+      label:
+        en: Database Password
+        es-es: Contraseña de la base de datos
+        ja: データベースパスワード
+        ms: Kata laluan pangkalan data
+        pt-br: Senha do banco de dados
+        ru: Пароль базы данных
+        ko: 데이터베이스 비밀번호
+        zh-Hant: 資料庫密碼
+        zh: 数据库密码
+        tr: Veritabanı parolası
+      required: true
+      type: password
+    - child:
+        default: ""
+        envKey: PANEL_REDIS_HOST
+        labelEn: Redis Service
+        labelZh: Redis 服务
+        label:
+          en: Redis Service
+          es-es: Servicio Redis
+          ja: Redis サービス
+          ms: Perkhidmatan Redis
+          pt-br: Serviço Redis
+          ru: Сервис Redis
+          ko: Redis 서비스
+          zh-Hant: Redis 服務
+          zh: Redis 服务
+          tr: Redis hizmeti
+        required: true
+        type: service
+      default: redis
+      envKey: PANEL_REDIS_TYPE
+      labelEn: Redis Service
+      labelZh: Redis 服务
+      label:
+        en: Redis Service
+        es-es: Servicio Redis
+        ja: Redis サービス
+        ms: Perkhidmatan Redis
+        pt-br: Serviço Redis
+        ru: Сервис Redis
+        ko: Redis 서비스
+        zh-Hant: Redis 服務
+        zh: Redis 服务
+        tr: Redis hizmeti
+      required: true
+      type: apps
+      values:
+        - label: Redis
+          value: redis
+    - default: ""
+      envKey: PANEL_REDIS_PASSWORD
+      labelEn: Redis Password
+      labelZh: Redis 密码
+      label:
+        en: Redis Password
+        es-es: Contraseña de Redis
+        ja: Redis パスワード
+        ms: Kata laluan Redis
+        pt-br: Senha do Redis
+        ru: Пароль Redis
+        ko: Redis 비밀번호
+        zh-Hant: Redis 密碼
+        zh: Redis 密码
+        tr: Redis parolası
+      required: false
+      type: password
+    - default: 0
+      envKey: PANEL_REDIS_DB
+      labelEn: Redis Database Number
+      labelZh: Redis 数据库编号
+      label:
+        en: Redis Database Number
+        es-es: Número de base de datos Redis
+        ja: Redis データベース番号
+        ms: Nombor pangkalan data Redis
+        pt-br: Número do banco de dados Redis
+        ru: Номер базы данных Redis
+        ko: Redis 데이터베이스 번호
+        zh-Hant: Redis 資料庫編號
+        zh: Redis 数据库编号
+        tr: Redis veritabanı numarası
+      required: true
+      rule: paramCommon
+      type: number
+    - default: 8000
+      envKey: PANEL_APP_PORT_HTTP
+      labelEn: HTTP Port
+      labelZh: HTTP 端口
+      label:
+        en: HTTP Port
+        es-es: Puerto HTTP
+        ja: HTTP ポート
+        ms: Port HTTP
+        pt-br: Porta HTTP
+        ru: Порт HTTP
+        ko: HTTP 포트
+        zh-Hant: HTTP 連接埠
+        zh: HTTP 端口
+        tr: HTTP bağlantı noktası
+      required: true
+      rule: paramPort
+      type: number
+    - default: http://localhost:8000
+      edit: true
+      envKey: BACKEND_URL
+      labelEn: Public URL
+      labelZh: 公网访问地址
+      label:
+        en: Public URL
+        es-es: URL pública
+        ja: 公開 URL
+        ms: URL awam
+        pt-br: URL pública
+        ru: Публичный URL
+        ko: 공개 URL
+        zh-Hant: 公開 URL
+        zh: 公网访问地址
+        tr: Genel URL
+      required: true
+      rule: paramCommon
+      type: text
+    - default: ""
+      edit: true
+      envKey: SECRET_KEY
+      labelEn: Application Secret Key
+      labelZh: 应用密钥
+      label:
+        en: Application Secret Key
+        es-es: Clave secreta de la aplicación
+        ja: アプリケーションシークレットキー
+        ms: Kunci rahsia aplikasi
+        pt-br: Chave secreta da aplicação
+        ru: Секретный ключ приложения
+        ko: 애플리케이션 비밀 키
+        zh-Hant: 應用程式密鑰
+        zh: 应用密钥
+        tr: Uygulama gizli anahtarı
+      random: true
+      required: true
+      type: password
+    - default: ""
+      edit: true
+      envKey: JWT_SECRET_KEY
+      labelEn: JWT Secret Key
+      labelZh: JWT 密钥
+      label:
+        en: JWT Secret Key
+        es-es: Clave secreta JWT
+        ja: JWT シークレットキー
+        ms: Kunci rahsia JWT
+        pt-br: Chave secreta JWT
+        ru: Секретный ключ JWT
+        ko: JWT 비밀 키
+        zh-Hant: JWT 密鑰
+        zh: JWT 密钥
+        tr: JWT gizli anahtarı
+      random: true
+      required: true
+      type: password
+    - default: ""
+      edit: true
+      envKey: GOOGLE_CLIENT_ID
+      labelEn: Google OAuth Client ID (Optional)
+      labelZh: Google OAuth 客户端 ID（可选）
+      label:
+        en: Google OAuth Client ID (Optional)
+        es-es: ID de cliente OAuth de Google (opcional)
+        ja: Google OAuth クライアント ID（任意）
+        ms: ID Klien Google OAuth (Pilihan)
+        pt-br: ID do cliente OAuth do Google (opcional)
+        ru: ID клиента Google OAuth (необязательно)
+        ko: Google OAuth 클라이언트 ID (선택 사항)
+        zh-Hant: Google OAuth 用戶端 ID（選填）
+        zh: Google OAuth 客户端 ID（可选）
+        tr: Google OAuth istemci kimliği (İsteğe bağlı)
+      required: false
+      rule: paramCommon
+      type: text

@@ -50,6 +50,10 @@ def main() -> None:
             "Complexity budget for split domains",
             [sys.executable, "scripts/check_complexity.py"],
         ),
+        (
+            "1Panel application package",
+            [sys.executable, "scripts/check_1panel_package.py"],
+        ),
         ("Tests and compatibility contracts", [pytest, "-q"]),
         (
             "Coverage for newly split domains",

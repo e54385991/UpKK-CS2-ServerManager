@@ -51,6 +51,29 @@ Open `http://your-server-ip:8000`, sign in with `admin` / `admin123`, and change
 password immediately. Keep the Docker volumes `app_data`, `postgres_data`, and `redis_data`
 when upgrading. See the [Docker quick-start guide](docs/DOCKER_QUICKSTART.md) for operations.
 
+### 1Panel 本地应用 / 1Panel local app
+
+如果您已经在 1Panel 中运行 PostgreSQL 和 Redis，可以安装仓库提供的本地应用包。该包只
+启动 CS2 Server Manager，并通过 `1panel-network` 复用现有服务，不会重复创建数据库容器。
+
+```bash
+sudo mkdir -p /opt/1panel/resource/apps/local/cs2-server-manager
+sudo cp -a deploy/1panel/apps/cs2-server-manager/. \
+  /opt/1panel/resource/apps/local/cs2-server-manager/
+```
+
+然后在 **应用商店 → 本地应用 → 刷新** 中安装，并选择 PostgreSQL/Redis 服务实例。请先
+创建专用 PostgreSQL 数据库和用户；容器内不要把数据库地址填写为 `localhost`。完整步骤见
+[1Panel 部署文档](docs/1PANEL_QUICKSTART.md)。如果不想复用 1Panel 服务，继续使用上面的
+Docker 一键部署即可。
+
+If PostgreSQL and Redis are already managed in 1Panel, copy the local app package from
+`deploy/1panel/apps/cs2-server-manager` to `/opt/1panel/resource/apps/local/cs2-server-manager`,
+refresh **App Store → Local Apps**, and install it. The package starts only the panel
+container and reuses the existing services over `1panel-network`. Create a dedicated
+PostgreSQL database/user first and never use `localhost` as the database host inside the
+container. See the [1Panel deployment guide](docs/1PANEL_QUICKSTART.md).
+
 > **Docker 用户说明：** 如果您使用 Docker 部署，到这里即可完成安装；后文的系统要求、
 > 源码克隆、手动配置 PostgreSQL/Redis 以及手动启动 `uvicorn` 等步骤都不必阅读或执行。
 > 只有不使用 Docker 时，才需要按照后面的手动部署说明操作。
@@ -450,6 +473,15 @@ Open <http://your-server-ip:8000>. The first login is `admin` / `admin123`; chan
 immediately. Keep the Docker volumes `app_data`, `postgres_data`, and `redis_data` when
 upgrading. See the [Docker quick-start guide](docs/DOCKER_QUICKSTART.md) for operations and
 security guidance.
+
+### 1Panel local app (reuse existing services)
+
+If PostgreSQL and Redis are already managed by 1Panel, copy the local app package from
+`deploy/1panel/apps/cs2-server-manager` to `/opt/1panel/resource/apps/local/cs2-server-manager`,
+refresh **App Store → Local Apps**, and install it. The package runs only the application and
+joins `1panel-network`; it does not create duplicate database containers. Create a dedicated
+PostgreSQL database/user first and select both service instances in the form. The full bilingual
+guide is in [docs/1PANEL_QUICKSTART.md](docs/1PANEL_QUICKSTART.md).
 
 ### 🌍 Recommended Deployment (For Users in China)
 
