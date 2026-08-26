@@ -62,17 +62,19 @@ sudo cp -a deploy/1panel/apps/cs2-server-manager/. \
   /opt/1panel/resource/apps/local/cs2-server-manager/
 ```
 
-然后在 **应用商店 → 本地应用 → 刷新** 中安装，并选择 PostgreSQL/Redis 服务实例。请先
-创建专用 PostgreSQL 数据库和用户；容器内不要把数据库地址填写为 `localhost`。完整步骤见
-[1Panel 部署文档](docs/1PANEL_QUICKSTART.md)。如果不想复用 1Panel 服务，继续使用上面的
-Docker 一键部署即可。
+然后在 **应用商店 → 本地应用 → 刷新** 中安装，并选择 PostgreSQL/Redis 服务实例。安装
+表单会由 1Panel 自动生成并创建 PostgreSQL 数据库和用户；Redis 复用所选实例和 DB 编号。
+容器内不要把数据库地址填写为 `localhost`。外部 HTTP 端口默认为 `8000`，可在安装表单中
+改成其他未占用端口（例如 `18000`）。完整步骤见 [1Panel 部署文档](docs/1PANEL_QUICKSTART.md)。
+如果不想复用 1Panel 服务，继续使用上面的 Docker 一键部署即可。
 
 If PostgreSQL and Redis are already managed in 1Panel, copy the local app package from
 `deploy/1panel/apps/cs2-server-manager` to `/opt/1panel/resource/apps/local/cs2-server-manager`,
-refresh **App Store → Local Apps**, and install it. The package starts only the panel
-container and reuses the existing services over `1panel-network`. Create a dedicated
-PostgreSQL database/user first and never use `localhost` as the database host inside the
-container. See the [1Panel deployment guide](docs/1PANEL_QUICKSTART.md).
+refresh **App Store → Local Apps**, and install it. The form asks 1Panel to generate and create
+the PostgreSQL database/user automatically, while Redis reuses the selected instance and DB.
+The external HTTP port defaults to `8000` and can be changed to any unused host port (for
+example `18000`). Never use `localhost` as the database host inside the container. See the
+[1Panel deployment guide](docs/1PANEL_QUICKSTART.md).
 
 > **Docker 用户说明：** 如果您使用 Docker 部署，到这里即可完成安装；后文的系统要求、
 > 源码克隆、手动配置 PostgreSQL/Redis 以及手动启动 `uvicorn` 等步骤都不必阅读或执行。
@@ -479,9 +481,11 @@ security guidance.
 If PostgreSQL and Redis are already managed by 1Panel, copy the local app package from
 `deploy/1panel/apps/cs2-server-manager` to `/opt/1panel/resource/apps/local/cs2-server-manager`,
 refresh **App Store → Local Apps**, and install it. The package runs only the application and
-joins `1panel-network`; it does not create duplicate database containers. Create a dedicated
-PostgreSQL database/user first and select both service instances in the form. The full bilingual
-guide is in [docs/1PANEL_QUICKSTART.md](docs/1PANEL_QUICKSTART.md).
+joins `1panel-network`; it does not create duplicate database containers. The form asks 1Panel to
+generate and create the PostgreSQL database/user automatically, while Redis reuses the selected
+instance and DB. The external HTTP port defaults to `8000` and can be changed to any unused host
+port (for example `18000`). The full bilingual guide is in
+[docs/1PANEL_QUICKSTART.md](docs/1PANEL_QUICKSTART.md).
 
 ### 🌍 Recommended Deployment (For Users in China)
 

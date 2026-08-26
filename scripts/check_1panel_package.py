@@ -196,6 +196,20 @@ def main() -> None:
         fail("BACKEND_URL must use the 1Panel URL validator")
     if backend_field.get("default") != "http://0.0.0.0:8000":
         fail("BACKEND_URL must default to http://0.0.0.0:8000")
+    port_field = next(
+        (field for field in version_fields if field.get("envKey") == "PANEL_APP_PORT_HTTP"), None
+    )
+    if (
+        not isinstance(port_field, dict)
+        or port_field.get("type") != "number"
+        or port_field.get("rule") != "paramPort"
+        or port_field.get("edit") is not True
+    ):
+        fail("PANEL_APP_PORT_HTTP must be an editable external port field")
+    if "${PANEL_APP_PORT_HTTP}:8000" not in (VERSION_ROOT / "docker-compose.yml").read_text(
+        encoding="utf-8"
+    ):
+        fail("compose must map PANEL_APP_PORT_HTTP to the container port 8000")
     for secret_key in ("SECRET_KEY", "JWT_SECRET_KEY"):
         secret_field = next(
             (field for field in version_fields if field.get("envKey") == secret_key), None
@@ -205,6 +219,12 @@ def main() -> None:
     init_script = (VERSION_ROOT / "scripts/init.sh").read_text(encoding="utf-8")
     if "openssl rand -hex 32" not in init_script or "ensure_secret SECRET_KEY" not in init_script:
         fail("init.sh must upgrade generated secrets to 256-bit values")
+    for database_field in ("PANEL_DB_NAME", "PANEL_DB_USER", "PANEL_DB_USER_PASSWORD"):
+        field = next(
+            (item for item in version_fields if item.get("envKey") == database_field), None
+        )
+        if not isinstance(field, dict) or field.get("random") is not True:
+            fail(f"{database_field} must be generated automatically by 1Panel")
 
     run_compose_config(
         VERSION_ROOT / "docker-compose.yml",

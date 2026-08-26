@@ -54,6 +54,7 @@ additionalProperties:
         zh: 数据库名
         tr: Veritabanı adı
       required: true
+      random: true
       rule: paramCommon
       type: text
     - default: cs2_manager
@@ -72,6 +73,7 @@ additionalProperties:
         zh: 数据库用户
         tr: Veritabanı kullanıcısı
       required: true
+      random: true
       rule: paramCommon
       type: text
     - default: ""
@@ -90,6 +92,7 @@ additionalProperties:
         zh: 数据库密码
         tr: Veritabanı parolası
       required: true
+      random: true
       type: password
     - child:
         default: ""
@@ -165,20 +168,21 @@ additionalProperties:
       rule: integerNumberWith0
       type: number
     - default: 8000
+      edit: true
       envKey: PANEL_APP_PORT_HTTP
-      labelEn: HTTP Port
-      labelZh: HTTP 端口
+      labelEn: External HTTP Port
+      labelZh: 外部 HTTP 端口
       label:
-        en: HTTP Port
-        es-es: Puerto HTTP
-        ja: HTTP ポート
-        ms: Port HTTP
-        pt-br: Porta HTTP
-        ru: Порт HTTP
-        ko: HTTP 포트
-        zh-Hant: HTTP 連接埠
-        zh: HTTP 端口
-        tr: HTTP bağlantı noktası
+        en: External HTTP Port
+        es-es: Puerto HTTP externo
+        ja: 外部 HTTP ポート
+        ms: Port HTTP luaran
+        pt-br: Porta HTTP externa
+        ru: Внешний HTTP-порт
+        ko: 외부 HTTP 포트
+        zh-Hant: 外部 HTTP 連接埠
+        zh: 外部 HTTP 端口
+        tr: Harici HTTP bağlantı noktası
       required: true
       rule: paramPort
       type: number

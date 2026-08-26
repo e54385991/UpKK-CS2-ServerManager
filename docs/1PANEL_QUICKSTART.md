@@ -17,12 +17,9 @@ This guide covers two deployment paths: the root Docker Compose keeps its bundle
 ### 1. 准备外部服务
 
 1. 在 1Panel 应用商店安装并启动 PostgreSQL 18.6 和 Redis 8.10.1。
-2. 在 PostgreSQL 管理界面创建专用数据库、用户和密码，例如：
-   - 数据库：`cs2_manager`
-   - 用户：`cs2_manager`
-   - 权限：仅授予该数据库所需权限，不使用超级用户。
-3. 记住 Redis 密码和使用的 DB 编号。Redis 无密码时，安装表单中的密码保持为空。
-4. 确认 PostgreSQL、Redis 和待安装应用都连接到 1Panel 的 `1panel-network`。
+2. 记住 Redis 密码和使用的 DB 编号。Redis 无密码时，安装表单中的密码保持为空；
+   Redis 数据库编号只选择现有 DB，不会由应用创建 Redis 实例或 ACL 用户。
+3. 确认 PostgreSQL、Redis 和待安装应用都连接到 1Panel 的 `1panel-network`。
 
 不要填写 `localhost` 作为容器内的数据库地址；安装表单应选择对应的 1Panel 服务实例。容器内的 `localhost` 指向应用容器本身。
 
@@ -48,10 +45,15 @@ test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
 
 安装表单中：
 
-- PostgreSQL 服务选择刚创建的数据库实例；
-- 填写专用数据库名、用户和密码；
+- PostgreSQL 服务选择刚安装的数据库实例。`PANEL_DB_NAME`、`PANEL_DB_USER` 和
+  `PANEL_DB_USER_PASSWORD` 默认由 1Panel 自动生成；安装任务会在选定 PostgreSQL
+  服务中创建对应数据库和用户，无需预先手工创建；
+- 如果要复用已有数据库/用户，请关闭或覆盖自动生成的字段并确保它们已经在 1Panel
+  数据库资源中登记，避免同名资源冲突；
 - Redis 服务选择已安装的 Redis 实例，并填写密码和 DB 编号；
-- HTTP 端口默认 `8000`，如端口冲突可更换；
+- 外部 HTTP 端口默认 `8000`，如端口冲突可更换为其他未占用端口（例如 `18000`）。该端口
+  是宿主机对外访问端口，容器内部端口仍固定为 `8000`；修改后访问
+  `http://服务器IP:外部端口`，并在防火墙/安全组放行该端口；
 - `SECRET_KEY` 和 `JWT_SECRET_KEY` 保持 1Panel 自动生成的随机值；安装脚本会把表单
   生成的短占位值升级为 64 位十六进制（256-bit SHA-256）随机密钥；已有长度不少于
   32 位的自定义值不会被轮换；
@@ -99,9 +101,8 @@ The 1Panel app store provides [PostgreSQL 18.6](https://github.com/1Panel-dev/ap
 ### 1. Prepare the external services
 
 1. Install and start PostgreSQL 18.6 and Redis 8.10.1 from the 1Panel App Store.
-2. Create a dedicated PostgreSQL database and user, for example `cs2_manager`, and grant only the required database permissions.
-3. Keep the Redis password and DB number available. Leave the password empty when Redis has no password.
-4. Confirm that both services and the application will use 1Panel's `1panel-network`.
+2. Keep the Redis password and DB number available. Leave the password empty when Redis has no password; the package reuses the selected Redis instance and DB and does not create a Redis server or ACL user.
+3. Confirm that both services and the application will use 1Panel's `1panel-network`.
 
 Do not use `localhost` for a database host inside the application container. Select the matching 1Panel service instance in the installation form; container `localhost` means the application container itself.
 
@@ -122,7 +123,7 @@ Copy the package root, not only `1.0.0` and not the whole repository. If the syn
 
 Open **App Store → Local Apps → Refresh**, select **CS2 Server Manager**, and install it.
 
-In the form, select the PostgreSQL and Redis service instances, enter the dedicated PostgreSQL credentials, keep the generated application and JWT secrets, choose an HTTP port, and set `BACKEND_URL` to the public URL (HTTPS when using a reverse proxy). The container listens on all interfaces through `API_HOST=0.0.0.0`; the default `BACKEND_URL` is the validation-safe placeholder `http://0.0.0.0:8000` and should be replaced with the real public URL for reset links and OAuth callbacks. The init script upgrades short 1Panel placeholders to 64-character hexadecimal (256-bit SHA-256) secrets while preserving custom values of at least 32 characters.
+In the form, select the PostgreSQL and Redis service instances. 1Panel automatically generates `PANEL_DB_NAME`, `PANEL_DB_USER`, and `PANEL_DB_USER_PASSWORD` and creates the PostgreSQL database/user during the install task; keep the generated application and JWT secrets, choose an external HTTP port (default `8000`, or any unused host port such as `18000`), and set `BACKEND_URL` to the public URL (HTTPS when using a reverse proxy). The external port maps to the container's fixed port `8000`; open the selected host port in your firewall/security group and access `http://server-ip:<port>`. To reuse an existing database/user, register it in 1Panel first and replace the generated values without colliding with an existing resource. The container listens on all interfaces through `API_HOST=0.0.0.0`; the default `BACKEND_URL` is the validation-safe placeholder `http://0.0.0.0:8000` and should be replaced with the real public URL for reset links and OAuth callbacks. The init script upgrades short 1Panel placeholders to 64-character hexadecimal (256-bit SHA-256) secrets while preserving custom values of at least 32 characters.
 
 The application automatically runs the reviewed Alembic migrations at startup. No manual SQL or migration command is required.
 
