@@ -38,6 +38,11 @@ CS2 Server Manager 是一个现代化的 **Counter-Strike 2 多服务器 Web 管
 3. 添加游戏服务器的 SSH 连接信息；
 4. 在网页中点击部署，随后即可完成日常管理。
 
+## 先更新下软件包 和 确保 CURL存在
+```bash
+sudo apt update && apt install curl
+```
+
 ## Docker 快速部署
 
 适用于全新的 **Ubuntu 24.04+** 或 **Debian 13+** 管理端主机。使用具有 `sudo`
