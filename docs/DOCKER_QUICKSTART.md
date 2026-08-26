@@ -8,8 +8,8 @@ curl -fsSLO https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/m
 docker compose up -d
 ```
 
-发布者需要先把 Compose 文件中的 `your-dockerhub-user` 替换为自己的 Docker Hub
-命名空间；也可以通过 `CS2_MANAGER_IMAGE` 环境变量覆盖镜像地址。运行者不需要手工执行
+本仓库默认使用公开镜像 `docker.io/e54385991/upkk-cs2-server-manager:main`；也可以通过
+`CS2_MANAGER_IMAGE` 环境变量覆盖镜像地址。运行者不需要手工执行
 `docker pull`，Compose 会自动拉取镜像。
 
 默认会启动应用、PostgreSQL 18 和 Redis 8，应用启动时自动执行 Alembic 数据库迁移。

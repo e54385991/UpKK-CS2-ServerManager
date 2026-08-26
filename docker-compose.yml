@@ -1,6 +1,6 @@
 services:
   app:
-    image: ${CS2_MANAGER_IMAGE:-docker.io/your-dockerhub-user/upkk-cs2-server-manager:main}
+    image: ${CS2_MANAGER_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager:main}
     build:
       context: .
       dockerfile: Dockerfile
