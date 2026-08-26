@@ -162,7 +162,7 @@ additionalProperties:
         zh: Redis 数据库编号
         tr: Redis veritabanı numarası
       required: true
-      rule: paramCommon
+      rule: integerNumberWith0
       type: number
     - default: 8000
       envKey: PANEL_APP_PORT_HTTP
@@ -182,7 +182,7 @@ additionalProperties:
       required: true
       rule: paramPort
       type: number
-    - default: http://localhost:8000
+    - default: http://0.0.0.0:8000
       edit: true
       envKey: BACKEND_URL
       labelEn: Public URL
@@ -199,7 +199,7 @@ additionalProperties:
         zh: 公网访问地址
         tr: Genel URL
       required: true
-      rule: paramCommon
+      rule: paramExtUrl
       type: text
     - default: ""
       edit: true

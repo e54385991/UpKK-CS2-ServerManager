@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,3 +19,31 @@ def test_1panel_package_validator_passes() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_init_script_upgrades_short_secrets(tmp_path: Path) -> None:
+    workdir = tmp_path / "app"
+    data_dir = workdir / "data"
+    data_dir.mkdir(parents=True)
+    (workdir / ".env").write_text(
+        "SECRET_KEY=_short\nJWT_SECRET_KEY=operator-provided-key-that-is-long-enough\n",
+        encoding="utf-8",
+    )
+    script = PROJECT_ROOT / "deploy/1panel/apps/cs2-server-manager/1.0.0/scripts/init.sh"
+    # The real init script runs as root in 1Panel.  Mock only chown here so the
+    # secret-rotation behavior can be tested on an unprivileged macOS runner.
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_chown = fake_bin / "chown"
+    fake_chown.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_chown.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    result = subprocess.run(
+        [str(script)], cwd=workdir, env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    values = dict(line.split("=", 1) for line in (workdir / ".env").read_text().splitlines())
+    assert len(values["SECRET_KEY"]) == 64
+    assert all(char in "0123456789abcdef" for char in values["SECRET_KEY"])
+    assert values["JWT_SECRET_KEY"] == "operator-provided-key-that-is-long-enough"
