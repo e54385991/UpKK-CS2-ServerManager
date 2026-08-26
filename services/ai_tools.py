@@ -80,6 +80,15 @@ class TailLogInput(ToolInput):
     lines: int = Field(default=120, ge=10, le=500)
 
 
+class GameConsoleReadInput(ToolInput):
+    lines: int = Field(
+        default=120,
+        ge=10,
+        le=500,
+        description="Number of recent lines to read from the live screen/tmux game console.",
+    )
+
+
 class CSSLogListInput(ToolInput):
     keyword: str | None = Field(default=None, min_length=1, max_length=64)
     limit: int = Field(default=20, ge=1, le=50)
@@ -677,6 +686,15 @@ async def tail_server_log(ctx: ToolContext, data: TailLogInput) -> dict[str, Any
     return {"path": "cs2/game/csgo/console.log", "content": redact_sensitive_text(stdout)}
 
 
+async def read_game_console(ctx: ToolContext, data: GameConsoleReadInput) -> dict[str, Any]:
+    """Read the live detached game console without sending any input."""
+
+    server = await _require_current_server(ctx)
+    from services.custom_command_service import read_game_console as read_console
+
+    return sanitize_tool_result(await read_console(server, lines=data.lines))
+
+
 def _css_log_root(server: Server) -> str:
     return posixpath.join(
         server.game_directory.rstrip("/"),
@@ -1199,7 +1217,12 @@ async def send_game_console_command(
     async with maintenance_lock_service.get(
         server.id, operation="game_console_command", wait=False, ttl=120
     ):
-        result = await execute_custom_commands(server, "game_process", data.command)
+        result = await execute_custom_commands(
+            server,
+            "game_process",
+            data.command,
+            capture_game_output=True,
+        )
     return sanitize_tool_result(result)
 
 
@@ -1411,6 +1434,13 @@ _RAW_TOOL_SPECS = (
         tail_server_log,
     ),
     ToolSpec(
+        "read_game_console",
+        "Read a bounded snapshot directly from the selected running CS2 screen/tmux console without sending input. Terminal controls and secrets are removed.",
+        "read",
+        GameConsoleReadInput,
+        read_game_console,
+    ),
+    ToolSpec(
         "list_css_error_logs",
         "List recent regular-text CounterStrikeSharp error logs from its fixed logs directory.",
         "read",
@@ -1528,7 +1558,7 @@ _RAW_TOOL_SPECS = (
     ),
     ToolSpec(
         "send_game_console_command",
-        "Send one literal command to the selected running CS2 game console. It is never host Shell and requires user approval.",
+        "Send one literal command to the selected running CS2 game console and return newly observed console output. It is never host Shell and requires user approval.",
         "write",
         GameConsoleCommandInput,
         send_game_console_command,
@@ -1628,6 +1658,7 @@ _TOOL_CAPABILITY_OPTIONS: dict[str, tuple[frozenset[AgentCapability], ...]] = {
     "search_server_files": (frozenset({AgentCapability.READ_LOGS_FILES}),),
     "read_server_text_file": (frozenset({AgentCapability.READ_LOGS_FILES}),),
     "tail_server_log": (frozenset({AgentCapability.READ_LOGS_FILES}),),
+    "read_game_console": (frozenset({AgentCapability.READ_LOGS_FILES}),),
     "list_css_error_logs": (frozenset({AgentCapability.READ_LOGS_FILES}),),
     "read_css_error_log": (frozenset({AgentCapability.READ_LOGS_FILES}),),
     "list_installed_plugins": (frozenset({AgentCapability.BROWSE_PLAN_PLUGINS}),),
@@ -1961,11 +1992,13 @@ async def build_approval_summary(
             "steps": [
                 "acquire the server maintenance lock",
                 "locate the exact configured or legacy screen/tmux session",
+                "snapshot the current bounded game-console output",
                 "send the approved command as literal input followed by Enter",
+                "poll briefly and return newly observed console output to the agent",
             ],
             "expected_result": (
-                "The command is delivered once to the running game process; console output is "
-                "not interpreted as host Shell output"
+                "The command is delivered once to the running game process and newly observed "
+                "console output is returned; it is not interpreted as host Shell output"
             ),
         }
     if name == "apply_server_startup_update":

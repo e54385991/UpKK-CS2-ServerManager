@@ -310,11 +310,14 @@ def sanitize_tool_result(value: object) -> dict:
             return [redact_object(child) for child in item]
         if isinstance(item, str):
             return redact_sensitive_text(item)
-        return item
+        if item is None or isinstance(item, (bool, int, float)):
+            return item
+        return redact_sensitive_text(str(item))
 
     value = redact_object(value)
     serialized = json.dumps(value, ensure_ascii=False, default=str)
-    serialized = redact_sensitive_text(serialized)
+    if len(serialized) > MAX_TOOL_RESULT_CHARS:
+        return {"output": serialized[:MAX_TOOL_RESULT_CHARS] + "\n[TRUNCATED]"}
     try:
         parsed = json.loads(serialized)
     except json.JSONDecodeError:

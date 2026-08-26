@@ -13,6 +13,7 @@ from services.game_session import (
     TMUX_SOCKET_NAME,
     attach_command,
     availability_command,
+    capture_console_command,
     cleanup_command,
     find_running_session_manager,
     find_running_session_managers,
@@ -273,6 +274,27 @@ def test_tmux_send_keys_uses_literal_mode_and_a_separate_enter_key():
         f"{TMUX_PREFIX} send-keys -t =cs2server_3: Enter"
     )
     assert command.count(quoted_text) == 1
+
+
+def test_tmux_console_capture_reads_a_bounded_exact_session_snapshot():
+    command = capture_console_command("tmux", "cs2server_3", lines=120)
+
+    assert command == (f"{TMUX_PREFIX} capture-pane -p -J -S -120 -t =cs2server_3:")
+
+
+def test_screen_console_capture_uses_and_removes_a_private_temporary_file():
+    command = capture_console_command("screen", "cs2server_3", lines=120)
+
+    assert "snapshot=$(mktemp) || exit 1" in command
+    assert 'screen -S cs2server_3 -X hardcopy -h "$snapshot"' in command
+    assert 'tail -n 120 -- "$snapshot"' in command
+    assert 'rm -f -- "$snapshot"' in command
+
+
+@pytest.mark.parametrize("lines", [0, 2001])
+def test_console_capture_rejects_unbounded_line_counts(lines):
+    with pytest.raises(ValueError, match="between 1 and 2000"):
+        capture_console_command("tmux", "cs2server_3", lines=lines)
 
 
 def test_tmux_stop_commands_never_kill_the_shared_tmux_server():

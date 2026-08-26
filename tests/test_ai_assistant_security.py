@@ -166,6 +166,20 @@ def test_secret_redaction_handles_json_tokens_passwords_and_private_keys():
     assert structured["safe"] == "visible"
 
 
+def test_tool_result_console_secret_redaction_preserves_json_structure():
+    structured = sanitize_tool_result(
+        {
+            "success": True,
+            "results": [{"console_output": 'sv_password "do-not-show"'}],
+        }
+    )
+
+    assert structured == {
+        "success": True,
+        "results": [{"console_output": "sv_password [REDACTED]"}],
+    }
+
+
 def test_ai_paths_and_argument_hashes_are_canonical():
     assert _safe_relative_path("cs2/game/csgo/server.cfg") == "cs2/game/csgo/server.cfg"
     with pytest.raises(ValueError):

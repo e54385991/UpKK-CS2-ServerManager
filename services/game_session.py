@@ -145,6 +145,28 @@ def send_keys_command(manager: Any, name: str, command: str) -> str:
     return f"screen -S {shlex.quote(name)} -X stuff {shlex.quote(command + chr(10))}"
 
 
+def capture_console_command(manager: Any, name: str, *, lines: int = 200) -> str:
+    """Return a bounded command that snapshots the detached session's console."""
+    manager = normalize_session_manager(manager)
+    name = _safe_session_name(name)
+    if not 1 <= lines <= 2000:
+        raise ValueError("Console capture lines must be between 1 and 2000")
+
+    if manager == "tmux":
+        target = shlex.quote("=" + name + ":")
+        return f"{_tmux()} capture-pane -p -J -S -{lines} -t {target}"
+
+    # screen cannot print a hardcopy directly to the invoking shell. Use a
+    # private temporary file, print only the bounded tail, and always remove it.
+    return (
+        "snapshot=$(mktemp) || exit 1; "
+        f'screen -S {shlex.quote(name)} -X hardcopy -h "$snapshot"; '
+        "status=$?; "
+        f'if [ "$status" -eq 0 ]; then tail -n {lines} -- "$snapshot"; fi; '
+        'rm -f -- "$snapshot"; exit "$status"'
+    )
+
+
 def attach_command(manager: Any, name: str) -> str:
     manager = normalize_session_manager(manager)
     name = _safe_session_name(name)

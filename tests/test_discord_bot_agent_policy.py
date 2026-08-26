@@ -181,6 +181,7 @@ def test_tool_visibility_and_parameter_resolvers_follow_capabilities():
     }
     assert "inspect_server" in names
     assert "read_server_text_file" in names
+    assert "read_game_console" in names
     assert "plan_plugin_install" in names
     assert "control_server" not in names
     assert "execute_saved_host_command" not in names
@@ -197,6 +198,9 @@ def test_tool_visibility_and_parameter_resolvers_follow_capabilities():
         {AgentCapability.SEND_GAME_CONSOLE_COMMANDS}
     )
     assert game_console.is_exposed(readonly) is False
+    assert TOOLS_BY_NAME["read_game_console"].required_capabilities({"lines": 120}) == frozenset(
+        {AgentCapability.READ_LOGS_FILES}
+    )
 
 
 def test_game_console_input_is_single_command_and_redacts_console_secrets():
