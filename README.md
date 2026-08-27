@@ -1,116 +1,140 @@
-# CS2 Server Manager | CS2 服务器管理器
+# CS2 Server Manager
+
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688.svg?style=flat&logo=FastAPI)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.14+-blue.svg?style=flat&logo=python)](https://www.python.org)
-[![Docker](https://img.shields.io/badge/Docker-一键部署-2496ED.svg?style=flat&logo=docker)](docs/DOCKER_QUICKSTART.md)
+[![Docker](https://img.shields.io/badge/Docker-One--click_Deploy-2496ED.svg?style=flat&logo=docker)](docs/DOCKER_QUICKSTART.md)
 
-> 🚀 **推荐使用 Docker 一键部署。** 无需手动安装 Python、PostgreSQL 或 Redis，
-> 一条命令即可启动完整管理面板。
+> 🚀 **Docker one-click deployment is recommended.** There is no need to
+> install Python, PostgreSQL, or Redis manually—a single command starts the
+> complete management panel.
 >
-> 同时支持 [1Panel 快速部署](docs/1PANEL_QUICKSTART.md)，更多内容见
-> [完整文档](docs/README.md)。
+> [1Panel quick deployment](docs/1PANEL_QUICKSTART.md) is also supported. See
+> the [full documentation](docs/README.md) for more information.
 
-## 项目说明
+## Overview
 
-CS2 Server Manager 是一个现代化的 **Counter-Strike 2 多服务器 Web 管理面板**。
-管理面板通过 SSH 连接一台或多台游戏服务器，让部署、启动、停止、更新、监控和插件管理
-都可以在浏览器中完成。
+CS2 Server Manager is a modern, web-based **multi-server management panel for
+Counter-Strike 2**. It connects to one or more game servers over SSH, allowing
+you to deploy, start, stop, update, monitor, and manage plugins entirely from
+your browser.
 
-管理面板与游戏服务器可以部署在同一台主机，也可以分开部署。推荐将管理面板放在独立主机
-上，通过 SSH 管理游戏服务器；这样更容易维护，也不会让管理服务与游戏进程互相影响。
+The management panel and game servers can run on the same host or on separate
+hosts. We recommend running the panel on a dedicated host and managing game
+servers over SSH. This setup is easier to maintain and prevents the management
+services and game processes from interfering with each other.
 
-### 主要功能
+### Key features
 
-- 一键部署、启动、停止、重启和更新 CS2 服务器；
-- 集中管理多台服务器，实时查看状态、日志和部署进度；
-- 提供 Web 控制台、文件管理和常用服务器配置；
-- 一键安装和更新 Metamod:Source、CounterStrikeSharp 及相关插件；
-- 支持自动重启保护、自动更新和计划任务；
-- 支持密码或 SSH 密钥认证，并提供用户权限和 API Key；
-- 支持 S3 兼容存储备份以及备份保留策略；
-- 支持面板中转和 GitHub URL 代理，方便受限网络环境下载插件；
-- 管理面板基于 FastAPI、PostgreSQL 和 Redis，Docker 部署会自动准备全部依赖并执行数据库迁移。
+- Deploy, start, stop, restart, and update CS2 servers with one click;
+- Centrally manage multiple servers and monitor their status, logs, and
+  deployment progress in real time;
+- Use a web console, file manager, and common server configuration tools;
+- Install and update Metamod:Source, CounterStrikeSharp, and related plugins
+  with one click;
+- Configure automatic restart protection, automatic updates, and scheduled
+  tasks;
+- Authenticate with a password or SSH key, with support for user permissions
+  and API keys;
+- Back up data to S3-compatible storage with configurable retention policies;
+- Relay downloads through the panel or a GitHub URL proxy in restricted
+  network environments;
+- Run on FastAPI, PostgreSQL, and Redis, with Docker automatically preparing
+  all dependencies and applying database migrations.
 
-### 使用流程
+### How it works
 
-1. 使用下方命令部署管理面板；
-2. 登录面板并立即修改默认密码；
-3. 添加游戏服务器的 SSH 连接信息；
-4. 在网页中点击部署，随后即可完成日常管理。
+1. Deploy the management panel with the command below;
+2. Sign in and change the default password immediately;
+3. Add the SSH connection details for your game servers;
+4. Click **Deploy** in the web interface, then manage your servers from the
+   panel.
 
-## 先更新下软件包 和 确保 CURL存在
+## Install prerequisites
+
+Update the package index and make sure `curl` is installed:
+
 ```bash
 sudo apt update && sudo apt install -y curl
 ```
 
-## Docker 快速部署
+## Docker quick deployment
 
-适用于全新的 **Ubuntu 24.04+** 或 **Debian 13+** 管理端主机。使用具有 `sudo`
-权限的用户执行：
+Use a fresh **Ubuntu 24.04+** or **Debian 13+** host for the management panel.
+Run the following command as a user with `sudo` privileges:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-quickstart.sh | bash
 ```
 
-脚本会自动：
+The script automatically:
 
-- 安装 Docker Engine 和 Docker Compose 插件；
-- 生成随机数据库密码和安全密钥；
-- 下载 Compose 配置并启动管理面板、PostgreSQL 和 Redis；
-- 自动完成数据库迁移并等待服务健康检查通过。
+- Installs Docker Engine and the Docker Compose plugin;
+- Generates a random database password and secure application keys;
+- Downloads the Compose configuration and starts the management panel,
+  PostgreSQL, and Redis;
+- Applies database migrations and waits for the services to become healthy.
 
-部署完成后访问：
-
-```text
-http://你的服务器IP:8000
-```
-
-首次登录凭据：
+When deployment is complete, open:
 
 ```text
-用户名：admin
-密码：admin123
+http://YOUR_SERVER_IP:8000
 ```
 
-> ⚠️ **首次登录后请立即修改默认密码。** 如果无法打开页面，请确认云服务器安全组和
-> 系统防火墙已放行 TCP `8000` 端口。正式对公网提供服务时建议配置域名和 HTTPS。
+Default credentials for the first sign-in:
 
-至此管理面板已经部署完成，无需克隆源码或手动配置数据库。升级、备份、日志查看、
-端口修改和故障排查请查看 [Docker 快速部署文档](docs/DOCKER_QUICKSTART.md)。
+```text
+Username: admin
+Password: admin123
+```
 
-## 文档导航
+> ⚠️ **Change the default password immediately after your first sign-in.** If
+> the page is unreachable, make sure TCP port `8000` is allowed by both your
+> cloud security group and system firewall. For a public production service,
+> configure a domain name and HTTPS.
 
-README 只保留最短部署路径。需要哪项功能时，直接打开对应文档即可。
+The management panel is now ready; you do not need to clone the repository or
+configure the database manually. For upgrades, backups, logs, port changes,
+and troubleshooting, see the [Docker quick deployment guide](docs/DOCKER_QUICKSTART.md).
 
-### 部署与入门
+## Documentation
 
-| 需求 | 文档 |
+This README covers only the shortest deployment path. Use the relevant guide
+below when you need additional features.
+
+### Deployment and getting started
+
+| Task | Guide |
 | --- | --- |
-| Docker 升级、备份与故障排查 | [Docker 快速部署](docs/DOCKER_QUICKSTART.md) |
-| 使用 1Panel 复用 PostgreSQL 和 Redis | [1Panel 快速部署](docs/1PANEL_QUICKSTART.md) |
-| 准备运行 CS2 的目标服务器 | [游戏服务器部署要求](docs/DEPLOYMENT.md) |
-| 从零开始添加并部署游戏服务器 | [新手图文教程](docs/ALIYUN_ECS_DEPLOY.md) |
-| 查看完整文档目录 | [项目文档中心](docs/README.md) |
+| Upgrade or back up Docker deployments and troubleshoot issues | [Docker quick deployment](docs/DOCKER_QUICKSTART.md) |
+| Reuse PostgreSQL and Redis with 1Panel | [1Panel quick deployment](docs/1PANEL_QUICKSTART.md) |
+| Prepare a target server to run CS2 | [Game server deployment requirements](docs/DEPLOYMENT.md) |
+| Add and deploy a game server from scratch | [Beginner's illustrated guide](docs/ALIYUN_ECS_DEPLOY.md) |
+| Browse all documentation | [Documentation center](docs/README.md) |
 
-### 常用功能
+### Common features
 
-| 需求 | 文档 |
+| Task | Guide |
 | --- | --- |
-| Web 控制台与命令操作 | [控制台使用指南](docs/CONSOLE_USAGE_GUIDE.md) |
-| 安装和管理插件 | [插件安装指南](docs/PLUGIN_INSTALLATION_GUIDE.md) |
-| 配置自动重启 | [自动重启指南](docs/AUTO_RESTART_GUIDE.md) |
-| 配置自动更新 | [自动更新指南](docs/AUTO_UPDATE_GUIDE.md) |
-| 配置计划任务 | [计划任务指南](docs/SCHEDULED_TASKS.md) |
-| 配置 GitHub 下载代理 | [面板代理指南](docs/GITHUB_PROXY.md) |
-| 使用 API Key | [API Key 使用指南](docs/API_KEY_USAGE.md) |
+| Use the web console and run commands | [Console usage guide](docs/CONSOLE_USAGE_GUIDE.md) |
+| Install and manage plugins | [Plugin installation guide](docs/PLUGIN_INSTALLATION_GUIDE.md) |
+| Configure automatic restarts | [Automatic restart guide](docs/AUTO_RESTART_GUIDE.md) |
+| Configure automatic updates | [Automatic update guide](docs/AUTO_UPDATE_GUIDE.md) |
+| Configure scheduled tasks | [Scheduled tasks guide](docs/SCHEDULED_TASKS.md) |
+| Configure a GitHub download proxy | [Panel proxy guide](docs/GITHUB_PROXY.md) |
+| Use API keys | [API key usage guide](docs/API_KEY_USAGE.md) |
 
-### 视频教程
+> Most linked guides are currently available in Simplified Chinese.
 
-- [管理面板快速部署（约 2 分钟）](https://youtu.be/8GksFZHmO0c)
-- [管理面板操作与功能演示](https://youtu.be/PPzykUZmNy0)
+### Video tutorials
 
-## 获取帮助
+- [Quick management panel deployment (about 2 minutes)](https://youtu.be/8GksFZHmO0c)
+- [Management panel walkthrough and feature demo](https://youtu.be/PPzykUZmNy0)
 
-遇到问题时请先查看 [项目文档中心](docs/README.md)。如果仍无法解决，请在
-[GitHub Issues](https://github.com/e54385991/UpKK-CS2-ServerManager/issues) 中提交问题，
-并附上系统版本、部署方式和相关日志。
+## Getting help
+
+Check the [documentation center](docs/README.md) first. If the issue remains,
+open a [GitHub issue](https://github.com/e54385991/UpKK-CS2-ServerManager/issues)
+and include your operating system version, deployment method, and relevant
+logs.
