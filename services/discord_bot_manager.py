@@ -43,8 +43,10 @@ from services.discord.commands import register_commands
 from services.discord_ai_service import (
     approve_discord_tool,
     ask_discord_agent,
+    available_discord_agent_server_ids,
     discord_run_snapshot,
     reset_discord_conversation,
+    resolve_discord_agent_server,
 )
 from services.discord_authorization_service import (
     DiscordAuthorizationDenied,
@@ -58,8 +60,8 @@ from services.discord_menu_ui import (
     action_capability,
     control_view,
     is_exact_wake_word,
-    is_leading_bot_mention,
     launcher_is_expired,
+    leading_bot_mention_content,
     menu_is_expired,
     menu_issued_at,
     no_access_view,
@@ -892,8 +894,11 @@ class DiscordBotManager:
         ):
             return
         mentioned = client.user.id in set(getattr(message, "raw_mentions", []))
+        mention_content = (
+            leading_bot_mention_content(message.content, client.user.id) if mentioned else None
+        )
         exact_wake_word = is_exact_wake_word(message.content, client.user.id)
-        mention_trigger = mentioned and is_leading_bot_mention(message.content, client.user.id)
+        mention_trigger = mention_content is not None
         greeting = client.message_trigger_mode == MESSAGE_TRIGGER_GREETINGS and exact_wake_word
         if not mention_trigger and not greeting:
             return
@@ -919,6 +924,11 @@ class DiscordBotManager:
             )
             if not allowed:
                 return
+            if mention_content and not exact_wake_word:
+                agent_server = await self._message_agent_server(client, pairs, mention_content)
+                if agent_server is not None:
+                    await self._run_message_agent(client, message, agent_server, mention_content)
+                    return
             await message.reply(
                 view=self._menu_view_for_pairs(
                     self._locale(message),
@@ -949,6 +959,65 @@ class DiscordBotManager:
                 client.owner_user_id,
                 message.guild.id,
                 message.channel.id,
+            )
+
+    async def _message_agent_server(
+        self,
+        client: ManagedDiscordClient,
+        pairs: list[tuple[ServerDiscordBinding, Server]],
+        prompt: str,
+    ) -> Server | None:
+        agent_servers = [
+            server
+            for binding, server in pairs
+            if server.id is not None
+            and DiscordCapability.AGENT_ASK.value in set(binding.capabilities or [])
+        ]
+        available_ids = await available_discord_agent_server_ids(
+            owner_user_id=client.owner_user_id,
+            server_ids=(server.id for server in agent_servers if server.id is not None),
+        )
+        return resolve_discord_agent_server(
+            prompt,
+            (server for server in agent_servers if server.id in available_ids),
+        )
+
+    async def _run_message_agent(
+        self,
+        client: ManagedDiscordClient,
+        message: discord.Message,
+        server: Server,
+        prompt: str,
+    ) -> None:
+        progress_message = await message.reply(
+            embed=discord.Embed(
+                title=f"AI Agent · {server.name}",
+                description="Working…",
+                color=discord.Color.blurple(),
+            ),
+            allowed_mentions=discord.AllowedMentions.none(),
+            mention_author=False,
+            silent=True,
+        )
+        try:
+            run_id = await ask_discord_agent(
+                owner_user_id=client.owner_user_id,
+                server_id=server.id,
+                actor_user_id=str(message.author.id),
+                guild_id=str(message.guild.id),
+                channel_id=str(message.channel.id),
+                prompt=prompt,
+            )
+            await self._render_ai_run_message(progress_message, run_id)
+        except Exception as exc:
+            await _edit_webhook_message(
+                progress_message,
+                embed=discord.Embed(
+                    title=f"AI Agent · {server.name}",
+                    description=_public_error_text(exc),
+                    color=discord.Color.red(),
+                ),
+                view=None,
             )
 
     async def _menu_pairs_for_interaction(
@@ -1573,7 +1642,9 @@ class DiscordBotManager:
             view=None,
         )
 
-    async def _render_ai_run_message(self, message: discord.WebhookMessage, run_id: str) -> bool:
+    async def _render_ai_run_message(
+        self, message: discord.Message | discord.WebhookMessage, run_id: str
+    ) -> bool:
         snapshot = await discord_run_snapshot(run_id)
         if snapshot["status"] == "waiting_approval" and snapshot["tool"]:
             tool = snapshot["tool"]

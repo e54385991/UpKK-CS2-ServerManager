@@ -224,9 +224,14 @@ def is_exact_wake_word(content: str, bot_user_id: int | str) -> bool:
     return normalize_message_trigger(content, bot_user_id) in _WAKE_WORDS
 
 
+def leading_bot_mention_content(content: str, bot_user_id: int | str) -> str | None:
+    value = (content or "").lstrip()
+    match = re.match(rf"<@!?{re.escape(str(bot_user_id))}>", value)
+    return value[match.end() :].strip() if match is not None else None
+
+
 def is_leading_bot_mention(content: str, bot_user_id: int | str) -> bool:
-    value = unicodedata.normalize("NFKC", content or "").lstrip()
-    return re.match(rf"<@!?{re.escape(str(bot_user_id))}>", value) is not None
+    return leading_bot_mention_content(content, bot_user_id) is not None
 
 
 def menu_issued_at() -> int:

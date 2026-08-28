@@ -45,6 +45,10 @@ from services.a2s_query import a2s_service
 from services.agent_policy_service import get_effective_agent_policy
 from services.ai_security import redact_sensitive_text
 from services.ai_tools import TOOLS_BY_NAME, GameConsoleCommandInput, tool_definitions
+from services.discord_ai_service import (
+    available_discord_agent_server_ids,
+    resolve_discord_agent_server,
+)
 from services.discord_authorization_service import authorized_bindings
 from services.discord_binding_template_service import (
     binding_matches_template,
@@ -81,6 +85,7 @@ from services.discord_menu_ui import (
     is_leading_bot_mention,
     launcher_is_expired,
     launcher_view,
+    leading_bot_mention_content,
     menu_is_expired,
     menu_issued_at,
     normalize_message_trigger,
@@ -681,6 +686,10 @@ def test_friendly_menu_wake_words_are_exact_normalized_and_mention_safe():
     assert is_leading_bot_mention("\n<@!123> run an arbitrary action", 123) is True
     assert is_leading_bot_mention("please ask <@123>", 123) is False
     assert is_leading_bot_mention("<@456> <@123>", 123) is False
+    assert leading_bot_mention_content(" <@!123>  ze1 执行 meta list ", 123) == (
+        "ze1 执行 meta list"
+    )
+    assert leading_bot_mention_content("please ask <@123>", 123) is None
     assert menu_is_expired(100, now=999) is False
     assert menu_is_expired(100, now=1001) is True
     assert launcher_is_expired(100, now=400) is False
@@ -721,6 +730,51 @@ def test_components_v2_menu_filters_actions_and_paginates_servers():
     assert server_select["options"][-1]["value"] == "40"
 
 
+def test_discord_agent_server_resolution_uses_unique_authorized_name_aliases():
+    ze1 = SimpleNamespace(id=10, name="[UPKK] CS2 ZE #1")
+    ze2 = SimpleNamespace(id=11, name="[UPKK] CS2 ZE #2")
+    kz1 = SimpleNamespace(id=12, name="[UPKK] CS2 KZ #1")
+    plain_ze = SimpleNamespace(id=13, name="CS2-ZE")
+
+    assert resolve_discord_agent_server("发送 meta list 到 ze1", [ze1, ze2, kz1]) is ze1
+    assert resolve_discord_agent_server("查询 KZ 1 当前状态", [ze1, ze2, kz1]) is kz1
+    assert resolve_discord_agent_server("查询 ze 服务器", [ze1, ze2, kz1]) is None
+    assert resolve_discord_agent_server("ze1 执行 meta list", [plain_ze, kz1]) is plain_ze
+    assert resolve_discord_agent_server("回报当前状态", [ze1]) is ze1
+    assert resolve_discord_agent_server("回报当前状态", [ze1, kz1]) is None
+
+
+@pytest.mark.asyncio
+async def test_available_discord_agent_servers_require_owner_provider_and_enabled_policy(
+    monkeypatch,
+):
+    owner = SimpleNamespace(id=1, is_active=True)
+    db = AsyncMock()
+    db.get.return_value = owner
+    result = Mock()
+    result.scalars.return_value.all.return_value = [10, 11]
+    db.execute.return_value = result
+
+    class Session:
+        async def __aenter__(self):
+            return db
+
+        async def __aexit__(self, *_args):
+            return None
+
+    monkeypatch.setattr("services.discord_ai_service.async_session_maker", Session)
+    provider = AsyncMock(return_value=SimpleNamespace(model="test"))
+    policy = AsyncMock(side_effect=[SimpleNamespace(enabled=True), SimpleNamespace(enabled=False)])
+    monkeypatch.setattr("services.discord_ai_service.get_effective_provider", provider)
+    monkeypatch.setattr("services.discord_ai_service.get_effective_agent_policy", policy)
+
+    available = await available_discord_agent_server_ids(owner_user_id=1, server_ids=[10, 11, 999])
+
+    assert available == frozenset({10})
+    provider.assert_awaited_once_with(db, owner)
+    assert policy.await_count == 2
+
+
 @pytest.mark.asyncio
 async def test_message_menu_requires_trigger_authorization_and_rate_limit(monkeypatch):
     manager = DiscordBotManager()
@@ -741,6 +795,7 @@ async def test_message_menu_requires_trigger_authorization_and_rate_limit(monkey
     )
     rate_limit = AsyncMock(return_value=(True, 0))
     monkeypatch.setattr("services.discord_bot_manager.redis_manager.hit_rate_limit", rate_limit)
+    monkeypatch.setattr(manager, "_message_agent_server", AsyncMock(return_value=None))
     message = SimpleNamespace(
         guild=SimpleNamespace(id=100, preferred_locale="zh-CN"),
         channel=SimpleNamespace(id=200),
@@ -796,6 +851,123 @@ async def test_message_menu_requires_trigger_authorization_and_rate_limit(monkey
     message.reply.reset_mock()
     await manager.handle_message(client, message)
     message.reply.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_leading_mention_task_routes_to_available_discord_agent(monkeypatch):
+    manager = DiscordBotManager()
+    client = SimpleNamespace(
+        owner_user_id=1,
+        message_trigger_mode="mention_only",
+        user=SimpleNamespace(id=999),
+    )
+    binding = ServerDiscordBinding(
+        server_id=10,
+        user_id=1,
+        enabled=True,
+        capabilities=["agent_ask"],
+    )
+    server = SimpleNamespace(id=10, name="[UPKK] CS2 ZE #1")
+    monkeypatch.setattr(
+        manager, "_authorized_menu_pairs", AsyncMock(return_value=[(binding, server)])
+    )
+    monkeypatch.setattr(
+        "services.discord_bot_manager.redis_manager.hit_rate_limit",
+        AsyncMock(return_value=(True, 0)),
+    )
+    resolver = AsyncMock(return_value=server)
+    runner = AsyncMock()
+    monkeypatch.setattr(manager, "_message_agent_server", resolver)
+    monkeypatch.setattr(manager, "_run_message_agent", runner)
+    message = SimpleNamespace(
+        guild=SimpleNamespace(id=100, preferred_locale="zh-CN"),
+        channel=SimpleNamespace(id=200),
+        author=SimpleNamespace(id=400, bot=False, roles=[]),
+        webhook_id=None,
+        raw_mentions=[999],
+        content="<@999> ze1 发送游戏控制台命令 meta list 并回报结果",
+        reply=AsyncMock(),
+    )
+
+    await manager.handle_message(client, message)
+
+    prompt = "ze1 发送游戏控制台命令 meta list 并回报结果"
+    resolver.assert_awaited_once_with(client, [(binding, server)], prompt)
+    runner.assert_awaited_once_with(client, message, server, prompt)
+    message.reply.assert_not_awaited()
+
+    resolver.reset_mock()
+    runner.reset_mock()
+    message.content = "<@999> menu"
+    await manager.handle_message(client, message)
+    resolver.assert_not_awaited()
+    runner.assert_not_awaited()
+    message.reply.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_message_agent_runs_in_selected_server_context(monkeypatch):
+    manager = DiscordBotManager()
+    client = SimpleNamespace(owner_user_id=1)
+    server = SimpleNamespace(id=10, name="[UPKK] CS2 ZE #1")
+    progress_message = SimpleNamespace(edit=AsyncMock())
+    message = SimpleNamespace(
+        guild=SimpleNamespace(id=100),
+        channel=SimpleNamespace(id=200),
+        author=SimpleNamespace(id=400),
+        reply=AsyncMock(return_value=progress_message),
+    )
+    ask = AsyncMock(return_value="run-1")
+    render = AsyncMock(return_value=True)
+    monkeypatch.setattr("services.discord_bot_manager.ask_discord_agent", ask)
+    monkeypatch.setattr(manager, "_render_ai_run_message", render)
+
+    await manager._run_message_agent(client, message, server, "ze1 meta list")
+
+    ask.assert_awaited_once_with(
+        owner_user_id=1,
+        server_id=10,
+        actor_user_id="400",
+        guild_id="100",
+        channel_id="200",
+        prompt="ze1 meta list",
+    )
+    render.assert_awaited_once_with(progress_message, "run-1")
+    assert message.reply.await_args.kwargs["silent"] is True
+    assert message.reply.await_args.kwargs["mention_author"] is False
+
+
+@pytest.mark.asyncio
+async def test_message_agent_server_filters_discord_and_agent_authorization(monkeypatch):
+    manager = DiscordBotManager()
+    client = SimpleNamespace(owner_user_id=1)
+    status_server = SimpleNamespace(id=10, name="[UPKK] CS2 KZ #1")
+    agent_server = SimpleNamespace(id=11, name="[UPKK] CS2 ZE #1")
+    pairs = [
+        (
+            ServerDiscordBinding(server_id=10, user_id=1, enabled=True, capabilities=["status"]),
+            status_server,
+        ),
+        (
+            ServerDiscordBinding(server_id=11, user_id=1, enabled=True, capabilities=["agent_ask"]),
+            agent_server,
+        ),
+    ]
+    captured = {}
+
+    async def available(**kwargs):
+        captured["owner_user_id"] = kwargs["owner_user_id"]
+        captured["server_ids"] = list(kwargs["server_ids"])
+        return frozenset({11})
+
+    monkeypatch.setattr(
+        "services.discord_bot_manager.available_discord_agent_server_ids", available
+    )
+
+    selected = await manager._message_agent_server(client, pairs, "ze1 meta list")
+
+    assert selected is agent_server
+    assert captured == {"owner_user_id": 1, "server_ids": [11]}
 
 
 @pytest.mark.asyncio

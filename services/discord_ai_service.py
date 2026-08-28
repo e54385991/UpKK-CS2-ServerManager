@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
+from collections.abc import Iterable
+
 from sqlalchemy import func
 from sqlmodel import select
 
@@ -9,15 +13,96 @@ from modules.database import async_session_maker
 from modules.models import AIConversation, AIMessage, AIRun, AIToolRun, Server, User
 from modules.schemas.discord import DiscordCapability
 from modules.utils import get_current_time
-from services.agent_policy_service import require_agent_capabilities
+from services.agent_policy_service import get_effective_agent_policy, require_agent_capabilities
 from services.ai_orchestrator import ACTIVE_RUN_STATUSES, process_ai_run
-from services.ai_security import get_effective_provider, redact_sensitive_text
+from services.ai_security import AIConfigurationError, get_effective_provider, redact_sensitive_text
 from services.ai_tools import TOOLS_BY_NAME, canonical_arguments
 from services.discord_authorization_service import authorized_bindings
 
 
 class DiscordAIError(ValueError):
     pass
+
+
+_SERVER_REFERENCE_PARTS = re.compile(r"[a-z]+[0-9]*|[0-9]+|[\u3400-\u9fff]+")
+_GENERIC_SERVER_REFERENCES = frozenset(
+    {"cs", "cs2", "server", "servers", "upkk", "服务器", "伺服器", "服"}
+)
+
+
+def _reference_phrases(value: str) -> set[str]:
+    normalized = unicodedata.normalize("NFKC", value or "").casefold()
+    parts = _SERVER_REFERENCE_PARTS.findall(normalized)
+    phrases = set(parts)
+    phrases.update(
+        match.group(1)
+        for part in parts
+        if (match := re.fullmatch(r"([a-z]+)[0-9]+", part)) is not None
+    )
+    for width in range(2, min(3, len(parts)) + 1):
+        phrases.update(
+            "".join(parts[start : start + width]) for start in range(len(parts) - width + 1)
+        )
+    return {
+        item
+        for item in phrases
+        if len(item) >= 2 and not item.isdecimal() and item not in _GENERIC_SERVER_REFERENCES
+    }
+
+
+def resolve_discord_agent_server(prompt: str, servers: Iterable[Server]) -> Server | None:
+    """Resolve one explicitly referenced authorized server without asking the model to enumerate."""
+
+    candidates = [server for server in servers if server.id is not None]
+    if len(candidates) == 1:
+        return candidates[0]
+    prompt_phrases = _reference_phrases(prompt)
+    scored = [
+        (
+            max(
+                (len(alias) for alias in _reference_phrases(server.name) & prompt_phrases),
+                default=0,
+            ),
+            server,
+        )
+        for server in candidates
+    ]
+    best_score = max((score for score, _server in scored), default=0)
+    matches = [server for score, server in scored if score == best_score and score > 0]
+    return matches[0] if len(matches) == 1 else None
+
+
+async def available_discord_agent_server_ids(
+    *, owner_user_id: int, server_ids: Iterable[int]
+) -> frozenset[int]:
+    """Return owner-scoped servers with an enabled Agent and tested AI provider."""
+
+    requested_ids = {int(server_id) for server_id in server_ids}
+    if not requested_ids:
+        return frozenset()
+    async with async_session_maker() as db:
+        owner = await db.get(User, owner_user_id)
+        if owner is None or not owner.is_active:
+            return frozenset()
+        try:
+            provider = await get_effective_provider(db, owner)
+        except AIConfigurationError:
+            return frozenset()
+        if provider is None:
+            return frozenset()
+        result = await db.execute(
+            select(Server.id).where(
+                Server.id.in_(requested_ids),
+                Server.user_id == owner_user_id,
+            )
+        )
+        owned_ids = {int(server_id) for server_id in result.scalars().all()}
+        available = {
+            server_id
+            for server_id in sorted(owned_ids)
+            if (await get_effective_agent_policy(db, server_id)).enabled
+        }
+    return frozenset(available)
 
 
 async def reset_discord_conversation(

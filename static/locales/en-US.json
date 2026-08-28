@@ -1929,7 +1929,7 @@
     "triggerMode": "Friendly menu trigger",
     "triggerMentionOnly": "Messages starting with @Bot and /cs2 menu (no privileged Intent)",
     "triggerGreetings": "Also listen for greetings such as hello (requires Message Content Intent)",
-    "triggerHint": "Messages starting with @Bot open a public requester-only menu. Greeting mode additionally reacts to exact wake words in bound channels.",
+    "triggerHint": "A task after @Bot routes to the AI Agent when one authorized server can be resolved. Bare mentions and menu or greeting wake words open a requester-only menu. Write tools still require approval.",
     "messageContentWarning": "Before saving, enable Message Content Intent under Discord Developer Portal → Bot → Privileged Gateway Intents. Otherwise the Gateway connection will be rejected.",
     "identity": "Bot identity:",
     "status": "Connection status:",
