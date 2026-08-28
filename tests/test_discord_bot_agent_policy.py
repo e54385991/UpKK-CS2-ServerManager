@@ -78,9 +78,11 @@ from services.discord_bot_service import (
 from services.discord_menu_ui import (
     control_view,
     is_exact_wake_word,
+    is_leading_bot_mention,
     launcher_is_expired,
     launcher_view,
     menu_is_expired,
+    menu_issued_at,
     normalize_message_trigger,
     server_picker_view,
 )
@@ -675,6 +677,10 @@ def test_friendly_menu_wake_words_are_exact_normalized_and_mention_safe():
     assert is_exact_wake_word(" ＨＥＬＬＯ! ", 123) is True
     assert is_exact_wake_word("你好大家", 123) is False
     assert is_exact_wake_word("please open menu", 123) is False
+    assert is_leading_bot_mention("  <@123>", 123) is True
+    assert is_leading_bot_mention("\n<@!123> run an arbitrary action", 123) is True
+    assert is_leading_bot_mention("please ask <@123>", 123) is False
+    assert is_leading_bot_mention("<@456> <@123>", 123) is False
     assert menu_is_expired(100, now=999) is False
     assert menu_is_expired(100, now=1001) is True
     assert launcher_is_expired(100, now=400) is False
@@ -690,9 +696,10 @@ def test_components_v2_menu_filters_actions_and_paginates_servers():
         server_name="测试服",
         capabilities=["status", "restart", "agent_ask"],
         issued_at=123,
+        requester_user_id=400,
     ).to_components()
     action_select = control[0]["components"][3]["components"][0]
-    assert action_select["custom_id"] == "cs2:menu:action:123:10"
+    assert action_select["custom_id"] == "cs2:menu:action:123:400:10"
     assert {item["value"] for item in action_select["options"]} == {
         "status",
         "restart",
@@ -704,15 +711,18 @@ def test_components_v2_menu_filters_actions_and_paginates_servers():
     servers = [
         {"id": index, "name": f"Server {index}", "capability_count": 2} for index in range(1, 46)
     ]
-    picker = server_picker_view("en-US", servers, issued_at=123, page=1).to_components()
+    picker = server_picker_view(
+        "en-US", servers, issued_at=123, requester_user_id=400, page=1
+    ).to_components()
     server_select = picker[0]["components"][3]["components"][0]
+    assert server_select["custom_id"] == "cs2:menu:server:123:400:1"
     assert len(server_select["options"]) == 20
     assert server_select["options"][0]["value"] == "21"
     assert server_select["options"][-1]["value"] == "40"
 
 
 @pytest.mark.asyncio
-async def test_message_launcher_requires_trigger_authorization_and_rate_limit(monkeypatch):
+async def test_message_menu_requires_trigger_authorization_and_rate_limit(monkeypatch):
     manager = DiscordBotManager()
     client = SimpleNamespace(
         owner_user_id=1,
@@ -729,10 +739,8 @@ async def test_message_launcher_requires_trigger_authorization_and_rate_limit(mo
     monkeypatch.setattr(
         manager, "_authorized_menu_pairs", AsyncMock(return_value=[(binding, server)])
     )
-    monkeypatch.setattr(
-        "services.discord_bot_manager.redis_manager.hit_rate_limit",
-        AsyncMock(return_value=(True, 0)),
-    )
+    rate_limit = AsyncMock(return_value=(True, 0))
+    monkeypatch.setattr("services.discord_bot_manager.redis_manager.hit_rate_limit", rate_limit)
     message = SimpleNamespace(
         guild=SimpleNamespace(id=100, preferred_locale="zh-CN"),
         channel=SimpleNamespace(id=200),
@@ -746,8 +754,17 @@ async def test_message_launcher_requires_trigger_authorization_and_rate_limit(mo
     await manager.handle_message(client, message)
 
     message.reply.assert_awaited_once()
-    assert message.reply.await_args.kwargs["delete_after"] == 300
+    assert message.reply.await_args.kwargs["delete_after"] == 900
     assert message.reply.await_args.kwargs["silent"] is True
+    assert message.reply.await_args.kwargs["mention_author"] is False
+    assert message.reply.await_args.kwargs["allowed_mentions"].to_dict() == {"parse": []}
+    action_id = message.reply.await_args.kwargs["view"].to_components()[0]["components"][3][
+        "components"
+    ][0]["custom_id"]
+    action_parts = action_id.split(":")
+    assert action_parts[:3] == ["cs2", "menu", "action"]
+    assert action_parts[4:] == ["400", "10"]
+    assert int(action_parts[3]) > 0
 
     message.reply.reset_mock()
     client.message_trigger_mode = "mention_only"
@@ -758,16 +775,110 @@ async def test_message_launcher_requires_trigger_authorization_and_rate_limit(mo
     message.content = "<@999> run an arbitrary action"
     message.raw_mentions = [999]
     await manager.handle_message(client, message)
+    message.reply.assert_awaited_once()
+
+    message.reply.reset_mock()
+    message.content = "please ask <@999>"
+    await manager.handle_message(client, message)
     message.reply.assert_not_awaited()
 
     message.content = "<@!999> menu!"
     await manager.handle_message(client, message)
     message.reply.assert_awaited_once()
 
+    message.reply.reset_mock()
+    rate_limit.return_value = (False, 5)
+    await manager.handle_message(client, message)
+    message.reply.assert_not_awaited()
+
+    rate_limit.return_value = (True, 0)
     manager._authorized_menu_pairs = AsyncMock(return_value=[])
     message.reply.reset_mock()
     await manager.handle_message(client, message)
     message.reply.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_message_menu_ignores_untrusted_message_sources(monkeypatch):
+    manager = DiscordBotManager()
+    client = SimpleNamespace(
+        owner_user_id=1,
+        message_trigger_mode="mention_only",
+        user=SimpleNamespace(id=999),
+    )
+    authorization = AsyncMock(side_effect=AssertionError("authorization must not run"))
+    monkeypatch.setattr(manager, "_authorized_menu_pairs", authorization)
+    reply = AsyncMock()
+
+    messages = [
+        SimpleNamespace(
+            guild=None,
+            webhook_id=None,
+            author=SimpleNamespace(id=400, bot=False, roles=[]),
+        ),
+        SimpleNamespace(
+            guild=SimpleNamespace(id=100),
+            webhook_id=123,
+            author=SimpleNamespace(id=400, bot=False, roles=[]),
+        ),
+        SimpleNamespace(
+            guild=SimpleNamespace(id=100),
+            webhook_id=None,
+            author=SimpleNamespace(id=400, bot=True, roles=[]),
+        ),
+    ]
+    for message in messages:
+        message.channel = SimpleNamespace(id=200)
+        message.raw_mentions = [999]
+        message.content = "<@999>"
+        message.reply = reply
+        await manager.handle_message(client, message)
+
+    authorization.assert_not_awaited()
+    reply.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_menu_components_are_bound_to_the_requester(monkeypatch):
+    manager = DiscordBotManager()
+    client = SimpleNamespace(owner_user_id=1)
+    issued_at = menu_issued_at()
+    view = Mock()
+    private_menu = AsyncMock(return_value=view)
+    monkeypatch.setattr(manager, "_private_menu_view", private_menu)
+
+    owner_interaction = SimpleNamespace(
+        user=SimpleNamespace(id=400),
+        guild=SimpleNamespace(preferred_locale="zh-CN"),
+        locale="zh-CN",
+        response=SimpleNamespace(edit_message=AsyncMock()),
+    )
+    await manager._handle_menu_component(
+        client,
+        owner_interaction,
+        ["cs2", "menu", "page", str(issued_at), "400", "1"],
+    )
+
+    private_menu.assert_awaited_once_with(client, owner_interaction, issued_at=issued_at, page=1)
+    owner_interaction.response.edit_message.assert_awaited_once_with(view=view)
+
+    other_interaction = SimpleNamespace(
+        user=SimpleNamespace(id=401),
+        guild=SimpleNamespace(preferred_locale="zh-CN"),
+        locale="zh-CN",
+        response=SimpleNamespace(is_done=lambda: False, send_message=AsyncMock()),
+        followup=SimpleNamespace(send=AsyncMock()),
+    )
+    await manager.handle_component(
+        client,
+        other_interaction,
+        f"cs2:menu:page:{issued_at}:400:1",
+    )
+
+    sent = other_interaction.response.send_message.await_args
+    assert "仅限" in sent.args[0]
+    assert sent.kwargs["ephemeral"] is True
+    assert private_menu.await_count == 1
 
 
 @pytest.mark.asyncio

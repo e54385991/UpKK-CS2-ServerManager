@@ -35,6 +35,7 @@ _TEXT = {
         "back": "Servers",
         "page": "Page {page}/{pages}",
         "no_access": "No authorized CS2 operation is available here.",
+        "not_owner": "This menu belongs to the member who mentioned the Bot. Mention the Bot to open your own menu.",
         "expired": "This menu expired. Use @Bot or /cs2 menu to open a new one.",
         "published": "The result or confirmation card was posted in this channel.",
         "search_title": "Search plugin market",
@@ -99,6 +100,7 @@ _TEXT = {
         "back": "返回服务器",
         "page": "第 {page}/{pages} 页",
         "no_access": "当前频道没有你可使用的 CS2 操作。",
+        "not_owner": "此菜单仅限 @Bot 的发起者操作；请自行 @Bot 打开你的菜单。",
         "expired": "此菜单已过期，请重新 @Bot 或使用 /cs2 menu。",
         "published": "结果或确认卡已经发布到当前频道。",
         "search_title": "搜索插件市场",
@@ -222,6 +224,11 @@ def is_exact_wake_word(content: str, bot_user_id: int | str) -> bool:
     return normalize_message_trigger(content, bot_user_id) in _WAKE_WORDS
 
 
+def is_leading_bot_mention(content: str, bot_user_id: int | str) -> bool:
+    value = unicodedata.normalize("NFKC", content or "").lstrip()
+    return re.match(rf"<@!?{re.escape(str(bot_user_id))}>", value) is not None
+
+
 def menu_issued_at() -> int:
     return int(time.time())
 
@@ -289,6 +296,7 @@ def server_picker_view(
     servers: list[dict],
     *,
     issued_at: int,
+    requester_user_id: int | str,
     page: int,
 ) -> discord.ui.LayoutView:
     pages = max(1, (len(servers) + SERVER_PAGE_SIZE - 1) // SERVER_PAGE_SIZE)
@@ -306,21 +314,21 @@ def server_picker_view(
     selector = discord.ui.Select(
         placeholder=text(locale, "choose_server"),
         options=options,
-        custom_id=f"cs2:menu:server:{issued_at}:{page}",
+        custom_id=f"cs2:menu:server:{issued_at}:{requester_user_id}:{page}",
     )
     buttons = discord.ui.ActionRow(
         discord.ui.Button(
             label=text(locale, "previous"),
             emoji="◀️",
             style=discord.ButtonStyle.secondary,
-            custom_id=f"cs2:menu:page:{issued_at}:{page - 1}",
+            custom_id=f"cs2:menu:page:{issued_at}:{requester_user_id}:{page - 1}",
             disabled=page == 0,
         ),
         discord.ui.Button(
             label=text(locale, "next"),
             emoji="▶️",
             style=discord.ButtonStyle.secondary,
-            custom_id=f"cs2:menu:page:{issued_at}:{page + 1}",
+            custom_id=f"cs2:menu:page:{issued_at}:{requester_user_id}:{page + 1}",
             disabled=page >= pages - 1,
         ),
     )
@@ -348,6 +356,7 @@ def control_view(
     server_name: str,
     capabilities: Iterable[str],
     issued_at: int,
+    requester_user_id: int | str,
 ) -> discord.ui.LayoutView:
     allowed = set(capabilities)
     language = locale_key(locale)
@@ -367,7 +376,7 @@ def control_view(
                 discord.ui.Select(
                     placeholder=text(locale, "choose_action"),
                     options=options,
-                    custom_id=f"cs2:menu:action:{issued_at}:{server_id}",
+                    custom_id=(f"cs2:menu:action:{issued_at}:{requester_user_id}:{server_id}"),
                 )
             )
         )
@@ -377,7 +386,7 @@ def control_view(
                 label=text(locale, "back"),
                 emoji="↩️",
                 style=discord.ButtonStyle.secondary,
-                custom_id=f"cs2:menu:page:{issued_at}:0",
+                custom_id=f"cs2:menu:page:{issued_at}:{requester_user_id}:0",
             )
         )
     )
@@ -399,6 +408,7 @@ def plugin_picker_view(
     options: list[discord.SelectOption],
     custom_id: str,
     issued_at: int,
+    requester_user_id: int | str,
     server_id: int,
     page: int,
     pages: int,
@@ -413,7 +423,7 @@ def plugin_picker_view(
                     label=text(locale, "back"),
                     emoji="↩️",
                     style=discord.ButtonStyle.secondary,
-                    custom_id=f"cs2:menu:control:{issued_at}:{server_id}",
+                    custom_id=(f"cs2:menu:control:{issued_at}:{requester_user_id}:{server_id}"),
                 )
             ),
             timeout=MENU_LIFETIME_SECONDS,
@@ -430,21 +440,25 @@ def plugin_picker_view(
             label=text(locale, "previous"),
             emoji="◀️",
             style=discord.ButtonStyle.secondary,
-            custom_id=f"cs2:menu:{page_kind}:{issued_at}:{server_id}:{page - 1}",
+            custom_id=(
+                f"cs2:menu:{page_kind}:{issued_at}:{requester_user_id}:{server_id}:{page - 1}"
+            ),
             disabled=page == 0,
         ),
         discord.ui.Button(
             label=text(locale, "next"),
             emoji="▶️",
             style=discord.ButtonStyle.secondary,
-            custom_id=f"cs2:menu:{page_kind}:{issued_at}:{server_id}:{page + 1}",
+            custom_id=(
+                f"cs2:menu:{page_kind}:{issued_at}:{requester_user_id}:{server_id}:{page + 1}"
+            ),
             disabled=page >= pages - 1,
         ),
         discord.ui.Button(
             label=text(locale, "back"),
             emoji="↩️",
             style=discord.ButtonStyle.secondary,
-            custom_id=f"cs2:menu:control:{issued_at}:{server_id}",
+            custom_id=f"cs2:menu:control:{issued_at}:{requester_user_id}:{server_id}",
         ),
     )
     rows.append(page_buttons)

@@ -109,7 +109,6 @@ README 只保留最短部署路径。需要哪项功能时，直接打开对应�
 
 ### 视频教程
 
-- [管理面板快速部署（约 2 分钟）](https://youtu.be/8GksFZHmO0c)
 - [管理面板操作与功能演示](https://youtu.be/PPzykUZmNy0)
 
 ## 获取帮助

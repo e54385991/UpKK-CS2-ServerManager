@@ -129,7 +129,6 @@ below when you need additional features.
 
 ### Video tutorials
 
-- [Quick management panel deployment (about 2 minutes)](https://youtu.be/8GksFZHmO0c)
 - [Management panel walkthrough and feature demo](https://youtu.be/PPzykUZmNy0)
 
 ## Getting help

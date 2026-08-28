@@ -58,12 +58,11 @@ from services.discord_menu_ui import (
     action_capability,
     control_view,
     is_exact_wake_word,
+    is_leading_bot_mention,
     launcher_is_expired,
-    launcher_view,
     menu_is_expired,
     menu_issued_at,
     no_access_view,
-    normalize_message_trigger,
     plugin_picker_view,
     server_picker_view,
 )
@@ -884,7 +883,7 @@ class DiscordBotManager:
         ]
 
     async def handle_message(self, client: ManagedDiscordClient, message: discord.Message) -> None:
-        """Publish a short-lived launcher only for authorized bound-channel messages."""
+        """Publish a requester-bound menu for authorized leading-mention messages."""
         if (
             message.guild is None
             or message.webhook_id is not None
@@ -893,9 +892,8 @@ class DiscordBotManager:
         ):
             return
         mentioned = client.user.id in set(getattr(message, "raw_mentions", []))
-        normalized = normalize_message_trigger(message.content, client.user.id)
         exact_wake_word = is_exact_wake_word(message.content, client.user.id)
-        mention_trigger = mentioned and (not normalized or exact_wake_word)
+        mention_trigger = mentioned and is_leading_bot_mention(message.content, client.user.id)
         greeting = client.message_trigger_mode == MESSAGE_TRIGGER_GREETINGS and exact_wake_word
         if not mention_trigger and not greeting:
             return
@@ -922,16 +920,20 @@ class DiscordBotManager:
             if not allowed:
                 return
             await message.reply(
-                view=launcher_view(self._locale(message)),
+                view=self._menu_view_for_pairs(
+                    self._locale(message),
+                    pairs,
+                    requester_user_id=message.author.id,
+                ),
                 allowed_mentions=discord.AllowedMentions.none(),
                 mention_author=False,
-                delete_after=300,
+                delete_after=MENU_LIFETIME_SECONDS,
                 silent=True,
             )
         except discord.HTTPException as exc:
             if _is_unknown_discord_resource(exc):
                 logger.info(
-                    "Discord launcher skipped; trigger message is gone for owner %s",
+                    "Discord menu skipped; trigger message is gone for owner %s",
                     client.owner_user_id,
                 )
                 return
@@ -990,6 +992,23 @@ class DiscordBotManager:
     ) -> discord.ui.LayoutView:
         locale = self._locale(interaction)
         pairs = await self._menu_pairs_for_interaction(client, interaction)
+        return self._menu_view_for_pairs(
+            locale,
+            pairs,
+            requester_user_id=interaction.user.id,
+            issued_at=issued_at,
+            page=page,
+        )
+
+    def _menu_view_for_pairs(
+        self,
+        locale: object,
+        pairs: list[tuple[ServerDiscordBinding, Server]],
+        *,
+        requester_user_id: int | str,
+        issued_at: int | None = None,
+        page: int = 0,
+    ) -> discord.ui.LayoutView:
         if not pairs:
             return no_access_view(locale)
         issued_at = issued_at or menu_issued_at()
@@ -1001,11 +1020,13 @@ class DiscordBotManager:
                 server_name=server.name,
                 capabilities=binding.capabilities or [],
                 issued_at=issued_at,
+                requester_user_id=requester_user_id,
             )
         return server_picker_view(
             locale,
             self._menu_server_payload(pairs),
             issued_at=issued_at,
+            requester_user_id=requester_user_id,
             page=page,
         )
 
@@ -1035,6 +1056,7 @@ class DiscordBotManager:
                     server_name=server.name,
                     capabilities=binding.capabilities or [],
                     issued_at=issued_at,
+                    requester_user_id=interaction.user.id,
                 )
         raise DiscordAuthorizationDenied("Selected server is unavailable or unauthorized")
 
@@ -1658,8 +1680,11 @@ class DiscordBotManager:
             title=menu_text(locale, "managed_plugins", server=server.name),
             hint=menu_text(locale, "managed_hint"),
             options=options,
-            custom_id=f"cs2:menu:managed_pick:{issued_at}:{server.id}:{mode}",
+            custom_id=(
+                f"cs2:menu:managed_pick:{issued_at}:{interaction.user.id}:{server.id}:{mode}"
+            ),
             issued_at=issued_at,
+            requester_user_id=interaction.user.id,
             server_id=server.id,
             page=page,
             pages=pages,
@@ -1728,8 +1753,11 @@ class DiscordBotManager:
             title=menu_text(locale, "search_results", query=_safe_text(query, 100)),
             hint=menu_text(locale, "search_result_hint"),
             options=options,
-            custom_id=f"cs2:menu:market_pick:{issued_at}:{server_id}:{nonce}:{mode}",
+            custom_id=(
+                f"cs2:menu:market_pick:{issued_at}:{interaction.user.id}:{server_id}:{nonce}:{mode}"
+            ),
             issued_at=issued_at,
+            requester_user_id=interaction.user.id,
             server_id=server_id,
             page=page,
             pages=pages,
@@ -1866,7 +1894,9 @@ class DiscordBotManager:
                 title_key="search_title",
                 label_key="search_label",
                 placeholder_key="search_placeholder",
-                custom_id=f"cs2:menu:search_modal:{issued_at}:{server.id}:{mode}",
+                custom_id=(
+                    f"cs2:menu:search_modal:{issued_at}:{interaction.user.id}:{server.id}:{mode}"
+                ),
                 callback=lambda modal_interaction, value: self._menu_search_submit(
                     client,
                     modal_interaction,
@@ -1885,7 +1915,7 @@ class DiscordBotManager:
                 title_key="console_title",
                 label_key="console_label",
                 placeholder_key="console_placeholder",
-                custom_id=f"cs2:menu:console_modal:{issued_at}:{server.id}",
+                custom_id=(f"cs2:menu:console_modal:{issued_at}:{interaction.user.id}:{server.id}"),
                 callback=lambda modal_interaction, value: self._menu_console_submit(
                     client, modal_interaction, server_id=server.id, command=value
                 ),
@@ -1899,7 +1929,7 @@ class DiscordBotManager:
                 title_key="agent_title",
                 label_key="agent_label",
                 placeholder_key="agent_placeholder",
-                custom_id=f"cs2:menu:agent_modal:{issued_at}:{server.id}",
+                custom_id=(f"cs2:menu:agent_modal:{issued_at}:{interaction.user.id}:{server.id}"),
                 callback=lambda modal_interaction, value: self._menu_agent_submit(
                     client, modal_interaction, server_id=server.id, prompt=value
                 ),
@@ -1972,17 +2002,20 @@ class DiscordBotManager:
             view = await self._private_menu_view(client, interaction)
             await interaction.response.send_message(view=view, ephemeral=True)
             return
-        if len(parts) < 4:
+        if len(parts) < 5:
             raise DiscordAuthorizationDenied("Invalid menu component")
         try:
             issued_at = int(parts[3])
+            requester_user_id = int(parts[4])
         except ValueError as exc:
-            raise DiscordAuthorizationDenied("Invalid menu timestamp") from exc
+            raise DiscordAuthorizationDenied("Invalid menu identity") from exc
+        if requester_user_id != interaction.user.id:
+            raise DiscordAuthorizationDenied(menu_text(self._locale(interaction), "not_owner"))
         if menu_is_expired(issued_at):
             await self._menu_expired_response(interaction)
             return
         if kind == "page":
-            page = int(parts[4])
+            page = int(parts[5])
             view = await self._private_menu_view(
                 client, interaction, issued_at=issued_at, page=page
             )
@@ -1997,14 +2030,14 @@ class DiscordBotManager:
             await interaction.response.edit_message(view=view)
             return
         if kind == "control":
-            server_id = int(parts[4])
+            server_id = int(parts[5])
             view = await self._menu_control_view(
                 client, interaction, issued_at=issued_at, server_id=server_id
             )
             await interaction.response.edit_message(view=view)
             return
         if kind == "action":
-            server_id = int(parts[4])
+            server_id = int(parts[5])
             values = (interaction.data or {}).get("values") or []
             if not values:
                 raise DiscordAuthorizationDenied("No menu action was selected")
@@ -2020,8 +2053,8 @@ class DiscordBotManager:
             mode = kind.removeprefix("managed_")
             if mode not in {"browse", "upgrade"}:
                 raise DiscordAuthorizationDenied("Invalid managed plugin mode")
-            server_id = int(parts[4])
-            page = int(parts[5])
+            server_id = int(parts[5])
+            page = int(parts[6])
             view = await self._managed_plugin_view(
                 client,
                 interaction,
@@ -2033,8 +2066,8 @@ class DiscordBotManager:
             await interaction.response.edit_message(view=view)
             return
         if kind == "managed_pick":
-            server_id = int(parts[4])
-            mode = parts[5]
+            server_id = int(parts[5])
+            mode = parts[6]
             if mode not in {"browse", "upgrade"}:
                 raise DiscordAuthorizationDenied("Invalid managed plugin mode")
             values = (interaction.data or {}).get("values") or []
@@ -2076,8 +2109,8 @@ class DiscordBotManager:
             return
         if kind.startswith("search_"):
             nonce = kind.removeprefix("search_")
-            server_id = int(parts[4])
-            page = int(parts[5])
+            server_id = int(parts[5])
+            page = int(parts[6])
             view = await self._market_search_view(
                 client,
                 interaction,
@@ -2089,9 +2122,9 @@ class DiscordBotManager:
             await interaction.response.edit_message(view=view)
             return
         if kind == "market_pick":
-            server_id = int(parts[4])
-            nonce = parts[5]
-            mode = parts[6]
+            server_id = int(parts[5])
+            nonce = parts[6]
+            mode = parts[7]
             if mode not in {"browse", "install"}:
                 raise DiscordAuthorizationDenied("Invalid market plugin mode")
             state = await redis_manager.get(self._search_state_key(client, interaction, nonce))
