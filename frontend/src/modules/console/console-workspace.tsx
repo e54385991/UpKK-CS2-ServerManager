@@ -112,7 +112,10 @@ export function ConsoleLauncherView({
           <CardDescription>{t("launcherHelp")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <LiveConsolePopups serverId={workspace.serverId} />
+          <LiveConsolePopups
+            serverId={workspace.serverId}
+            showDeploy={workspace.steamcmdRunning}
+          />
           <p className="text-xs text-fg-subtle">{t("popupHint")}</p>
         </CardContent>
       </Card>

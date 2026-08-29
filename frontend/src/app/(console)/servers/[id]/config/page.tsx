@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getServer } from "@/modules/servers/api";
-import { ServerConfigForm } from "@/modules/servers/config-form";
+import { ServerConfigWorkspace } from "@/modules/servers/config-form";
 import { parseServerId } from "@/modules/servers/workspace";
 import { Card } from "@/shared/ui/card";
 
@@ -33,5 +33,5 @@ export default async function ServerConfigPage({
     );
   }
 
-  return <ServerConfigForm server={result.data} />;
+  return <ServerConfigWorkspace server={result.data} section="game" />;
 }

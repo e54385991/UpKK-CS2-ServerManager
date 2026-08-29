@@ -22,6 +22,7 @@ from services.game_session import (
     steamcmd_session_name,
 )
 from services.ssh_manager import SSHManager
+from services.ssh.text import decode_remote_text, encode_console_input
 from services.steamcmd_session import latest_console_heartbeat
 
 from .schemas import ConsolePaneView, ConsoleWorkspaceView
@@ -295,12 +296,7 @@ async def _run_console(
                 )
                 await websocket.close()
                 return
-            process = await ssh.conn.create_process(
-                attach_command(active_manager, name),
-                term_type="xterm-256color",
-                encoding="utf-8",
-                errors="replace",
-            )
+            process = await ssh.create_interactive_process(attach_command(active_manager, name))
             await websocket.send_json(
                 {
                     "type": "connected",
@@ -308,11 +304,7 @@ async def _run_console(
                 }
             )
         else:
-            process = await ssh.conn.create_process(
-                term_type="xterm-256color",
-                encoding="utf-8",
-                errors="replace",
-            )
+            process = await ssh.create_interactive_process()
             await websocket.send_json(
                 {"type": "connected", "message": f"Connected to {server.host}"}
             )
@@ -322,7 +314,9 @@ async def _run_console(
                 while True:
                     output = await process.stdout.read(1024)
                     if output:
-                        await websocket.send_json({"type": "output", "data": output})
+                        await websocket.send_json(
+                            {"type": "output", "data": decode_remote_text(output)}
+                        )
                     else:
                         break
             except Exception:
@@ -337,7 +331,7 @@ async def _run_console(
                 continue
             msg_type = message.get("type")
             if msg_type == "input":
-                process.stdin.write(str(message.get("data") or ""))
+                process.stdin.write(encode_console_input(str(message.get("data") or "")))
                 await process.stdin.drain()
             elif msg_type == "resize":
                 cols = int(message.get("cols") or 80)

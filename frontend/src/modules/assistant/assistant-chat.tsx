@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
+import Link from "next/link";
 import { Bot, Plus, TriangleAlert } from "lucide-react";
 import {
   createConversationAction,
@@ -157,6 +158,14 @@ export function AssistantChat({
               </CardTitle>
               <CardDescription>{t("providerOffHelp")}</CardDescription>
             </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link href={"/settings" as Route}>{t("openSettings")}</Link>
+              </Button>
+              <Button asChild size="sm" variant="ghost">
+                <Link href={"/settings/profile" as Route}>{t("openProfile")}</Link>
+              </Button>
+            </CardContent>
           </Card>
         ) : (
           <div className="flex flex-wrap gap-2">

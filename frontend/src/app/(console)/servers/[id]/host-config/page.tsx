@@ -1,21 +1,17 @@
-import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getServer } from "@/modules/servers/api";
-import {
-  S3BackupsWorkspace,
-  S3BackupsWorkspaceSkeleton,
-} from "@/modules/servers/s3-backups-workspace";
+import { ServerConfigWorkspace } from "@/modules/servers/config-form";
 import { parseServerId } from "@/modules/servers/workspace";
 import { Card } from "@/shared/ui/card";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("serverWorkspace");
-  return { title: t("categories.backups") };
+  return { title: t("categories.host-config") };
 }
 
-export default async function ServerBackupsPage({
+export default async function ServerHostConfigPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -25,7 +21,7 @@ export default async function ServerBackupsPage({
   if (serverId == null) notFound();
 
   const [t, result] = await Promise.all([
-    getTranslations("s3Backups"),
+    getTranslations("serverDetail"),
     getServer(serverId),
   ]);
   if (!result.ok && result.status === 404) notFound();
@@ -37,13 +33,5 @@ export default async function ServerBackupsPage({
     );
   }
 
-  return (
-    <Suspense fallback={<S3BackupsWorkspaceSkeleton />}>
-      <S3BackupsWorkspace
-        serverId={result.data.id}
-        serverStatus={result.data.status}
-        gameDirectory={result.data.gameDirectory}
-      />
-    </Suspense>
-  );
+  return <ServerConfigWorkspace server={result.data} section="host" />;
 }

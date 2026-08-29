@@ -22,17 +22,16 @@ export async function MapsPanel({ serverId }: { serverId: number }) {
 export function MapsPanelSkeleton() {
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-line bg-surface px-4 py-3 shadow-panel">
+        <Skeleton className="h-6 w-64" />
+      </div>
       <div className="rounded-lg border border-line bg-surface p-5 shadow-panel">
         <div className="mb-4 flex items-center gap-2">
           <MapIcon className="size-4 text-fg-subtle" />
-          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-24" />
         </div>
-        <Skeleton className="mb-2 h-8 w-full" />
-        <Skeleton className="h-8 w-2/3" />
-      </div>
-      <div className="rounded-lg border border-line bg-surface p-5 shadow-panel">
-        <Skeleton className="mb-3 h-4 w-40" />
-        <Skeleton className="h-24 w-full" />
+        <Skeleton className="mb-2 h-10 w-full" />
+        <Skeleton className="h-40 w-full" />
       </div>
     </div>
   );

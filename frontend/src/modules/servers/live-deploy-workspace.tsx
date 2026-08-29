@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { LiveConsolePopups } from "@/modules/console/open-live-terminal";
 import { SessionPane } from "@/modules/console/session-pane";
 import { useConsolePane } from "@/modules/console/use-console-pane";
@@ -83,7 +84,16 @@ export function LiveDeployWorkspace({
               ? t("deployFinished")
               : tDetail("streamIdle")}
         </p>
-        {streaming ? null : <LiveConsolePopups serverId={serverId} />}
+        {streaming ? null : (
+          <LiveConsolePopups
+            serverId={serverId}
+            showDeploy={isDeployProgressVisible({
+              serverStatus,
+              steamcmdRunning: Boolean(pane?.running),
+              operation,
+            })}
+          />
+        )}
       </div>
 
       <SessionPane

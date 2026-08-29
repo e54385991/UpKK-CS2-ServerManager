@@ -69,6 +69,25 @@ def test_v1_game_updates_requires_authentication():
     assert response.status_code == 401
 
 
+def test_v1_game_updates_inspect_error_is_200(monkeypatch):
+    client, _user = _client(monkeypatch)
+    monkeypatch.setattr(
+        "api.routes.v1.game_updates.require_server_access",
+        AsyncMock(return_value=_server()),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.game_updates.inspect_game_version",
+        AsyncMock(side_effect=RuntimeError("steam blocked")),
+    )
+
+    listed = client.get("/api/v1/servers/2/game-updates")
+    assert listed.status_code == 200
+    body = listed.json()
+    assert body["steam_check_ok"] is False
+    assert body["installed_version"] == "1.41.2.5"
+    assert body["advertised_version"] is None
+
+
 def test_v1_game_updates_workspace(monkeypatch):
     client, _user = _client(monkeypatch)
     server = _server()

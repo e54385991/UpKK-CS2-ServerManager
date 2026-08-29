@@ -216,26 +216,39 @@ test("server workspace two-row nav reaches named surfaces", async ({ page }) => 
   ).toBeVisible();
 });
 
-test("console workspace offers independent ssh, game, and deploy popups", async ({
+test("console workspace offers ssh and game popups; deploy only while deploying", async ({
   page,
   context,
 }) => {
   await page.goto("/servers/1/console");
   const ssh = page.getByTestId("open-live-ssh").first();
   const game = page.getByTestId("open-live-game").first();
-  const deploy = page.getByTestId("open-live-deploy").first();
+  const deploy = page.getByTestId("open-live-deploy");
   await expect(ssh).toBeVisible();
   await expect(game).toBeVisible();
-  await expect(deploy).toBeVisible();
   await expect(ssh).toHaveText(/打开 SSH 终端|Open SSH console/);
   await expect(game).toHaveText(/打开游戏控制台|Open game console/);
-  await expect(deploy).toHaveText(/打开部署进度|Open deploy progress/);
 
-  const views = [
-    { button: ssh, view: "ssh" },
-    { button: game, view: "game" },
-    { button: deploy, view: "deploy" },
-  ] as const;
+  const steamcmdRunning = await page
+    .getByText(/SteamCMD 会话在运行|SteamCMD session running/)
+    .isVisible();
+  if (steamcmdRunning) {
+    await expect(deploy.first()).toBeVisible();
+    await expect(deploy.first()).toHaveText(/打开部署进度|Open deploy progress/);
+  } else {
+    await expect(deploy).toHaveCount(0);
+  }
+
+  const views = steamcmdRunning
+    ? ([
+        { button: ssh, view: "ssh" },
+        { button: game, view: "game" },
+        { button: deploy.first(), view: "deploy" },
+      ] as const)
+    : ([
+        { button: ssh, view: "ssh" },
+        { button: game, view: "game" },
+      ] as const);
   for (const item of views) {
     const popupPromise = context.waitForEvent("page");
     await item.button.click();
@@ -266,6 +279,7 @@ test("operations center is read-only and does not start SteamCMD", async ({
   await expect(
     page.getByRole("heading", { name: /操作中心|Operations center/ }),
   ).toBeVisible();
+  await expect(page.getByTestId("open-live-deploy")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: /最近操作|Recent operations/ }),
   ).toBeVisible();
@@ -285,8 +299,24 @@ test("operations center is read-only and does not start SteamCMD", async ({
   }
 });
 
-test("server config shows download proxy controls", async ({ page }) => {
+test("server config splits game and host into two categories", async ({
+  page,
+}) => {
   await page.goto("/servers/1/config");
+  await expect(page.getByTestId("server-config-tabs")).toBeVisible();
+  await expect(page.getByTestId("game-config-form")).toBeVisible();
+  await expect(page.locator("#serverName")).toBeVisible();
+  await expect(page.getByTestId("apply-system-defaults")).toHaveCount(0);
+  await expect(page.locator("#host")).toHaveCount(0);
+
+  await page.getByTestId("server-config-tabs").getByRole("link", {
+    name: /主机配置|Host config/,
+  }).click();
+  await expect(page).toHaveURL(/\/servers\/1\/host-config$/);
+  await expect(page.getByTestId("host-config-form")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Linux 主机|Linux host/ }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: /下载代理|Download proxy/ }),
   ).toBeVisible();
@@ -320,6 +350,10 @@ test("s3 backups page lists without restoring", async ({ page }) => {
     ),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /刷新|Refresh/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /手动备份插件|Back up plugins now/ }),
+  ).toBeVisible();
+  await expect(page.getByTestId("s3-local-backups-dir")).toBeVisible();
 });
 
 test("admin fleet toggle stays on the servers list", async ({ page }) => {

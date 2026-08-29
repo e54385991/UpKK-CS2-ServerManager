@@ -2,8 +2,12 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { saveProfileAiAction, testProfileAiAction } from "@/modules/profile/actions";
-import type { AiMode, AiProtocol, ProfileAiSettings } from "@/modules/profile/types";
+import {
+  refreshProfileAiAction,
+  saveProfileAiAction,
+  testProfileAiAction,
+} from "@/modules/profile/actions";
+import type { AiMode, AiProtocol, ProfileAiPatch, ProfileAiSettings } from "@/modules/profile/types";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -53,10 +57,8 @@ export function UserAiForm({ initial }: { initial: ProfileAiSettings }) {
   const [pending, setPending] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
 
-  async function save() {
-    setPending("save");
-    setBanner(null);
-    const result = await saveProfileAiAction({
+  function patch(): ProfileAiPatch {
+    return {
       mode,
       baseUrl: baseUrl.trim() || null,
       model: model.trim() || null,
@@ -71,29 +73,37 @@ export function UserAiForm({ initial }: { initial: ProfileAiSettings }) {
       frequencyPenalty: optionalNumber(frequency),
       presencePenalty: optionalNumber(presence),
       verbosity: verbosity || null,
-      parallelToolCalls:
-        parallelTools === "" ? null : parallelTools === "true",
-    });
+      parallelToolCalls: parallelTools === "" ? null : parallelTools === "true",
+    };
+  }
+
+  function applySaved(next: ProfileAiSettings) {
+    setSettings(next);
+    setMode(next.mode);
+    setApiKey("");
+    setClearKey(false);
+  }
+
+  async function save() {
+    setPending("save");
+    setBanner(null);
+    const result = await saveProfileAiAction(patch());
     setPending(null);
     if (!result.ok) {
       setBanner(result.error || t("failed"));
       return;
     }
-    setSettings(result.data);
-    setApiKey("");
-    setClearKey(false);
+    applySaved(result.data);
     setBanner(t("aiSaved"));
   }
 
   async function test() {
     setPending("test");
     setBanner(null);
-    const result = await testProfileAiAction({
-      baseUrl: baseUrl.trim() || undefined,
-      model: model.trim() || undefined,
-      apiKey: apiKey.trim() || undefined,
-    });
+    const result = await testProfileAiAction();
+    const refreshed = result.ok ? await refreshProfileAiAction() : null;
     setPending(null);
+    if (refreshed?.ok) applySaved(refreshed.data);
     setBanner(result.ok ? result.data.message : result.error || t("failed"));
   }
 

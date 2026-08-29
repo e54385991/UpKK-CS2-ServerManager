@@ -6,6 +6,7 @@ import {
   getDeploymentLock,
   getServer,
 } from "@/modules/servers/api";
+import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { SshReconnectCard } from "@/modules/servers/ssh-reconnect-card";
 import { parseServerId } from "@/modules/servers/workspace";
 import { ServerWorkspaceNav } from "@/modules/servers/workspace-nav";
@@ -47,6 +48,11 @@ export default async function ServerWorkspaceLayout({
     operationActive ||
     (lock.ok && lock.data.lockActive) ||
     server?.status === "deploying";
+  const showDeploy = isDeployProgressVisible({
+    serverStatus: server?.status ?? null,
+    lockActive: lock.ok && lock.data.lockActive,
+    operation: currentOperation.ok ? currentOperation.data : null,
+  });
 
   return (
     <>
@@ -78,6 +84,7 @@ export default async function ServerWorkspaceLayout({
           sshActiveLeases={server.sshActiveLeases}
           sshIdleSeconds={server.sshIdleSeconds}
           canForceStop={canForceStop}
+          showDeploy={showDeploy}
           health={{
             id: server.id,
             isSshDown: server.isSshDown,

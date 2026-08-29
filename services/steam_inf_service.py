@@ -161,7 +161,7 @@ class SteamInfService:
         return success, version
 
     async def get_steam_inf_details(
-        self, server: Server, force_refresh: bool = False
+        self, server: Server, force_refresh: bool = False, *, timeout: float = 30
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Return PatchVersion and optional Steam build id from steam.inf."""
         cache_key = f"steam_inf:version:{server.id}"
@@ -179,7 +179,7 @@ class SteamInfService:
             force_refresh = True
 
         if force_refresh:
-            success, version, build_id = await self._read_version_from_file(server)
+            success, version, build_id = await self._read_version_from_file(server, timeout=timeout)
             if success and version:
                 await redis_manager.set(cache_key, version, expire=self.CACHE_TTL_SECONDS)
                 if build_id:
@@ -194,7 +194,7 @@ class SteamInfService:
         return False, None, None
 
     async def _read_version_from_file(
-        self, server: Server
+        self, server: Server, *, timeout: float = 30
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Read PatchVersion from steam.inf file via SSH
@@ -206,7 +206,8 @@ class SteamInfService:
             Tuple[bool, Optional[str], Optional[str]]: (success, version, build_id)
         """
         if _ssh_manager_factory is None:
-            raise RuntimeError("Steam.inf SSH manager factory is not configured")
+            logger.error("Steam.inf SSH manager factory is not configured")
+            return False, None, None
         ssh_manager = _ssh_manager_factory()
 
         try:
@@ -260,11 +261,11 @@ class SteamInfService:
                 return False, None, None
 
             # Apply timeout to prevent blocking the event loop
-            return await asyncio.wait_for(_do_read(), timeout=30)
+            return await asyncio.wait_for(_do_read(), timeout=timeout)
 
         except asyncio.TimeoutError:
             logger.warning(
-                f"Timeout reading steam.inf for server {server.id} - operation took longer than 30 seconds"
+                f"Timeout reading steam.inf for server {server.id} after {timeout} seconds"
             )
             return False, None, None
         except Exception as e:

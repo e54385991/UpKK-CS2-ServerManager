@@ -38,6 +38,9 @@ export async function OverviewPanel({ serverId }: { serverId: number }) {
             value={`${server.sshUser}@${server.host}:${server.sshPort}`}
             mono
           />
+          {server.sshUser.trim().toLowerCase() === "root" ? (
+            <p className="sm:col-span-2 text-sm text-warn">{t("rootSshUserWarning")}</p>
+          ) : null}
           <Field
             label={t("sshPool")}
             value={
@@ -118,6 +121,13 @@ export async function OverviewPanel({ serverId }: { serverId: number }) {
           size="sm"
         >
           {t("goConfig")}
+        </LinkButton>
+        <LinkButton
+          href={workspaceHref(server.id, "host-config")}
+          variant="outline"
+          size="sm"
+        >
+          {t("goHostConfig")}
         </LinkButton>
         <LinkButton
           href={workspaceHref(server.id, "frameworks")}

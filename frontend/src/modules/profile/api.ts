@@ -266,18 +266,10 @@ export async function putProfileAi(
   return { ok: true, data: toAi(result.data) };
 }
 
-export async function testProfileAi(input: {
-  readonly baseUrl?: string;
-  readonly model?: string;
-  readonly apiKey?: string;
-}): Promise<ApiResult<AssistantProviderTestViewDto>> {
+export async function testProfileAi(): Promise<ApiResult<AssistantProviderTestViewDto>> {
   return apiFetch<AssistantProviderTestViewDto>("/api/v1/profile/ai/test", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      base_url: input.baseUrl || null,
-      model: input.model || null,
-      api_key: input.apiKey || null,
-    }),
+    body: "{}",
   });
 }

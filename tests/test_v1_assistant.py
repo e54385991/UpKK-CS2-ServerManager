@@ -57,3 +57,28 @@ def test_v1_assistant_workspace_when_provider_is_off(monkeypatch):
     assert body["provider_ready"] is False
     assert body["mode"] == "none"
     assert body["conversations"] == []
+
+
+def test_v1_assistant_workspace_when_provider_is_ready(monkeypatch):
+    client, _user = _client(monkeypatch)
+    monkeypatch.setattr(
+        "api.routes.v1.assistant.legacy.get_user_ai_settings",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                effective_enabled=True,
+                effective_source="global",
+                model=None,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.assistant.legacy.list_ai_conversations",
+        AsyncMock(return_value=[]),
+    )
+
+    response = client.get("/api/v1/assistant")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider_ready"] is True
+    assert body["mode"] == "global"
+    assert body["conversations"] == []

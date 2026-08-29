@@ -83,6 +83,7 @@ export function useOperationRunner({
   initialLogs,
   initialLock,
   aptMirror = null,
+  onSettled,
 }: {
   serverId: number;
   serverStatus: ServerStatus;
@@ -90,6 +91,7 @@ export function useOperationRunner({
   initialLogs: DeploymentLogEntry[];
   initialLock: DeploymentLock;
   aptMirror?: string | null;
+  onSettled?: () => void | Promise<void>;
 }) {
   const t = useTranslations("serverDetail");
   const router = useRouter();
@@ -106,7 +108,11 @@ export function useOperationRunner({
   const [currentMirror, setCurrentMirror] = useState(toAptMirror(aptMirror));
   const [error, setError] = useState<string | null>(null);
   const [streamFailed, setStreamFailed] = useState(false);
+  const onSettledRef = useRef(onSettled);
   const operationRef = useRef(operation);
+  useEffect(() => {
+    onSettledRef.current = onSettled;
+  }, [onSettled]);
   useEffect(() => {
     operationRef.current = operation;
   }, [operation]);
@@ -128,6 +134,7 @@ export function useOperationRunner({
     if (logsResult.ok) setLogs(logsResult.data);
     if (lockResult.ok) setLock(lockResult.data);
     router.refresh();
+    await onSettledRef.current?.();
   }, [router, serverId]);
 
   useEffect(() => {
@@ -292,6 +299,7 @@ export function useOperationRunner({
     if (lockResult.ok) setLock(lockResult.data);
     if (logsResult.ok) setLogs(logsResult.data);
     if (serverResult.ok) setStatus(serverResult.data.status);
+    await onSettledRef.current?.();
   }
 
   return {

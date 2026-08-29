@@ -5,6 +5,7 @@ import {
   hostsMatch,
   isHostReadyToAdd,
   normalizeHost,
+  pickInitializedHost,
   setupWizardHref,
 } from "./initialized-hosts.ts";
 
@@ -27,6 +28,26 @@ test("isHostReadyToAdd accepts saved or marked hosts", () => {
   assert.equal(isHostReadyToAdd("10.0.0.8", saved, "10.0.0.8"), true);
 });
 
+test("pickInitializedHost prefers key, then marked host, then the only item", () => {
+  const listed = [
+    { key: "init:1:a", host: "10.0.0.1" },
+    { key: "init:1:b", host: "192.168.50.141" },
+  ];
+  assert.deepEqual(
+    pickInitializedHost(listed, { preferredKey: "init:1:b" }),
+    listed[1],
+  );
+  assert.deepEqual(
+    pickInitializedHost(listed, { markedHost: "192.168.50.141" }),
+    listed[1],
+  );
+  assert.equal(pickInitializedHost(listed), undefined);
+  assert.deepEqual(
+    pickInitializedHost([listed[0]]),
+    listed[0],
+  );
+});
+
 test("setup and add-server hrefs carry the init gate", () => {
   assert.equal(
     setupWizardHref({
@@ -41,7 +62,8 @@ test("setup and add-server hrefs carry the init gate", () => {
     addServerAfterSetupHref({
       host: "192.168.50.141",
       initializedServerId: "init:1:abc",
+      sshUser: "cs2server",
     }),
-    "/servers/new?initialized=1&host=192.168.50.141&from=init%3A1%3Aabc",
+    "/servers/new?initialized=1&host=192.168.50.141&from=init%3A1%3Aabc&sshUser=cs2server",
   );
 });

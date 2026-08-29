@@ -14,9 +14,11 @@ import { Skeleton } from "@/shared/ui/skeleton";
 export async function S3BackupsWorkspace({
   serverId,
   serverStatus,
+  gameDirectory,
 }: {
   serverId: number;
   serverStatus: ServerStatus;
+  gameDirectory: string;
 }) {
   const t = await getTranslations("s3Backups");
   const [backups, current, logs, lock] = await Promise.all([
@@ -39,6 +41,7 @@ export async function S3BackupsWorkspace({
     <S3BackupsConsole
       serverId={serverId}
       serverStatus={serverStatus}
+      gameDirectory={gameDirectory}
       initialBackups={backups.data}
       initialOperation={current.ok ? current.data : null}
       initialLogs={logs.ok ? logs.data : []}

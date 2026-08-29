@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
+  Archive,
   Cloud,
+  FolderArchive,
   LoaderCircle,
   RefreshCw,
   RotateCcw,
@@ -47,9 +49,15 @@ function formatBackupSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
+function localPluginBackupsDir(gameDirectory: string): string {
+  const trimmed = gameDirectory.trim().replace(/\/+$/, "");
+  return trimmed ? `${trimmed}/backups` : "—";
+}
+
 export function S3BackupsConsole({
   serverId,
   serverStatus,
+  gameDirectory,
   initialBackups,
   initialOperation,
   initialLogs,
@@ -57,6 +65,7 @@ export function S3BackupsConsole({
 }: {
   serverId: number;
   serverStatus: ServerStatus;
+  gameDirectory: string;
   initialBackups: S3BackupList;
   initialOperation: ServerOperation | null;
   initialLogs: DeploymentLogEntry[];
@@ -65,6 +74,12 @@ export function S3BackupsConsole({
   const t = useTranslations("s3Backups");
   const [backups, setBackups] = useState(initialBackups);
   const [refreshing, setRefreshing] = useState(false);
+  const refreshList = useCallback(async () => {
+    setRefreshing(true);
+    const result = await listS3BackupsAction(serverId);
+    setRefreshing(false);
+    if (result.ok) setBackups(result.data);
+  }, [serverId]);
   const {
     operation,
     events,
@@ -74,6 +89,7 @@ export function S3BackupsConsole({
     error,
     streamFailed,
     canForceStop,
+    runAction,
     runS3Restore,
     refreshAfterForceStop,
   } = useOperationRunner({
@@ -82,24 +98,28 @@ export function S3BackupsConsole({
     initialOperation,
     initialLogs,
     initialLock,
+    onSettled: refreshList,
   });
   const emptyHint = useMemo(() => t("streamEmpty"), [t]);
-  const restoring = running || busyAction === "s3_restore";
-
-  async function refreshList() {
-    setRefreshing(true);
-    const result = await listS3BackupsAction(serverId);
-    setRefreshing(false);
-    if (result.ok) setBackups(result.data);
-  }
+  const localDir = useMemo(
+    () => localPluginBackupsDir(gameDirectory),
+    [gameDirectory],
+  );
+  const busy =
+    running || busyAction === "s3_restore" || busyAction === "backup_plugins";
 
   async function onRestore(item: S3BackupItem) {
-    if (restoring) return;
+    if (busy) return;
     if (!(await confirm(t("confirmRestore", { name: item.filename })))) {
       return;
     }
     await runS3Restore(item.key);
     await refreshList();
+  }
+
+  async function onBackupNow() {
+    if (busy) return;
+    await runAction("backup_plugins");
   }
 
   return (
@@ -110,22 +130,52 @@ export function S3BackupsConsole({
             <CardTitle>{t("title")}</CardTitle>
             <CardDescription>{t("help")}</CardDescription>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={refreshing}
-            onClick={() => void refreshList()}
-          >
-            {refreshing ? (
-              <LoaderCircle className="animate-spin" />
-            ) : (
-              <RefreshCw />
-            )}
-            {t("refresh")}
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              data-testid="s3-backup-now"
+              disabled={busy}
+              onClick={() => void onBackupNow()}
+            >
+              {busyAction === "backup_plugins" ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <Archive />
+              )}
+              {t("backupNow")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={refreshing}
+              onClick={() => void refreshList()}
+            >
+              {refreshing ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <RefreshCw />
+              )}
+              {t("refresh")}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="rounded-md border border-line bg-canvas/60 px-3 py-3">
+            <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-fg-subtle">
+              <FolderArchive className="size-3.5" />
+              {t("localDirLabel")}
+            </p>
+            <p
+              data-testid="s3-local-backups-dir"
+              className="mt-1 break-all font-mono text-sm text-fg"
+            >
+              {localDir}
+            </p>
+            <p className="mt-1 text-sm text-fg-muted">{t("localDirHelp")}</p>
+          </div>
+
           {!backups.configured ? (
             <div className="flex items-start gap-3 rounded-md border border-warn/30 bg-warn-muted/40 px-3 py-3 text-sm text-warn">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />
@@ -177,7 +227,7 @@ export function S3BackupsConsole({
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={restoring}
+                          disabled={busy}
                           onClick={() => void onRestore(item)}
                         >
                           {busyAction === "s3_restore" ? (

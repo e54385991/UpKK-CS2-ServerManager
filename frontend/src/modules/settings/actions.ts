@@ -75,14 +75,17 @@ export async function saveAiSettingsAction(
   patch: AiSystemPatch,
 ): Promise<ApiResult<AiSystemSettings>> {
   const result = await putAiSettings(patch);
-  if (result.ok) revalidatePath("/settings");
+  if (result.ok) {
+    revalidatePath("/settings");
+    revalidatePath("/assistant");
+  }
   return result;
 }
 
-export async function testAiSettingsAction(input: {
-  readonly baseUrl?: string;
-  readonly model?: string;
-  readonly apiKey?: string;
-}): Promise<ApiResult<AssistantProviderTestViewDto>> {
-  return testAiSettings(input);
+export async function testAiSettingsAction(): Promise<
+  ApiResult<AssistantProviderTestViewDto>
+> {
+  const result = await testAiSettings();
+  if (result.ok) revalidatePath("/assistant");
+  return result;
 }

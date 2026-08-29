@@ -49,6 +49,24 @@ export function isHostReadyToAdd(
   return savedHosts.some((item) => hostsMatch(item.host, host));
 }
 
+export function pickInitializedHost<T extends { key: string; host: string }>(
+  listed: readonly T[],
+  options?: { preferredKey?: string; markedHost?: string },
+): T | undefined {
+  const preferredKey = options?.preferredKey?.trim();
+  if (preferredKey) {
+    const byKey = listed.find((item) => item.key === preferredKey);
+    if (byKey) return byKey;
+  }
+  const markedHost = options?.markedHost?.trim();
+  if (markedHost) {
+    const byHost = listed.find((item) => hostsMatch(item.host, markedHost));
+    if (byHost) return byHost;
+  }
+  if (listed.length === 1) return listed[0];
+  return undefined;
+}
+
 export function setupWizardHref(input: {
   name?: string;
   host?: string;
@@ -69,8 +87,11 @@ export function setupWizardHref(input: {
 export function addServerAfterSetupHref(input: {
   host: string;
   initializedServerId?: string | null;
+  sshUser?: string | null;
 }): string {
   const params = new URLSearchParams({ initialized: "1", host: input.host });
   if (input.initializedServerId) params.set("from", input.initializedServerId);
+  const sshUser = input.sshUser?.trim();
+  if (sshUser) params.set("sshUser", sshUser);
   return `/servers/new?${params.toString()}`;
 }

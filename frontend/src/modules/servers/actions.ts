@@ -68,6 +68,7 @@ function revalidateServer(serverId: number) {
   revalidatePath(`/servers/${serverId}/frameworks`);
   revalidatePath(`/servers/${serverId}/backups`);
   revalidatePath(`/servers/${serverId}/config`);
+  revalidatePath(`/servers/${serverId}/host-config`);
   revalidatePath(`/servers/${serverId}/monitoring`);
   revalidatePath(`/servers/${serverId}/plugins`);
   revalidatePath(`/servers/${serverId}/updates`);

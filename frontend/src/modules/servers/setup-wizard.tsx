@@ -160,7 +160,7 @@ export function SetupWizard({
       cs2Username: String(form.get("cs2Username") ?? "cs2server").trim(),
       captchaToken: captcha.token,
       captchaCode: String(form.get("captcha") ?? "").trim(),
-      saveConfig: form.get("saveConfig") === "on",
+      saveConfig: true,
       openGamePorts: form.get("openGamePorts") === "on",
       sessionId,
     });
@@ -367,7 +367,7 @@ export function SetupWizard({
                 </Field>
               ) : null}
               <label className="flex items-center gap-2 text-sm text-fg">
-                <input type="checkbox" name="saveConfig" defaultChecked />
+                <input type="checkbox" checked disabled readOnly />
                 {t("fields.saveConfig")}
               </label>
               <label className="flex items-center gap-2 text-sm text-fg">
@@ -522,6 +522,7 @@ export function SetupWizard({
                   addServerAfterSetupHref({
                     host: completedHost,
                     initializedServerId: result.initializedServerId,
+                    sshUser: result.cs2Username,
                   }) as Route
                 }
               >

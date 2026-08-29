@@ -31,6 +31,7 @@ import type {
 
 function revalidateProfile() {
   revalidatePath("/settings/profile");
+  revalidatePath("/assistant");
 }
 
 export async function saveSteamcmdRetryAction(
@@ -110,10 +111,10 @@ export async function saveProfileAiAction(
   return result;
 }
 
-export async function testProfileAiAction(input: {
-  readonly baseUrl?: string;
-  readonly model?: string;
-  readonly apiKey?: string;
-}): Promise<ApiResult<AssistantProviderTestViewDto>> {
-  return testProfileAi(input);
+export async function testProfileAiAction(): Promise<
+  ApiResult<AssistantProviderTestViewDto>
+> {
+  const result = await testProfileAi();
+  if (result.ok) revalidateProfile();
+  return result;
 }

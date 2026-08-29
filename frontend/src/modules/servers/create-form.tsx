@@ -26,7 +26,7 @@ import type {
   InitializedHostCredentials,
 } from "@/modules/servers/setup-api";
 import {
-  isHostReadyToAdd,
+  pickInitializedHost,
   rememberInitializedHost,
   setupWizardHref,
 } from "@/modules/servers/initialized-hosts";
@@ -63,20 +63,6 @@ const GAME_MODES = [
   "custom",
 ] as const;
 
-function defaultsFromCredentials(
-  creds: InitializedHostCredentials | undefined,
-  markedHost?: string,
-) {
-  return {
-    name: creds?.name ?? "",
-    host: creds?.host ?? markedHost ?? "",
-    sshUser: creds?.sshUser ?? "",
-    sshPort: creds?.sshPort ?? 22,
-    sshPassword: creds?.sshPassword ?? "",
-    gameDirectory: creds?.gameDirectory ?? "/home/cs2server/cs2",
-  };
-}
-
 export function CreateServerForm({
   initialCredentials,
   markedInitializedHost,
@@ -93,43 +79,32 @@ export function CreateServerForm({
   const [created, setCreated] = useState<ServerCreateResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [hosts, setHosts] = useState<InitializedHost[]>([]);
+  const [hostsLoading, setHostsLoading] = useState(true);
+  const [account, setAccount] = useState<InitializedHostCredentials | undefined>(
+    initialCredentials,
+  );
   const [selectedHostKey, setSelectedHostKey] = useState(
     initialCredentials?.key ?? "",
   );
-  const [formKey, setFormKey] = useState(0);
-  const [defaults, setDefaults] = useState(() =>
-    defaultsFromCredentials(initialCredentials, markedInitializedHost),
-  );
-  const [sshUser, setSshUser] = useState(initialCredentials?.sshUser ?? "");
+  const [displayName, setDisplayName] = useState(initialCredentials?.name ?? "");
   const [aptMirror, setAptMirror] = useState<AptMirrorId>("official");
   const [switchingMirror, setSwitchingMirror] = useState<AptMirrorId | null>(
     null,
   );
-  const isRoot = sshUser.trim().toLowerCase() === "root";
+  const isRoot = (account?.sshUser ?? "").trim().toLowerCase() === "root";
+  const canCreate = Boolean(account && selectedHostKey);
 
   const requestCaptcha = useCallback(async (): Promise<Captcha | null> => {
     return fetchCaptchaChallenge();
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void requestCaptcha().then((next) => {
-      if (!active) return;
-      if (next) setCaptcha(next);
-      else setError(t("captchaLoadError"));
-      setCaptchaLoading(false);
-    });
-    void listInitializedHostsAction().then((listed) => {
-      if (active && listed.ok) setHosts(listed.data);
-    });
-    return () => {
-      active = false;
-    };
-  }, [requestCaptcha, t]);
-
   const applyInitializedHost = useCallback(
     async (key: string) => {
-      if (!key) return;
+      if (!key) {
+        setSelectedHostKey("");
+        setAccount(undefined);
+        return;
+      }
       const creds = await getInitializedHostCredentialsAction(key);
       if (!creds.ok) {
         void alertDialog({
@@ -140,12 +115,59 @@ export function CreateServerForm({
       }
       rememberInitializedHost(creds.data.host);
       setSelectedHostKey(key);
-      setDefaults(defaultsFromCredentials(creds.data));
-      setSshUser(creds.data.sshUser);
-      setFormKey((current) => current + 1);
+      setAccount(creds.data);
+      setDisplayName((current) =>
+        current.trim() === "" ? creds.data.name : current,
+      );
     },
     [t],
   );
+
+  useEffect(() => {
+    let active = true;
+    void requestCaptcha().then((next) => {
+      if (!active) return;
+      if (next) setCaptcha(next);
+      else setError(t("captchaLoadError"));
+      setCaptchaLoading(false);
+    });
+    void (async () => {
+      const listed = await listInitializedHostsAction();
+      if (!active) return;
+      if (!listed.ok) {
+        setHosts([]);
+        setHostsLoading(false);
+        return;
+      }
+      setHosts(listed.data);
+      if (initialCredentials?.key) {
+        rememberInitializedHost(initialCredentials.host);
+        setHostsLoading(false);
+        return;
+      }
+      const match = pickInitializedHost(listed.data, {
+        markedHost: markedInitializedHost,
+      });
+      if (!match) {
+        setHostsLoading(false);
+        return;
+      }
+      const creds = await getInitializedHostCredentialsAction(match.key);
+      if (!active) return;
+      if (creds.ok) {
+        rememberInitializedHost(creds.data.host);
+        setSelectedHostKey(match.key);
+        setAccount(creds.data);
+        setDisplayName((current) =>
+          current.trim() === "" ? creds.data.name : current,
+        );
+      }
+      setHostsLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [initialCredentials, markedInitializedHost, requestCaptcha, t]);
 
   const refreshCaptcha = useCallback(() => {
     setCaptchaLoading(true);
@@ -164,38 +186,27 @@ export function CreateServerForm({
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!captcha) return;
-    setError(null);
     const form = new FormData(event.currentTarget);
-    const name = String(form.get("name") ?? "").trim();
-    const host = String(form.get("host") ?? "").trim();
-    const sshPort = Number(form.get("sshPort") ?? 22);
-    const nextSshUser = String(form.get("sshUser") ?? "").trim();
-    if (!isHostReadyToAdd(host, hosts, markedInitializedHost)) {
+    const name = String(form.get("name") ?? displayName).trim();
+    if (!account || !selectedHostKey) {
       await alertDialog({
         title: t("mustInitializeTitle"),
         description: t("mustInitialize"),
       });
-      router.push(
-        setupWizardHref({
-          name,
-          host,
-          sshPort,
-          sshUser: nextSshUser,
-        }) as Route,
-      );
+      router.push(setupWizardHref({ name }) as Route);
       return;
     }
+    setError(null);
     setPending(true);
     const result = await createServerAction({
       name,
-      host,
-      sshPort,
-      sshUser: nextSshUser,
-      sshPassword: String(form.get("sshPassword") ?? ""),
-      sudoPassword: String(form.get("sudoPassword") ?? "") || undefined,
+      host: account.host,
+      sshPort: account.sshPort,
+      sshUser: account.sshUser,
+      sshPassword: account.sshPassword,
       aptMirror,
       gamePort: Number(form.get("gamePort") ?? 27015),
-      gameDirectory: String(form.get("gameDirectory") ?? "").trim(),
+      gameDirectory: account.gameDirectory,
       description: String(form.get("description") ?? "") || undefined,
       captchaToken: captcha.token,
       captchaCode: String(form.get("captcha") ?? "").trim(),
@@ -253,8 +264,10 @@ export function CreateServerForm({
     }
   }
 
+  const showCreateFields = !hostsLoading && hosts.length > 0;
+
   return (
-    <form key={formKey} onSubmit={onSubmit} className="space-y-6">
+    <form onSubmit={onSubmit} className="space-y-6">
       {error ? (
         <div className="flex items-start gap-2 rounded-md border border-danger/30 bg-danger-muted/50 px-3 py-2 text-sm text-danger">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
@@ -270,10 +283,22 @@ export function CreateServerForm({
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          {hosts.length > 0 ? (
-            <Field className="min-w-0 flex-1" label={t("initializedSelect")} htmlFor="initializedHost">
+          {hostsLoading ? (
+            <p
+              className="flex-1 text-sm text-fg-muted"
+              data-testid="initialized-hosts-loading"
+            >
+              {t("loading")}
+            </p>
+          ) : hosts.length > 0 ? (
+            <Field
+              className="min-w-0 flex-1"
+              label={t("initializedSelect")}
+              htmlFor="initializedHost"
+            >
               <Select
                 id="initializedHost"
+                data-testid="initialized-host-select"
                 value={selectedHostKey}
                 onChange={(event) => void applyInitializedHost(event.target.value)}
               >
@@ -286,9 +311,17 @@ export function CreateServerForm({
               </Select>
             </Field>
           ) : (
-            <p className="flex-1 text-sm text-fg-muted">{t("initializedEmpty")}</p>
+            <p
+              className="flex-1 text-sm text-fg-muted"
+              data-testid="initialized-hosts-empty"
+            >
+              {t("initializedEmpty")}
+            </p>
           )}
-          <Button asChild variant="outline">
+          <Button
+            asChild
+            variant={!hostsLoading && hosts.length === 0 ? "primary" : "outline"}
+          >
             <Link href={"/servers/new?tab=setup" as Route}>{t("goToSetup")}</Link>
           </Button>
         </CardContent>
@@ -353,263 +386,248 @@ export function CreateServerForm({
         </Card>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      {showCreateFields ? (
+        <div className="grid gap-6 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>{t("connectionTitle")}</CardTitle>
+                <CardDescription>{t("connectionHelp")}</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              {account ? (
+                <div
+                  className="sm:col-span-2 space-y-3 rounded-md border border-line bg-canvas/60 px-3 py-3"
+                  data-testid="selected-account-summary"
+                >
+                  <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle">
+                    {t("selectedAccountTitle")}
+                  </p>
+                  <dl className="grid gap-3 sm:grid-cols-2">
+                    <SummaryItem label={t("fields.host")} value={account.host} testId="selected-account-host" />
+                    <SummaryItem label={t("fields.sshUser")} value={account.sshUser} testId="selected-account-ssh-user" />
+                    <SummaryItem label={t("fields.sshPort")} value={String(account.sshPort)} />
+                    <SummaryItem
+                      className="sm:col-span-2"
+                      label={t("fields.gameDirectory")}
+                      value={account.gameDirectory}
+                    />
+                  </dl>
+                  <p className="text-xs text-fg-subtle">{t("selectedAccountHelp")}</p>
+                </div>
+              ) : (
+                <p className="sm:col-span-2 text-sm text-fg-muted">
+                  {t("pickAccountRequired")}
+                </p>
+              )}
+              {account && isRoot ? (
+                <div
+                  className="sm:col-span-2 flex items-start gap-2 rounded-md border border-warn/30 bg-warn-muted/50 px-3 py-2 text-sm text-warn"
+                  data-testid="create-root-ssh-warning"
+                >
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                  <span>{t("rootSshUserWarning")}</span>
+                </div>
+              ) : null}
+              <Field
+                className="sm:col-span-2"
+                label={t("fields.aptMirror")}
+                htmlFor="aptMirror"
+                hint={t("aptMirrorHelp")}
+              >
+                <Select
+                  id="aptMirror"
+                  name="aptMirror"
+                  value={aptMirror}
+                  onChange={(event) =>
+                    setAptMirror(toAptMirror(event.target.value) ?? "official")
+                  }
+                >
+                  {APT_MIRRORS.map((mirror) => (
+                    <option key={mirror} value={mirror}>
+                      {t(`mirrors.${mirror}`)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field
+                className="sm:col-span-2"
+                label={t("fields.description")}
+                htmlFor="description"
+              >
+                <Textarea id="description" name="description" rows={3} />
+              </Field>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>{t("gameTitle")}</CardTitle>
+                <CardDescription>{t("gameHelp")}</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <Field className="sm:col-span-2" label={t("fields.name")} htmlFor="name">
+                <Input
+                  id="name"
+                  name="name"
+                  required
+                  maxLength={255}
+                  autoFocus
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                />
+              </Field>
+              <Field className="sm:col-span-2" label={t("fields.serverName")} htmlFor="serverName">
+                <Input id="serverName" name="serverName" defaultValue="CS2 Server" required />
+              </Field>
+              <Field label={t("fields.gamePort")} htmlFor="gamePort">
+                <Input
+                  id="gamePort"
+                  name="gamePort"
+                  type="number"
+                  min={1}
+                  max={65535}
+                  defaultValue={27015}
+                  required
+                />
+              </Field>
+              <Field label={t("fields.defaultMap")} htmlFor="defaultMap">
+                <Input id="defaultMap" name="defaultMap" defaultValue="de_dust2" required />
+              </Field>
+              <Field label={t("fields.maxPlayers")} htmlFor="maxPlayers">
+                <Input
+                  id="maxPlayers"
+                  name="maxPlayers"
+                  type="number"
+                  min={1}
+                  max={64}
+                  defaultValue={32}
+                  required
+                />
+              </Field>
+              <Field label={t("fields.gameMode")} htmlFor="gameMode">
+                <Select id="gameMode" name="gameMode" defaultValue="competitive">
+                  {GAME_MODES.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {t(`modes.${mode}`)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t("fields.gameType")} htmlFor="gameType">
+                <Input id="gameType" name="gameType" defaultValue="0" required />
+              </Field>
+              <Field label={t("fields.sessionManager")} htmlFor="sessionManager">
+                <Select id="sessionManager" name="sessionManager" defaultValue="tmux">
+                  <option value="tmux">tmux</option>
+                  <option value="screen">screen</option>
+                </Select>
+              </Field>
+              <Field label={t("fields.rconPassword")} htmlFor="rconPassword">
+                <Input
+                  id="rconPassword"
+                  name="rconPassword"
+                  type="password"
+                  autoComplete="new-password"
+                />
+              </Field>
+              <Field
+                className="sm:col-span-2"
+                label={t("fields.steamAccountToken")}
+                htmlFor="steamAccountToken"
+              >
+                <Input
+                  id="steamAccountToken"
+                  name="steamAccountToken"
+                  type="password"
+                  autoComplete="off"
+                />
+              </Field>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {showCreateFields ? (
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>{t("connectionTitle")}</CardTitle>
-              <CardDescription>{t("connectionHelp")}</CardDescription>
+              <CardTitle>{t("confirmTitle")}</CardTitle>
+              <CardDescription>{t("confirmHelp")}</CardDescription>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <Field className="sm:col-span-2" label={t("fields.name")} htmlFor="name">
-              <Input
-                id="name"
-                name="name"
-                required
-                maxLength={255}
-                autoFocus
-                defaultValue={defaults.name}
-              />
-            </Field>
-            <Field label={t("fields.host")} htmlFor="host">
-              <Input
-                id="host"
-                name="host"
-                required
-                autoComplete="off"
-                defaultValue={defaults.host}
-              />
-            </Field>
-            <Field label={t("fields.gamePort")} htmlFor="gamePort">
-              <Input
-                id="gamePort"
-                name="gamePort"
-                type="number"
-                min={1}
-                max={65535}
-                defaultValue={27015}
-                required
-              />
-            </Field>
-            <Field
-              label={t("fields.sshUser")}
-              htmlFor="sshUser"
-              hint={t("privilegedHelp")}
-            >
-              <Input
-                id="sshUser"
-                name="sshUser"
-                required
-                autoComplete="off"
-                value={sshUser}
-                onChange={(event) => setSshUser(event.target.value)}
-              />
-            </Field>
-            <Field label={t("fields.sshPort")} htmlFor="sshPort">
-              <Input
-                id="sshPort"
-                name="sshPort"
-                type="number"
-                min={1}
-                max={65535}
-                defaultValue={defaults.sshPort}
-                required
-              />
-            </Field>
-            <Field
-              label={isRoot ? t("fields.sshPasswordRoot") : t("fields.sshPassword")}
-              htmlFor="sshPassword"
-              hint={isRoot ? t("sshPasswordRootHelp") : t("sshPasswordHelp")}
-            >
-              <Input
-                id="sshPassword"
-                name="sshPassword"
-                type="password"
-                required
-                autoComplete="new-password"
-                defaultValue={defaults.sshPassword}
-              />
-            </Field>
-            <Field
-              label={
-                isRoot
-                  ? t("fields.sudoPassword")
-                  : t("fields.sudoPasswordRequired")
-              }
-              htmlFor="sudoPassword"
-              hint={isRoot ? t("sudoPasswordRootHelp") : t("sudoPasswordHelp")}
-            >
-              <Input
-                id="sudoPassword"
-                name="sudoPassword"
-                type="password"
-                required={!isRoot}
-                autoComplete="new-password"
-              />
-            </Field>
-            <Field
-              className="sm:col-span-2"
-              label={t("fields.aptMirror")}
-              htmlFor="aptMirror"
-              hint={t("aptMirrorHelp")}
-            >
-              <Select
-                id="aptMirror"
-                name="aptMirror"
-                value={aptMirror}
-                onChange={(event) =>
-                  setAptMirror(toAptMirror(event.target.value) ?? "official")
-                }
-              >
-                {APT_MIRRORS.map((mirror) => (
-                  <option key={mirror} value={mirror}>
-                    {t(`mirrors.${mirror}`)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field
-              className="sm:col-span-2"
-              label={t("fields.gameDirectory")}
-              htmlFor="gameDirectory"
-            >
-              <Input
-                id="gameDirectory"
-                name="gameDirectory"
-                defaultValue={defaults.gameDirectory}
-                required
-                className="font-mono"
-              />
-            </Field>
-            <Field
-              className="sm:col-span-2"
-              label={t("fields.description")}
-              htmlFor="description"
-            >
-              <Textarea id="description" name="description" rows={3} />
-            </Field>
+          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <Label htmlFor="captcha">{t("fields.captcha")}</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="captcha"
+                  name="captcha"
+                  required
+                  maxLength={4}
+                  autoComplete="off"
+                  className="uppercase tracking-[0.3em]"
+                  placeholder={t("captchaPlaceholder")}
+                />
+                <button
+                  type="button"
+                  onClick={refreshCaptcha}
+                  aria-label={t("refreshCaptcha")}
+                  className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
+                >
+                  {captcha && !captchaLoading ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={captcha.imageUrl}
+                      alt={t("fields.captcha")}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs text-fg-subtle">{t("loading")}</span>
+                  )}
+                  <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
+                    <RefreshCw
+                      className={cn("size-3", captchaLoading && "animate-spin")}
+                    />
+                  </span>
+                </button>
+              </div>
+            </div>
+            <Button type="submit" disabled={pending || !captcha || !canCreate}>
+              <Plus />
+              {pending ? t("submitting") : t("submit")}
+            </Button>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>{t("gameTitle")}</CardTitle>
-              <CardDescription>{t("gameHelp")}</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <Field className="sm:col-span-2" label={t("fields.serverName")} htmlFor="serverName">
-              <Input id="serverName" name="serverName" defaultValue="CS2 Server" required />
-            </Field>
-            <Field label={t("fields.defaultMap")} htmlFor="defaultMap">
-              <Input id="defaultMap" name="defaultMap" defaultValue="de_dust2" required />
-            </Field>
-            <Field label={t("fields.maxPlayers")} htmlFor="maxPlayers">
-              <Input
-                id="maxPlayers"
-                name="maxPlayers"
-                type="number"
-                min={1}
-                max={64}
-                defaultValue={32}
-                required
-              />
-            </Field>
-            <Field label={t("fields.gameMode")} htmlFor="gameMode">
-              <Select id="gameMode" name="gameMode" defaultValue="competitive">
-                {GAME_MODES.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {t(`modes.${mode}`)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={t("fields.gameType")} htmlFor="gameType">
-              <Input id="gameType" name="gameType" defaultValue="0" required />
-            </Field>
-            <Field label={t("fields.sessionManager")} htmlFor="sessionManager">
-              <Select id="sessionManager" name="sessionManager" defaultValue="tmux">
-                <option value="tmux">tmux</option>
-                <option value="screen">screen</option>
-              </Select>
-            </Field>
-            <Field label={t("fields.rconPassword")} htmlFor="rconPassword">
-              <Input
-                id="rconPassword"
-                name="rconPassword"
-                type="password"
-                autoComplete="new-password"
-              />
-            </Field>
-            <Field
-              className="sm:col-span-2"
-              label={t("fields.steamAccountToken")}
-              htmlFor="steamAccountToken"
-            >
-              <Input
-                id="steamAccountToken"
-                name="steamAccountToken"
-                type="password"
-                autoComplete="off"
-              />
-            </Field>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>{t("confirmTitle")}</CardTitle>
-            <CardDescription>{t("confirmHelp")}</CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1">
-            <Label htmlFor="captcha">{t("fields.captcha")}</Label>
-            <div className="flex items-center gap-3">
-              <Input
-                id="captcha"
-                name="captcha"
-                required
-                maxLength={4}
-                autoComplete="off"
-                className="uppercase tracking-[0.3em]"
-                placeholder={t("captchaPlaceholder")}
-              />
-              <button
-                type="button"
-                onClick={refreshCaptcha}
-                aria-label={t("refreshCaptcha")}
-                className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
-              >
-                {captcha && !captchaLoading ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={captcha.imageUrl}
-                    alt={t("fields.captcha")}
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  <span className="text-xs text-fg-subtle">{t("loading")}</span>
-                )}
-                <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
-                  <RefreshCw
-                    className={cn("size-3", captchaLoading && "animate-spin")}
-                  />
-                </span>
-              </button>
-            </div>
-          </div>
-          <Button type="submit" disabled={pending || !captcha}>
-            <Plus />
-            {pending ? t("submitting") : t("submit")}
-          </Button>
-        </CardContent>
-      </Card>
+      ) : null}
     </form>
+  );
+}
+
+function SummaryItem({
+  label,
+  value,
+  className,
+  testId,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+  testId?: string;
+}) {
+  return (
+    <div className={className}>
+      <dt className="text-xs text-fg-subtle">{label}</dt>
+      <dd
+        className="mt-0.5 font-mono text-sm text-fg break-all"
+        data-testid={testId}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }
 

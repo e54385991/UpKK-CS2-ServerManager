@@ -673,6 +673,91 @@ async def test_personal_provider_takes_precedence(monkeypatch):
     assert config.api_protocol == "chat_completions"
 
 
+@pytest.mark.asyncio
+async def test_custom_provider_works_when_global_is_disabled(monkeypatch):
+    monkeypatch.setattr(
+        ai_security.settings,
+        "AI_CREDENTIAL_ENCRYPTION_KEY",
+        Fernet.generate_key().decode(),
+    )
+    system = SimpleNamespace(
+        enabled=False,
+        base_url=None,
+        model=None,
+        api_key_encrypted=None,
+        request_timeout_seconds=30,
+        private_endpoint_allowlist=[],
+        admin_prompt="",
+        provider_tested=False,
+        tool_calling_tested=False,
+        streaming_tested=False,
+    )
+    personal = UserAISettings(
+        user_id=7,
+        mode="custom",
+        base_url="https://personal.example/v1",
+        model="personal",
+        api_key_encrypted=encrypt_credential("personal-key"),
+        provider_tested=True,
+        tool_calling_tested=True,
+        streaming_tested=True,
+    )
+    monkeypatch.setattr(AISystemSettings, "get_or_create", AsyncMock(return_value=system))
+
+    class DB:
+        async def get(self, model, key):
+            assert model is UserAISettings and key == 7
+            return personal
+
+    config = await get_effective_provider(DB(), SimpleNamespace(id=7))
+    assert config is not None
+    assert config.source == "custom"
+    assert config.model == "personal"
+
+
+def test_null_placeholder_test_body_is_treated_as_saved_provider():
+    from api.routes.ai import _is_saved_provider_test
+    from modules.schemas.ai import AIProviderTestRequest
+
+    item = SimpleNamespace(
+        base_url="https://api.openai.com/v1",
+        model="gpt-4.1",
+        api_protocol="chat_completions",
+    )
+    empty = AIProviderTestRequest()
+    placeholders = AIProviderTestRequest(base_url=None, model=None, api_key=None)
+    matching = AIProviderTestRequest(base_url="https://api.openai.com/v1", model="gpt-4.1")
+    draft_url = AIProviderTestRequest(base_url="https://draft.example/v1")
+    draft_key = AIProviderTestRequest(api_key="sk-draft")
+
+    assert _is_saved_provider_test(empty, item) is True
+    assert _is_saved_provider_test(placeholders, item) is True
+    assert _is_saved_provider_test(matching, item) is True
+    assert _is_saved_provider_test(draft_url, item) is False
+    assert _is_saved_provider_test(draft_key, item) is False
+
+
+def test_successful_saved_probe_enables_system_provider(monkeypatch):
+    from api.routes.ai import _apply_saved_provider_test_flags
+
+    monkeypatch.setattr("api.routes.ai.credential_encryption_available", lambda: True)
+    item = AISystemSettings(
+        enabled=False,
+        base_url="https://api.example/v1",
+        model="m",
+        api_key_encrypted="enc",
+    )
+    _apply_saved_provider_test_flags(item, text_ok=True, tool_ok=True, streaming_ok=True)
+    assert item.enabled is True
+    assert item.provider_tested is True
+    assert item.tool_calling_tested is True
+    assert item.streaming_tested is True
+
+    _apply_saved_provider_test_flags(item, text_ok=True, tool_ok=False, streaming_ok=True)
+    assert item.enabled is False
+    assert item.tool_calling_tested is False
+
+
 def test_dependency_parser_and_warning_acknowledgements():
     assert parse_dependency_ids("2, 1, 2") == [2, 1]
     with pytest.raises(PluginPlanError):

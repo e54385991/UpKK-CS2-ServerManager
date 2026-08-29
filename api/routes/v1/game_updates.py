@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Query, Request, status
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
@@ -20,6 +22,7 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api/v1/servers", tags=["v1-game-updates"])
+logger = logging.getLogger(__name__)
 
 
 def _view(server, snapshot: GameVersionStatus) -> GameUpdatesView:
@@ -46,6 +49,31 @@ async def _inspect(server, *, refresh: bool) -> GameVersionStatus:
     return await inspect_game_version(server, refresh=refresh)
 
 
+def _degraded_snapshot(server) -> GameVersionStatus:
+    installed = getattr(server, "current_game_version", None)
+    return GameVersionStatus(
+        installed_version=installed,
+        installed_build_id=None,
+        installed_source="database" if installed else "unknown",
+        advertised_version=None,
+        up_to_date=None,
+        steam_check_ok=False,
+        steam_message=None,
+        steam_error=(
+            "Cannot reach Steam from this panel. In Docker, allow outbound HTTPS "
+            "to api.steampowered.com or set HTTPS_PROXY on the API container."
+        ),
+    )
+
+
+async def _safe_inspect(server, *, refresh: bool) -> GameVersionStatus:
+    try:
+        return await _inspect(server, refresh=refresh)
+    except Exception:
+        logger.exception("game-updates inspect failed for server %s", getattr(server, "id", "?"))
+        return _degraded_snapshot(server)
+
+
 @router.get("/{server_id}/game-updates", response_model=GameUpdatesView)
 async def get_game_updates(
     server_id: int,
@@ -54,7 +82,7 @@ async def get_game_updates(
     refresh: bool = Query(default=False),
 ) -> GameUpdatesView:
     server = await require_server_access(db, server_id, current_user)
-    snapshot = await _inspect(server, refresh=refresh)
+    snapshot = await _safe_inspect(server, refresh=refresh)
     if refresh:
         server.last_update_check = get_current_time()
         if snapshot.installed_version:
@@ -82,7 +110,7 @@ async def update_game_updates(
         current_user,
         request,
     )
-    snapshot = await _inspect(updated, refresh=False)
+    snapshot = await _safe_inspect(updated, refresh=False)
     return _view(updated, snapshot)
 
 

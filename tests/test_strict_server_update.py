@@ -85,7 +85,7 @@ class FakeStreamingConnection:
     def __init__(self, exit_status):
         self.exit_status = exit_status
 
-    async def create_process(self, command):
+    async def create_process(self, command, **_kwargs):
         return FakeStreamingProcess(self.exit_status)
 
 

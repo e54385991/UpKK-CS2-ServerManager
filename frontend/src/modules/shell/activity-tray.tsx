@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { ListTodo, X } from "lucide-react";
+import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { OpenLiveTerminalButton } from "@/modules/console/open-live-terminal";
 import {
   closeActivityTray,
@@ -36,7 +37,6 @@ import { Badge, StatusDot } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 
-const DEPLOY_ACTIONS = new Set(["deploy", "update", "validate"]);
 const GAME_ACTIONS = new Set(["start", "restart"]);
 
 type TrayTab = "queue" | "failed";
@@ -403,7 +403,7 @@ export function ActivityTray() {
                   >
                     {t("activityOpenOperations")}
                   </Link>
-                  {DEPLOY_ACTIONS.has(selected.action) ? (
+                  {isDeployProgressVisible({ operation: selected }) ? (
                     <OpenLiveTerminalButton
                       serverId={selected.serverId}
                       view="deploy"

@@ -331,8 +331,6 @@ async def get_effective_provider(
     db: AsyncSession, user: User, *, require_tested: bool = True
 ) -> AIProviderConfig | None:
     system = await AISystemSettings.get_or_create(db)
-    if not system.enabled:
-        return None
     personal = await db.get(UserAISettings, user.id)
     if personal is not None and personal.mode == "custom":
         if require_tested and not (
@@ -360,6 +358,8 @@ async def get_effective_provider(
             verbosity=personal.verbosity,
             parallel_tool_calls=personal.parallel_tool_calls,
         )
+    if not system.enabled:
+        return None
     if require_tested and not (
         system.provider_tested and system.tool_calling_tested and system.streaming_tested
     ):

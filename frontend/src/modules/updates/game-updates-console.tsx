@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { openLiveTerminal } from "@/modules/console/open-live-terminal";
 import { refreshCurrentOperationAction } from "@/modules/servers/actions";
 import {
@@ -163,6 +164,9 @@ export function GameUpdatesConsole({
       </CardHeader>
       <CardContent className="space-y-5">
         {banner ? <p className="text-sm text-fg-muted">{banner}</p> : null}
+        {!workspace.steamCheckOk ? (
+          <p className="text-sm text-warn">{t("steamUnreachable")}</p>
+        ) : null}
         {workspace.steamError ? (
           <p className="text-sm text-warn">
             {t("steamError", { error: workspace.steamError })}
@@ -274,7 +278,9 @@ export function GameUpdatesConsole({
           >
             {pending === "validate" ? t("validating") : t("validate")}
           </Button>
-          {startedOp ? (
+          {isDeployProgressVisible({
+            operation: startedOp ?? currentOperation,
+          }) ? (
             <Button
               type="button"
               variant="ghost"

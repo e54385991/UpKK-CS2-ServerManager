@@ -3,6 +3,7 @@
 import type { RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { LoaderCircle, SquareTerminal } from "lucide-react";
+import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { OpenLiveTerminalButton } from "@/modules/console/open-live-terminal";
 import { ForceStopButton } from "@/modules/servers/force-stop-button";
 import {
@@ -109,7 +110,7 @@ export function OperationLiveLog({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {showOpenLiveTerminal ? (
+          {showOpenLiveTerminal && isDeployProgressVisible({ operation }) ? (
             <OpenLiveTerminalButton
               serverId={serverId}
               view="deploy"

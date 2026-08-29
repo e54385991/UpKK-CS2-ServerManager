@@ -101,6 +101,7 @@ export async function getGameUpdates(
   const suffix = refresh ? "?refresh=true" : "";
   const result = await apiFetch<GameUpdatesViewDto>(
     `/api/v1/servers/${serverId}/game-updates${suffix}`,
+    { timeoutMs: refresh ? 25_000 : 20_000 },
   );
   if (!result.ok) return result;
   return { ok: true, data: toGameUpdates(result.data) };
@@ -122,6 +123,7 @@ export async function putGameUpdates(
         enable_auto_update: input.enableAutoUpdate,
         update_check_interval_hours: input.intervalHours,
       }),
+      timeoutMs: 20_000,
     },
   );
   if (!result.ok) return result;

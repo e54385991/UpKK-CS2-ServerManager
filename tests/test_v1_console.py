@@ -123,6 +123,28 @@ def test_v1_console_pane_degrades_when_ssh_is_down(monkeypatch):
     ssh.disconnect.assert_awaited()
 
 
+def test_v1_console_pane_replaces_invalid_utf8_in_tmux_snapshot(monkeypatch):
+    client, _server, _user = _client(monkeypatch)
+    snapshot = "Lobby\ufffd player joined"
+    ssh = SimpleNamespace(
+        connect=AsyncMock(return_value=(True, "ok")),
+        execute_command=AsyncMock(return_value=(True, snapshot, "")),
+        disconnect=AsyncMock(),
+    )
+    monkeypatch.setattr("api.routes.v1.console.SSHManager", lambda: ssh)
+    monkeypatch.setattr(
+        "api.routes.v1.console.find_running_session_manager",
+        AsyncMock(return_value="tmux"),
+    )
+
+    response = client.get("/api/v1/servers/1/console/pane?kind=game")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["running"] is True
+    assert "Lobby" in body["text"]
+    assert "player joined" in body["text"]
+
+
 def test_v1_console_pane_returns_live_tmux_snapshot(monkeypatch):
     client, _server, _user = _client(monkeypatch)
     snapshot = "Update state (0x61) downloading, progress: 12.4\r"

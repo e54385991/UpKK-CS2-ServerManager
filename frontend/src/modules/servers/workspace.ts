@@ -7,6 +7,7 @@ export const SERVER_WORKSPACE_NAV_ROWS = [
     categories: [
       "overview",
       "operations",
+      "config",
       "frameworks",
       "backups",
       "plugins",
@@ -18,7 +19,7 @@ export const SERVER_WORKSPACE_NAV_ROWS = [
   {
     id: "host",
     categories: [
-      "config",
+      "host-config",
       "monitoring",
       "files",
       "console",

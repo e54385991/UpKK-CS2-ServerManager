@@ -62,15 +62,19 @@ export function OpenLiveTerminalButton({
 export function LiveConsolePopups({
   serverId,
   className,
+  showDeploy = false,
 }: {
   serverId: number;
   className?: string;
+  showDeploy?: boolean;
 }) {
   return (
     <div className={className ?? "flex flex-wrap items-center gap-2"}>
       <OpenLiveTerminalButton serverId={serverId} view="ssh" />
       <OpenLiveTerminalButton serverId={serverId} view="game" />
-      <OpenLiveTerminalButton serverId={serverId} view="deploy" />
+      {showDeploy ? (
+        <OpenLiveTerminalButton serverId={serverId} view="deploy" />
+      ) : null}
     </div>
   );
 }

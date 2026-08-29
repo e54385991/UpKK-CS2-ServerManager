@@ -49,6 +49,11 @@ services:
       AI_CREDENTIAL_ENCRYPTION_KEY: ${AI_CREDENTIAL_ENCRYPTION_KEY:-}
       SSH_AUTH_MODE: ${SSH_AUTH_MODE:-password}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      # Optional Steam/GitHub egress (China / locked-down Docker). Do not set
+      # these to empty strings. Example: HTTPS_PROXY=http://host.docker.internal:7890
+      # HTTP_PROXY: ${HTTP_PROXY}
+      # HTTPS_PROXY: ${HTTPS_PROXY}
+      # NO_PROXY: localhost,127.0.0.1,postgres,redis,web,app
     expose:
       - "8000"
     volumes:

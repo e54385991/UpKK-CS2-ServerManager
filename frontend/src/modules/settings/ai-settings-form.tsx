@@ -2,8 +2,12 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { saveAiSettingsAction, testAiSettingsAction } from "@/modules/settings/actions";
-import type { AiProtocol, AiSystemSettings } from "@/modules/settings/types";
+import {
+  refreshAiSettingsAction,
+  saveAiSettingsAction,
+  testAiSettingsAction,
+} from "@/modules/settings/actions";
+import type { AiProtocol, AiSystemPatch, AiSystemSettings } from "@/modules/settings/types";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -60,11 +64,9 @@ export function AiSettingsForm({ initial }: { initial: AiSystemSettings }) {
   const [pending, setPending] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
 
-  async function save() {
-    setPending("save");
-    setBanner(null);
-    const result = await saveAiSettingsAction({
-      enabled,
+  function patch(enabledValue: boolean): AiSystemPatch {
+    return {
+      enabled: enabledValue,
       baseUrl: baseUrl.trim() || null,
       model: model.trim() || null,
       apiProtocol: protocol,
@@ -88,28 +90,36 @@ export function AiSettingsForm({ initial }: { initial: AiSystemSettings }) {
       historyRetentionDays: Number(retention) || settings.historyRetentionDays,
       maxProviderRounds: Number(rounds) || settings.maxProviderRounds,
       maxToolCallsPerRound: Number(toolCalls) || settings.maxToolCallsPerRound,
-    });
+    };
+  }
+
+  function applySaved(next: AiSystemSettings) {
+    setSettings(next);
+    setEnabled(next.enabled);
+    setApiKey("");
+    setClearKey(false);
+  }
+
+  async function save() {
+    setPending("save");
+    setBanner(null);
+    const result = await saveAiSettingsAction(patch(enabled));
     setPending(null);
     if (!result.ok) {
       setBanner(result.error || t("failed"));
       return;
     }
-    setSettings(result.data);
-    setEnabled(result.data.enabled);
-    setApiKey("");
-    setClearKey(false);
+    applySaved(result.data);
     setBanner(t("saved"));
   }
 
   async function test() {
     setPending("test");
     setBanner(null);
-    const result = await testAiSettingsAction({
-      baseUrl: baseUrl.trim() || undefined,
-      model: model.trim() || undefined,
-      apiKey: apiKey.trim() || undefined,
-    });
+    const result = await testAiSettingsAction();
+    const refreshed = result.ok ? await refreshAiSettingsAction() : null;
     setPending(null);
+    if (refreshed?.ok) applySaved(refreshed.data);
     setBanner(result.ok ? result.data.message : result.error || t("failed"));
   }
 

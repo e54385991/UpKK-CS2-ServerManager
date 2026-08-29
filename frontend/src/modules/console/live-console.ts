@@ -5,6 +5,30 @@ import {
   type ServerStatus,
 } from "@/modules/servers/types";
 
+export const DEPLOY_PROGRESS_ACTIONS = new Set(["deploy", "update", "validate"]);
+
+export function isDeployProgressAction(
+  action: string | null | undefined,
+): boolean {
+  return Boolean(action && DEPLOY_PROGRESS_ACTIONS.has(action));
+}
+
+export function isDeployProgressVisible(input: {
+  serverStatus?: ServerStatus | null;
+  lockActive?: boolean;
+  steamcmdRunning?: boolean;
+  operation?: Pick<ServerOperation, "action" | "status"> | null;
+}): boolean {
+  if (input.serverStatus === "deploying") return true;
+  if (input.lockActive) return true;
+  if (input.steamcmdRunning) return true;
+  const operation = input.operation;
+  return (
+    isDeployProgressAction(operation?.action) &&
+    (operation?.status === "queued" || operation?.status === "running")
+  );
+}
+
 export type LiveConsolePreferredView =
   | "auto"
   | "deploy"

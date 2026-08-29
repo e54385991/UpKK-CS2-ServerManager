@@ -20,6 +20,7 @@ const CONSOLE_ROUTES = [
   "/live-console/1?view=game",
   "/live-console/1?view=deploy",
   "/servers/1/config",
+  "/servers/1/host-config",
   "/servers/1/monitoring",
   "/servers/1/schedule",
   "/servers/1/discord",

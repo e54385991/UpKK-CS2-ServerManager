@@ -20,6 +20,7 @@ export function SshReconnectCard({
   sshActiveLeases,
   sshIdleSeconds,
   canForceStop,
+  showDeploy = false,
   health,
 }: {
   serverId: number;
@@ -29,6 +30,7 @@ export function SshReconnectCard({
   sshActiveLeases: number;
   sshIdleSeconds: number | null;
   canForceStop: boolean;
+  showDeploy?: boolean;
   health?: SshHealthFields;
 }) {
   const t = useTranslations("serverDetail");
@@ -101,7 +103,7 @@ export function SshReconnectCard({
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <LiveConsolePopups serverId={serverId} />
+          <LiveConsolePopups serverId={serverId} showDeploy={showDeploy} />
           {canForceStop ? <ForceStopButton serverId={serverId} /> : null}
           <Button
             type="button"

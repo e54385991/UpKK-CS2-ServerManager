@@ -195,6 +195,59 @@ def _configuration_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
+def _is_saved_provider_test(
+    request: AIProviderTestRequest,
+    item: AISystemSettings | UserAISettings,
+) -> bool:
+    """Persist probe flags only when the caller is testing the stored provider.
+
+    The Jinja UI posts ``{}``. The Next console used to post null placeholders
+    for URL / model / key; those must still record the saved configuration.
+    An explicit API key or a different URL / model / protocol is a dry-run.
+    """
+    if request.api_key:
+        return False
+    if request.base_url:
+        try:
+            if normalize_base_url(request.base_url) != item.base_url:
+                return False
+        except AIConfigurationError, ValueError:
+            return False
+    posted_model = (request.model or "").strip()
+    if posted_model and posted_model != (item.model or ""):
+        return False
+    if (
+        "api_protocol" in request.model_fields_set
+        and request.api_protocol is not None
+        and request.api_protocol != item.api_protocol
+    ):
+        return False
+    return True
+
+
+def _apply_saved_provider_test_flags(
+    item: AISystemSettings | UserAISettings,
+    *,
+    text_ok: bool,
+    tool_ok: bool,
+    streaming_ok: bool,
+) -> None:
+    item.provider_tested = text_ok
+    item.tool_calling_tested = tool_ok
+    item.streaming_tested = streaming_ok
+    if isinstance(item, AISystemSettings):
+        all_ok = bool(text_ok and tool_ok and streaming_ok)
+        if not all_ok:
+            item.enabled = False
+        elif (
+            item.base_url
+            and item.model
+            and item.api_key_encrypted
+            and credential_encryption_available()
+        ):
+            item.enabled = True
+
+
 @router.get("/api/system/ai-settings", response_model=AISystemSettingsResponse)
 async def get_system_ai_settings(
     db: DatabaseSession,
@@ -309,13 +362,13 @@ async def test_system_ai_settings(
         text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
     except (AIConfigurationError, ValueError) as exc:
         text_ok, tool_ok, streaming_ok, message = False, False, False, str(exc)
-    saved_configuration = not request.model_fields_set
-    if saved_configuration:
-        item.provider_tested = text_ok
-        item.tool_calling_tested = tool_ok
-        item.streaming_tested = streaming_ok
-        if not (text_ok and tool_ok and streaming_ok):
-            item.enabled = False
+    if _is_saved_provider_test(request, item):
+        _apply_saved_provider_test_flags(
+            item,
+            text_ok=text_ok,
+            tool_ok=tool_ok,
+            streaming_ok=streaming_ok,
+        )
         db.add(item)
         await db.commit()
     return AIProviderTestResponse(
@@ -411,11 +464,13 @@ async def test_user_ai_settings(
         text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
     except (AIConfigurationError, ValueError) as exc:
         text_ok, tool_ok, streaming_ok, message = False, False, False, str(exc)
-    saved_configuration = not request.model_fields_set
-    if saved_configuration:
-        item.provider_tested = text_ok
-        item.tool_calling_tested = tool_ok
-        item.streaming_tested = streaming_ok
+    if _is_saved_provider_test(request, item):
+        _apply_saved_provider_test_flags(
+            item,
+            text_ok=text_ok,
+            tool_ok=tool_ok,
+            streaming_ok=streaming_ok,
+        )
         db.add(item)
         await db.commit()
     return AIProviderTestResponse(

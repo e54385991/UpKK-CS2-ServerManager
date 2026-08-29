@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from services.steam_api_service import steam_api_service
+from services.steam_api_service import steam_api_service, versions_equivalent
 from services.steam_inf_service import steam_inf_service
+
+logger = logging.getLogger(__name__)
 
 InstalledVersionSource = Literal["steam.inf", "database", "unknown"]
 
@@ -25,17 +28,37 @@ class GameVersionStatus:
 
 def versions_match(observed_version: Optional[str], required_version: Optional[str]) -> bool:
     """Compare dotted steam.inf versions with Steam's numeric fallback format."""
-    if not observed_version or not required_version:
-        return False
-    observed_digits = "".join(character for character in observed_version if character.isdigit())
-    required_digits = "".join(character for character in required_version if character.isdigit())
-    return bool(observed_digits and observed_digits == required_digits)
+    return versions_equivalent(observed_version, required_version)
 
 
 async def inspect_game_version(server, *, refresh: bool = False) -> GameVersionStatus:
-    """Read steam.inf (cached unless refresh) and ask Steam whether it is current."""
+    """Read steam.inf (cached unless refresh) and ask Steam whether it is current.
+
+    Interactive page loads must stay fast: Steam is often blocked from Docker,
+    and a missed steam.inf cache would otherwise wait on SSH for 30s.
+    """
+    try:
+        return await _inspect_game_version(server, refresh=refresh)
+    except Exception as exc:
+        logger.exception("inspect_game_version failed for server %s", getattr(server, "id", "?"))
+        installed = getattr(server, "current_game_version", None)
+        return GameVersionStatus(
+            installed_version=installed,
+            installed_build_id=None,
+            installed_source="database" if installed else "unknown",
+            advertised_version=None,
+            up_to_date=None,
+            steam_check_ok=False,
+            steam_message=None,
+            steam_error=str(exc) or "Steam version check failed",
+        )
+
+
+async def _inspect_game_version(server, *, refresh: bool) -> GameVersionStatus:
     ok, installed, build_id = await steam_inf_service.get_steam_inf_details(
-        server, force_refresh=refresh
+        server,
+        force_refresh=refresh,
+        timeout=15.0 if refresh else 6.0,
     )
     source: InstalledVersionSource = "unknown"
     if ok and installed:
@@ -44,7 +67,12 @@ async def inspect_game_version(server, *, refresh: bool = False) -> GameVersionS
         installed = server.current_game_version
         source = "database"
 
-    steam_ok, result = await steam_api_service.check_version(installed)
+    steam_ok, result = await steam_api_service.check_version(
+        installed,
+        timeout=8 if refresh else 3,
+        retries=1,
+        use_cache=not refresh,
+    )
     if not steam_ok or not isinstance(result, dict):
         error = None
         if isinstance(result, dict):

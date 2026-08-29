@@ -10,8 +10,50 @@ from typing import Dict, Optional, Tuple
 
 from modules.http_helper import http_helper
 from modules.utils import get_current_time
+from services.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
+
+STEAM_CS2_VERSION_CACHE_KEY = "steam:cs2:uptodate_check"
+STEAM_CS2_VERSION_CACHE_TTL = 30 * 60
+STEAM_UNREACHABLE_HINT = (
+    "Cannot reach api.steampowered.com from this panel. In Docker, allow outbound "
+    "HTTPS to Steam or set HTTPS_PROXY / HTTP_PROXY on the API container."
+)
+
+
+def steam_version_query(current_version: Optional[str]) -> str:
+    """Steam UpToDateCheck wants a numeric ClientVersion, not PatchVersion dots."""
+    raw = (current_version or "1").strip() or "1"
+    digits = "".join(character for character in raw if character.isdigit())
+    return digits or "1"
+
+
+def versions_equivalent(observed: Optional[str], required: Optional[str]) -> bool:
+    """Compare dotted steam.inf versions with Steam's numeric fallback format."""
+    if not observed or not required:
+        return False
+    observed_digits = "".join(character for character in observed if character.isdigit())
+    required_digits = "".join(character for character in required if character.isdigit())
+    return bool(observed_digits and observed_digits == required_digits)
+
+
+def _looks_like_egress_failure(message: Optional[str]) -> bool:
+    text = (message or "").lower()
+    return any(
+        token in text
+        for token in (
+            "timeout",
+            "timed out",
+            "connect",
+            "name or service",
+            "network",
+            "proxy",
+            "unreachable",
+            "ssl",
+            "certificate",
+        )
+    )
 
 
 class SteamAPIService:
@@ -27,7 +69,13 @@ class SteamAPIService:
     CREATE_ACCOUNT_URL = "https://api.steampowered.com/IGameServersService/CreateAccount/v1/"
 
     @staticmethod
-    async def check_version(current_version: Optional[str] = None) -> Tuple[bool, Optional[Dict]]:
+    async def check_version(
+        current_version: Optional[str] = None,
+        *,
+        timeout: int = 10,
+        retries: int = 3,
+        use_cache: bool = True,
+    ) -> Tuple[bool, Optional[Dict]]:
         """
         Check if a CS2 version is up-to-date using Steam API
 
@@ -46,7 +94,19 @@ class SteamAPIService:
         """
         try:
             # Use "1" as default version if not provided to get the latest version info
-            version_to_check = current_version if current_version else "1"
+            version_to_check = steam_version_query(current_version)
+
+            if use_cache:
+                cached = await redis_manager.get(STEAM_CS2_VERSION_CACHE_KEY)
+                if isinstance(cached, dict) and cached.get("required_version"):
+                    required = str(cached["required_version"])
+                    return True, {
+                        "success": True,
+                        "up_to_date": versions_equivalent(current_version, required),
+                        "required_version": required,
+                        "message": cached.get("message") or "",
+                        "cached": True,
+                    }
 
             # Prepare request parameters
             params = {
@@ -59,14 +119,22 @@ class SteamAPIService:
 
             # Make async HTTP request using http_helper
             success, data, error_msg = await http_helper.get(
-                url=SteamAPIService.VERSION_CHECK_URL, params=params, timeout=10
+                url=SteamAPIService.VERSION_CHECK_URL,
+                params=params,
+                timeout=timeout,
+                retries=retries,
             )
 
             if not success:
                 logger.error(f"Steam API request failed: {error_msg}")
+                hint = (
+                    STEAM_UNREACHABLE_HINT
+                    if _looks_like_egress_failure(error_msg)
+                    else (error_msg or "Failed to connect to Steam API")
+                )
                 return False, {
                     "success": False,
-                    "error": error_msg or "Failed to connect to Steam API",
+                    "error": hint,
                 }
 
             # Parse response
@@ -120,10 +188,18 @@ class SteamAPIService:
                 f"required={required_version}"
             )
 
+            if required_version:
+                await redis_manager.set(
+                    STEAM_CS2_VERSION_CACHE_KEY,
+                    {"required_version": required_version, "message": message},
+                    expire=STEAM_CS2_VERSION_CACHE_TTL,
+                )
+
             return True, result
         except Exception as e:
             logger.error(f"Steam API unexpected error: {str(e)}")
-            return False, {"success": False, "error": f"Unexpected error: {str(e)}"}
+            hint = STEAM_UNREACHABLE_HINT if _looks_like_egress_failure(str(e)) else str(e)
+            return False, {"success": False, "error": hint}
 
     @staticmethod
     def parse_version_from_a2s(a2s_version: Optional[str]) -> Optional[str]:
