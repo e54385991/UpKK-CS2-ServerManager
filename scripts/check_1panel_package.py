@@ -30,8 +30,17 @@ LOCALES = {
 VARIABLE_PATTERN = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+@sha256:[0-9a-f]{64}$")
 FRONTEND_IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+(?:@sha256:[0-9a-f]{64})?$")
+IMAGE_OVERRIDE_PATTERN = re.compile(r"^\$\{[A-Z][A-Z0-9_]*:-(.+)\}$")
 KNOWN_1PANEL_VARIABLES = {"CONTAINER_NAME"}
 REQUIRED_SERVICES = {"app", "frontend", "caddy"}
+DEFAULT_INTERNAL_API_URL = "http://app:8000"
+
+
+def compose_image_ref(raw: object) -> str:
+    if not isinstance(raw, str):
+        return ""
+    match = IMAGE_OVERRIDE_PATTERN.fullmatch(raw)
+    return match.group(1) if match else raw
 
 
 def require_1panel_service(name: str, service: dict[str, Any]) -> None:
@@ -195,21 +204,29 @@ def main() -> None:
         fail("app must not publish a host port; Caddy is the public root")
     if "8000" not in [str(item) for item in app.get("expose", [])]:
         fail("app must expose the private API port 8000")
-    image = app.get("image")
-    if not isinstance(image, str) or IMAGE_PATTERN.fullmatch(image) is None:
+    image = compose_image_ref(app.get("image"))
+    if IMAGE_PATTERN.fullmatch(image) is None:
         fail("app image must use a tag and immutable sha256 digest")
-    frontend_image = frontend.get("image")
-    if (
-        not isinstance(frontend_image, str)
-        or FRONTEND_IMAGE_PATTERN.fullmatch(frontend_image) is None
-    ):
+    frontend_image = compose_image_ref(frontend.get("image"))
+    if FRONTEND_IMAGE_PATTERN.fullmatch(frontend_image) is None:
         fail("frontend image must use a tagged Next.js console image")
     frontend_env = frontend.get("environment")
-    if (
-        not isinstance(frontend_env, dict)
-        or frontend_env.get("INTERNAL_API_URL") != "http://app:8000"
-    ):
+    if not isinstance(frontend_env, dict):
+        fail("frontend environment is required")
+    internal_api = frontend_env.get("INTERNAL_API_URL")
+    if internal_api not in {
+        DEFAULT_INTERNAL_API_URL,
+        f"${{FRONTEND_INTERNAL_API_URL:-{DEFAULT_INTERNAL_API_URL}}}",
+    }:
         fail("frontend must proxy API calls to the private app:8000 listener")
+    if frontend_env.get("PUBLIC_APP_URL"):
+        fail("frontend must not pin PUBLIC_APP_URL; derive the browser origin from Host")
+    extra_hosts = frontend.get("extra_hosts") or []
+    if "host.docker.internal:host-gateway" not in extra_hosts:
+        fail("frontend must set extra_hosts host.docker.internal:host-gateway")
+    app_env = app.get("environment")
+    if not isinstance(app_env, dict) or app_env.get("CONSOLE_PUBLIC_URL") != "${BACKEND_URL}":
+        fail("app must set CONSOLE_PUBLIC_URL from BACKEND_URL")
     caddy_image = caddy.get("image")
     if not isinstance(caddy_image, str) or IMAGE_PATTERN.fullmatch(caddy_image) is None:
         fail("caddy image must use a tag and immutable sha256 digest")
@@ -241,8 +258,19 @@ def main() -> None:
     )
     if not isinstance(backend_field, dict) or backend_field.get("rule") != "paramExtUrl":
         fail("BACKEND_URL must use the 1Panel URL validator")
-    if backend_field.get("default") != "http://0.0.0.0:8000":
-        fail("BACKEND_URL must default to http://0.0.0.0:8000")
+    if backend_field.get("default") != "http://localhost:3000":
+        fail("BACKEND_URL must default to the browser origin http://localhost:3000")
+    if "0.0.0.0" in str(backend_field.get("default")):
+        fail("BACKEND_URL must not default to a bind address")
+    internal_api_field = next(
+        (field for field in version_fields if field.get("envKey") == "FRONTEND_INTERNAL_API_URL"),
+        None,
+    )
+    if (
+        not isinstance(internal_api_field, dict)
+        or internal_api_field.get("default") != DEFAULT_INTERNAL_API_URL
+    ):
+        fail("FRONTEND_INTERNAL_API_URL must default to http://app:8000")
     port_field = next(
         (field for field in version_fields if field.get("envKey") == "PANEL_APP_PORT_HTTP"), None
     )
@@ -251,8 +279,9 @@ def main() -> None:
         or port_field.get("type") != "number"
         or port_field.get("rule") != "paramPort"
         or port_field.get("edit") is not True
+        or port_field.get("default") != 3000
     ):
-        fail("PANEL_APP_PORT_HTTP must be an editable external port field")
+        fail("PANEL_APP_PORT_HTTP must be an editable console port defaulting to 3000")
     if "${PANEL_APP_PORT_HTTP}:80" not in compose_text:
         fail("compose must map PANEL_APP_PORT_HTTP to Caddy port 80")
     if "${PANEL_APP_PORT_HTTP}:8000" in compose_text:
@@ -288,6 +317,9 @@ def main() -> None:
             "PANEL_REDIS_DB": "0",
             "PANEL_APP_PORT_HTTP": "18000",
             "BACKEND_URL": "http://localhost:18000",
+            "FRONTEND_INTERNAL_API_URL": "http://app:8000",
+            "CS2_MANAGER_IMAGE": "",
+            "CS2_FRONTEND_IMAGE": "",
             "SECRET_KEY": "test-secret-key",
             "JWT_SECRET_KEY": "test-jwt-secret-key",
             "GOOGLE_CLIENT_ID": "",

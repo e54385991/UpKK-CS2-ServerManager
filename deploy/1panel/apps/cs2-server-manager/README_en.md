@@ -1,13 +1,17 @@
 ## Introduction
 
-CS2 Server Manager is a Counter-Strike 2 server panel. Caddy publishes the Next.js
-console as the public root; FastAPI stays on the private `/api` listener. It manages
-multiple game servers over SSH and provides deployment, lifecycle, monitoring, plugin,
-and live console features.
+CS2 Server Manager is a Counter-Strike 2 server panel. One store app starts
+Caddy, the Next.js console, and FastAPI together. Caddy is the public root;
+FastAPI stays on the private `app:8000` `/api` listener. Do not install the
+frontend and backend as two 1Panel runtimes.
 
 Copy this directory as a complete package to `/opt/1panel/resource/apps/local/cs2-server-manager/`.
 The app root must contain `data.yml`, `logo.png`, and `1.0.0/data.yml`; do not copy only the
 `1.0.0` directory.
+
+After install, open `http://SERVER_IP:3000` (or the console port you chose).
+Default login is `admin` / `admin123`. Keep the internal API URL as
+`http://app:8000`. Set the browser origin to the real URL, not `0.0.0.0`.
 
 ## Features
 

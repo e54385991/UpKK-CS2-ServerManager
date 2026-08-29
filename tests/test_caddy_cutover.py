@@ -25,19 +25,23 @@ def test_host_caddyfile_proxies_next_on_the_developer_machine() -> None:
     assert "reverse_proxy host.docker.internal:3000" in CADDYFILE_HOST
 
 
-def test_root_compose_publishes_caddy_not_fastapi_as_http() -> None:
-    assert "${HTTP_PORT:-80}:80" in COMPOSE
-    assert "./deploy/Caddyfile:/etc/caddy/Caddyfile:ro" in COMPOSE
+def test_root_compose_publishes_next_and_keeps_fastapi_private() -> None:
+    assert "${HTTP_PORT:-3000}:3000" in COMPOSE
+    assert "./deploy/Caddyfile" not in COMPOSE
     assert "upkk-cs2-server-manager-web" in COMPOSE
-    assert "${API_PORT:-8000}:8000" in COMPOSE
+    assert "${API_PORT:-8000}:8000" not in COMPOSE
+    assert "${POSTGRES_PORT:-5432}:5432" not in COMPOSE
     assert "${FRONTEND_INTERNAL_API_URL:-http://app:8000}" in COMPOSE
     assert "host.docker.internal:host-gateway" in COMPOSE
+    assert 'profiles: ["edge"]' in COMPOSE
 
 
 def test_1panel_compose_publishes_caddy_as_public_root() -> None:
     assert "${PANEL_APP_PORT_HTTP}:80" in PANEL_COMPOSE
     assert "${PANEL_APP_PORT_HTTP}:8000" not in PANEL_COMPOSE
     assert "reverse_proxy frontend:3000" in PANEL_CADDY
-    assert "INTERNAL_API_URL: http://app:8000" in PANEL_COMPOSE
+    assert "INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL:-http://app:8000}" in PANEL_COMPOSE
+    assert "PUBLIC_APP_URL" not in PANEL_COMPOSE
     assert "host.docker.internal:host-gateway" in PANEL_COMPOSE
+    assert "CONSOLE_PUBLIC_URL: ${BACKEND_URL}" in PANEL_COMPOSE
     assert 'expose:\n      - "8000"' in PANEL_COMPOSE

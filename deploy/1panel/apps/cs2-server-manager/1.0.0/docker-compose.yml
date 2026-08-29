@@ -1,6 +1,6 @@
 services:
   app:
-    image: docker.io/e54385991/upkk-cs2-server-manager:b6d5284@sha256:7e100ad1d049f50d3b588aba6e9029750f79ed8394ad3b31621b311a744dc5b9
+    image: ${CS2_MANAGER_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager:b6d5284@sha256:7e100ad1d049f50d3b588aba6e9029750f79ed8394ad3b31621b311a744dc5b9}
     container_name: ${CONTAINER_NAME}
     restart: always
     environment:
@@ -23,6 +23,7 @@ services:
       API_PORT: "8000"
       DEBUG: "False"
       BACKEND_URL: ${BACKEND_URL}
+      CONSOLE_PUBLIC_URL: ${BACKEND_URL}
       LOG_LEVEL: INFO
       ASYNCSSH_LOG_LEVEL: WARNING
       SECRET_KEY: ${SECRET_KEY}
@@ -54,12 +55,11 @@ services:
       start_period: 30s
 
   frontend:
-    image: docker.io/e54385991/upkk-cs2-server-manager-web:main
+    image: ${CS2_FRONTEND_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager-web:main}
     container_name: ${CONTAINER_NAME}-web
     restart: always
     environment:
-      INTERNAL_API_URL: http://app:8000
-      PUBLIC_APP_URL: ${BACKEND_URL}
+      INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL:-http://app:8000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:

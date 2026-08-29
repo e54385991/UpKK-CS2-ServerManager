@@ -1,3 +1,17 @@
+# Zero-config stack. Images come from Docker Hub; no other repo files needed:
+#   curl -fsSLO https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-compose.yml
+#   docker compose up -d
+# Open http://<host>:3000  (admin / admin123). Change the password immediately.
+#
+# Next proxies /api to the `app` service on the private network. Do not set
+# INTERNAL_API_URL to a LAN IP. Secrets are created on first start in app_data.
+#
+# Optional: `docker compose --profile edge up -d` also publishes Caddy on :80.
+# Optional: `docker compose -f docker-compose.yml -f docker-compose.debug.yml up -d`
+# publishes FastAPI / Postgres / Redis for local debugging.
+
+name: cs2-server-manager
+
 services:
   app:
     image: ${CS2_MANAGER_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager:main}
@@ -23,7 +37,7 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: 8000
       DEBUG: ${DEBUG:-False}
-      BACKEND_URL: ${BACKEND_URL:-http://localhost:8000}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:3000}
       CONSOLE_PUBLIC_URL: ${CONSOLE_PUBLIC_URL:-http://localhost:3000}
       LEGACY_HTML_CONSOLE: ${LEGACY_HTML_CONSOLE:-redirect}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -37,9 +51,6 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     expose:
       - "8000"
-    # Public HTTP is Caddy → Next. Keep 8000 published only for local API debugging.
-    ports:
-      - "${API_PORT:-8000}:8000"
     volumes:
       - app_data:/app/data
     depends_on:
@@ -65,12 +76,11 @@ services:
   postgres:
     image: postgres:18.6-alpine
     container_name: cs2_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DATABASE:-cs2_manager}
       POSTGRES_USER: ${POSTGRES_USER:-cs2_manager}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cs2-manager-db}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
     networks:
@@ -88,6 +98,7 @@ services:
   redis:
     image: redis:8.10.1-alpine
     container_name: cs2_redis
+    restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     command:
@@ -99,8 +110,6 @@ services:
         else
           exec redis-server
         fi
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -123,13 +132,9 @@ services:
     container_name: cs2_frontend
     restart: unless-stopped
     environment:
-      # Applied at container start so /api rewrites reach this service, not
-      # the image's build-time 127.0.0.1:8000 default. Override with
-      # FRONTEND_INTERNAL_API_URL if FastAPI is not the `app` service.
       INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL:-http://app:8000}
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost}
-    expose:
-      - "3000"
+    ports:
+      - "${HTTP_PORT:-3000}:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -137,17 +142,44 @@ services:
         condition: service_healthy
     networks:
       - cs2_network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/login').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   caddy:
+    profiles: ["edge"]
     image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
     container_name: cs2_caddy
     restart: unless-stopped
     ports:
-      - "${HTTP_PORT:-80}:80"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - "${EDGE_PORT:-80}:80"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat > /tmp/Caddyfile <<'EOF'
+        {
+        	admin off
+        }
+        :80 {
+        	encode gzip
+        	reverse_proxy frontend:3000 {
+        		flush_interval -1
+        	}
+        }
+        EOF
+        exec caddy run --config /tmp/Caddyfile --adapter caddyfile
     depends_on:
-      - frontend
+      frontend:
+        condition: service_healthy
     networks:
       - cs2_network
 

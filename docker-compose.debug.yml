@@ -1,0 +1,12 @@
+# Optional host ports for local API / database debugging.
+#   docker compose -f docker-compose.yml -f docker-compose.debug.yml up -d
+services:
+  app:
+    ports:
+      - "${API_PORT:-8000}:8000"
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
