@@ -130,6 +130,8 @@ services:
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost}
     expose:
       - "3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       app:
         condition: service_healthy

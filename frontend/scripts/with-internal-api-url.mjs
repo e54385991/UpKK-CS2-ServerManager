@@ -9,12 +9,88 @@
  * `next dev` does not need this: next.config.ts is evaluated on startup.
  */
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const DEFAULT_ORIGIN = "http://127.0.0.1:8000";
 const here = dirname(fileURLToPath(import.meta.url));
+
+export function hostGatewayFromRouteTable(text) {
+  for (const line of text.split(/\r?\n/).slice(1)) {
+    const cols = line.trim().split(/\s+/);
+    if (cols[1] !== "00000000" || !cols[2] || cols[2] === "00000000") continue;
+    if (!/^[0-9a-fA-F]{8}$/.test(cols[2])) continue;
+    const bytes = [];
+    for (let i = 6; i >= 0; i -= 2) {
+      bytes.push(Number.parseInt(cols[2].slice(i, i + 2), 16));
+    }
+    return bytes.join(".");
+  }
+  return undefined;
+}
+
+export function apiOriginCandidates(configured, gateway) {
+  const origin = configured.replace(/\/$/, "");
+  const unique = [origin];
+  try {
+    const url = new URL(origin);
+    const port = url.port || (url.protocol === "https:" ? "443" : "80");
+    const extras = [];
+    if (gateway && gateway !== url.hostname) {
+      extras.push(`${url.protocol}//${gateway}:${port}`);
+    }
+    if (url.hostname !== "host.docker.internal") {
+      extras.push(`${url.protocol}//host.docker.internal:${port}`);
+    }
+    for (const item of extras) {
+      if (!unique.includes(item)) unique.push(item);
+    }
+  } catch {
+    // Keep the configured origin when it is not a URL.
+  }
+  return unique;
+}
+
+async function originIsHealthy(origin, fetchImpl, timeoutMs = 800) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(`${origin}/health`, {
+      signal: ac.signal,
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function pickReachableApiOrigin(
+  configured,
+  fetchImpl = fetch,
+  gateway = existsSync("/proc/net/route")
+    ? hostGatewayFromRouteTable(readFileSync("/proc/net/route", "utf8"))
+    : undefined,
+) {
+  const candidates = apiOriginCandidates(configured, gateway);
+  for (const origin of candidates) {
+    if (await originIsHealthy(origin, fetchImpl)) {
+      if (origin !== configured) {
+        console.info(
+          `[frontend] ${configured} is not reachable from this process; using ${origin}`,
+        );
+      }
+      return origin;
+    }
+  }
+  console.warn(
+    `[frontend] no candidate answered /health (${candidates.join(", ")}). keeping ${configured}`,
+  );
+  return configured;
+}
 
 export function rewriteApiDestinations(manifest, origin) {
   const groups = manifest?.rewrites;
@@ -76,6 +152,27 @@ function resolveAppRoot() {
   return process.cwd();
 }
 
+export function resolveStandaloneServer(appRoot) {
+  const candidates = [
+    resolve(process.cwd(), "server.js"),
+    resolve(appRoot, ".next/standalone/server.js"),
+  ];
+  return candidates.find((filePath) => existsSync(filePath));
+}
+
+export function prepareStandaloneAssets(appRoot, serverPath) {
+  const standaloneRoot = dirname(serverPath);
+  const copies = [
+    [resolve(appRoot, ".next/static"), resolve(standaloneRoot, ".next/static")],
+    [resolve(appRoot, "public"), resolve(standaloneRoot, "public")],
+  ];
+  for (const [from, to] of copies) {
+    if (existsSync(from)) {
+      cpSync(from, to, { recursive: true, force: true });
+    }
+  }
+}
+
 function applyManifest(filePath, origin) {
   if (!existsSync(filePath)) return false;
   const data = JSON.parse(readFileSync(filePath, "utf8"));
@@ -85,29 +182,7 @@ function applyManifest(filePath, origin) {
   return true;
 }
 
-function startServer(appRoot) {
-  const standalone = existsSync(resolve(process.cwd(), "server.js"));
-  if (standalone) {
-    const child = spawn(process.execPath, [resolve(process.cwd(), "server.js")], {
-      stdio: "inherit",
-      env: process.env,
-    });
-    child.on("exit", (code, signal) => {
-      if (signal) {
-        process.kill(process.pid, signal);
-        return;
-      }
-      process.exit(code ?? 1);
-    });
-    return;
-  }
-
-  const nextBin = resolve(appRoot, "node_modules/next/dist/bin/next");
-  const child = spawn(process.execPath, [nextBin, "start", "--port", process.env.PORT || "3000"], {
-    stdio: "inherit",
-    env: process.env,
-    cwd: appRoot,
-  });
+function followChild(child) {
   child.on("exit", (code, signal) => {
     if (signal) {
       process.kill(process.pid, signal);
@@ -117,15 +192,48 @@ function startServer(appRoot) {
   });
 }
 
-function main() {
+function startServer(appRoot) {
+  const serverPath = resolveStandaloneServer(appRoot);
+  if (serverPath) {
+    prepareStandaloneAssets(appRoot, serverPath);
+    const standaloneRoot = dirname(serverPath);
+    const child = spawn(process.execPath, [serverPath], {
+      stdio: "inherit",
+      cwd: standaloneRoot,
+      env: {
+        ...process.env,
+        PORT: process.env.PORT || "3000",
+        HOSTNAME: process.env.HOSTNAME || "0.0.0.0",
+      },
+    });
+    followChild(child);
+    return;
+  }
+
+  console.warn(
+    "[frontend] standalone server.js not found; falling back to next start",
+  );
+  const nextBin = resolve(appRoot, "node_modules/next/dist/bin/next");
+  const child = spawn(process.execPath, [nextBin, "start", "--port", process.env.PORT || "3000"], {
+    stdio: "inherit",
+    env: process.env,
+    cwd: appRoot,
+  });
+  followChild(child);
+}
+
+async function main() {
   const appRoot = resolveAppRoot();
   for (const name of [".env", ".env.local", ".env.production", ".env.production.local"]) {
     loadEnvFile(resolve(appRoot, name));
   }
 
-  const origin = (process.env.INTERNAL_API_URL || DEFAULT_ORIGIN).replace(/\/$/, "");
+  const configured = (process.env.INTERNAL_API_URL || DEFAULT_ORIGIN).replace(/\/$/, "");
+  const origin = await pickReachableApiOrigin(configured);
+  process.env.INTERNAL_API_URL = origin;
   const manifests = [
     resolve(appRoot, ".next/routes-manifest.json"),
+    resolve(appRoot, ".next/standalone/.next/routes-manifest.json"),
     resolve(process.cwd(), ".next/routes-manifest.json"),
   ];
   for (const filePath of new Set(manifests)) {
@@ -136,5 +244,8 @@ function main() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  main();
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
 }

@@ -21,6 +21,7 @@ export async function apiFetch<T>(
     const response = await fetch(`${internalApiUrl()}${path}`, {
       ...init,
       cache: "no-store",
+      signal: init?.signal ?? AbortSignal.timeout(8000),
       headers: {
         accept: "application/json",
         ...(token ? { authorization: `Bearer ${token}` } : {}),

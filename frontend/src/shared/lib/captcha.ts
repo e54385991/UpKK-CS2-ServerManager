@@ -17,6 +17,7 @@ async function fetchJsonChallenge(): Promise<CaptchaChallenge | null> {
   try {
     const response = await fetch(`/api/captcha/challenge?ts=${Date.now()}`, {
       cache: "no-store",
+      signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return null;
     const body = (await response.json()) as ChallengeJson;
@@ -34,6 +35,7 @@ async function fetchImageChallenge(): Promise<CaptchaChallenge | null> {
   try {
     const response = await fetch(`/api/captcha/image/refresh?ts=${Date.now()}`, {
       cache: "no-store",
+      signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return null;
     const token = response.headers.get("X-Captcha-Token");
