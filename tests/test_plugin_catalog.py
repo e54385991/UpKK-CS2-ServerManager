@@ -18,9 +18,25 @@ from services.plugin_catalog import (
     catalog_lookup_key,
     collect_export_bundle,
     conflict_to_catalog_item,
+    delete_market_plugin,
+    ensure_default_plugin_catalog,
     import_plugin_catalog,
+    load_default_plugin_catalog,
     plugin_to_catalog_entry,
 )
+
+
+def test_default_plugin_catalog_is_portable_and_self_contained():
+    request = load_default_plugin_catalog()
+    assert request.format == "upkk-cs2-plugin-catalog"
+    assert request.version == 1
+    assert request.plugins
+    urls = {catalog_lookup_key(plugin.github_url) for plugin in request.plugins}
+    assert "https://github.com/kzglobalteam/cs2kz-metamod" in urls
+    assert "https://github.com/roflmuffin/counterstrikesharp" in urls
+    for plugin in request.plugins:
+        for dependency in plugin.dependencies:
+            assert catalog_lookup_key(dependency) in urls, dependency
 
 
 def test_catalog_github_url_strips_releases_and_git_suffix():
@@ -123,6 +139,12 @@ class _FakeSession:
     async def commit(self):
         await self.flush()
         self.committed = True
+
+    async def delete(self, obj):
+        if obj in self.plugins:
+            self.plugins.remove(obj)
+        if obj in self.rules:
+            self.rules.remove(obj)
 
 
 def _entry(**overrides) -> PluginCatalogEntry:
@@ -323,3 +345,97 @@ async def test_import_update_applies_conflict_rules_by_url(monkeypatch):
     assert existing_rule.severity == "hard"
     assert existing_rule.reason == "cannot coexist"
     assert existing_rule.is_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_ensure_default_plugin_catalog_imports_when_empty(monkeypatch):
+    session = _FakeSession()
+    monkeypatch.setattr(
+        "services.plugin_catalog._load_market_plugins",
+        AsyncMock(side_effect=lambda _db: list(session.plugins)),
+    )
+    monkeypatch.setattr(
+        "services.plugin_catalog._load_conflict_rules",
+        AsyncMock(side_effect=lambda _db: list(session.rules)),
+    )
+    summary = await ensure_default_plugin_catalog(session)
+    assert summary is not None
+    assert summary.imported == len(load_default_plugin_catalog().plugins)
+    assert summary.failed == 0
+    assert session.committed is True
+    titles = {plugin.title for plugin in session.plugins}
+    assert "cs2kz-metamod" in titles
+    assert "CounterStrikeSharp" in titles
+
+
+@pytest.mark.asyncio
+async def test_ensure_default_plugin_catalog_skips_when_populated(monkeypatch):
+    existing = MarketPlugin(
+        id=3,
+        github_url="https://github.com/example/already-there",
+        title="Already",
+        category=PluginCategory.OTHER,
+    )
+    session = _FakeSession(plugins=[existing])
+    load = AsyncMock(return_value=[existing])
+    monkeypatch.setattr("services.plugin_catalog._load_market_plugins", load)
+    summary = await ensure_default_plugin_catalog(session)
+    assert summary is None
+    assert session.committed is False
+    assert session.plugins == [existing]
+    load.assert_awaited_once()
+
+
+def _catalog_session(session: _FakeSession, monkeypatch):
+    monkeypatch.setattr(
+        "services.plugin_catalog._load_market_plugins",
+        AsyncMock(side_effect=lambda _db: list(session.plugins)),
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_market_plugin_returns_none_when_missing(monkeypatch):
+    session = _FakeSession()
+    _catalog_session(session, monkeypatch)
+    assert await delete_market_plugin(session, 99) is None
+    assert session.committed is False
+
+
+@pytest.mark.asyncio
+async def test_delete_market_plugin_strips_dependency_ids(monkeypatch):
+    lib = MarketPlugin(
+        id=1,
+        github_url="https://github.com/example/lib",
+        title="Lib",
+        category=PluginCategory.LIBRARY,
+    )
+    target = MarketPlugin(
+        id=2,
+        github_url="https://github.com/example/gone",
+        title="Gone",
+        category=PluginCategory.UTILITY,
+    )
+    dependent = MarketPlugin(
+        id=3,
+        github_url="https://github.com/example/app",
+        title="App",
+        category=PluginCategory.GAME_MODE,
+        dependencies="1,2",
+    )
+    last_dep = MarketPlugin(
+        id=4,
+        github_url="https://github.com/example/solo",
+        title="Solo",
+        category=PluginCategory.OTHER,
+        dependencies="2",
+    )
+    session = _FakeSession(plugins=[lib, target, dependent, last_dep])
+    _catalog_session(session, monkeypatch)
+
+    deleted = await delete_market_plugin(session, 2)
+
+    assert deleted is target
+    assert target not in session.plugins
+    assert dependent.dependencies == "1"
+    assert last_dep.dependencies is None
+    assert session.committed is True

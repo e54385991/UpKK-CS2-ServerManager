@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { ServerA2SPanel } from "@/modules/servers/a2s-panel";
 import { getDiagnosticRecommendation } from "@/modules/servers/diagnostics-api";
 import { PluginDiagnosticsPanel } from "@/modules/servers/diagnostics-panel";
-import { getServer } from "@/modules/servers/api";
+import { getServer, getServerA2SQuery, listMonitoringLogs } from "@/modules/servers/api";
 import { ServerMonitoringForm } from "@/modules/servers/monitoring-form";
 import { parseServerId } from "@/modules/servers/workspace";
 import { Card } from "@/shared/ui/card";
@@ -22,10 +23,12 @@ export default async function ServerMonitoringPage({
   const serverId = parseServerId(id);
   if (serverId == null) notFound();
 
-  const [t, result, recommendation] = await Promise.all([
+  const [t, result, recommendation, lastQuery, logs] = await Promise.all([
     getTranslations("serverDetail"),
     getServer(serverId),
     getDiagnosticRecommendation(serverId),
+    getServerA2SQuery(serverId),
+    listMonitoringLogs(serverId, "a2s_check"),
   ]);
   if (!result.ok && result.status === 404) notFound();
   if (!result.ok) {
@@ -41,6 +44,11 @@ export default async function ServerMonitoringPage({
       <PluginDiagnosticsPanel
         serverId={serverId}
         recommendation={recommendation.ok ? recommendation.data : null}
+      />
+      <ServerA2SPanel
+        server={result.data}
+        initialQuery={lastQuery.ok ? lastQuery.data : null}
+        initialLogs={logs.ok ? logs.data : []}
       />
       <ServerMonitoringForm server={result.data} />
     </div>

@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 import { Input, Label } from "@/shared/ui/input";
+import { Skeleton } from "@/shared/ui/skeleton";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -111,7 +112,7 @@ export function CleanupConsole({ serverId }: { serverId: number }) {
   }
 
   return (
-    <Card>
+    <Card data-testid="cleanup-console">
       <CardHeader>
         <div>
           <CardTitle>{t("title")}</CardTitle>
@@ -222,5 +223,15 @@ export function CleanupConsole({ serverId }: { serverId: number }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+export function CleanupPanelSkeleton() {
+  return (
+    <div className="max-w-5xl rounded-lg border border-line bg-surface p-5 shadow-panel">
+      <Skeleton className="mb-4 h-4 w-40" />
+      <Skeleton className="mb-2 h-4 w-72" />
+      <Skeleton className="h-48 w-full" />
+    </div>
   );
 }

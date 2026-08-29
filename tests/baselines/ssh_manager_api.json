@@ -4,6 +4,7 @@
   "check_session_manager_available": "(self, server: modules.models.Server, timeout: int = 10) -> Tuple[bool, str]",
   "connect": "(self, server: modules.models.Server) -> Tuple[bool, str]",
   "create_directory": "(self, path: str, server: modules.models.Server) -> Tuple[bool, str]",
+  "create_interactive_process": "(self, command: str | None = None)",
   "delete_path": "(self, path: str, server: modules.models.Server) -> Tuple[bool, str]",
   "deploy_cs2_server": "(self, server: modules.models.Server, progress_callback=None) -> Tuple[bool, str]",
   "disconnect": "(self)",

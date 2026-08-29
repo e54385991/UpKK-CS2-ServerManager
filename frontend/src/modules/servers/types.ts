@@ -67,6 +67,51 @@ export type DiskSpace = {
   readonly usedPercent: number | null;
 };
 
+export type A2SServerInfo = {
+  readonly serverName: string | null;
+  readonly mapName: string | null;
+  readonly folder: string | null;
+  readonly game: string | null;
+  readonly playerCount: number | null;
+  readonly maxPlayers: number | null;
+  readonly botCount: number | null;
+  readonly serverType: string | null;
+  readonly platform: string | null;
+  readonly passwordProtected: boolean | null;
+  readonly vacEnabled: boolean | null;
+  readonly version: string | null;
+  readonly ping: number | null;
+  readonly keywords: string | null;
+};
+
+export type A2SPlayer = {
+  readonly name: string;
+  readonly score: number;
+  readonly duration: number;
+};
+
+export type A2SQuery = {
+  readonly queryHost: string;
+  readonly queryPort: number;
+  readonly success: boolean;
+  readonly cached: boolean;
+  readonly live: boolean;
+  readonly serverInfo: A2SServerInfo | null;
+  readonly players: readonly A2SPlayer[];
+  readonly timestamp: string | null;
+  readonly lastUpdated: string | null;
+  readonly responseTimeMs: number | null;
+  readonly error: string | null;
+};
+
+export type MonitoringLog = {
+  readonly id: string;
+  readonly eventType: string;
+  readonly status: string;
+  readonly message: string;
+  readonly createdAt: string | null;
+};
+
 export type A2SCache = {
   readonly serverId: number;
   readonly cached: boolean;

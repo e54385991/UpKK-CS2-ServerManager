@@ -7,8 +7,10 @@ same URLs. Local storage still keeps comma-separated IDs and ID-pair rules.
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -23,6 +25,8 @@ from modules.schemas.plugins import (
     PluginCatalogImportResult,
 )
 from services.plugins.common import PluginPlanError, parse_dependency_ids
+
+DEFAULT_PLUGIN_CATALOG_PATH = Path(__file__).resolve().parent / "defaults" / "plugin-catalog.json"
 
 _GITHUB_REPO = re.compile(
     r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/.*)?$",
@@ -156,6 +160,22 @@ async def _load_market_plugins(db: AsyncSession) -> list[MarketPlugin]:
 async def _load_conflict_rules(db: AsyncSession) -> list[PluginConflictRule]:
     result = await db.execute(select(PluginConflictRule).order_by(PluginConflictRule.id))
     return list(result.scalars().all())
+
+
+def load_default_plugin_catalog() -> PluginCatalogImportRequest:
+    """Load the shipped marketplace catalog used for empty-database seeding."""
+    payload = json.loads(DEFAULT_PLUGIN_CATALOG_PATH.read_text(encoding="utf-8"))
+    return PluginCatalogImportRequest.model_validate(payload)
+
+
+async def ensure_default_plugin_catalog(
+    db: AsyncSession,
+) -> PluginCatalogImportResponse | None:
+    """Import the shipped catalog when the marketplace has no plugins."""
+    existing = await _load_market_plugins(db)
+    if existing:
+        return None
+    return await import_plugin_catalog(db, load_default_plugin_catalog())
 
 
 async def collect_export_bundle(db: AsyncSession) -> PluginCatalogExport:
@@ -455,3 +475,30 @@ async def import_plugin_catalog(
 
     await db.commit()
     return _summarize(results)
+
+
+async def delete_market_plugin(db: AsyncSession, plugin_id: int) -> MarketPlugin | None:
+    """Remove a catalog listing and drop it from other plugins' dependency lists.
+
+    Conflict rows cascade in the database. Managed-plugin tracking is set
+    null. Files already on game servers stay until they are uninstalled.
+    """
+    plugins = await _load_market_plugins(db)
+    target = next((item for item in plugins if item.id == plugin_id), None)
+    if target is None:
+        return None
+    for other in plugins:
+        if other.id == plugin_id or not other.dependencies:
+            continue
+        try:
+            dep_ids = parse_dependency_ids(other.dependencies)
+        except PluginPlanError:
+            continue
+        if plugin_id not in dep_ids:
+            continue
+        remaining = [dep_id for dep_id in dep_ids if dep_id != plugin_id]
+        other.dependencies = ",".join(str(dep_id) for dep_id in remaining) or None
+        db.add(other)
+    await db.delete(target)
+    await db.commit()
+    return target

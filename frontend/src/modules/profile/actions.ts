@@ -6,6 +6,7 @@ import type { ActionResultDto, AssistantProviderTestViewDto } from "@/shared/api
 import {
   changePassword,
   generateApiKey,
+  generateGslt,
   getApiKey,
   getProfile,
   getProfileAi,
@@ -23,6 +24,7 @@ import type {
   ProfileAiSettings,
   ProfileApiKey,
   ProfileCredentialsPatch,
+  ProfileGslt,
   ProfileS3Patch,
   ProfileS3Settings,
   ProfileS3Test,
@@ -81,6 +83,14 @@ export async function revokeApiKeyAction(): Promise<ApiResult<ActionResultDto>> 
   const result = await revokeApiKey();
   if (result.ok) revalidateProfile();
   return result;
+}
+
+export async function generateGsltAction(input: {
+  readonly serverName?: string;
+  readonly captchaToken: string;
+  readonly captchaCode: string;
+}): Promise<ApiResult<ProfileGslt>> {
+  return generateGslt(input);
 }
 
 export async function refreshS3Action(): Promise<ApiResult<ProfileS3Settings>> {

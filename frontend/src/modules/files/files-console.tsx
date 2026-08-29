@@ -6,9 +6,12 @@ import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import {
   ArrowUp,
+  Check,
+  Copy,
   Download,
   FileArchive,
   FileText,
+  Folder,
   FolderPlus,
   Pencil,
   RefreshCw,
@@ -30,7 +33,11 @@ import {
   saveFileContentAction,
   startUrlDownloadAction,
 } from "@/modules/files/actions";
+import { FilesPathBar } from "@/modules/files/path-bar";
+import { parentPath } from "@/modules/files/paths";
 import {
+  ARCHIVE_FORMATS_LABEL,
+  archiveExtensionLabel,
   formatFileSize,
   isArchiveFile,
   isTextFile,
@@ -83,9 +90,13 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const [stripFolder, setStripFolder] = useState(false);
   const [extractTaskId, setExtractTaskId] = useState<string | null>(null);
   const [extractTask, setExtractTask] = useState<FileTask | null>(null);
+  const [copiedEntry, setCopiedEntry] = useState<string | null>(null);
 
   const serverId = workspace.serverId;
   const canMutate = workspace.sshOk && !pending;
+  const visibleFiles = workspace.files.filter(
+    (entry) => entry.name !== "." && entry.name !== "..",
+  );
 
   const load = useCallback(
     async (path: string) => {
@@ -167,8 +178,6 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     if (ok) await load(workspace.path);
   }
 
-  const crumbs = breadcrumbs(workspace.root, workspace.path);
-
   return (
     <div className="space-y-6">
       {banner ? (
@@ -233,24 +242,13 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <nav className="flex flex-wrap items-center gap-1 text-sm">
-            {crumbs.map((crumb, index) => (
-              <span key={crumb.path} className="flex items-center gap-1">
-                {index > 0 ? <span className="text-fg-subtle">/</span> : null}
-                {index === crumbs.length - 1 ? (
-                  <span className="font-medium text-fg">{crumb.name}</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="text-primary hover:underline"
-                    onClick={() => void load(crumb.path)}
-                  >
-                    {crumb.name}
-                  </button>
-                )}
-              </span>
-            ))}
-          </nav>
+          <FilesPathBar
+            key={workspace.path}
+            root={workspace.root}
+            path={workspace.path}
+            disabled={Boolean(pending)}
+            onGo={(next) => void load(next)}
+          />
 
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-48 flex-1">
@@ -301,7 +299,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
 
           {!workspace.sshOk ? (
             <p className="text-sm text-fg-muted">{t("listLocked")}</p>
-          ) : workspace.files.length === 0 ? (
+          ) : visibleFiles.length === 0 ? (
             <p className="text-sm text-fg-muted">{t("empty")}</p>
           ) : (
             <div className="overflow-x-auto">
@@ -315,18 +313,28 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {workspace.files.map((entry) => (
+                  {visibleFiles.map((entry) => (
                     <tr key={entry.path}>
                       <td className="py-2 pr-3">
                         <button
                           type="button"
-                          className="text-left font-medium text-fg hover:text-primary"
+                          className="inline-flex items-center gap-2 text-left font-medium text-fg hover:text-primary"
                           onClick={() => {
                             if (entry.type === "directory") void load(entry.path);
                           }}
                         >
+                          {entry.type === "directory" ? (
+                            <Folder className="size-4 text-fg-subtle" />
+                          ) : isArchiveFile(entry.name) ? (
+                            <FileArchive className="size-4 text-fg-subtle" />
+                          ) : null}
                           {entry.name}
                         </button>
+                        {entry.type === "file" && isArchiveFile(entry.name) ? (
+                          <Badge tone="info" className="ml-2">
+                            {archiveExtensionLabel(entry.name)}
+                          </Badge>
+                        ) : null}
                         {entry.isSymlink ? (
                           <Badge tone="info" className="ml-2">
                             symlink
@@ -343,6 +351,16 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                       </td>
                       <td className="py-2">
                         <div className="flex flex-wrap gap-1">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label={t("copyEntryPath")}
+                            data-testid={`files-entry-copy-${entry.name}`}
+                            onClick={() => void copyEntryPath(entry.path)}
+                          >
+                            {copiedEntry === entry.path ? <Check /> : <Copy />}
+                          </Button>
                           {entry.type === "file" ? (
                             <Button
                               type="button"
@@ -604,7 +622,12 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
         <Card>
           <CardHeader>
             <CardTitle>{t("extractTitle")}</CardTitle>
-            <CardDescription>{extractEntry.path}</CardDescription>
+            <CardDescription>
+              {extractEntry.path}
+              <span className="mt-1 block">
+                {t("formatsHelp", { formats: ARCHIVE_FORMATS_LABEL })}
+              </span>
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {inspect ? (
@@ -764,25 +787,14 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     }
     setInspect(result.data);
   }
-}
 
-function parentPath(path: string): string {
-  const trimmed = path.replace(/\/+$/, "");
-  const index = trimmed.lastIndexOf("/");
-  return index <= 0 ? "/" : trimmed.slice(0, index);
-}
-
-function breadcrumbs(root: string, path: string): { name: string; path: string }[] {
-  const normalizedRoot = root.replace(/\/+$/, "") || "/";
-  const normalized = path.replace(/\/+$/, "") || normalizedRoot;
-  const parts = [];
-  parts.push({ name: normalizedRoot.split("/").pop() || normalizedRoot, path: normalizedRoot });
-  if (normalized === normalizedRoot) return parts;
-  const rest = normalized.slice(normalizedRoot.length).split("/").filter(Boolean);
-  let current = normalizedRoot;
-  for (const part of rest) {
-    current = `${current}/${part}`;
-    parts.push({ name: part, path: current });
+  async function copyEntryPath(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedEntry(value);
+      window.setTimeout(() => setCopiedEntry(null), 1600);
+    } catch {
+      setCopiedEntry(null);
+    }
   }
-  return parts;
 }

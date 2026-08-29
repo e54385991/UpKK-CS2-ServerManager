@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 OPERATION_TTL_SECONDS = 24 * 60 * 60
 FAILED_RETENTION_SECONDS = 7 * 24 * 60 * 60
-EVENT_LIMIT = 5000
+EVENT_LIMIT = 300
 SUBSCRIBER_QUEUE_LIMIT = 256
 ACTIVE_STATUSES = frozenset({"queued", "running"})
 TERMINAL_EVENT_TYPES = frozenset({"operation_completed", "operation_failed"})
@@ -40,6 +40,12 @@ def _as_datetime(value: object) -> datetime | None:
     if stamp.tzinfo is None:
         stamp = stamp.replace(tzinfo=timezone.utc)
     return stamp
+
+
+def _trim_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if len(events) > EVENT_LIMIT:
+        return events[-EVENT_LIMIT:]
+    return events
 
 
 def _record_ttl(record: dict[str, Any]) -> int:
@@ -389,8 +395,7 @@ class ServerOperationHub:
         }
         async with self._lock:
             self._events[operation_id].append(event)
-            if len(self._events[operation_id]) > EVENT_LIMIT:
-                self._events[operation_id] = self._events[operation_id][-EVENT_LIMIT:]
+            self._events[operation_id] = _trim_events(self._events[operation_id])
             queues = list(self._queues.get(operation_id, set()))
         await self._persist_event(operation_id, event)
         for queue in queues:
@@ -430,7 +435,7 @@ class ServerOperationHub:
             if events:
                 async with self._lock:
                     if not self._events.get(operation_id):
-                        self._events[operation_id] = events
+                        self._events[operation_id] = _trim_events(events)
         replayed: list[dict[str, Any]] = []
         for event in events:
             try:
@@ -618,7 +623,7 @@ class ServerOperationHub:
                 events.append(json.loads(value))
             except TypeError, json.JSONDecodeError:
                 continue
-        return events
+        return _trim_events(events)
 
 
 server_operation_hub = ServerOperationHub()

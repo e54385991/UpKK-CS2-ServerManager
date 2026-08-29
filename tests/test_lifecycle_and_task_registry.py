@@ -113,9 +113,10 @@ def test_startup_upgrades_alembic_head_before_any_service():
     source = inspect.getsource(ApplicationLifecycle.start)
     migrate_at = source.index("await migrate_db()")
     init_at = source.index("await init_db()")
+    catalog_at = source.index("ensure_default_plugin_catalog")
     discord_at = source.index("discord_bot_manager.start")
     ready_at = source.index("self._started = True")
-    assert migrate_at < init_at < discord_at < ready_at
+    assert migrate_at < init_at < catalog_at < discord_at < ready_at
     assert "upgrade_database" in inspect.getsource(migrate_db)
     agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "uv run python scripts/check_baseline.py" in agents

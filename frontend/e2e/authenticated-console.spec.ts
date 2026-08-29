@@ -35,10 +35,20 @@ test("overview greets the admin and shows fleet stats", async ({ page }) => {
 
 test("activity tray shows queue and failed tabs", async ({ page }) => {
   await page.goto("/overview");
-  await page.getByTestId("activity-tray-toggle").click();
+  const toggle = page.getByTestId("activity-tray-toggle");
+  await expect(toggle).toBeVisible();
+  if ((await page.getByTestId("activity-tray-count").count()) > 0) {
+    await expect(toggle).toHaveAttribute("data-busy", "true");
+    await expect(toggle).toContainText(/剩余|remaining/i);
+  }
+  await toggle.click();
   await expect(page.getByTestId("activity-tray-panel")).toBeVisible();
   await expect(page.getByTestId("activity-tray-tab-queue")).toBeVisible();
   await expect(page.getByTestId("activity-tray-tab-failed")).toBeVisible();
+  if ((await page.getByTestId("activity-command").count()) > 0) {
+    await expect(page.getByTestId("activity-command")).toBeVisible();
+    await expect(page.getByTestId("activity-status")).toBeVisible();
+  }
   await page.getByTestId("activity-tray-tab-failed").click();
   await expect(page.getByTestId("activity-tray-tab-failed")).toHaveAttribute(
     "aria-selected",
@@ -104,6 +114,11 @@ test("server workspace two-row nav reaches named surfaces", async ({ page }) => 
   await expect(
     page.getByRole("heading", { name: /自定义快捷命令|Custom quick commands/ }),
   ).toBeVisible();
+  await expect(page.getByTestId("cleanup-console")).toHaveCount(0);
+
+  await nav.getByRole("link", { name: /日志与垃圾清理|Log & junk cleanup/ }).click();
+  await expect(page).toHaveURL(/\/servers\/1\/cleanup$/);
+  await expect(page.getByTestId("cleanup-console")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: /日志与垃圾清理|Log & junk cleanup/ }),
   ).toBeVisible();
@@ -200,6 +215,16 @@ test("server workspace two-row nav reaches named surfaces", async ({ page }) => 
   await expect(
     nav.getByRole("link", { name: /^文件$|^Files$/ }),
   ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page
+      .getByTestId("files-path-input")
+      .or(page.getByText(/暂时无法加载文件|Unable to load the files/)),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByTestId("files-path-copy")
+      .or(page.getByText(/暂时无法加载文件|Unable to load the files/)),
+  ).toBeVisible();
 
   await nav.getByRole("link", { name: /^控制台$|^Console$/ }).click();
   await expect(page).toHaveURL(/\/servers\/1\/console$/);
@@ -306,6 +331,19 @@ test("server config splits game and host into two categories", async ({
   await expect(page.getByTestId("server-config-tabs")).toBeVisible();
   await expect(page.getByTestId("game-config-form")).toBeVisible();
   await expect(page.locator("#serverName")).toBeVisible();
+  await expect(page.getByTestId("gslt-field")).toBeVisible();
+  await expect(page.getByTestId("additional-parameters")).toBeVisible();
+  await expect(
+    page.getByText(/host_workshop_map/),
+  ).toBeVisible();
+  await page.getByTestId("additional-parameters-use-ze").click();
+  await expect(page.getByTestId("additional-parameters-input")).toHaveValue(
+    /host_workshop_map 3171881962/,
+  );
+  await expect(page.getByTestId("gslt-generate")).toBeVisible();
+  await page.getByTestId("gslt-generate").click();
+  await expect(page.getByTestId("gslt-dialog")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: /关闭|Close/ }).first().click();
   await expect(page.getByTestId("apply-system-defaults")).toHaveCount(0);
   await expect(page.locator("#host")).toHaveCount(0);
 
@@ -424,6 +462,7 @@ test("plugin catalog dialog opens without importing", async ({ page }) => {
 
   const cardInstall = page.getByTestId("market-install-open");
   if ((await cardInstall.count()) > 0) {
+    await expect(page.getByTestId("market-delete").first()).toBeVisible();
     await cardInstall.first().click();
     const market = page.getByTestId("market-install-dialog");
     await expect(market).toBeVisible();
@@ -483,6 +522,11 @@ test("monitoring shows plugin diagnostics without executing", async ({
   await expect(page.getByTestId("diagnostic-plan")).toBeVisible();
   await expect(page.getByTestId("diagnostic-execute")).toBeVisible();
   await expect(page.getByTestId("diagnostic-restore")).toBeVisible();
+  await expect(page.getByTestId("a2s-panel")).toBeVisible();
+  await expect(page.getByTestId("a2s-query-host")).toBeVisible();
+  await expect(page.getByTestId("a2s-query-port")).toBeVisible();
+  await expect(page.getByTestId("a2s-query-now")).toBeVisible();
+  await expect(page.getByTestId("a2s-last-check")).toBeVisible();
   // Do not click plan/execute/restore — plan talks to SSH.
 });
 

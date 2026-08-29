@@ -255,6 +255,9 @@ class ConsoleSSHManager:
     async def connect(self, server):
         return True, "connected"
 
+    async def create_interactive_process(self, command=None):
+        return await self.conn.create_process(command, encoding=None)
+
     async def execute_command(self, command, *args, **kwargs):
         return True, "", ""
 

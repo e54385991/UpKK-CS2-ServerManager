@@ -21,7 +21,6 @@ import type {
   DeploymentLock,
   DeploymentLogEntry,
   OperationInbox,
-  OperationInboxItem,
   OperationJournal,
   OperationStreamEvent,
   S3BackupList,
@@ -29,6 +28,10 @@ import type {
   ServerConfigImportRequest,
   ServerConfigImportSummary,
   A2SCache,
+  A2SPlayer,
+  A2SQuery,
+  A2SServerInfo,
+  MonitoringLog,
   BatchAction,
   BatchActionAccepted,
   BatchJournal,
@@ -41,6 +44,7 @@ import type {
   ServerSummary,
   SteamLatestVersion,
 } from "@/modules/servers/types";
+import { mapOperationInbox, type InboxSnapshotDto } from "@/modules/servers/operation-inbox";
 import { SERVER_OPERATION_ACTIONS } from "@/modules/servers/types";
 
 const KNOWN_STATUSES: readonly ServerStatus[] = [
@@ -151,6 +155,8 @@ export type ServerDetail = ServerSummary & {
   readonly enableA2sMonitoring: boolean;
   readonly a2sFailureThreshold: number;
   readonly a2sCheckIntervalSeconds: number;
+  readonly a2sQueryHost: string | null;
+  readonly a2sQueryPort: number | null;
   readonly enableAutoUpdate: boolean;
   readonly tvEnable: boolean;
   readonly isSshDown: boolean;
@@ -159,6 +165,7 @@ export type ServerDetail = ServerSummary & {
   readonly updatedAt: string;
   readonly lastDeployed: string | null;
   readonly aptMirror: string | null;
+  readonly additionalParameters: string | null;
   readonly hasSudoPassword: boolean;
   readonly sshPooled: boolean;
   readonly sshInUse: boolean;
@@ -197,6 +204,8 @@ function toDetail(raw: ServerDetailDto): ServerDetail {
     enableA2sMonitoring: raw.enable_a2s_monitoring,
     a2sFailureThreshold: raw.a2s_failure_threshold,
     a2sCheckIntervalSeconds: raw.a2s_check_interval_seconds,
+    a2sQueryHost: raw.a2s_query_host ?? null,
+    a2sQueryPort: raw.a2s_query_port ?? null,
     enableAutoUpdate: raw.enable_auto_update,
     tvEnable: raw.tv_enable,
     isSshDown: raw.is_ssh_down,
@@ -205,6 +214,7 @@ function toDetail(raw: ServerDetailDto): ServerDetail {
     updatedAt: raw.updated_at,
     lastDeployed: raw.last_deployed ?? null,
     aptMirror: raw.apt_mirror ?? null,
+    additionalParameters: raw.additional_parameters ?? null,
     hasSudoPassword: raw.has_sudo_password,
     sshPooled: raw.ssh_pooled ?? false,
     sshInUse: raw.ssh_in_use ?? false,
@@ -247,6 +257,8 @@ export type ServerUpdateInput = {
   readonly enableA2sMonitoring?: boolean;
   readonly a2sFailureThreshold?: number;
   readonly a2sCheckIntervalSeconds?: number;
+  readonly a2sQueryHost?: string | null;
+  readonly a2sQueryPort?: number | null;
   readonly enableAutoUpdate?: boolean;
   readonly rconPassword?: string;
   readonly steamAccountToken?: string;
@@ -254,6 +266,7 @@ export type ServerUpdateInput = {
   readonly aptMirror?: string;
   readonly usePanelProxy?: boolean;
   readonly githubProxy?: string | null;
+  readonly additionalParameters?: string | null;
 };
 
 export async function updateServer(
@@ -284,6 +297,8 @@ export async function updateServer(
       enable_a2s_monitoring: input.enableA2sMonitoring,
       a2s_failure_threshold: input.a2sFailureThreshold,
       a2s_check_interval_seconds: input.a2sCheckIntervalSeconds,
+      a2s_query_host: input.a2sQueryHost,
+      a2s_query_port: input.a2sQueryPort,
       enable_auto_update: input.enableAutoUpdate,
       rcon_password: input.rconPassword,
       steam_account_token: input.steamAccountToken,
@@ -291,6 +306,7 @@ export async function updateServer(
       apt_mirror: input.aptMirror,
       use_panel_proxy: input.usePanelProxy,
       github_proxy: input.githubProxy,
+      additional_parameters: input.additionalParameters,
     }),
   });
   if (!result.ok) return result;
@@ -323,6 +339,7 @@ export type ServerCreateInput = {
   readonly gameType: string;
   readonly rconPassword?: string;
   readonly steamAccountToken?: string;
+  readonly additionalParameters?: string;
   readonly sessionManager: "tmux" | "screen";
 };
 
@@ -353,6 +370,7 @@ export async function createServer(
       game_type: input.gameType,
       rcon_password: input.rconPassword || null,
       steam_account_token: input.steamAccountToken || null,
+      additional_parameters: input.additionalParameters || null,
       session_manager: input.sessionManager,
     }),
   });
@@ -484,6 +502,116 @@ export async function getServerA2SCache(
   );
   if (!result.ok) return result;
   return { ok: true, data: toA2SCache(result.data) };
+}
+
+type A2SQueryRaw = {
+  query_host: string;
+  query_port: number;
+  success: boolean;
+  cached?: boolean;
+  live?: boolean;
+  server_info?: {
+    server_name?: string | null;
+    map_name?: string | null;
+    folder?: string | null;
+    game?: string | null;
+    player_count?: number | null;
+    max_players?: number | null;
+    bot_count?: number | null;
+    server_type?: string | null;
+    platform?: string | null;
+    password_protected?: boolean | null;
+    vac_enabled?: boolean | null;
+    version?: string | null;
+    ping?: number | null;
+    keywords?: string | null;
+  } | null;
+  players?: Array<{ name?: string; score?: number; duration?: number }>;
+  timestamp?: string | null;
+  last_updated?: string | null;
+  response_time_ms?: number | null;
+  error?: string | null;
+};
+
+function toA2SServerInfo(
+  raw: NonNullable<A2SQueryRaw["server_info"]>,
+): A2SServerInfo {
+  return {
+    serverName: raw.server_name ?? null,
+    mapName: raw.map_name ?? null,
+    folder: raw.folder ?? null,
+    game: raw.game ?? null,
+    playerCount: raw.player_count ?? null,
+    maxPlayers: raw.max_players ?? null,
+    botCount: raw.bot_count ?? null,
+    serverType: raw.server_type ?? null,
+    platform: raw.platform ?? null,
+    passwordProtected: raw.password_protected ?? null,
+    vacEnabled: raw.vac_enabled ?? null,
+    version: raw.version ?? null,
+    ping: raw.ping ?? null,
+    keywords: raw.keywords ?? null,
+  };
+}
+
+function toA2SQuery(raw: A2SQueryRaw): A2SQuery {
+  const players: A2SPlayer[] = (raw.players ?? []).map((player) => ({
+    name: player.name ?? "",
+    score: player.score ?? 0,
+    duration: player.duration ?? 0,
+  }));
+  return {
+    queryHost: raw.query_host,
+    queryPort: raw.query_port,
+    success: raw.success,
+    cached: raw.cached ?? false,
+    live: raw.live ?? false,
+    serverInfo: raw.server_info ? toA2SServerInfo(raw.server_info) : null,
+    players,
+    timestamp: raw.timestamp ?? null,
+    lastUpdated: raw.last_updated ?? raw.timestamp ?? null,
+    responseTimeMs: raw.response_time_ms ?? null,
+    error: raw.error ?? null,
+  };
+}
+
+export async function getServerA2SQuery(
+  serverId: number,
+  live = false,
+): Promise<ApiResult<A2SQuery>> {
+  const query = live ? "?live=true" : "";
+  const result = await apiFetch<A2SQueryRaw>(`/api/v1/servers/${serverId}/a2s${query}`);
+  if (!result.ok) return result;
+  return { ok: true, data: toA2SQuery(result.data) };
+}
+
+export async function listMonitoringLogs(
+  serverId: number,
+  eventType?: string,
+): Promise<ApiResult<readonly MonitoringLog[]>> {
+  const params = new URLSearchParams();
+  if (eventType) params.set("event_type", eventType);
+  const query = params.toString();
+  const result = await apiFetch<{
+    items?: Array<{
+      id: string;
+      event_type: string;
+      status: string;
+      message: string;
+      created_at?: string | null;
+    }>;
+  }>(`/api/v1/servers/${serverId}/monitoring-logs${query ? `?${query}` : ""}`);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: (result.data.items ?? []).map((item) => ({
+      id: item.id,
+      eventType: item.event_type,
+      status: item.status,
+      message: item.message,
+      createdAt: item.created_at ?? null,
+    })),
+  };
 }
 
 function toBatchAccepted(raw: {
@@ -685,43 +813,10 @@ function toOperation(raw: ServerOperationViewDto): ServerOperation {
   };
 }
 
-type InboxItemDto = ServerOperationViewDto & {
-  server_name: string;
-  latest_message?: string | null;
-  queue_position?: number;
-};
-
-function toInboxItem(item: InboxItemDto): OperationInboxItem {
-  return {
-    ...toOperation(item),
-    serverName: item.server_name,
-    latestMessage: item.latest_message ?? null,
-    queuePosition: item.queue_position ?? 0,
-  };
-}
-
 export async function listOperationInbox(): Promise<ApiResult<OperationInbox>> {
-  const result = await apiFetch<{
-    items: InboxItemDto[];
-    failed_items?: InboxItemDto[];
-    active_count: number;
-    running_count: number;
-    failed_count?: number;
-    failed_retention_days?: number;
-  }>("/api/v1/operations/inbox");
+  const result = await apiFetch<InboxSnapshotDto>("/api/v1/operations/inbox");
   if (!result.ok) return result;
-  const failedItems = (result.data.failed_items ?? []).map(toInboxItem);
-  return {
-    ok: true,
-    data: {
-      items: result.data.items.map(toInboxItem),
-      failedItems,
-      activeCount: result.data.active_count,
-      runningCount: result.data.running_count,
-      failedCount: result.data.failed_count ?? failedItems.length,
-      failedRetentionDays: result.data.failed_retention_days ?? 7,
-    },
-  };
+  return { ok: true, data: mapOperationInbox(result.data) };
 }
 
 export async function clearFailedOperations(): Promise<ApiResult<ActionResultDto>> {

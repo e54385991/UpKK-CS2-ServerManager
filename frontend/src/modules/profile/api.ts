@@ -5,6 +5,7 @@ import type {
   AssistantProviderTestViewDto,
   AssistantUserSettingsViewDto,
   ProfileApiKeyViewDto,
+  ProfileGsltViewDto,
   ProfileS3TestViewDto,
   ProfileS3ViewDto,
   ProfileViewDto,
@@ -14,6 +15,7 @@ import type {
   ProfileAiSettings,
   ProfileApiKey,
   ProfileCredentialsPatch,
+  ProfileGslt,
   ProfileS3Patch,
   ProfileS3Settings,
   ProfileS3Test,
@@ -172,6 +174,34 @@ export async function generateApiKey(input: {
 
 export async function revokeApiKey(): Promise<ApiResult<ActionResultDto>> {
   return apiFetch<ActionResultDto>("/api/v1/profile/api-key", { method: "DELETE" });
+}
+
+export async function generateGslt(input: {
+  readonly serverName?: string;
+  readonly captchaToken: string;
+  readonly captchaCode: string;
+}): Promise<ApiResult<ProfileGslt>> {
+  const result = await apiFetch<ProfileGsltViewDto>(
+    "/api/v1/profile/gslt",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...(input.serverName ? { server_name: input.serverName } : {}),
+        captcha_token: input.captchaToken,
+        captcha_code: input.captchaCode,
+      }),
+      timeoutMs: 25_000,
+    },
+  );
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: {
+      loginToken: result.data.login_token,
+      steamid: result.data.steamid ?? null,
+    },
+  };
 }
 
 export async function getS3Settings(): Promise<ApiResult<ProfileS3Settings>> {

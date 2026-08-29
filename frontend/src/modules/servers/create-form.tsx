@@ -32,6 +32,11 @@ import {
 } from "@/modules/servers/initialized-hosts";
 import { AptMirrorSwitcher } from "@/modules/servers/apt-mirror-switcher";
 import {
+  AdditionalParametersField,
+  OfficialMapField,
+} from "@/modules/servers/additional-parameters-field";
+import { GsltTokenField } from "@/modules/servers/gslt-token-field";
+import {
   APT_MIRRORS,
   toAptMirror,
   type AptMirrorId,
@@ -88,6 +93,8 @@ export function CreateServerForm({
   );
   const [displayName, setDisplayName] = useState(initialCredentials?.name ?? "");
   const [aptMirror, setAptMirror] = useState<AptMirrorId>("official");
+  const [steamAccountToken, setSteamAccountToken] = useState("");
+  const [additionalParameters, setAdditionalParameters] = useState("");
   const [switchingMirror, setSwitchingMirror] = useState<AptMirrorId | null>(
     null,
   );
@@ -216,7 +223,8 @@ export function CreateServerForm({
       gameMode: String(form.get("gameMode") ?? "competitive"),
       gameType: String(form.get("gameType") ?? "0"),
       rconPassword: String(form.get("rconPassword") ?? "") || undefined,
-      steamAccountToken: String(form.get("steamAccountToken") ?? "") || undefined,
+      steamAccountToken: steamAccountToken.trim() || undefined,
+      additionalParameters: additionalParameters.trim() || undefined,
       sessionManager:
         form.get("sessionManager") === "screen" ? "screen" : "tmux",
     });
@@ -494,9 +502,11 @@ export function CreateServerForm({
                   required
                 />
               </Field>
-              <Field label={t("fields.defaultMap")} htmlFor="defaultMap">
-                <Input id="defaultMap" name="defaultMap" defaultValue="de_dust2" required />
-              </Field>
+              <OfficialMapField
+                id="defaultMap"
+                name="defaultMap"
+                defaultValue="de_dust2"
+              />
               <Field label={t("fields.maxPlayers")} htmlFor="maxPlayers">
                 <Input
                   id="maxPlayers"
@@ -520,7 +530,11 @@ export function CreateServerForm({
               <Field label={t("fields.gameType")} htmlFor="gameType">
                 <Input id="gameType" name="gameType" defaultValue="0" required />
               </Field>
-              <Field label={t("fields.sessionManager")} htmlFor="sessionManager">
+              <Field
+                label={t("fields.sessionManager")}
+                htmlFor="sessionManager"
+                hint={t("sessionManagerHelp")}
+              >
                 <Select id="sessionManager" name="sessionManager" defaultValue="tmux">
                   <option value="tmux">tmux</option>
                   <option value="screen">screen</option>
@@ -534,18 +548,22 @@ export function CreateServerForm({
                   autoComplete="new-password"
                 />
               </Field>
-              <Field
+              <GsltTokenField
                 className="sm:col-span-2"
+                id="steamAccountToken"
+                name="steamAccountToken"
                 label={t("fields.steamAccountToken")}
-                htmlFor="steamAccountToken"
-              >
-                <Input
-                  id="steamAccountToken"
-                  name="steamAccountToken"
-                  type="password"
-                  autoComplete="off"
-                />
-              </Field>
+                value={steamAccountToken}
+                serverName={displayName || undefined}
+                onChange={setSteamAccountToken}
+              />
+              <AdditionalParametersField
+                className="sm:col-span-2"
+                id="additionalParameters"
+                name="additionalParameters"
+                value={additionalParameters}
+                onChange={setAdditionalParameters}
+              />
             </CardContent>
           </Card>
         </div>

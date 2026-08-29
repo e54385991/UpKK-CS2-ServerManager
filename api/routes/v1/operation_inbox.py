@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
-from api.dependencies import ActiveUser, DatabaseSession
+from api.dependencies import ActiveUser, DatabaseSession, StreamUser
 from modules import Server
 from services.server_operation_hub import (
     ACTIVE_STATUSES,
@@ -46,13 +49,7 @@ async def _to_inbox_item(
     )
 
 
-@router.get("/inbox", response_model=OperationInboxView)
-async def list_operation_inbox(
-    db: DatabaseSession,
-    current_user: ActiveUser,
-) -> OperationInboxView:
-    """Active jobs plus failed jobs retained for seven days."""
-    servers = await _accessible_servers(db, current_user)
+async def _build_inbox(servers: list[tuple[int, str]]) -> OperationInboxView:
     names = {server_id: name for server_id, name in servers}
     items: list[OperationInboxItem] = []
     failed_items: list[OperationInboxItem] = []
@@ -86,6 +83,58 @@ async def list_operation_inbox(
         running_count=len(running),
         failed_count=len(failed_items),
         failed_retention_days=FAILED_RETENTION_SECONDS // 86400,
+    )
+
+
+@router.get("/inbox", response_model=OperationInboxView)
+async def list_operation_inbox(
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> OperationInboxView:
+    """Active jobs plus failed jobs retained for seven days."""
+    return await _build_inbox(await _accessible_servers(db, current_user))
+
+
+@router.get("/inbox/events")
+async def stream_operation_inbox(
+    request: Request,
+    db: DatabaseSession,
+    current_user: StreamUser,
+) -> StreamingResponse:
+    """Live inbox snapshots for the top-right tray. SSE, not a second WebSocket."""
+    servers = await _accessible_servers(db, current_user)
+
+    async def event_source():
+        yield ": connected\n\n"
+        last = ""
+        idle_ticks = 0
+        while not await request.is_disconnected():
+            view = await _build_inbox(servers)
+            encoded = json.dumps(
+                view.model_dump(mode="json"),
+                ensure_ascii=False,
+                separators=(",", ":"),
+                default=str,
+            )
+            if encoded != last:
+                last = encoded
+                idle_ticks = 0
+                yield f"event: inbox\ndata: {encoded}\n\n"
+            else:
+                idle_ticks += 1
+                if idle_ticks >= 15:
+                    idle_ticks = 0
+                    yield ": keep-alive\n\n"
+            await asyncio.sleep(1)
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

@@ -16,22 +16,47 @@ class ConnectionMixin:
 
     STREAMING_OUTPUT_MAX_BYTES = 2 * 1024 * 1024
 
+    SUPPORTED_ARCHIVE_FORMATS_LABEL = (
+        ".zip, .7z, .rar, .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .tbz, "
+        ".tar.xz, .txz, .tar.zst, .tzst, .tar.lzma, .tlz, .gz, .bz2, .xz, "
+        ".zst, .zstd, .lzma"
+    )
+
+    TAR_ARCHIVE_TYPES = frozenset({"tar", "tar.gz", "tar.bz2", "tar.xz", "tar.zst", "tar.lzma"})
+
+    SEVEN_ZIP_ARCHIVE_TYPES = frozenset({"7z", "rar"})
+
+    SINGLE_FILE_ARCHIVE_TYPES = frozenset({"gz", "bz2", "xz", "zst", "lzma"})
+
+    ARCHIVE_TYPES_ALLOW_BACKSLASH = TAR_ARCHIVE_TYPES | SEVEN_ZIP_ARCHIVE_TYPES
+
     @staticmethod
     def archive_type_from_path(path: str) -> Optional[str]:
         """Return a normalized archive type from a local or remote filename."""
         lower_path = path.lower()
         for suffix, archive_type in (
-            (".tar.gz", "tar.gz"),
+            (".tar.zstd", "tar.zst"),
+            (".tar.lzma", "tar.lzma"),
+            (".tar.zst", "tar.zst"),
             (".tar.bz2", "tar.bz2"),
+            (".tar.gz", "tar.gz"),
             (".tar.xz", "tar.xz"),
-            (".tgz", "tar.gz"),
+            (".tzst", "tar.zst"),
             (".tbz2", "tar.bz2"),
+            (".tgz", "tar.gz"),
             (".txz", "tar.xz"),
+            (".tlz", "tar.lzma"),
+            (".tbz", "tar.bz2"),
             (".zip", "zip"),
             (".7z", "7z"),
+            (".rar", "rar"),
             (".tar", "tar"),
+            (".zstd", "zst"),
+            (".lzma", "lzma"),
+            (".zst", "zst"),
             (".gz", "gz"),
             (".bz2", "bz2"),
+            (".xz", "xz"),
         ):
             if lower_path.endswith(suffix):
                 return archive_type

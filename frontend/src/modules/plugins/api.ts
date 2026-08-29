@@ -1,6 +1,7 @@
 import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
 import type {
+  ActionResultDto,
   ManagedPluginViewDto,
   MarketPluginPageDto,
   MarketPluginViewDto,
@@ -105,6 +106,14 @@ export async function getMarketPlugin(
   );
   if (!result.ok) return result;
   return { ok: true, data: toMarketPlugin(result.data) };
+}
+
+export async function deleteMarketPlugin(
+  pluginId: number,
+): Promise<ApiResult<ActionResultDto>> {
+  return apiFetch<ActionResultDto>(`/api/v1/plugins/market/${pluginId}`, {
+    method: "DELETE",
+  });
 }
 
 function toManaged(raw: ManagedPluginViewDto): ManagedPlugin {

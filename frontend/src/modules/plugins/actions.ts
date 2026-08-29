@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { ActionResultDto } from "@/shared/api/types";
 import type { ApiResult } from "@/shared/api/server-fetch";
 import {
   analyzeGitHubArchive,
+  deleteMarketPlugin,
   exportPluginCatalog,
   getPluginInstallPlan,
   importPluginCatalog,
@@ -153,6 +155,17 @@ export async function importPluginCatalogAction(
   const result = await importPluginCatalog(bundle);
   if (result.ok) {
     revalidatePath("/plugins");
+  }
+  return result;
+}
+
+export async function deleteMarketPluginAction(
+  pluginId: number,
+): Promise<ApiResult<ActionResultDto>> {
+  const result = await deleteMarketPlugin(pluginId);
+  if (result.ok) {
+    revalidatePath("/plugins");
+    revalidatePath(`/plugins/${pluginId}`);
   }
   return result;
 }

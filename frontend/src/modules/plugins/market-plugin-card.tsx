@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { Download, Puzzle } from "lucide-react";
+import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin-button";
 import { MarketInstallDialog } from "@/modules/plugins/market-install-dialog";
 import {
   PLUGIN_CATEGORIES,
@@ -24,10 +25,12 @@ export function MarketPluginCard({
   plugin,
   servers,
   defaultServerId,
+  canDelete = false,
 }: {
   plugin: MarketPlugin;
   servers: readonly MarketInstallServer[];
   defaultServerId?: number;
+  canDelete?: boolean;
 }) {
   const t = useTranslations("plugins");
   const [open, setOpen] = useState(false);
@@ -76,15 +79,23 @@ export function MarketPluginCard({
             </span>
           ) : null}
         </div>
-        <Button
-          type="button"
-          size="sm"
-          data-testid="market-install-open"
-          onClick={() => setOpen(true)}
-        >
-          <Download className="size-4" />
-          {t("installOnCard")}
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {canDelete ? (
+            <DeleteMarketPluginButton
+              pluginId={plugin.id}
+              pluginTitle={plugin.title}
+            />
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            data-testid="market-install-open"
+            onClick={() => setOpen(true)}
+          >
+            <Download className="size-4" />
+            {t("installOnCard")}
+          </Button>
+        </div>
       </div>
       <MarketInstallDialog
         open={open}

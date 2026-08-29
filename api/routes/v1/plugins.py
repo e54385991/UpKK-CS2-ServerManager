@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlmodel import select
 
-from api.dependencies import ActiveUser, DatabaseSession, require_server_access
+from api.dependencies import ActiveUser, AdminUser, DatabaseSession, require_server_access
 from modules import ManagedPlugin, MarketPlugin, PluginCategory
+from services.audit_log_service import record_audit_event
+from services.plugin_catalog import delete_market_plugin as remove_catalog_plugin
 from services.plugin_conflict_service import (
     PluginPlanError,
     build_plugin_install_plan,
@@ -21,6 +23,7 @@ from .operation_locks import reject_stuck_lock_unless_active
 from .operation_runner import enqueue_github_plugin_uninstall, enqueue_plugin_install
 from .operations import to_view
 from .schemas import (
+    ActionResult,
     GitHubUninstallRequest,
     ManagedPluginView,
     MarketPluginView,
@@ -230,6 +233,32 @@ async def get_market_plugin(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
     dependencies = (await _dependency_refs(db, [plugin]))[0]
     return to_market_view(plugin, dependencies)
+
+
+@market_router.delete("/market/{plugin_id}", response_model=ActionResult)
+async def delete_market_plugin(
+    plugin_id: int,
+    db: DatabaseSession,
+    current_user: AdminUser,
+    request: Request,
+) -> ActionResult:
+    """Remove a marketplace listing. Members receive 403. Files on servers stay."""
+    plugin = await remove_catalog_plugin(db, plugin_id)
+    if plugin is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+    await record_audit_event(
+        category="plugin",
+        action="plugin.catalog.delete",
+        status="success",
+        user=current_user,
+        request=request,
+        details={
+            "plugin_id": plugin_id,
+            "title": plugin.title,
+            "github_url": plugin.github_url,
+        },
+    )
+    return ActionResult(success=True, message=f"Plugin '{plugin.title}' deleted successfully")
 
 
 @server_router.get("", response_model=list[ManagedPluginView])

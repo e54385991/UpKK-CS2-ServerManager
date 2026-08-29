@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { Route } from "next";
+import { requireSession } from "@/modules/auth/session";
 import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
 import { PluginDetail } from "@/modules/plugins/plugin-detail";
@@ -23,10 +24,11 @@ export default async function PluginDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<SearchParams>;
 }) {
-  const [{ id }, sp, t] = await Promise.all([
+  const [{ id }, sp, t, session] = await Promise.all([
     params,
     searchParams,
     getTranslations("plugins"),
+    requireSession(),
   ]);
   const pluginId = Number(id);
   if (!Number.isInteger(pluginId)) notFound();
@@ -56,6 +58,7 @@ export default async function PluginDetailPage({
         pluginId={pluginId}
         serverId={Number.isInteger(serverId) ? serverId : null}
         servers={servers}
+        canDelete={session.isAdmin}
       />
     </>
   );

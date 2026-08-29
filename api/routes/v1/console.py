@@ -21,8 +21,8 @@ from services.game_session import (
     session_name,
     steamcmd_session_name,
 )
-from services.ssh_manager import SSHManager
 from services.ssh.text import decode_remote_text, encode_console_input
+from services.ssh_manager import SSHManager
 from services.steamcmd_session import latest_console_heartbeat
 
 from .schemas import ConsolePaneView, ConsoleWorkspaceView

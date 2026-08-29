@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -17,6 +18,7 @@ export function SessionPane({
   emptyText: string;
   className?: string;
 }) {
+  const t = useTranslations("console");
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -82,14 +84,27 @@ export function SessionPane({
     term.write(next.replace(/\n/g, "\r\n"));
   }, [emptyText, pane]);
 
+  const heartbeat = pane?.heartbeat?.trim() || "";
+
   return (
-    <div
-      ref={hostRef}
-      data-testid="session-pane"
-      className={cn(
-        "min-h-[24rem] overflow-hidden rounded-md border border-line bg-canvas p-2",
-        className,
-      )}
-    />
+    <div className="space-y-2">
+      {heartbeat ? (
+        <p
+          data-testid="session-pane-heartbeat"
+          className="rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs leading-5 text-fg"
+        >
+          <span className="mr-2 text-fg-subtle">{t("latestProgress")}</span>
+          <span className="break-all">{heartbeat}</span>
+        </p>
+      ) : null}
+      <div
+        ref={hostRef}
+        data-testid="session-pane"
+        className={cn(
+          "min-h-[24rem] overflow-hidden rounded-md border border-line bg-canvas p-2",
+          className,
+        )}
+      />
+    </div>
   );
 }

@@ -1,11 +1,14 @@
 "use client";
 
-import type { RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { LoaderCircle, SquareTerminal } from "lucide-react";
 import { isDeployProgressVisible } from "@/modules/console/live-console";
+import { fetchConsolePane } from "@/modules/console/pane-client";
 import { OpenLiveTerminalButton } from "@/modules/console/open-live-terminal";
 import { ForceStopButton } from "@/modules/servers/force-stop-button";
+import { OPERATION_EVENT_LIMIT } from "@/modules/servers/operation-events";
+import { latestSteamcmdProgress } from "@/modules/servers/steamcmd-progress";
 import {
   OPERATION_STATUS_TONE,
   isActiveOperation,
@@ -67,6 +70,39 @@ export function OperationLiveLog({
   logClassName?: string;
 }) {
   const t = useTranslations("serverDetail");
+  const [paneLatest, setPaneLatest] = useState<string | null>(null);
+  const watchDeploy = isDeployProgressVisible({ operation });
+
+  useEffect(() => {
+    if (!watchDeploy) return;
+    let cancelled = false;
+    async function pull() {
+      const pane = await fetchConsolePane(serverId, "steamcmd");
+      if (cancelled || !pane) return;
+      const latest =
+        latestSteamcmdProgress(pane.text) || pane.heartbeat?.trim() || null;
+      if (latest) setPaneLatest(latest);
+    }
+    void pull();
+    const timer = window.setInterval(() => void pull(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [serverId, watchDeploy]);
+
+  const eventLatest = useMemo(
+    () => latestSteamcmdProgress(events.map((event) => event.message).join("\n")),
+    [events],
+  );
+  const pinnedLatest = useMemo(
+    () =>
+      latestSteamcmdProgress(
+        [watchDeploy ? paneLatest : null, eventLatest].filter(Boolean).join("\n"),
+      ),
+    [eventLatest, paneLatest, watchDeploy],
+  );
+
   const displayEvents =
     events.length > 0
       ? events
@@ -88,6 +124,10 @@ export function OperationLiveLog({
             } satisfies OperationStreamEvent,
           ]
         : [];
+  const visibleEvents =
+    displayEvents.length > OPERATION_EVENT_LIMIT
+      ? displayEvents.slice(-OPERATION_EVENT_LIMIT)
+      : displayEvents;
 
   return (
     <Card className={cn("overflow-hidden", className)}>
@@ -130,6 +170,15 @@ export function OperationLiveLog({
         </div>
       </CardHeader>
       <CardContent className="p-0">
+        {pinnedLatest ? (
+          <p
+            data-testid="operation-live-latest"
+            className="border-b border-line bg-primary-muted/40 px-4 py-2 font-mono text-xs leading-5 text-fg"
+          >
+            <span className="mr-2 text-fg-subtle">{t("latestProgress")}</span>
+            <span className="break-all">{pinnedLatest}</span>
+          </p>
+        ) : null}
         <div
           ref={logRef}
           className={cn(
@@ -137,12 +186,12 @@ export function OperationLiveLog({
             logClassName,
           )}
         >
-          {displayEvents.length === 0 ? (
+          {visibleEvents.length === 0 ? (
             <p className="text-fg-subtle">
               {streamFailed ? t("streamUnavailable") : emptyHint}
             </p>
           ) : (
-            displayEvents.map((event) => (
+            visibleEvents.map((event) => (
               <p
                 key={`${event.sequence}-${event.timestamp}-${event.message}`}
                 className={cn("whitespace-pre-wrap break-all", lineTone(event.kind))}

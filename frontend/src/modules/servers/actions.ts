@@ -17,7 +17,9 @@ import {
   getStartupCommand,
   getBatchJournal,
   getServerA2SCache,
+  getServerA2SQuery,
   listA2SCache,
+  listMonitoringLogs,
   listDiskSpace,
   startBatchActions,
   startBatchInstallPlugins,
@@ -50,6 +52,8 @@ import type {
   ServerConfigImportRequest,
   ServerConfigImportSummary,
   A2SCache,
+  A2SQuery,
+  MonitoringLog,
   BatchAction,
   BatchActionAccepted,
   BatchJournal,
@@ -74,6 +78,7 @@ function revalidateServer(serverId: number) {
   revalidatePath(`/servers/${serverId}/updates`);
   revalidatePath(`/servers/${serverId}/maps`);
   revalidatePath(`/servers/${serverId}/files`);
+  revalidatePath(`/servers/${serverId}/cleanup`);
   revalidatePath(`/servers/${serverId}/console`);
   revalidatePath(`/servers/${serverId}/schedule`);
   revalidatePath(`/servers/${serverId}/discord`);
@@ -297,6 +302,26 @@ export async function refreshServerA2SCacheAction(
     revalidateServer(serverId);
   }
   return result;
+}
+
+export async function queryServerA2SAction(
+  serverId: number,
+  live = false,
+): Promise<ApiResult<A2SQuery>> {
+  const result = await getServerA2SQuery(serverId, live);
+  if (result.ok && live) {
+    revalidatePath("/servers");
+    revalidatePath("/overview");
+    revalidateServer(serverId);
+  }
+  return result;
+}
+
+export async function listMonitoringLogsAction(
+  serverId: number,
+  eventType?: string,
+): Promise<ApiResult<readonly MonitoringLog[]>> {
+  return listMonitoringLogs(serverId, eventType);
 }
 
 export async function startBatchActionsAction(

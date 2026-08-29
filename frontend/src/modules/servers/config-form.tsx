@@ -10,6 +10,11 @@ import {
 } from "@/modules/servers/actions";
 import type { ServerDetail } from "@/modules/servers/api";
 import { APT_MIRRORS, toAptMirror } from "@/modules/servers/apt-mirrors";
+import {
+  AdditionalParametersField,
+  OfficialMapField,
+} from "@/modules/servers/additional-parameters-field";
+import { GsltTokenField } from "@/modules/servers/gslt-token-field";
 import { serverProxyMode, type ServerProxyMode } from "@/modules/servers/types";
 import { workspaceHref } from "@/modules/servers/workspace";
 import { Button } from "@/shared/ui/button";
@@ -91,12 +96,16 @@ function GameConfigForm({ server }: { server: ServerDetail }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [steamAccountToken, setSteamAccountToken] = useState("");
+  const [additionalParameters, setAdditionalParameters] = useState(
+    server.additionalParameters ?? "",
+  );
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const rconPassword = String(form.get("rconPassword") ?? "").trim();
-    const steamAccountToken = String(form.get("steamAccountToken") ?? "").trim();
+    const nextGslt = steamAccountToken.trim();
     setPending(true);
     setError(null);
     setNotice(null);
@@ -110,7 +119,8 @@ function GameConfigForm({ server }: { server: ServerDetail }) {
       gameMode: String(form.get("gameMode") ?? "").trim(),
       gameType: String(form.get("gameType") ?? "").trim(),
       rconPassword: rconPassword || undefined,
-      steamAccountToken: steamAccountToken || undefined,
+      steamAccountToken: nextGslt || undefined,
+      additionalParameters: additionalParameters.trim() || null,
     });
     setPending(false);
     if (!result.ok) {
@@ -170,14 +180,11 @@ function GameConfigForm({ server }: { server: ServerDetail }) {
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t("fields.defaultMap")} htmlFor="defaultMap">
-                <Input
-                  id="defaultMap"
-                  name="defaultMap"
-                  required
-                  defaultValue={server.defaultMap}
-                />
-              </Field>
+              <OfficialMapField
+                id="defaultMap"
+                name="defaultMap"
+                defaultValue={server.defaultMap}
+              />
               <Field label={t("fields.maxPlayers")} htmlFor="maxPlayers">
                 <Input
                   id="maxPlayers"
@@ -200,24 +207,34 @@ function GameConfigForm({ server }: { server: ServerDetail }) {
                   ))}
                 </Select>
               </Field>
-              <Field label={t("fields.gameType")} htmlFor="gameType">
+              <Field
+                label={t("fields.gameType")}
+                htmlFor="gameType"
+                hint={t("gameTypeHelp")}
+              >
                 <Input id="gameType" name="gameType" required defaultValue={server.gameType} />
               </Field>
             </div>
+            <AdditionalParametersField
+              id="additionalParameters"
+              name="additionalParameters"
+              value={additionalParameters}
+              onChange={setAdditionalParameters}
+            />
           </Section>
 
           <Section title={t("secrets")} description={t("secretsHelp")}>
             <Field label={t("fields.rconPassword")} htmlFor="rconPassword">
               <Input id="rconPassword" name="rconPassword" type="password" autoComplete="new-password" />
             </Field>
-            <Field label={t("fields.steamAccountToken")} htmlFor="steamAccountToken">
-              <Input
-                id="steamAccountToken"
-                name="steamAccountToken"
-                type="password"
-                autoComplete="off"
-              />
-            </Field>
+            <GsltTokenField
+              id="steamAccountToken"
+              name="steamAccountToken"
+              label={t("fields.steamAccountToken")}
+              value={steamAccountToken}
+              serverName={server.serverName || server.name}
+              onChange={setSteamAccountToken}
+            />
           </Section>
 
           <FormStatus error={error} notice={notice} />
@@ -341,7 +358,11 @@ function HostConfigForm({ server }: { server: ServerDetail }) {
                 defaultValue={server.gameDirectory}
               />
             </Field>
-            <Field label={t("fields.sessionManager")} htmlFor="sessionManager">
+            <Field
+              label={t("fields.sessionManager")}
+              htmlFor="sessionManager"
+              hint={t("sessionManagerHelp")}
+            >
               <Select
                 id="sessionManager"
                 name="sessionManager"

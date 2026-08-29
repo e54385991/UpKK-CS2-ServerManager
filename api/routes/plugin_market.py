@@ -38,6 +38,7 @@ from modules import (
 )
 from modules.http_helper import http_helper
 from services.github_credentials import get_effective_github_token
+from services.plugin_catalog import delete_market_plugin
 from services.plugin_conflict_service import (
     PluginPlanError,
     build_plugin_install_plan,
@@ -564,17 +565,13 @@ async def delete_plugin(
     Returns:
         Success response
     """
-    plugin = await MarketPlugin.get_by_id(db, plugin_id)
+    plugin = await delete_market_plugin(db, plugin_id)
     if not plugin:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
 
-    plugin_title = plugin.title
-    await db.delete(plugin)
-    await db.commit()
+    logger.info(f"Plugin '{plugin.title}' deleted by admin {current_user.username}")
 
-    logger.info(f"Plugin '{plugin_title}' deleted by admin {current_user.username}")
-
-    return ActionResponse(success=True, message=f"Plugin '{plugin_title}' deleted successfully")
+    return ActionResponse(success=True, message=f"Plugin '{plugin.title}' deleted successfully")
 
 
 @router.get("/plugins/{plugin_id}/releases")

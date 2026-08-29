@@ -269,17 +269,27 @@ class ArchivePureHelperTests(unittest.TestCase):
         cases = {
             "bundle.zip": "zip",
             "bundle.7Z": "7z",
+            "bundle.rar": "rar",
             "bundle.tar": "tar",
             "bundle.TAR.GZ": "tar.gz",
             "bundle.tgz": "tar.gz",
             "bundle.tar.bz2": "tar.bz2",
             "bundle.tbz2": "tar.bz2",
+            "bundle.tbz": "tar.bz2",
             "bundle.tar.xz": "tar.xz",
             "bundle.txz": "tar.xz",
+            "bundle.tar.zst": "tar.zst",
+            "bundle.tzst": "tar.zst",
+            "bundle.tar.lzma": "tar.lzma",
+            "bundle.tlz": "tar.lzma",
             "bundle.gz": "gz",
             "bundle.bz2": "bz2",
-            "bundle.rar": None,
+            "bundle.xz": "xz",
+            "bundle.zst": "zst",
+            "bundle.zstd": "zst",
+            "bundle.lzma": "lzma",
             "bundle.zip.txt": None,
+            "bundle.iso": None,
         }
         for path, expected in cases.items():
             with self.subTest(path=path):
@@ -496,6 +506,32 @@ class ArchivePureHelperTests(unittest.TestCase):
             False,
         )
         self.assertNotIn("--transform=", regular_command)
+
+        zstd_command = SSHManager._tar_extract_command(
+            "/bin/tar",
+            "tar.zst",
+            "/srv/game/server.tar.zst",
+            "/srv/game/.stage",
+            False,
+            "/usr/bin/zstd",
+        )
+        self.assertIn("-I", shlex.split(zstd_command))
+        self.assertIn("/usr/bin/zstd", shlex.split(zstd_command))
+        self.assertIn("-xf", shlex.split(zstd_command))
+
+    def test_single_file_output_name_strips_compound_and_simple_suffixes(self):
+        self.assertEqual(
+            SSHManager._single_file_output_name("/srv/game/plugin.so.zst", "zst"),
+            "plugin.so",
+        )
+        self.assertEqual(
+            SSHManager._single_file_output_name("/srv/game/plugin.so.zstd", "zst"),
+            "plugin.so",
+        )
+        self.assertEqual(
+            SSHManager._single_file_output_name("/srv/game/server.cfg.xz", "xz"),
+            "server.cfg",
+        )
 
     def test_archive_info_rejects_duplicate_and_file_ancestor_conflicts(self):
         success, _, error = SSHManager._build_archive_info(
@@ -810,6 +846,66 @@ Attributes = D
         self.assertEqual(info["folders"], ["addons"])
         self.assertEqual(manager.tool_candidates, [("7zz", "7z", "7za")])
         self.assertIn(" l -slt -sccUTF-8 ", manager.commands[0][0])
+
+    def test_rar_inspection_uses_7z_listing(self):
+        listing = """
+----------
+Path = addons
+Folder = +
+Attributes = D
+"""
+        manager = self.manager_with_commands(
+            "/usr/bin/7z",
+            [(True, listing, "")],
+        )
+
+        success, info, error = self.run_async(
+            manager._inspect_archive_connected("/srv/game/archive.rar", "rar")
+        )
+
+        self.assertTrue(success, error)
+        self.assertEqual(info["archive_type"], "rar")
+        self.assertEqual(info["folders"], ["addons"])
+        self.assertEqual(manager.tool_candidates, [("7zz", "7z", "7za")])
+
+    def test_tar_zst_inspection_requires_zstd_and_uses_compress_program(self):
+        manager = SSHManager(use_pool=False)
+        manager.conn = object()
+        manager.tool_candidates = []
+        manager.commands = []
+
+        async def find_tool(candidates):
+            manager.tool_candidates.append(candidates)
+            if candidates == ("tar",):
+                return "/bin/tar"
+            if candidates == ("zstd",):
+                return "/usr/bin/zstd"
+            return None
+
+        async def stream_listing(command, line_handler):
+            manager.commands.append((command, SSHManager.ARCHIVE_INSPECT_TIMEOUT))
+            for line in (
+                'drwxr-xr-x 0/0 0 2026-07-15 04:00:00 "addons/"',
+                '-rw-r--r-- 0/0 1 2026-07-15 04:00:00 "addons/plugin.dll"',
+            ):
+                error = line_handler(line)
+                if error:
+                    return False, error
+            return True, ""
+
+        manager._find_remote_tool = find_tool
+        manager._stream_archive_listing = stream_listing
+
+        success, info, error = self.run_async(
+            manager._inspect_archive_connected("/srv/game/archive.tar.zst", "tar.zst")
+        )
+
+        self.assertTrue(success, error)
+        self.assertEqual(info["folders"], ["addons"])
+        self.assertEqual(manager.tool_candidates, [("tar",), ("zstd",)])
+        self.assertIn("-I", shlex.split(manager.commands[0][0]))
+        self.assertIn("/usr/bin/zstd", shlex.split(manager.commands[0][0]))
+        self.assertIn("-tvf", shlex.split(manager.commands[0][0]))
 
     def test_inspection_reports_missing_required_tool_without_running_archive(self):
         manager = self.manager_with_commands(None, [])

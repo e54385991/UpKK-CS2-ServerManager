@@ -431,8 +431,8 @@ def _download_archive_filename(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                "Unsupported archive filename. Supported formats: .zip, .7z, .tar, "
-                ".tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .gz, .bz2"
+                "Unsupported archive filename. Supported formats: "
+                f"{SSHManager.SUPPORTED_ARCHIVE_FORMATS_LABEL}"
             ),
         )
     return filename

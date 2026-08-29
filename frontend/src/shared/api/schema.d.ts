@@ -2513,6 +2513,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operations/inbox/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Operation Inbox
+         * @description Live inbox snapshots for the top-right tray. SSE, not a second WebSocket.
+         */
+        get: operations["stream_operation_inbox_api_v1_operations_inbox_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/operations/inbox/failed": {
         parameters: {
             query?: never;
@@ -2731,7 +2751,11 @@ export interface paths {
         get: operations["get_market_plugin_api_v1_plugins_market__plugin_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Market Plugin
+         * @description Remove a marketplace listing. Members receive 403. Files on servers stay.
+         */
+        delete: operations["delete_market_plugin_api_v1_plugins_market__plugin_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2819,6 +2843,26 @@ export interface paths {
          * @description Revoke the personal API key.
          */
         delete: operations["revoke_api_key_api_v1_profile_api_key_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profile/gslt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Gslt
+         * @description Create a Steam game server login token using the user's Steam Web API key.
+         */
+        post: operations["generate_gslt_api_v1_profile_gslt_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3058,6 +3102,26 @@ export interface paths {
          * @description Patch non-secret settings. Omitted secrets stay unchanged.
          */
         patch: operations["update_server_api_v1_servers__server_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/a2s": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Server A2S Query
+         * @description Return the last A2S snapshot, or run a live query when ``live=true``.
+         */
+        get: operations["get_server_a2s_query_api_v1_servers__server_id__a2s_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/servers/{server_id}/a2s-cache": {
@@ -3709,6 +3773,26 @@ export interface paths {
         put?: never;
         /** Apply Map Preset */
         post: operations["apply_map_preset_api_v1_servers__server_id__maps_presets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/monitoring-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Server Monitoring Logs
+         * @description Return recent panel / A2S monitoring log lines from Redis.
+         */
+        get: operations["get_server_monitoring_logs_api_v1_servers__server_id__monitoring_logs_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6605,6 +6689,93 @@ export interface components {
             server_name?: string | null;
             /** Success */
             success?: boolean | null;
+            /** Version */
+            version?: string | null;
+        };
+        /** A2SPlayerView */
+        A2SPlayerView: {
+            /**
+             * Duration
+             * @default 0
+             */
+            duration: number;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /**
+             * Score
+             * @default 0
+             */
+            score: number;
+        };
+        /**
+         * A2SQueryView
+         * @description Last cached A2S snapshot, or a live query when requested.
+         */
+        A2SQueryView: {
+            /**
+             * Cached
+             * @default false
+             */
+            cached: boolean;
+            /** Error */
+            error?: string | null;
+            /** Last Updated */
+            last_updated?: string | null;
+            /**
+             * Live
+             * @default false
+             */
+            live: boolean;
+            /** Players */
+            players?: components["schemas"]["A2SPlayerView"][];
+            /** Query Host */
+            query_host: string;
+            /** Query Port */
+            query_port: number;
+            /** Response Time Ms */
+            response_time_ms?: number | null;
+            server_info?: components["schemas"]["A2SServerInfoView"] | null;
+            /** Success */
+            success: boolean;
+            /** Timestamp */
+            timestamp?: string | null;
+        };
+        /**
+         * A2SServerInfoView
+         * @description One A2S_INFO payload. Extra Valve fields are ignored.
+         */
+        A2SServerInfoView: {
+            /** Bot Count */
+            bot_count?: number | null;
+            /** Folder */
+            folder?: string | null;
+            /** Game */
+            game?: string | null;
+            /** Game Id */
+            game_id?: number | null;
+            /** Keywords */
+            keywords?: string | null;
+            /** Map Name */
+            map_name?: string | null;
+            /** Max Players */
+            max_players?: number | null;
+            /** Password Protected */
+            password_protected?: boolean | null;
+            /** Ping */
+            ping?: number | null;
+            /** Platform */
+            platform?: string | null;
+            /** Player Count */
+            player_count?: number | null;
+            /** Server Name */
+            server_name?: string | null;
+            /** Server Type */
+            server_type?: string | null;
+            /** Vac Enabled */
+            vac_enabled?: boolean | null;
             /** Version */
             version?: string | null;
         };
@@ -10665,6 +10836,24 @@ export interface components {
             /** Version */
             version?: string | null;
         };
+        /** MonitoringLogListView */
+        MonitoringLogListView: {
+            /** Items */
+            items?: components["schemas"]["MonitoringLogView"][];
+        };
+        /** MonitoringLogView */
+        MonitoringLogView: {
+            /** Created At */
+            created_at?: string | null;
+            /** Event Type */
+            event_type: string;
+            /** Id */
+            id: string;
+            /** Message */
+            message: string;
+            /** Status */
+            status: string;
+        };
         /** OperationInboxItem */
         OperationInboxItem: {
             /**
@@ -11682,6 +11871,28 @@ export interface components {
             api_key: string;
             /** Created At */
             created_at?: string | null;
+        };
+        /**
+         * ProfileGsltGenerate
+         * @description Create a Steam GSLT with the signed-in user's Steam Web API key.
+         */
+        ProfileGsltGenerate: {
+            /** Captcha Code */
+            captcha_code: string;
+            /** Captcha Token */
+            captcha_token: string;
+            /** Server Name */
+            server_name?: string | null;
+        };
+        /**
+         * ProfileGsltView
+         * @description Newly generated GSLT. Returned once so the operator can save it on a server.
+         */
+        ProfileGsltView: {
+            /** Login Token */
+            login_token: string;
+            /** Steamid */
+            steamid?: string | null;
         };
         /**
          * ProfilePasswordChange
@@ -12837,6 +13048,8 @@ export interface components {
          * @description Create a server. Secret fields are write-only and never echoed.
          */
         ServerCreateRequest: {
+            /** Additional Parameters */
+            additional_parameters?: string | null;
             /** Apt Mirror */
             apt_mirror?: string | null;
             /** Captcha Code */
@@ -12921,6 +13134,12 @@ export interface components {
              * @default 3
              */
             a2s_failure_threshold: number;
+            /** A2S Query Host */
+            a2s_query_host?: string | null;
+            /** A2S Query Port */
+            a2s_query_port?: number | null;
+            /** Additional Parameters */
+            additional_parameters?: string | null;
             /** Apt Mirror */
             apt_mirror?: string | null;
             /**
@@ -13092,6 +13311,12 @@ export interface components {
              * @default 3
              */
             a2s_failure_threshold: number;
+            /** A2S Query Host */
+            a2s_query_host?: string | null;
+            /** A2S Query Port */
+            a2s_query_port?: number | null;
+            /** Additional Parameters */
+            additional_parameters?: string | null;
             /** Apt Mirror */
             apt_mirror?: string | null;
             /**
@@ -13849,6 +14074,12 @@ export interface components {
             a2s_check_interval_seconds?: number | null;
             /** A2S Failure Threshold */
             a2s_failure_threshold?: number | null;
+            /** A2S Query Host */
+            a2s_query_host?: string | null;
+            /** A2S Query Port */
+            a2s_query_port?: number | null;
+            /** Additional Parameters */
+            additional_parameters?: string | null;
             /** Apt Mirror */
             apt_mirror?: string | null;
             /** Auto Restart On Crash */
@@ -13917,6 +14148,12 @@ export interface components {
              * @default 3
              */
             a2s_failure_threshold: number;
+            /** A2S Query Host */
+            a2s_query_host?: string | null;
+            /** A2S Query Port */
+            a2s_query_port?: number | null;
+            /** Additional Parameters */
+            additional_parameters?: string | null;
             /** Apt Mirror */
             apt_mirror?: string | null;
             /**
@@ -18888,6 +19125,26 @@ export interface operations {
             };
         };
     };
+    stream_operation_inbox_api_v1_operations_inbox_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     clear_failed_operations_api_v1_operations_inbox_failed_delete: {
         parameters: {
             query?: never;
@@ -19214,6 +19471,37 @@ export interface operations {
             };
         };
     };
+    delete_market_plugin_api_v1_plugins_market__plugin_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_profile_api_v1_profile_get: {
         parameters: {
             query?: never;
@@ -19422,6 +19710,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+        };
+    };
+    generate_gslt_api_v1_profile_gslt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileGsltGenerate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileGsltView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -19878,6 +20199,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_a2s_query_api_v1_servers__server_id__a2s_get: {
+        parameters: {
+            query?: {
+                live?: boolean;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["A2SQueryView"];
                 };
             };
             /** @description Validation Error */
@@ -21438,6 +21792,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_monitoring_logs_api_v1_servers__server_id__monitoring_logs_get: {
+        parameters: {
+            query?: {
+                event_type?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitoringLogListView"];
                 };
             };
             /** @description Validation Error */

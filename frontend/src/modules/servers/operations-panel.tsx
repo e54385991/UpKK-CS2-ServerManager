@@ -1,6 +1,5 @@
 import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
-import { CleanupConsole } from "@/modules/cleanup/cleanup-console";
 import { listCustomCommands } from "@/modules/commands/api";
 import { CommandsConsole } from "@/modules/commands/commands-console";
 import {
@@ -63,7 +62,6 @@ export async function OperationsPanel({
           {tCommands("fetchError", { status: commands.status || "network" })}
         </Card>
       )}
-      <CleanupConsole serverId={serverId} />
     </div>
   );
 }

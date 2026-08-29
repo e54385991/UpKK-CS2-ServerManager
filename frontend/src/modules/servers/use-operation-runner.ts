@@ -17,6 +17,10 @@ import { toAptMirror, type AptMirrorId } from "@/modules/servers/apt-mirrors";
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { confirm } from "@/shared/feedback";
 import {
+  mergeOperationEvents,
+  parseOperationEvent,
+} from "@/modules/servers/operation-events";
+import {
   CONFIRM_ACTIONS,
   type DeploymentLock,
   type DeploymentLogEntry,
@@ -27,53 +31,19 @@ import {
   type ServerStatus,
 } from "@/modules/servers/types";
 
+export {
+  OPERATION_EVENT_LIMIT,
+  mergeOperationEvents,
+  parseOperationEvent,
+} from "@/modules/servers/operation-events";
+
 export { isActiveOperation };
 
-export function parseOperationEvent(raw: string): OperationStreamEvent | null {
-  try {
-    const data = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof data.message !== "string") {
-      return null;
-    }
-    return {
-      sequence: String(data.sequence ?? ""),
-      operationId: String(data.operation_id ?? ""),
-      type: typeof data.type === "string" ? data.type : "progress",
-      kind: String(data.kind ?? "output"),
-      message: data.message,
-      timestamp: String(data.timestamp ?? ""),
-      success: typeof data.success === "boolean" ? data.success : undefined,
-      serverStatus:
-        typeof data.server_status === "string" ? data.server_status : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function sequenceSortKey(value: string): string {
-  if (!value || value === "seed") return "0".padStart(24, "0");
-  return value.padStart(24, "0");
-}
-
-export function mergeOperationEvents(
-  current: readonly OperationStreamEvent[],
-  incoming: readonly OperationStreamEvent[],
-): OperationStreamEvent[] {
-  if (incoming.length === 0) return [...current];
-  const seen = new Set(
-    current.map((event) => event.sequence).filter((value) => value.length > 0),
-  );
-  const next = [...current];
-  for (const event of incoming) {
-    if (event.sequence && seen.has(event.sequence)) continue;
-    if (event.sequence) seen.add(event.sequence);
-    next.push(event);
-  }
-  next.sort((left, right) =>
-    sequenceSortKey(left.sequence).localeCompare(sequenceSortKey(right.sequence)),
-  );
-  return next;
+export function operationEventsUrl(
+  serverId: number,
+  operationId: string,
+): string {
+  return `/ops-stream/servers/${serverId}/operations/${operationId}?after=0`;
 }
 
 export function useOperationRunner({
@@ -164,9 +134,7 @@ export function useOperationRunner({
   useEffect(() => {
     if (!operationId) return;
     const alreadyTerminal = !isActiveOperation(operationRef.current);
-    const source = new EventSource(
-      `/api/v1/servers/${serverId}/operations/${operationId}/events?after=0`,
-    );
+    const source = new EventSource(operationEventsUrl(serverId, operationId));
     source.onopen = () => {
       setStreamFailed(false);
     };

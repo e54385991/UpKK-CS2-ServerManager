@@ -20,6 +20,7 @@ import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { confirm, notify } from "@/shared/feedback";
 import {
   mergeOperationEvents,
+  operationEventsUrl,
   parseOperationEvent,
 } from "@/modules/servers/use-operation-runner";
 import type {
@@ -126,7 +127,7 @@ export function GitHubInstallForm({
   useEffect(() => {
     if (!operation) return;
     const source = new EventSource(
-      `/api/v1/servers/${operation.serverId}/operations/${operation.operationId}/events?after=0`,
+      operationEventsUrl(operation.serverId, operation.operationId),
     );
     const ingest = (raw: string) => {
       const event = parseOperationEvent(raw);

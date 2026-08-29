@@ -130,6 +130,296 @@
         "title": "A2SCacheView",
         "type": "object"
       },
+      "A2SPlayerView": {
+        "properties": {
+          "duration": {
+            "default": 0,
+            "title": "Duration",
+            "type": "number"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "score": {
+            "default": 0,
+            "title": "Score",
+            "type": "integer"
+          }
+        },
+        "title": "A2SPlayerView",
+        "type": "object"
+      },
+      "A2SQueryView": {
+        "description": "Last cached A2S snapshot, or a live query when requested.",
+        "properties": {
+          "cached": {
+            "default": false,
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "last_updated": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Updated"
+          },
+          "live": {
+            "default": false,
+            "title": "Live",
+            "type": "boolean"
+          },
+          "players": {
+            "items": {
+              "$ref": "#/components/schemas/A2SPlayerView"
+            },
+            "title": "Players",
+            "type": "array"
+          },
+          "query_host": {
+            "title": "Query Host",
+            "type": "string"
+          },
+          "query_port": {
+            "title": "Query Port",
+            "type": "integer"
+          },
+          "response_time_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Time Ms"
+          },
+          "server_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/A2SServerInfoView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          }
+        },
+        "required": [
+          "query_host",
+          "query_port",
+          "success"
+        ],
+        "title": "A2SQueryView",
+        "type": "object"
+      },
+      "A2SServerInfoView": {
+        "description": "One A2S_INFO payload. Extra Valve fields are ignored.",
+        "properties": {
+          "bot_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Count"
+          },
+          "folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder"
+          },
+          "game": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Game"
+          },
+          "game_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Game Id"
+          },
+          "keywords": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keywords"
+          },
+          "map_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Map Name"
+          },
+          "max_players": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Players"
+          },
+          "password_protected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password Protected"
+          },
+          "ping": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ping"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "player_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Player Count"
+          },
+          "server_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Name"
+          },
+          "server_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Type"
+          },
+          "vac_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vac Enabled"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "title": "A2SServerInfoView",
+        "type": "object"
+      },
       "AIBackgroundTaskResponse": {
         "properties": {
           "completed_at": {
@@ -11562,6 +11852,59 @@
         "title": "MarketPluginView",
         "type": "object"
       },
+      "MonitoringLogListView": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MonitoringLogView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "MonitoringLogListView",
+        "type": "object"
+      },
+      "MonitoringLogView": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_type",
+          "status",
+          "message"
+        ],
+        "title": "MonitoringLogView",
+        "type": "object"
+      },
       "OperationInboxItem": {
         "properties": {
           "action": {
@@ -14038,6 +14381,64 @@
           "api_key"
         ],
         "title": "ProfileApiKeyView",
+        "type": "object"
+      },
+      "ProfileGsltGenerate": {
+        "description": "Create a Steam GSLT with the signed-in user's Steam Web API key.",
+        "properties": {
+          "captcha_code": {
+            "maxLength": 4,
+            "minLength": 4,
+            "title": "Captcha Code",
+            "type": "string"
+          },
+          "captcha_token": {
+            "title": "Captcha Token",
+            "type": "string"
+          },
+          "server_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Name"
+          }
+        },
+        "required": [
+          "captcha_token",
+          "captcha_code"
+        ],
+        "title": "ProfileGsltGenerate",
+        "type": "object"
+      },
+      "ProfileGsltView": {
+        "description": "Newly generated GSLT. Returned once so the operator can save it on a server.",
+        "properties": {
+          "login_token": {
+            "title": "Login Token",
+            "type": "string"
+          },
+          "steamid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steamid"
+          }
+        },
+        "required": [
+          "login_token"
+        ],
+        "title": "ProfileGsltView",
         "type": "object"
       },
       "ProfilePasswordChange": {
@@ -16716,6 +17117,18 @@
       "ServerCreateRequest": {
         "description": "Create a server. Secret fields are write-only and never echoed.",
         "properties": {
+          "additional_parameters": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Parameters"
+          },
           "apt_mirror": {
             "anyOf": [
               {
@@ -16895,6 +17308,39 @@
             "default": 3,
             "title": "A2S Failure Threshold",
             "type": "integer"
+          },
+          "a2s_query_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A2S Query Host"
+          },
+          "a2s_query_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A2S Query Port"
+          },
+          "additional_parameters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Parameters"
           },
           "apt_mirror": {
             "anyOf": [
@@ -17220,6 +17666,39 @@
             "default": 3,
             "title": "A2S Failure Threshold",
             "type": "integer"
+          },
+          "a2s_query_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A2S Query Host"
+          },
+          "a2s_query_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A2S Query Port"
+          },
+          "additional_parameters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Parameters"
           },
           "apt_mirror": {
             "anyOf": [
@@ -19408,6 +19887,43 @@
             ],
             "title": "A2S Failure Threshold"
           },
+          "a2s_query_host": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A2S Query Host"
+          },
+          "a2s_query_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A2S Query Port"
+          },
+          "additional_parameters": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Parameters"
+          },
           "apt_mirror": {
             "anyOf": [
               {
@@ -19740,6 +20256,39 @@
             "default": 3,
             "title": "A2S Failure Threshold",
             "type": "integer"
+          },
+          "a2s_query_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A2S Query Host"
+          },
+          "a2s_query_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A2S Query Port"
+          },
+          "additional_parameters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Parameters"
           },
           "apt_mirror": {
             "anyOf": [
@@ -28389,6 +28938,31 @@
         ]
       }
     },
+    "/api/v1/operations/inbox/events": {
+      "get": {
+        "description": "Live inbox snapshots for the top-right tray. SSE, not a second WebSocket.",
+        "operationId": "stream_operation_inbox_api_v1_operations_inbox_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stream Operation Inbox",
+        "tags": [
+          "v1-operations"
+        ]
+      }
+    },
     "/api/v1/operations/inbox/failed": {
       "delete": {
         "description": "Remove every retained failure the caller can see.",
@@ -28918,6 +29492,52 @@
       }
     },
     "/api/v1/plugins/market/{plugin_id}": {
+      "delete": {
+        "description": "Remove a marketplace listing. Members receive 403. Files on servers stay.",
+        "operationId": "delete_market_plugin_api_v1_plugins_market__plugin_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Market Plugin",
+        "tags": [
+          "v1-plugins"
+        ]
+      },
       "get": {
         "description": "Return one marketplace plugin, including resolved dependency titles.",
         "operationId": "get_market_plugin_api_v1_plugins_market__plugin_id__get",
@@ -29245,6 +29865,53 @@
           }
         ],
         "summary": "Generate User Api Key",
+        "tags": [
+          "v1-profile"
+        ]
+      }
+    },
+    "/api/v1/profile/gslt": {
+      "post": {
+        "description": "Create a Steam game server login token using the user's Steam Web API key.",
+        "operationId": "generate_gslt_api_v1_profile_gslt_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileGsltGenerate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileGsltView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Generate Gslt",
         "tags": [
           "v1-profile"
         ]
@@ -29968,6 +30635,64 @@
           }
         ],
         "summary": "Update Server",
+        "tags": [
+          "v1-servers"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/a2s": {
+      "get": {
+        "description": "Return the last A2S snapshot, or run a live query when ``live=true``.",
+        "operationId": "get_server_a2s_query_api_v1_servers__server_id__a2s_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "live",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Live",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/A2SQueryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Server A2S Query",
         "tags": [
           "v1-servers"
         ]
@@ -32587,6 +33312,82 @@
         "summary": "Apply Map Preset",
         "tags": [
           "v1-maps"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/monitoring-logs": {
+      "get": {
+        "description": "Return recent panel / A2S monitoring log lines from Redis.",
+        "operationId": "get_server_monitoring_logs_api_v1_servers__server_id__monitoring_logs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringLogListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Server Monitoring Logs",
+        "tags": [
+          "v1-servers"
         ]
       }
     },

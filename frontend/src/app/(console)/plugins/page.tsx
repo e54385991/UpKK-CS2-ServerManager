@@ -76,6 +76,7 @@ export default async function PluginsPage({
         <MarketCatalog
           query={query}
           serverId={Number.isInteger(serverId) ? serverId : undefined}
+          canDelete={session.isAdmin}
           servers={
             serversResult.ok
               ? serversResult.data.map((server) => ({

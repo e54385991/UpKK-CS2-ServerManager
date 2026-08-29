@@ -308,6 +308,79 @@ def test_v1_profile_s3_test(monkeypatch):
     assert response.json()["steps"][0]["name"] == "list"
 
 
+def test_v1_profile_gslt_requires_steam_api_key(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch)
+    response = client.post(
+        "/api/v1/profile/gslt",
+        json={
+            "server_name": "lan-ops",
+            "captcha_token": "tok",
+            "captcha_code": "ABCD",
+        },
+    )
+    assert response.status_code == 400
+    assert "Steam API key not set" in response.json()["detail"]
+
+
+def test_v1_profile_gslt_requires_captcha(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch, steam_api_key="A" * 32)
+    monkeypatch.setattr(
+        "api.routes.v1.profile.captcha_service.validate_captcha",
+        AsyncMock(return_value=False),
+    )
+    response = client.post(
+        "/api/v1/profile/gslt",
+        json={
+            "server_name": "lan-ops",
+            "captcha_token": "tok",
+            "captcha_code": "ABCD",
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_v1_profile_gslt_returns_generated_token(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch, steam_api_key="A" * 32)
+    monkeypatch.setattr(
+        "api.routes.v1.profile.steam_api_service.create_game_server_account",
+        AsyncMock(
+            return_value=(
+                True,
+                {"success": True, "login_token": "GSLTTOKEN123", "steamid": "7656119"},
+            )
+        ),
+    )
+    response = client.post(
+        "/api/v1/profile/gslt",
+        json={
+            "server_name": "lan-ops",
+            "captcha_token": "tok",
+            "captcha_code": "ABCD",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["login_token"] == "GSLTTOKEN123"
+    assert body["steamid"] == "7656119"
+
+
+def test_v1_profile_gslt_surfaces_steam_error(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch, steam_api_key="A" * 32)
+    monkeypatch.setattr(
+        "api.routes.v1.profile.steam_api_service.create_game_server_account",
+        AsyncMock(return_value=(False, {"success": False, "error": "Steam said no"})),
+    )
+    response = client.post(
+        "/api/v1/profile/gslt",
+        json={
+            "captcha_token": "tok",
+            "captcha_code": "ABCD",
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Steam said no"
+
+
 def test_v1_profile_ai_hides_key(monkeypatch):
     client, _user = _client(monkeypatch=monkeypatch)
     monkeypatch.setattr(

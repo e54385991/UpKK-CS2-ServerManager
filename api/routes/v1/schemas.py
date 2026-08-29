@@ -15,6 +15,7 @@ from typing import Generic, Literal, TypeVar
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from modules.models.servers import ServerStatus
+from modules.server_startup import normalize_additional_parameters
 from services.apt_mirrors import normalize_apt_mirror
 
 ItemT = TypeVar("ItemT")
@@ -169,6 +170,21 @@ class ProfileApiKeyGenerate(BaseModel):
 
     captcha_token: str | None = None
     captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
+
+
+class ProfileGsltGenerate(BaseModel):
+    """Create a Steam GSLT with the signed-in user's Steam Web API key."""
+
+    server_name: str | None = Field(default=None, max_length=255)
+    captcha_token: str
+    captcha_code: str = Field(min_length=4, max_length=4)
+
+
+class ProfileGsltView(BaseModel):
+    """Newly generated GSLT. Returned once so the operator can save it on a server."""
+
+    login_token: str
+    steamid: str | None = None
 
 
 class ProfileS3View(BaseModel):
@@ -327,6 +343,8 @@ class ServerDetail(ServerSummary):
     enable_a2s_monitoring: bool = False
     a2s_failure_threshold: int = 3
     a2s_check_interval_seconds: int = 60
+    a2s_query_host: str | None = None
+    a2s_query_port: int | None = None
     enable_auto_update: bool = True
     tv_enable: bool = False
     is_ssh_down: bool = False
@@ -335,6 +353,7 @@ class ServerDetail(ServerSummary):
     updated_at: datetime
     last_deployed: datetime | None = None
     apt_mirror: str | None = None
+    additional_parameters: str | None = None
     has_sudo_password: bool = False
     ssh_pooled: bool = False
     ssh_in_use: bool = False
@@ -380,6 +399,8 @@ class ServerUpdateRequest(BaseModel):
     enable_a2s_monitoring: bool | None = None
     a2s_failure_threshold: int | None = Field(default=None, ge=1, le=10)
     a2s_check_interval_seconds: int | None = Field(default=None, ge=15, le=3600)
+    a2s_query_host: str | None = Field(default=None, max_length=255)
+    a2s_query_port: int | None = Field(default=None, ge=1, le=65535)
     enable_auto_update: bool | None = None
     tv_enable: bool | None = None
     rcon_password: str | None = Field(default=None, max_length=255)
@@ -388,6 +409,7 @@ class ServerUpdateRequest(BaseModel):
     apt_mirror: str | None = Field(default=None, max_length=32)
     use_panel_proxy: bool | None = None
     github_proxy: str | None = Field(default=None, max_length=500)
+    additional_parameters: str | None = Field(default=None, max_length=4096)
 
     @field_validator("ssh_password", "rcon_password", "description", "sudo_password")
     @classmethod
@@ -409,6 +431,11 @@ class ServerUpdateRequest(BaseModel):
             raise ValueError("Steam account token must only contain alphanumeric characters")
         return token
 
+    @field_validator("additional_parameters")
+    @classmethod
+    def validate_additional_parameters(cls, value: str | None) -> str | None:
+        return normalize_additional_parameters(value)
+
     @field_validator("apt_mirror")
     @classmethod
     def validate_apt_mirror(cls, value: str | None) -> str | None:
@@ -422,7 +449,7 @@ class ServerUpdateRequest(BaseModel):
             raise ValueError("apt_mirror must be official, ustc, or tuna/tsinghua")
         return normalized
 
-    @field_validator("github_proxy")
+    @field_validator("github_proxy", "a2s_query_host")
     @classmethod
     def empty_github_proxy_to_none(cls, value: str | None) -> str | None:
         if value is None:
@@ -461,6 +488,7 @@ class ServerCreateRequest(BaseModel):
     game_type: str = Field(default="0", max_length=50)
     rcon_password: str | None = Field(default=None, max_length=255)
     steam_account_token: str | None = Field(default=None, max_length=255)
+    additional_parameters: str | None = Field(default=None, max_length=4096)
     session_manager: Literal["screen", "tmux"] = "tmux"
 
     @field_validator("sudo_password", "description", "rcon_password")
@@ -482,6 +510,11 @@ class ServerCreateRequest(BaseModel):
         if not re.match(r"^[A-Za-z0-9]+$", token):
             raise ValueError("Steam account token must only contain alphanumeric characters")
         return token
+
+    @field_validator("additional_parameters")
+    @classmethod
+    def validate_additional_parameters(cls, value: str | None) -> str | None:
+        return normalize_additional_parameters(value)
 
     @field_validator("apt_mirror")
     @classmethod
@@ -553,6 +586,60 @@ class A2SCacheView(BaseModel):
 class A2SCacheListView(BaseModel):
     servers: list[A2SCacheView] = Field(default_factory=list)
     timestamp: datetime
+
+
+class A2SServerInfoView(BaseModel):
+    """One A2S_INFO payload. Extra Valve fields are ignored."""
+
+    server_name: str | None = None
+    map_name: str | None = None
+    folder: str | None = None
+    game: str | None = None
+    player_count: int | None = None
+    max_players: int | None = None
+    bot_count: int | None = None
+    server_type: str | None = None
+    platform: str | None = None
+    password_protected: bool | None = None
+    vac_enabled: bool | None = None
+    version: str | None = None
+    ping: float | None = None
+    keywords: str | None = None
+    game_id: int | None = None
+
+
+class A2SPlayerView(BaseModel):
+    name: str = ""
+    score: int = 0
+    duration: float = 0
+
+
+class A2SQueryView(BaseModel):
+    """Last cached A2S snapshot, or a live query when requested."""
+
+    query_host: str
+    query_port: int
+    success: bool
+    cached: bool = False
+    live: bool = False
+    server_info: A2SServerInfoView | None = None
+    players: list[A2SPlayerView] = Field(default_factory=list)
+    timestamp: datetime | None = None
+    last_updated: datetime | None = None
+    response_time_ms: int | None = None
+    error: str | None = None
+
+
+class MonitoringLogView(BaseModel):
+    id: str
+    event_type: str
+    status: str
+    message: str
+    created_at: datetime | None = None
+
+
+class MonitoringLogListView(BaseModel):
+    items: list[MonitoringLogView] = Field(default_factory=list)
 
 
 class SshPoolView(BaseModel):

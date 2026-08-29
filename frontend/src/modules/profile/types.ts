@@ -64,6 +64,11 @@ export type ProfileApiKey = {
   readonly createdAt: string | null;
 };
 
+export type ProfileGslt = {
+  readonly loginToken: string;
+  readonly steamid: string | null;
+};
+
 export type AiProtocol = "chat_completions" | "responses";
 export type AiMode = "global" | "custom";
 

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
-import { ListTodo, X } from "lucide-react";
+import { ListTodo, LoaderCircle, X } from "lucide-react";
 import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { OpenLiveTerminalButton } from "@/modules/console/open-live-terminal";
 import {
@@ -29,7 +29,12 @@ import {
   type OperationStreamEvent,
 } from "@/modules/servers/types";
 import {
+  OPERATION_INBOX_EVENTS_URL,
+  parseOperationInboxPayload,
+} from "@/modules/servers/operation-inbox";
+import {
   mergeOperationEvents,
+  operationEventsUrl,
   parseOperationEvent,
 } from "@/modules/servers/use-operation-runner";
 import { confirm } from "@/shared/feedback";
@@ -59,11 +64,13 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
     let cancelled = false;
     void refreshOperationJournalAction(item.serverId, item.operationId).then(
       (result) => {
-        if (!cancelled && result.ok) setEvents([...result.data.events]);
+        if (!cancelled && result.ok) {
+          setEvents(mergeOperationEvents([], result.data.events));
+        }
       },
     );
     const source = new EventSource(
-      `/ops-stream/servers/${item.serverId}/operations/${item.operationId}?after=0`,
+      operationEventsUrl(item.serverId, item.operationId),
     );
     const ingest = (raw: string) => {
       const event = parseOperationEvent(raw);
@@ -91,12 +98,14 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
     };
   }, [item.operationId, item.serverId]);
 
+  const latest = item.latestMessage || events.at(-1)?.message || t("activityWaiting");
+
   return (
     <>
       <div>
         <p className="text-xs font-medium text-fg-subtle">{t("activityNow")}</p>
-        <p className="mt-1 text-sm text-fg-muted">
-          {item.latestMessage || events.at(-1)?.message || t("activityWaiting")}
+        <p className="mt-1 text-sm text-fg-muted" data-testid="activity-step">
+          {latest}
         </p>
       </div>
       <div>
@@ -156,11 +165,26 @@ export function ActivityTray() {
       if (!cancelled && result.ok) setInbox(result.data);
     }
     void load();
-    const timer = window.setInterval(() => void load(), remaining > 0 ? 4000 : 8000);
+    const source = new EventSource(OPERATION_INBOX_EVENTS_URL);
+    const apply = (raw: string) => {
+      const next = parseOperationInboxPayload(raw);
+      if (!cancelled && next) setInbox(next);
+    };
+    source.addEventListener("inbox", (message: MessageEvent<string>) => apply(message.data));
+    source.onmessage = (message) => apply(message.data);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      source.close();
     };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshOperationInboxAction().then((result) => {
+        if (result.ok) setInbox(result.data);
+      });
+    }, remaining > 0 ? 8000 : 20000);
+    return () => window.clearInterval(timer);
   }, [remaining]);
 
   const actionLabel = (action: string) => {
@@ -201,14 +225,20 @@ export function ActivityTray() {
     <div className="relative">
       <Button
         type="button"
-        variant="outline"
+        variant={remaining > 0 ? "primary" : "outline"}
         size="sm"
         data-testid="activity-tray-toggle"
+        data-busy={remaining > 0 ? "true" : "false"}
         aria-expanded={open}
-        aria-label={t("activityOpen")}
+        aria-label={
+          remaining > 0
+            ? t("activityOpenBusy", { count: remaining })
+            : t("activityOpen")
+        }
         className={cn(
-          "relative gap-2",
-          running && "border-primary/60 text-primary shadow-[0_0_0_1px_rgb(34_211_238/0.25)]",
+          "relative gap-2 overflow-visible",
+          remaining > 0 &&
+            "shadow-[0_0_0_1px_rgb(34_211_238/0.55),0_0_22px_rgb(34_211_238/0.28)]",
         )}
         onClick={() => {
           if (open) {
@@ -219,17 +249,28 @@ export function ActivityTray() {
           openActivityTray(selected?.operationId);
         }}
       >
+        {remaining > 0 ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -inset-1.5 -z-10 animate-ping rounded-lg bg-primary/35"
+          />
+        ) : null}
         <span className="relative inline-flex">
           {running ? (
-            <span className="absolute -inset-1 animate-ping rounded-full bg-primary/30" />
-          ) : null}
-          <ListTodo className={cn("size-4", running && "animate-pulse")} />
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : (
+            <ListTodo className={cn("size-4", remaining > 0 && "animate-pulse")} />
+          )}
         </span>
-        <span className="hidden sm:inline">{t("activityTitle")}</span>
+        <span>
+          {remaining > 0
+            ? t("activityRemaining", { count: remaining })
+            : t("activityTitle")}
+        </span>
         {remaining > 0 ? (
           <span
             data-testid="activity-tray-count"
-            className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground"
+            className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 text-[11px] font-semibold text-primary-strong"
           >
             {remaining}
           </span>
@@ -351,6 +392,9 @@ export function ActivityTray() {
                           {tStatus(`opStatus.${item.status}`)}
                         </Badge>
                       </span>
+                      <span className="truncate font-mono text-[11px] text-fg-muted">
+                        {item.command || actionLabel(item.action)}
+                      </span>
                       <span className="truncate text-xs text-fg-subtle">
                         {item.serverName}
                         {item.queuePosition > 0
@@ -389,9 +433,23 @@ export function ActivityTray() {
             ) : null}
             {selected ? (
               <div className="space-y-3 border-t border-line px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-medium text-fg">
+                    {actionLabel(selected.action)}
+                  </p>
+                  <Badge
+                    data-testid="activity-status"
+                    tone={OPERATION_STATUS_TONE[selected.status]}
+                  >
+                    {tStatus(`opStatus.${selected.status}`)}
+                  </Badge>
+                </div>
                 <div>
                   <p className="text-xs font-medium text-fg-subtle">{t("activityCommand")}</p>
-                  <pre className="mt-1 overflow-x-auto rounded-md border border-line bg-surface-overlay/60 px-3 py-2 font-mono text-xs text-fg">
+                  <pre
+                    data-testid="activity-command"
+                    className="mt-1 overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-fg"
+                  >
                     {selected.command || actionLabel(selected.action)}
                   </pre>
                 </div>

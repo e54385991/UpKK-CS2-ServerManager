@@ -51,6 +51,63 @@ def test_incremental_console_emits_latest_progress_on_redraw():
     ) == ["Update state (0x61) downloading, progress: 2.20"]
 
 
+def test_incremental_console_does_not_replay_older_progress_from_history():
+    previous = (
+        "Waiting for user info...OK\n"
+        "Update state (0x61) downloading, progress: 10.10 (7179405511 / 71089554542)\n"
+        "Update state (0x61) downloading, progress: 10.17 (7232318229 / 71089554542)\n"
+    )
+    current = (
+        "Waiting for user info...OK\n"
+        "Update state (0x61) downloading, progress: 10.10 (7179405511 / 71089554542)\n"
+        "Update state (0x61) downloading, progress: 10.17 (7232318229 / 71089554542)\n"
+        "Update state (0x61) downloading, progress: 10.25 (7286981417 / 71089554542)\n"
+    )
+    assert incremental_console_lines(previous, current) == [
+        "Update state (0x61) downloading, progress: 10.25 (7286981417 / 71089554542)"
+    ]
+    redraw = (
+        "Waiting for user info...OK\n"
+        "Update state (0x61) downloading, progress: 16.55 (11763884997 / 71089554542)\n"
+    )
+    next_redraw = (
+        "Waiting for user info...OK\n"
+        "Update state (0x61) downloading, progress: 16.62 (11814281445 / 71089554542)\n"
+    )
+    assert incremental_console_lines(redraw, next_redraw) == [
+        "Update state (0x61) downloading, progress: 16.62 (11814281445 / 71089554542)"
+    ]
+
+
+def test_incremental_console_joins_wrapped_byte_tail():
+    previous = "Update state (0x61) downloading, progress: 16.55 (11763884997 / 710895\n54542)\n"
+    current = "Update state (0x61) downloading, progress: 16.62 (11814281445 / 710895\n54542)\n"
+    assert incremental_console_lines(previous, current) == [
+        "Update state (0x61) downloading, progress: 16.62 (11814281445 / 71089554542)"
+    ]
+    assert latest_console_heartbeat(current) == (
+        "Update state (0x61) downloading, progress: 16.62 (11814281445 / 71089554542)"
+    )
+    assert incremental_console_lines(current, current) == []
+
+
+def test_latest_progress_prefers_highest_bytes_over_old_complete_line():
+    snapshot = (
+        "Waiting for user info...OK\n"
+        "Update state (0x61) downloading, progress: 10.17 (7232318229 / 71089554542)\n"
+        "Update state (0x61) downloading, progress: 10.25 (7286981417 / 71089554542)\n"
+        "Update state (0x61) downloading,\n"
+        "progress: 50.64 (35999207698 / 71089554542)\n"
+    )
+    assert latest_console_heartbeat(snapshot).startswith(
+        "Update state (0x61) downloading, progress: 50.64"
+    )
+    assert incremental_console_lines(
+        "Update state (0x61) downloading, progress: 10.25 (7286981417 / 71089554542)\n",
+        snapshot,
+    ) == ["Update state (0x61) downloading, progress: 50.64 (35999207698 / 71089554542)"]
+
+
 def test_latest_console_heartbeat_keeps_cr_only_progress():
     snapshot = "Update state (0x61) downloading, progress: 9.10\r"
     assert latest_console_heartbeat(snapshot) == ("Update state (0x61) downloading, progress: 9.10")

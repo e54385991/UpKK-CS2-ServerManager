@@ -22,7 +22,6 @@ export function ServerMonitoringForm({ server }: { server: ServerDetail }) {
   const router = useRouter();
   const [enablePanel, setEnablePanel] = useState(server.enablePanelMonitoring);
   const [autoRestart, setAutoRestart] = useState(server.autoRestartOnCrash);
-  const [enableA2s, setEnableA2s] = useState(server.enableA2sMonitoring);
   const [autoUpdate, setAutoUpdate] = useState(server.enableAutoUpdate);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,9 +37,6 @@ export function ServerMonitoringForm({ server }: { server: ServerDetail }) {
       enablePanelMonitoring: enablePanel,
       monitorIntervalSeconds: Number(form.get("interval")),
       autoRestartOnCrash: autoRestart,
-      enableA2sMonitoring: enableA2s,
-      a2sFailureThreshold: Number(form.get("a2sThreshold")),
-      a2sCheckIntervalSeconds: Number(form.get("a2sInterval")),
       enableAutoUpdate: autoUpdate,
     });
     setPending(false);
@@ -98,34 +94,6 @@ export function ServerMonitoringForm({ server }: { server: ServerDetail }) {
             checked={autoRestart}
             onCheckedChange={setAutoRestart}
           />
-          <SwitchRow
-            id="enableA2s"
-            label={t("fields.enableA2s")}
-            checked={enableA2s}
-            onCheckedChange={setEnableA2s}
-          />
-          <Field label={t("fields.a2sThreshold")} htmlFor="a2sThreshold">
-            <Input
-              id="a2sThreshold"
-              name="a2sThreshold"
-              type="number"
-              min={1}
-              max={10}
-              required
-              defaultValue={server.a2sFailureThreshold}
-            />
-          </Field>
-          <Field label={t("fields.a2sInterval")} htmlFor="a2sInterval">
-            <Input
-              id="a2sInterval"
-              name="a2sInterval"
-              type="number"
-              min={15}
-              max={3600}
-              required
-              defaultValue={server.a2sCheckIntervalSeconds}
-            />
-          </Field>
           <SwitchRow
             id="autoUpdate"
             label={t("fields.autoUpdate")}

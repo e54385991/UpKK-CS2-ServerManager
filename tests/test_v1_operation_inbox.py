@@ -6,9 +6,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.application import create_app
+from api.dependencies import get_bearer_or_cookie_user
+from api.routes.v1.operation_inbox import _build_inbox
 from modules import get_current_active_user, get_current_user, get_db
 
 
@@ -27,6 +30,7 @@ def _client(monkeypatch, *, admin: bool = False):
 
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_current_active_user] = lambda: user
+    app.dependency_overrides[get_bearer_or_cookie_user] = lambda: user
     app.dependency_overrides[get_db] = override_db
     return TestClient(app)
 
@@ -128,3 +132,53 @@ def test_operation_inbox_lists_and_clears_failures(monkeypatch):
     one = client.delete(f"/api/v1/operations/inbox/failed/{operation_id}")
     assert one.status_code == 200
     dismiss.assert_awaited_once()
+
+
+def test_operation_inbox_events_requires_authentication():
+    client = TestClient(create_app(lifespan=None))
+    response = client.get("/api/v1/operations/inbox/events")
+    assert response.status_code == 401
+
+
+def test_operation_inbox_events_route_is_registered():
+    from fastapi.routing import iter_route_contexts
+
+    app = create_app(lifespan=None)
+    paths = {getattr(context.route, "path", None) for context in iter_route_contexts(app.routes)}
+    assert "/api/v1/operations/inbox/events" in paths
+
+
+@pytest.mark.asyncio
+async def test_build_inbox_includes_command_and_status(monkeypatch):
+    operation_id = str(uuid4())
+    record = {
+        "operation_id": operation_id,
+        "server_id": 1,
+        "action": "install_plugin",
+        "command": "plugin-market install 11 --from latest",
+        "status": "running",
+        "success": None,
+        "message": None,
+        "server_status": None,
+        "actor_user_id": 1,
+        "started_at": "2026-08-29T00:00:00+00:00",
+        "completed_at": None,
+    }
+    monkeypatch.setattr(
+        "api.routes.v1.operation_inbox.server_operation_hub.list_for_server",
+        AsyncMock(return_value=[record]),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.operation_inbox.server_operation_hub.latest_message",
+        AsyncMock(return_value="Extracting archive"),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.operation_inbox.server_operation_hub.list_failed_for_server",
+        AsyncMock(return_value=[]),
+    )
+    view = await _build_inbox([(1, "alpha")])
+    assert view.active_count == 1
+    assert view.running_count == 1
+    assert view.items[0].command == "plugin-market install 11 --from latest"
+    assert view.items[0].status == "running"
+    assert view.items[0].latest_message == "Extracting archive"

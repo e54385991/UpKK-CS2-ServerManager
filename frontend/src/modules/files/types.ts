@@ -35,18 +35,32 @@ export const TEXT_EXTENSIONS = [
 ] as const;
 
 export const ARCHIVE_EXTENSIONS = [
+  ".tar.zstd",
+  ".tar.lzma",
+  ".tar.zst",
+  ".tar.bz2",
+  ".tar.gz",
+  ".tar.xz",
+  ".tzst",
+  ".tbz2",
+  ".tgz",
+  ".txz",
+  ".tlz",
+  ".tbz",
   ".zip",
   ".7z",
+  ".rar",
   ".tar",
-  ".tar.gz",
-  ".tgz",
-  ".tar.bz2",
-  ".tbz2",
-  ".tar.xz",
-  ".txz",
+  ".zstd",
+  ".lzma",
+  ".zst",
   ".gz",
   ".bz2",
+  ".xz",
 ] as const;
+
+export const ARCHIVE_FORMATS_LABEL =
+  "zip, 7z, rar, tar, tar.gz, tgz, tar.bz2, tar.xz, tar.zst, gz, bz2, xz, zst, lzma";
 
 export type FileKind = "file" | "directory";
 
@@ -111,6 +125,12 @@ export function isTextFile(name: string): boolean {
 export function isArchiveFile(name: string): boolean {
   const lower = name.toLowerCase();
   return ARCHIVE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+export function archiveExtensionLabel(name: string): string {
+  const lower = name.toLowerCase();
+  const match = ARCHIVE_EXTENSIONS.find((ext) => lower.endsWith(ext));
+  return match ? match.slice(1) : "archive";
 }
 
 export function formatFileSize(bytes: number): string {

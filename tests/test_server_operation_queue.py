@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.server_operation_hub import ServerOperationHub
+from services.server_operation_hub import EVENT_LIMIT, ServerOperationHub
 
 
 @pytest.fixture
@@ -82,3 +82,23 @@ async def test_failed_job_is_retained_and_can_be_cleared(hub: ServerOperationHub
     dismissed = await hub.dismiss_failed(first["operation_id"])
     assert dismissed is not None
     assert await hub.list_failed_for_server(1) == []
+
+
+@pytest.mark.asyncio
+async def test_emit_keeps_only_the_latest_event_limit(hub, monkeypatch):
+    monkeypatch.setattr("services.server_operation_hub.EVENT_LIMIT", 3)
+    record = await hub.create(server_id=1, action="deploy", actor_user_id=1)
+    operation_id = record["operation_id"]
+    for index in range(5):
+        await hub.emit(
+            operation_id,
+            "progress",
+            kind="output",
+            message=f"line-{index}",
+        )
+    assert [event["message"] for event in hub._events[operation_id]] == [
+        "line-2",
+        "line-3",
+        "line-4",
+    ]
+    assert EVENT_LIMIT == 300

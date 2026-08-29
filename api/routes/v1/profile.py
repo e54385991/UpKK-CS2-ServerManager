@@ -17,6 +17,7 @@ from modules.schemas.ai import AIProviderTestRequest, UserAISettingsUpdate
 from services.audit_log_service import record_audit_event
 from services.captcha_service import captcha_service
 from services.s3_backup_service import s3_backup_service
+from services.steam_api_service import steam_api_service
 from services.steamcmd_retry import (
     STEAMCMD_DEFAULT_MAX_RETRIES,
     STEAMCMD_MAX_RETRIES_LIMIT,
@@ -31,6 +32,8 @@ from .schemas import (
     AssistantUserSettingsView,
     ProfileApiKeyGenerate,
     ProfileApiKeyView,
+    ProfileGsltGenerate,
+    ProfileGsltView,
     ProfilePasswordChange,
     ProfilePatch,
     ProfileS3Patch,
@@ -305,6 +308,51 @@ async def revoke_api_key(
         request=request,
     )
     return ActionResult(success=True, message="API key revoked successfully")
+
+
+@router.post("/gslt", response_model=ProfileGsltView)
+async def generate_gslt(
+    body: ProfileGsltGenerate,
+    current_user: ActiveUser,
+    request: Request,
+) -> ProfileGsltView:
+    """Create a Steam game server login token using the user's Steam Web API key."""
+    await _require_captcha(body.captcha_token, body.captcha_code)
+    steam_key = (getattr(current_user, "steam_api_key", None) or "").strip()
+    if not steam_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Steam API key not set. Please set your Steam API key in profile settings first."
+            ),
+        )
+
+    if body.server_name and isinstance(body.server_name, str):
+        memo = body.server_name.strip() or f"CS2 Server - {current_user.username}"
+    else:
+        memo = f"CS2 Server - {current_user.username}"
+
+    success, result = await steam_api_service.create_game_server_account(
+        steam_api_key=steam_key, memo=memo
+    )
+    login_token = (result or {}).get("login_token") if result else None
+    if not success or not login_token:
+        error_msg = ((result or {}).get("error") if result else None) or "Failed to generate token"
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+
+    steamid = (result or {}).get("steamid") or None
+    await record_audit_event(
+        category="settings",
+        action="gslt.generate",
+        status="success",
+        user=current_user,
+        request=request,
+        details={"memo": memo},
+    )
+    return ProfileGsltView(
+        login_token=str(login_token),
+        steamid=str(steamid) if steamid else None,
+    )
 
 
 @router.get("/s3", response_model=ProfileS3View)

@@ -281,7 +281,7 @@ class RedisManager:
         return await self.delete(server_key)
 
     # Deployment progress methods
-    MAX_DEPLOYMENT_PROGRESS_ENTRIES = 5000
+    MAX_DEPLOYMENT_PROGRESS_ENTRIES = 300
     MAX_DEPLOYMENT_PROGRESS_MESSAGE_BYTES = 64 * 1024
 
     async def append_deployment_progress(

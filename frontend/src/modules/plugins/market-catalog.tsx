@@ -22,10 +22,12 @@ export async function MarketCatalog({
   query,
   serverId,
   servers,
+  canDelete = false,
 }: {
   query: MarketQuery;
   serverId?: number;
   servers: readonly MarketInstallServer[];
+  canDelete?: boolean;
 }) {
   const t = await getTranslations("plugins");
   const result = await listMarketPlugins(query);
@@ -64,6 +66,7 @@ export async function MarketCatalog({
               plugin={plugin}
               servers={servers}
               defaultServerId={serverId}
+              canDelete={canDelete}
             />
           </li>
         ))}

@@ -217,6 +217,10 @@ def test_v1_get_server_includes_workspace_fields_without_secrets(monkeypatch):
             monitor_interval_seconds=30,
             auto_restart_on_crash=False,
             is_ssh_down=True,
+            a2s_query_host="query.example",
+            a2s_query_port=27016,
+            enable_a2s_monitoring=True,
+            additional_parameters="+sv_hibernate_when_empty 0",
         )
 
     monkeypatch.setattr("api.routes.v1.servers.require_server_access", fake_access)
@@ -228,6 +232,10 @@ def test_v1_get_server_includes_workspace_fields_without_secrets(monkeypatch):
     assert body["monitor_interval_seconds"] == 30
     assert body["auto_restart_on_crash"] is False
     assert body["is_ssh_down"] is True
+    assert body["a2s_query_host"] == "query.example"
+    assert body["a2s_query_port"] == 27016
+    assert body["enable_a2s_monitoring"] is True
+    assert body["additional_parameters"] == "+sv_hibernate_when_empty 0"
     assert body["apt_mirror"] == "official"
     assert body["has_sudo_password"] is True
     assert body["ssh_pooled"] is False
@@ -271,6 +279,42 @@ def test_v1_patch_server_updates_and_hides_secrets(monkeypatch):
     assert "ssh_password" not in body
     assert "sudo_password" not in body
     assert "new-secret" not in str(body)
+
+
+def test_v1_patch_server_accepts_additional_parameters(monkeypatch):
+    client, _user = _client(monkeypatch)
+    captured = {}
+
+    async def fake_update(_server_id, server_data, _db, _user, _request):
+        captured["additional_parameters"] = server_data.additional_parameters
+        updated = _sample_server(additional_parameters=server_data.additional_parameters)
+        updated.restart_required = True
+        return updated
+
+    monkeypatch.setattr("api.routes.v1.servers.update_legacy_server", fake_update)
+    response = client.patch(
+        "/api/v1/servers/7",
+        json={"additional_parameters": "+sv_hibernate_when_empty 0 +host_workshop_map 3171881962"},
+    )
+    assert response.status_code == 200
+    assert (
+        captured["additional_parameters"]
+        == "+sv_hibernate_when_empty 0 +host_workshop_map 3171881962"
+    )
+    assert (
+        response.json()["additional_parameters"]
+        == "+sv_hibernate_when_empty 0 +host_workshop_map 3171881962"
+    )
+    assert response.json()["restart_required"] is True
+
+
+def test_v1_patch_server_rejects_managed_additional_parameters(monkeypatch):
+    client, _user = _client(monkeypatch)
+    response = client.patch(
+        "/api/v1/servers/7",
+        json={"additional_parameters": "+map de_dust2"},
+    )
+    assert response.status_code == 422
 
 
 def test_v1_create_server_accepts_tsinghua_alias(monkeypatch):

@@ -1,6 +1,7 @@
 """Versioned server endpoints returning non-secret projections."""
 
-from typing import Literal
+from datetime import datetime
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import select
@@ -28,10 +29,15 @@ from .operations import to_view
 from .overview import _a2s_view
 from .schemas import (
     A2SCacheView,
+    A2SPlayerView,
+    A2SQueryView,
+    A2SServerInfoView,
     ActionResult,
     AptMirrorApplyRequest,
     ConfirmDeploymentView,
     DiskSpaceView,
+    MonitoringLogListView,
+    MonitoringLogView,
     ServerCreateRequest,
     ServerCreateResult,
     ServerDetail,
@@ -129,6 +135,8 @@ async def _to_detail(server: Server) -> ServerDetail:
         enable_a2s_monitoring=bool(getattr(server, "enable_a2s_monitoring", False)),
         a2s_failure_threshold=int(getattr(server, "a2s_failure_threshold", 3) or 3),
         a2s_check_interval_seconds=int(getattr(server, "a2s_check_interval_seconds", 60) or 60),
+        a2s_query_host=getattr(server, "a2s_query_host", None) or None,
+        a2s_query_port=getattr(server, "a2s_query_port", None),
         enable_auto_update=bool(getattr(server, "enable_auto_update", True)),
         tv_enable=bool(getattr(server, "tv_enable", False)),
         is_ssh_down=bool(getattr(server, "is_ssh_down", False)),
@@ -144,6 +152,7 @@ async def _to_detail(server: Server) -> ServerDetail:
         updated_at=server.updated_at,
         last_deployed=server.last_deployed,
         apt_mirror=getattr(server, "apt_mirror", None),
+        additional_parameters=getattr(server, "additional_parameters", None) or None,
         has_sudo_password=bool(getattr(server, "sudo_password", None)),
         use_panel_proxy=bool(getattr(server, "use_panel_proxy", False)),
         github_proxy=getattr(server, "github_proxy", None) or None,
@@ -351,6 +360,112 @@ async def get_server_a2s_cache(
         else await a2s_cache_service.get_cached_info(int(server.id))
     )
     return _a2s_view(int(server.id), cached if isinstance(cached, dict) else None)
+
+
+def _parse_optional_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
+def _a2s_query_view(
+    server: Server,
+    cached: dict[str, Any] | None,
+    *,
+    live: bool,
+) -> A2SQueryView:
+    query_host = str(getattr(server, "a2s_query_host", None) or server.host)
+    query_port = int(getattr(server, "a2s_query_port", None) or server.game_port)
+    if not cached:
+        return A2SQueryView(
+            query_host=query_host,
+            query_port=query_port,
+            success=False,
+            cached=False,
+            live=live,
+        )
+    info_raw = cached.get("server_info")
+    info = A2SServerInfoView.model_validate(info_raw) if isinstance(info_raw, dict) else None
+    players: list[A2SPlayerView] = []
+    raw_players = cached.get("players")
+    if isinstance(raw_players, list):
+        for item in raw_players:
+            if isinstance(item, dict):
+                players.append(A2SPlayerView.model_validate(item))
+    return A2SQueryView(
+        query_host=str(cached.get("query_host") or query_host),
+        query_port=int(cached.get("query_port") or query_port),
+        success=bool(cached.get("success")),
+        cached=True,
+        live=live,
+        server_info=info if cached.get("success") else None,
+        players=players,
+        timestamp=_parse_optional_datetime(cached.get("timestamp")),
+        last_updated=_parse_optional_datetime(
+            cached.get("last_updated") or cached.get("timestamp")
+        ),
+        response_time_ms=int(cached["response_time_ms"])
+        if cached.get("response_time_ms") is not None
+        else None,
+        error=str(cached["error"]) if cached.get("error") else None,
+    )
+
+
+@router.get("/{server_id}/a2s", response_model=A2SQueryView)
+async def get_server_a2s_query(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    live: bool = Query(default=False),
+) -> A2SQueryView:
+    """Return the last A2S snapshot, or run a live query when ``live=true``."""
+    server = await require_server_access(db, server_id, current_user)
+    cached = (
+        await a2s_cache_service.refresh_cached_info(server)
+        if live
+        else await a2s_cache_service.get_cached_info(int(server.id))
+    )
+    return _a2s_query_view(
+        server,
+        cached if isinstance(cached, dict) else None,
+        live=live,
+    )
+
+
+@router.get("/{server_id}/monitoring-logs", response_model=MonitoringLogListView)
+async def get_server_monitoring_logs(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    event_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=50),
+) -> MonitoringLogListView:
+    """Return recent panel / A2S monitoring log lines from Redis."""
+    await require_server_access(db, server_id, current_user)
+    raw_logs = await redis_manager.get_monitoring_logs(
+        server_id=server_id,
+        event_type=event_type,
+        limit=limit,
+    )
+    items: list[MonitoringLogView] = []
+    for entry in raw_logs:
+        if not isinstance(entry, dict):
+            continue
+        items.append(
+            MonitoringLogView(
+                id=str(entry.get("id") or ""),
+                event_type=str(entry.get("event_type") or ""),
+                status=str(entry.get("status") or ""),
+                message=str(entry.get("message") or ""),
+                created_at=_parse_optional_datetime(entry.get("created_at")),
+            )
+        )
+    return MonitoringLogListView(items=items)
 
 
 @router.get("/{server_id}/startup-command", response_model=StartupCommandView)

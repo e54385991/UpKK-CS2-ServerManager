@@ -10,7 +10,7 @@ import type {
 } from "@/modules/cleanup/types";
 
 function revalidate(serverId: number) {
-  revalidatePath(`/servers/${serverId}/operations`);
+  revalidatePath(`/servers/${serverId}/cleanup`);
 }
 
 export async function scanCleanupAction(

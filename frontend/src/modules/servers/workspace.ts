@@ -22,6 +22,7 @@ export const SERVER_WORKSPACE_NAV_ROWS = [
       "host-config",
       "monitoring",
       "files",
+      "cleanup",
       "console",
       "schedule",
       "discord",

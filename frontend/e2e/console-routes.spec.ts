@@ -14,6 +14,7 @@ const CONSOLE_ROUTES = [
   "/servers/1/updates",
   "/servers/1/maps",
   "/servers/1/files",
+  "/servers/1/cleanup",
   "/servers/1/console",
   "/live-console/1",
   "/live-console/1?view=ssh",

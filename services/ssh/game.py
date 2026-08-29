@@ -22,6 +22,7 @@ from services.steamcmd_retry import (
 )
 from services.steamcmd_session import (
     incremental_console_lines,
+    latest_console_heartbeat,
     parse_steamcmd_exit_code,
     steamcmd_exit_path,
     wrap_steamcmd_payload,
@@ -1689,17 +1690,13 @@ class GameLifecycleMixin:
                         )
                 elif time.monotonic() - last_heartbeat >= 20:
                     last_heartbeat = time.monotonic()
-                    path = f"{server.game_directory}/cs2"
-                    _, size_out, _ = await self.execute_command(
-                        f"du -sh -- {shlex.quote(path)} 2>/dev/null || echo unknown",
-                        timeout=20,
-                    )
-                    size = (size_out or "unknown").strip().splitlines()
-                    size_text = size[0] if size else "unknown"
+                    # Do not `du` a 70GB tree mid-download — it blocks pane
+                    # capture for tens of seconds and the web log looks frozen.
                     pids = await self._list_steamcmd_pids(server)
-                    await send_progress(
-                        f"SteamCMD session {name} running ({len(pids)} pid). game dir {size_text}"
-                    )
+                    heartbeat = latest_console_heartbeat(capture or last_capture)
+                    if heartbeat:
+                        await send_progress(heartbeat)
+                    await send_progress(f"SteamCMD session {name} running ({len(pids)} pid)")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

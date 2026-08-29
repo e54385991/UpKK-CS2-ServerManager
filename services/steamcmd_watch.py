@@ -2,14 +2,13 @@
 
 The original stream can stall after "Waiting for user info...OK" (CR-only
 progress) or die when the SSH session drops. A short watch on a fresh lease
-publishes directory size and process counts into the same operation log.
+publishes process counts and pane progress into the same operation log.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import shlex
 
 from modules.models import Server
 from services.deployment_progress import send_deployment_update
@@ -21,7 +20,7 @@ from services.game_session import (
 from services.server_operation_hub import ACTIVE_STATUSES, server_operation_hub
 from services.ssh_manager import SSHManager
 from services.steamcmd_guard import steamcmd_pgrep_command
-from services.steamcmd_session import incremental_console_lines
+from services.steamcmd_session import incremental_console_lines, latest_console_heartbeat
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +73,6 @@ async def _run_watch(server: Server) -> None:
                 ssh.execute_command, server.session_manager, name, timeout=10
             )
             pids = await _list_pids(ssh, server)
-            size_line = await _dir_size_line(ssh, server)
             if manager:
                 idle_empty = 0
                 success, capture, _ = await ssh.execute_command(
@@ -85,24 +83,27 @@ async def _run_watch(server: Server) -> None:
                     for line in incremental_console_lines(last_capture, capture or ""):
                         await send_deployment_update(server_id, "output", line)
                     last_capture = capture or last_capture
+                    heartbeat = latest_console_heartbeat(capture or last_capture)
+                    if heartbeat:
+                        await send_deployment_update(server_id, "output", heartbeat)
                 await send_deployment_update(
                     server_id,
                     "output",
-                    f"SteamCMD {manager} session {name} running ({len(pids)} pid). {size_line}",
+                    f"SteamCMD {manager} session {name} running ({len(pids)} pid)",
                 )
             elif pids:
                 idle_empty = 0
                 await send_deployment_update(
                     server_id,
                     "output",
-                    f"SteamCMD still running ({len(pids)} pid). {size_line}",
+                    f"SteamCMD still running ({len(pids)} pid)",
                 )
             else:
                 idle_empty += 1
                 await send_deployment_update(
                     server_id,
                     "info",
-                    f"SteamCMD session {name} not seen. {size_line}",
+                    f"SteamCMD session {name} not seen",
                 )
                 if idle_empty >= 3:
                     await send_deployment_update(
@@ -132,14 +133,3 @@ async def _list_pids(ssh: SSHManager, server: Server) -> list[str]:
     if not success or not stdout.strip():
         return []
     return [pid for pid in stdout.strip().splitlines() if pid.isdigit()]
-
-
-async def _dir_size_line(ssh: SSHManager, server: Server) -> str:
-    path = f"{server.game_directory}/cs2"
-    success, stdout, _stderr = await ssh.execute_command(
-        f"du -sh -- {shlex.quote(path)} 2>/dev/null || echo '0\\t{path}'",
-        timeout=20,
-    )
-    text = (stdout or "").strip().splitlines()
-    first = text[0] if text else "unknown"
-    return f"game dir {first}"

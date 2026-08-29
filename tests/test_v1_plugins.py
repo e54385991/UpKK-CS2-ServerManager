@@ -182,6 +182,49 @@ def test_v1_plugins_market_detail_404(monkeypatch):
     assert response.status_code == 404
 
 
+def test_v1_plugins_market_delete_requires_authentication():
+    client = TestClient(create_app(lifespan=None))
+    response = client.delete("/api/v1/plugins/market/11")
+    assert response.status_code == 401
+
+
+def test_v1_plugins_market_delete_is_admin_only(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch)
+    response = client.delete("/api/v1/plugins/market/11")
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not enough permissions"
+
+
+def test_v1_plugins_market_delete_404(monkeypatch):
+    client, user = _client(monkeypatch=monkeypatch)
+    user.is_admin = True
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.remove_catalog_plugin",
+        AsyncMock(return_value=None),
+    )
+    response = client.delete("/api/v1/plugins/market/99")
+    assert response.status_code == 404
+
+
+def test_v1_plugins_market_delete_admin(monkeypatch):
+    client, user = _client(monkeypatch=monkeypatch)
+    user.is_admin = True
+    plugin = _sample_market()
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.remove_catalog_plugin",
+        AsyncMock(return_value=plugin),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.record_audit_event",
+        AsyncMock(),
+    )
+    response = client.delete("/api/v1/plugins/market/11")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert "MatchZy" in body["message"]
+
+
 def test_v1_server_plugins_list(monkeypatch):
     managed = _sample_managed()
     client, _user = _client(
