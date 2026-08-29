@@ -9,10 +9,22 @@ fields; secret mutation happens through dedicated, explicit actions.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel
 
 from modules.models.servers import ServerStatus
+
+ItemT = TypeVar("ItemT")
+
+
+class Page(BaseModel, Generic[ItemT]):
+    """Unified offset-based pagination container for list endpoints."""
+
+    items: list[ItemT]
+    total: int
+    limit: int
+    offset: int
 
 
 class ProblemDetail(BaseModel):
@@ -67,3 +79,18 @@ class OverviewSummary(BaseModel):
     running: int
     attention: int
     capacity: int
+
+
+class AuditEntry(BaseModel):
+    """One administrator-visible audit event (metadata only, non-secret)."""
+
+    id: str
+    created_at: datetime | None = None
+    category: str
+    action: str
+    status: str
+    actor_username: str | None = None
+    ip_address: str | None = None
+    source: str
+    server_id: int | None = None
+    details: dict = {}

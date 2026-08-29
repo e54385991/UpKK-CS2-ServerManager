@@ -8,11 +8,12 @@ Legacy ``/api/*`` routes remain untouched for existing clients.
 
 from fastapi import APIRouter
 
-from . import auth, overview, servers
+from . import audit, auth, overview, servers
 
 router = APIRouter()
 router.include_router(auth.router)
 router.include_router(servers.router)
 router.include_router(overview.router)
+router.include_router(audit.router)
 
 __all__ = ["router"]

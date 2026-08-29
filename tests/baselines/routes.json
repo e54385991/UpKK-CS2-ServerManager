@@ -1724,6 +1724,14 @@
     "methods": [
       "GET"
     ],
+    "name": "list_audit",
+    "path": "/api/v1/audit"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "root",
     "path": "/"
   },
