@@ -293,6 +293,7 @@ class ServerSummary(BaseModel):
     name: str
     host: str
     game_port: int
+    ssh_user: str
     status: ServerStatus
     description: str | None = None
     default_map: str
@@ -787,6 +788,7 @@ class ServerOperationView(BaseModel):
     completed_at: datetime | None = None
     actor_user_id: int
     stream_url: str
+    command: str | None = None
 
 
 class OperationJournalEvent(BaseModel):
@@ -811,6 +813,21 @@ class OperationJournal(BaseModel):
 
 class CurrentServerOperation(BaseModel):
     operation: ServerOperationView | None = None
+
+
+class OperationInboxItem(ServerOperationView):
+    server_name: str
+    latest_message: str | None = None
+    queue_position: int = 0
+
+
+class OperationInboxView(BaseModel):
+    items: list[OperationInboxItem] = Field(default_factory=list)
+    failed_items: list[OperationInboxItem] = Field(default_factory=list)
+    active_count: int = 0
+    running_count: int = 0
+    failed_count: int = 0
+    failed_retention_days: int = 7
 
 
 class DeploymentLockView(BaseModel):
@@ -925,10 +942,43 @@ class PluginInstallPlanView(BaseModel):
 
 
 class PluginInstallRequest(BaseModel):
-    """Acknowledge warnings and optionally pin the preflight plan hash."""
+    """Acknowledge warnings and optionally pin the preflight plan hash.
+
+    ``install_dependencies`` is opt-in, matching the legacy web installer.
+    """
 
     acknowledge_warning_rule_ids: list[int] = Field(default_factory=list)
     plan_hash: str | None = Field(default=None, max_length=64)
+    download_url: str | None = Field(default=None, max_length=2000)
+    upgrade_mode: bool = False
+    install_dependencies: bool = False
+    exclude_dirs: list[str] = Field(default_factory=list)
+    exclude_files: list[str] = Field(default_factory=list)
+
+    @field_validator("download_url")
+    @classmethod
+    def validate_market_download_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        if not text:
+            return None
+        if not text.startswith("https://github.com/") or "/releases/download/" not in text:
+            raise ValueError("download_url must be a GitHub releases download URL")
+        return text
+
+    @field_validator("exclude_dirs", "exclude_files")
+    @classmethod
+    def validate_market_exclusions(cls, values: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for value in values:
+            text = str(value).replace("\\", "/").strip()
+            if not text:
+                continue
+            if ".." in text.split("/") or text.startswith("/") or "\x00" in text:
+                raise ValueError("exclusion paths must be relative and cannot contain traversal")
+            cleaned.append(text)
+        return cleaned
 
 
 class LinuxRuntimeProfileView(BaseModel):

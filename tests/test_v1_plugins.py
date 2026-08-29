@@ -198,14 +198,12 @@ def test_v1_server_plugins_list(monkeypatch):
 
 def test_v1_plugin_preflight(monkeypatch):
     client, _user = _client(monkeypatch=monkeypatch)
+    planner = AsyncMock(return_value=_sample_plan())
     monkeypatch.setattr(
         "api.routes.v1.plugins.MarketPlugin.get_by_id",
         AsyncMock(return_value=_sample_market()),
     )
-    monkeypatch.setattr(
-        "api.routes.v1.plugins.build_plugin_install_plan",
-        AsyncMock(return_value=_sample_plan()),
-    )
+    monkeypatch.setattr("api.routes.v1.plugins.build_plugin_install_plan", planner)
     response = client.get("/api/v1/servers/1/plugins/market/11/preflight")
     assert response.status_code == 200
     body = response.json()
@@ -213,6 +211,20 @@ def test_v1_plugin_preflight(monkeypatch):
     assert body["blocked"] is False
     assert body["plan_hash"] == "abc123"
     assert body["steps"][0]["status"] == "install"
+    assert planner.await_args.kwargs["include_dependencies"] is False
+
+
+def test_v1_plugin_preflight_can_include_dependencies(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch)
+    planner = AsyncMock(return_value=_sample_plan())
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        AsyncMock(return_value=_sample_market()),
+    )
+    monkeypatch.setattr("api.routes.v1.plugins.build_plugin_install_plan", planner)
+    response = client.get("/api/v1/servers/1/plugins/market/11/preflight?install_dependencies=true")
+    assert response.status_code == 200
+    assert planner.await_args.kwargs["include_dependencies"] is True
 
 
 def test_v1_plugin_install_returns_202(monkeypatch):
@@ -231,30 +243,24 @@ def test_v1_plugin_install_returns_202(monkeypatch):
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.redis_manager.get",
+        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
     )
-    monkeypatch.setattr(
-        "api.routes.v1.plugins.maintenance_lock_service.is_locked",
-        AsyncMock(return_value=False),
+    enqueue = AsyncMock(
+        return_value={
+            "operation_id": operation_id,
+            "server_id": 1,
+            "action": "install_plugin",
+            "status": "queued",
+            "success": None,
+            "message": None,
+            "server_status": None,
+            "actor_user_id": user.id,
+            "started_at": "2026-08-29T00:00:00+00:00",
+            "completed_at": None,
+        }
     )
-    monkeypatch.setattr(
-        "api.routes.v1.plugins.enqueue_plugin_install",
-        AsyncMock(
-            return_value={
-                "operation_id": operation_id,
-                "server_id": 1,
-                "action": "install_plugin",
-                "status": "queued",
-                "success": None,
-                "message": None,
-                "server_status": None,
-                "actor_user_id": user.id,
-                "started_at": "2026-08-29T00:00:00+00:00",
-                "completed_at": None,
-            }
-        ),
-    )
+    monkeypatch.setattr("api.routes.v1.plugins.enqueue_plugin_install", enqueue)
 
     response = client.post("/api/v1/servers/1/plugins/market/11/install", json={})
     assert response.status_code == 202
@@ -263,6 +269,65 @@ def test_v1_plugin_install_returns_202(monkeypatch):
     assert body["action"] == "install_plugin"
     assert body["status"] == "queued"
     assert body["stream_url"] == f"/api/v1/servers/1/operations/{operation_id}/events"
+    assert enqueue.await_args.kwargs["install_dependencies"] is False
+    assert enqueue.await_args.kwargs["upgrade_mode"] is False
+    assert enqueue.await_args.kwargs["download_url"] is None
+
+
+def test_v1_plugin_install_forwards_web_parity_options(monkeypatch):
+    client, user = _client(monkeypatch=monkeypatch)
+    operation_id = str(uuid4())
+    planner = AsyncMock(return_value=_sample_plan())
+    enqueue = AsyncMock(
+        return_value={
+            "operation_id": operation_id,
+            "server_id": 1,
+            "action": "install_plugin",
+            "status": "queued",
+            "success": None,
+            "message": None,
+            "server_status": None,
+            "actor_user_id": user.id,
+            "started_at": "2026-08-29T00:00:00+00:00",
+            "completed_at": None,
+        }
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.MarketPlugin.get_by_id",
+        AsyncMock(return_value=_sample_market()),
+    )
+    monkeypatch.setattr("api.routes.v1.plugins.build_plugin_install_plan", planner)
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.validate_plugin_plan_acknowledgements",
+        lambda *_a, **_k: None,
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr("api.routes.v1.plugins.enqueue_plugin_install", enqueue)
+
+    download_url = "https://github.com/shobhit-pathak/MatchZy/releases/download/v0.8.1/MatchZy.zip"
+    response = client.post(
+        "/api/v1/servers/1/plugins/market/11/install",
+        json={
+            "download_url": download_url,
+            "upgrade_mode": True,
+            "install_dependencies": True,
+            "exclude_dirs": ["cfg/old"],
+            "exclude_files": ["README.md"],
+            "plan_hash": "abc123",
+        },
+    )
+    assert response.status_code == 202
+    assert planner.await_args.kwargs["include_dependencies"] is True
+    kwargs = enqueue.await_args.kwargs
+    assert kwargs["download_url"] == download_url
+    assert kwargs["upgrade_mode"] is True
+    assert kwargs["install_dependencies"] is True
+    assert kwargs["exclude_dirs"] == ["cfg/old"]
+    assert kwargs["exclude_files"] == ["README.md"]
+    assert kwargs["plan_hash"] == "abc123"
 
 
 def test_v1_plugin_install_conflict_when_blocked(monkeypatch):
@@ -293,12 +358,8 @@ def test_v1_plugin_install_conflict_when_blocked(monkeypatch):
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.redis_manager.get",
+        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.plugins.maintenance_lock_service.is_locked",
-        AsyncMock(return_value=False),
     )
     response = client.post("/api/v1/servers/1/plugins/market/11/install", json={})
     assert response.status_code == 409
@@ -312,12 +373,8 @@ def test_v1_market_uninstall_returns_202(monkeypatch):
         AsyncMock(return_value=_sample_market()),
     )
     monkeypatch.setattr(
-        "api.routes.v1.plugins.redis_manager.get",
+        "api.routes.v1.plugins.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.plugins.maintenance_lock_service.is_locked",
-        AsyncMock(return_value=False),
     )
     enqueue = AsyncMock(
         return_value={

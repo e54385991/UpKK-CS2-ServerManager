@@ -71,6 +71,8 @@ function toOperation(raw: ServerOperationViewDto): ServerOperation {
     completedAt: raw.completed_at ?? null,
     actorUserId: raw.actor_user_id,
     streamUrl: raw.stream_url,
+    command:
+      "command" in raw && typeof raw.command === "string" ? raw.command : null,
   };
 }
 

@@ -133,13 +133,25 @@ is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-
   treats SSH/RCON/GSLT as write-only. Mutations from the
   console go through Next.js Server Actions in `src/modules/<domain>/actions.ts`,
   which attach the session JWT as Bearer — the browser never reads the HttpOnly
-  cookie. Long-running server actions and market plugin installs return **202**
-  with an `operation_id`;
-  the live log is a replayable SSE stream. `EventSource` cannot set
-  `Authorization`, so the console connects to
+  cookie. Long-running server actions and market plugin installs are a
+  **delivery queue**: POST returns **202** with an `operation_id` and the
+  page must not block. Jobs run **one at a time per server** so SSH locks
+  and plugin extracts do not overlap. The live log is the existing
+  replayable SSE stream — do not add a second WebSocket for panel jobs, and
+  do not attach the task tray to tmux (tmux is only the game/SteamCMD pane
+  via `/live-console/{id}`). `EventSource` cannot set `Authorization`, so
+  the console connects to
   `/ops-stream/servers/{id}/operations/{operationId}` (a Next Route Handler
   that upgrades the session cookie to Bearer). The FastAPI SSE GET also
   accepts the session cookie as a same-origin fallback.
+  `GET /api/v1/operations/inbox` feeds the **top-right activity tray** in
+  the App Shell (`ActivityTray` in `Topbar`). While any job is queued or
+  running the tray must show a **clear pulse animation** and the
+  **remaining task count**. Opening the tray shows the submitted command,
+  status, current step, and console output (SSE, with journal fallback).
+  Failed jobs are summarized on a separate **Failed** tab, retained for
+  **7 days**, and can be dismissed one-by-one or cleared in bulk.
+  After a 202, call `trackQueuedOperation` so the tray opens immediately.
   Each domain `api.ts` maps the snake_case DTO to a camelCase domain type so
   the UI stays decoupled from wire casing; extend those mappers as more
   `/api/v1` lands.

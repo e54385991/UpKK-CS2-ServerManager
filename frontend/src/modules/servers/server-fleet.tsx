@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useTranslations } from "next-intl";
-import { MapPin, Radio, Users } from "lucide-react";
 import { isA2SVersionOutdated } from "@/modules/servers/a2s";
 import {
   exportServerConfigsAction,
@@ -22,23 +22,16 @@ import { confirm } from "@/shared/feedback";
 import {
   BATCH_PLUGINS,
   SERVER_STATUS_TONE,
-  serverProxyMode,
   type A2SCache,
   type BatchAction,
   type BatchJournal,
   type BatchPlugin,
   type DiskSpace,
   type ServerListScope,
-  type ServerStatus,
   type ServerSummary,
   type SteamLatestVersion,
 } from "@/modules/servers/types";
-import {
-  SERVER_STATUS_GROUPS,
-  SERVER_WORKSPACE_CATEGORIES,
-  workspaceHref,
-  type ServerWorkspaceCategory,
-} from "@/modules/servers/workspace";
+import { SERVER_STATUS_GROUPS } from "@/modules/servers/workspace";
 import { Badge, StatusDot } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
@@ -84,7 +77,6 @@ export function ServerFleet({
   showOwner: boolean;
 }) {
   const t = useTranslations("servers");
-  const tWorkspace = useTranslations("serverWorkspace");
   const [selected, setSelected] = useState<number[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -319,12 +311,6 @@ export function ServerFleet({
       {SERVER_STATUS_GROUPS.map((status) => {
         const items = servers.filter((server) => server.status === status);
         if (items.length === 0) return null;
-        const categoryLabels = Object.fromEntries(
-          SERVER_WORKSPACE_CATEGORIES.map((category) => [
-            category,
-            tWorkspace(`categories.${category}`),
-          ]),
-        ) as Record<ServerWorkspaceCategory, string>;
         return (
           <section key={status} className="space-y-3">
             <div className="flex items-center gap-2">
@@ -344,8 +330,6 @@ export function ServerFleet({
                   selected={selected.includes(server.id)}
                   onToggle={() => toggle(server.id)}
                   showOwner={showOwner}
-                  categoryLabels={categoryLabels}
-                  categoryNavLabel={tWorkspace("navLabel")}
                 />
               ))}
             </ul>
@@ -356,6 +340,13 @@ export function ServerFleet({
   );
 }
 
+function formatA2STime(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Date(parsed).toLocaleString();
+}
+
 function ServerCard({
   server,
   disk,
@@ -364,8 +355,6 @@ function ServerCard({
   selected,
   onToggle,
   showOwner,
-  categoryLabels,
-  categoryNavLabel,
 }: {
   server: ServerSummary;
   disk: DiskSpace | undefined;
@@ -374,16 +363,11 @@ function ServerCard({
   selected: boolean;
   onToggle: () => void;
   showOwner: boolean;
-  categoryLabels: Record<ServerWorkspaceCategory, string>;
-  categoryNavLabel: string;
 }) {
   const t = useTranslations("servers");
   const tone = SERVER_STATUS_TONE[server.status];
-  const livePlayers =
-    a2s?.cached && a2s.success ? a2s.playerCount : null;
-  const liveMax =
-    a2s?.cached && a2s.success ? a2s.maxPlayers : server.maxPlayers;
   const outdated = isA2SVersionOutdated(a2s?.version, steam?.version ?? null);
+  const a2sUpdated = formatA2STime(a2s?.lastUpdated ?? null);
 
   return (
     <li>
@@ -402,12 +386,9 @@ function ServerCard({
               onChange={onToggle}
               aria-label={server.name}
             />
-            <Link href={`/servers/${server.id}`} className="min-w-0">
+            <span className="min-w-0">
               <p className="truncate text-sm font-semibold text-fg">
                 {server.name}
-              </p>
-              <p className="truncate font-mono text-xs text-fg-subtle">
-                {server.host}:{server.gamePort}
               </p>
               {showOwner && server.ownerUsername ? (
                 <p className="truncate text-xs text-fg-muted">
@@ -416,79 +397,89 @@ function ServerCard({
                     : t("owner", { name: server.ownerUsername })}
                 </p>
               ) : null}
-            </Link>
+            </span>
           </label>
-          <div className="flex flex-col items-end gap-1">
-            <Badge tone={tone}>
-              <StatusDot tone={tone} pulse={server.status === "running"} />
-              {t(`status.${server.status}`)}
-            </Badge>
-            <Badge
-              tone={
-                serverProxyMode(server) === "direct" ? "neutral" : "info"
-              }
-              data-testid="proxy-badge"
-            >
-              {t(`proxy.${serverProxyMode(server)}`)}
-            </Badge>
-            {server.isSshDown ? (
-              <Badge tone="danger" data-testid="ssh-down-badge">
-                {t("sshDown")}
-              </Badge>
-            ) : null}
-          </div>
+          <Badge tone={tone}>
+            <StatusDot tone={tone} pulse={server.status === "running"} />
+            {t(`status.${server.status}`)}
+          </Badge>
         </div>
 
-        {server.description ? (
-          <p className="mt-3 line-clamp-2 text-sm text-fg-muted">
-            {server.description}
-          </p>
-        ) : null}
+        <p className="mt-3 line-clamp-2 text-sm text-fg-muted">
+          {server.description || t("noDescription")}
+        </p>
 
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-fg-muted">
-          <span className="inline-flex items-center gap-1.5">
-            <MapPin className="size-3.5 text-fg-subtle" />
-            {a2s?.mapName || server.defaultMap}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Users className="size-3.5 text-fg-subtle" />
-            {livePlayers != null
-              ? t("a2s.playersLive", {
-                  current: livePlayers,
-                  max: liveMax ?? server.maxPlayers,
-                })
-              : t("players", { count: server.maxPlayers })}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Radio className="size-3.5 text-fg-subtle" />
-            {server.gamePort}
-          </span>
-        </div>
+        <ul className="mt-3 space-y-1 text-xs text-fg-muted">
+          <li>
+            {t("card.host")}:{" "}
+            <strong className="font-medium text-fg">{server.host}</strong>
+          </li>
+          <li>
+            {t("card.port")}:{" "}
+            <strong className="font-medium text-fg">{server.gamePort}</strong>
+          </li>
+          <li>
+            {t("card.sshUser")}:{" "}
+            <strong className="font-medium text-fg">{server.sshUser}</strong>
+          </li>
+        </ul>
 
         <div
           className="mt-3 rounded-md border border-line bg-surface-overlay/50 px-3 py-2"
           data-testid="a2s-overlay"
         >
           {a2s?.cached && a2s.success ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <p className="text-fg">
-                {t("a2s.online")}
-                {a2s.serverName ? ` · ${a2s.serverName}` : ""}
+            <div className="space-y-1 text-xs text-fg-muted">
+              <p className="font-medium text-ok">{t("a2s.online")}</p>
+              {a2s.serverName ? <p className="text-fg">{a2s.serverName}</p> : null}
+              <p>
+                {t("a2s.map")}:{" "}
+                <strong className="font-medium text-fg">
+                  {a2s.mapName || server.defaultMap}
+                </strong>
               </p>
-              <span className="inline-flex items-center gap-1.5">
+              <p>
+                {t("a2s.players")}:{" "}
+                <strong className="font-medium text-fg">
+                  {t("a2s.playersLive", {
+                    current: a2s.playerCount ?? 0,
+                    max: a2s.maxPlayers ?? server.maxPlayers,
+                  })}
+                </strong>
+              </p>
+              {a2s.responseTimeMs != null ? (
+                <p>
+                  {t("a2s.ping")}:{" "}
+                  <strong className="font-medium text-fg">
+                    {a2s.responseTimeMs}ms
+                  </strong>
+                </p>
+              ) : null}
+              <p className="flex flex-wrap items-center gap-1.5">
+                <span>
+                  {t("a2s.version")}:{" "}
+                  <strong className="font-medium text-fg">
+                    {a2s.version || "—"}
+                  </strong>
+                </span>
                 {outdated ? (
                   <Badge tone="warn">{t("a2s.outdated")}</Badge>
                 ) : steam?.version ? (
                   <Badge tone="ok">{t("a2s.upToDate")}</Badge>
                 ) : null}
-              </span>
+              </p>
+              {a2sUpdated ? (
+                <p className="text-[11px] text-fg-subtle">
+                  {t("a2s.updated")}: {a2sUpdated}
+                </p>
+              ) : null}
             </div>
+          ) : a2s?.cached ? (
+            <p className="text-xs text-fg-subtle">{t("a2s.offline")}</p>
           ) : (
             <p className="text-xs text-fg-subtle">{t("a2s.waiting")}</p>
           )}
         </div>
-
-        <SshHealthBlock server={server} />
 
         <div className="mt-3 rounded-md border border-line bg-surface-overlay/50 px-3 py-2">
           <div className="flex items-center justify-between gap-2">
@@ -518,25 +509,11 @@ function ServerCard({
           <p className="mt-1 text-[10px] text-fg-subtle">{t("diskSpace.note")}</p>
         </div>
 
-        <nav aria-label={categoryNavLabel} className="mt-4">
-          <ul className="flex flex-wrap gap-1.5">
-            {SERVER_WORKSPACE_CATEGORIES.map((category) => (
-              <li key={category}>
-                <Link
-                  href={workspaceHref(server.id, category)}
-                  className={cn(
-                    "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                    category === "operations"
-                      ? "border-primary/40 bg-primary-muted text-primary hover:border-primary/60"
-                      : "border-line text-fg-muted hover:border-line-strong hover:text-fg",
-                  )}
-                >
-                  {categoryLabels[category]}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <SshHealthBlock server={server} />
+
+        <Button asChild className="mt-4 w-full" size="sm">
+          <Link href={`/servers/${server.id}` as Route}>{t("manageServer")}</Link>
+        </Button>
       </Card>
     </li>
   );

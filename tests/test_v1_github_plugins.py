@@ -113,12 +113,8 @@ def test_v1_github_install_returns_202(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "api.routes.v1.github_plugins.redis_manager.get",
+        "api.routes.v1.github_plugins.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.github_plugins.maintenance_lock_service.is_locked",
-        AsyncMock(return_value=False),
     )
     monkeypatch.setattr(
         "api.routes.v1.github_plugins.enqueue_github_plugin_install",
@@ -170,12 +166,8 @@ def test_v1_github_install_blocked_when_mapping_required(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "api.routes.v1.github_plugins.redis_manager.get",
+        "api.routes.v1.github_plugins.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.github_plugins.maintenance_lock_service.is_locked",
-        AsyncMock(return_value=False),
     )
     response = client.post(
         "/api/v1/servers/1/plugins/github/install",
@@ -264,12 +256,8 @@ def test_v1_github_install_accepts_operator_mapping(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "api.routes.v1.github_plugins.redis_manager.get",
+        "api.routes.v1.github_plugins.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.github_plugins.maintenance_lock_service.is_locked",
-        AsyncMock(return_value=False),
     )
     enqueue = AsyncMock(
         return_value={
@@ -312,12 +300,8 @@ def test_v1_github_uninstall_returns_202(monkeypatch):
     client, user = _client(monkeypatch=monkeypatch)
     operation_id = str(uuid4())
     monkeypatch.setattr(
-        "api.routes.v1.github_plugins.redis_manager.get",
+        "api.routes.v1.github_plugins.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.github_plugins.maintenance_lock_service.is_locked",
-        AsyncMock(return_value=False),
     )
     enqueue = AsyncMock(
         return_value={

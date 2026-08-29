@@ -123,9 +123,6 @@ export function SshHealthBlock({
           {t("lastCheck")}:{" "}
           {formatLastCheck(server.lastSshHealthCheck) ?? t("never")}
         </li>
-        <li>
-          {t("interval")}: {server.sshHealthCheckIntervalHours}h
-        </li>
       </ul>
       {canReconnect ? (
         <Button

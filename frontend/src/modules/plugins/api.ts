@@ -181,9 +181,14 @@ function toPlan(raw: PluginInstallPlanViewDto): PluginInstallPlan {
 export async function getPluginInstallPlan(
   serverId: number,
   pluginId: number,
+  installDependencies = false,
 ): Promise<ApiResult<PluginInstallPlan>> {
+  const params = new URLSearchParams();
+  if (installDependencies) params.set("install_dependencies", "true");
+  const query = params.toString();
   const result = await apiFetch<PluginInstallPlanViewDto>(
-    `/api/v1/servers/${serverId}/plugins/market/${pluginId}/preflight`,
+    `/api/v1/servers/${serverId}/plugins/market/${pluginId}/preflight${query ? `?${query}` : ""}`,
+    { timeoutMs: 120_000 },
   );
   if (!result.ok) return result;
   return { ok: true, data: toPlan(result.data) };
@@ -195,6 +200,11 @@ export async function installMarketPlugin(
   input: {
     readonly acknowledgeWarningRuleIds?: readonly number[];
     readonly planHash?: string;
+    readonly downloadUrl?: string | null;
+    readonly upgradeMode?: boolean;
+    readonly installDependencies?: boolean;
+    readonly excludeDirs?: readonly string[];
+    readonly excludeFiles?: readonly string[];
   },
 ): Promise<ApiResult<ServerOperation>> {
   const result = await apiFetch<ServerOperationViewDto>(
@@ -202,9 +212,15 @@ export async function installMarketPlugin(
     {
       method: "POST",
       headers: { "content-type": "application/json" },
+      timeoutMs: 30_000,
       body: JSON.stringify({
         acknowledge_warning_rule_ids: input.acknowledgeWarningRuleIds ?? [],
         plan_hash: input.planHash ?? null,
+        download_url: input.downloadUrl ?? null,
+        upgrade_mode: input.upgradeMode ?? false,
+        install_dependencies: input.installDependencies ?? false,
+        exclude_dirs: [...(input.excludeDirs ?? [])],
+        exclude_files: [...(input.excludeFiles ?? [])],
       }),
     },
   );
@@ -234,6 +250,10 @@ export async function installMarketPlugin(
       completedAt: result.data.completed_at ?? null,
       actorUserId: result.data.actor_user_id,
       streamUrl: result.data.stream_url,
+      command:
+        "command" in result.data && typeof result.data.command === "string"
+          ? result.data.command
+          : null,
     },
   };
 }
@@ -349,7 +369,7 @@ export async function listGitHubReleases(
         runtime_compatibility?: string;
       }>;
     }>;
-  }>(`/api/v1/plugins/github/releases?${params}`);
+  }>(`/api/v1/plugins/github/releases?${params}`, { timeoutMs: 60_000 });
   if (!result.ok) return result;
   return {
     ok: true,
@@ -385,7 +405,9 @@ export async function analyzeGitHubArchive(
     all_dirs?: string[];
     all_files?: Array<{ path: string; is_dir: boolean; size?: number }>;
     archive_type?: string | null;
-  }>(`/api/v1/servers/${serverId}/plugins/github/analyze-archive?${params}`);
+  }>(`/api/v1/servers/${serverId}/plugins/github/analyze-archive?${params}`, {
+    timeoutMs: 120_000,
+  });
   if (!result.ok) return result;
   return {
     ok: true,
@@ -484,6 +506,10 @@ export async function installGitHubPlugin(
       completedAt: result.data.completed_at ?? null,
       actorUserId: result.data.actor_user_id,
       streamUrl: result.data.stream_url,
+      command:
+        "command" in result.data && typeof result.data.command === "string"
+          ? result.data.command
+          : null,
     },
   };
 }
@@ -532,6 +558,10 @@ export async function uninstallGitHubPlugin(
       completedAt: result.data.completed_at ?? null,
       actorUserId: result.data.actor_user_id,
       streamUrl: result.data.stream_url,
+      command:
+        "command" in result.data && typeof result.data.command === "string"
+          ? result.data.command
+          : null,
     },
   };
 }
@@ -575,6 +605,10 @@ export async function uninstallMarketPlugin(
       completedAt: result.data.completed_at ?? null,
       actorUserId: result.data.actor_user_id,
       streamUrl: result.data.stream_url,
+      command:
+        "command" in result.data && typeof result.data.command === "string"
+          ? result.data.command
+          : null,
     },
   };
 }

@@ -7,25 +7,34 @@ export type ApiResult<T> =
   | { readonly ok: true; readonly data: T }
   | { readonly ok: false; readonly status: number; readonly error: string };
 
+export type ApiFetchInit = Omit<RequestInit, "signal"> & {
+  signal?: AbortSignal | null;
+  timeoutMs?: number;
+};
+
 /**
  * Server-side call to the internal FastAPI. Attaches the session cookie's JWT
  * as a bearer token and never caches. Auth and transport failures are returned
  * as structured results instead of thrown so pages can render a degraded state.
+ *
+ * Default timeout is 8s for ordinary reads. Long SSH/setup calls must pass
+ * `timeoutMs` (or their own `signal`) so they are not aborted mid-flight.
  */
 export async function apiFetch<T>(
   path: string,
-  init?: RequestInit,
+  init?: ApiFetchInit,
 ): Promise<ApiResult<T>> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const { timeoutMs, signal, headers, ...rest } = init ?? {};
   try {
     const response = await fetch(`${internalApiUrl()}${path}`, {
-      ...init,
+      ...rest,
       cache: "no-store",
-      signal: init?.signal ?? AbortSignal.timeout(8000),
+      signal: signal ?? AbortSignal.timeout(timeoutMs ?? 8000),
       headers: {
         accept: "application/json",
         ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...init?.headers,
+        ...headers,
       },
     });
     if (!response.ok) {

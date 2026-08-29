@@ -1,20 +1,12 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
-import { Package, Puzzle, TriangleAlert } from "lucide-react";
+import { Package, TriangleAlert } from "lucide-react";
 import { listMarketPlugins } from "@/modules/plugins/api";
-import {
-  PLUGIN_CATEGORIES,
-  type MarketQuery,
-} from "@/modules/plugins/types";
-import { Badge } from "@/shared/ui/badge";
+import { MarketPluginCard } from "@/modules/plugins/market-plugin-card";
+import type { MarketInstallServer, MarketQuery } from "@/modules/plugins/types";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
-
-function hrefFor(pluginId: number, serverId?: number): Route {
-  const query = serverId ? `?serverId=${serverId}` : "";
-  return `/plugins/${pluginId}${query}` as Route;
-}
 
 function pageHref(query: MarketQuery, offset: number, serverId?: number): Route {
   const params = new URLSearchParams();
@@ -29,9 +21,11 @@ function pageHref(query: MarketQuery, offset: number, serverId?: number): Route 
 export async function MarketCatalog({
   query,
   serverId,
+  servers,
 }: {
   query: MarketQuery;
   serverId?: number;
+  servers: readonly MarketInstallServer[];
 }) {
   const t = await getTranslations("plugins");
   const result = await listMarketPlugins(query);
@@ -66,51 +60,11 @@ export async function MarketCatalog({
       <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {items.map((plugin) => (
           <li key={plugin.id}>
-            <Link href={hrefFor(plugin.id, serverId)} className="block h-full">
-              <Card className="h-full p-5 transition-colors hover:border-line-strong hover:bg-surface-raised">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <p className="truncate text-sm font-semibold text-fg">
-                      {plugin.title}
-                    </p>
-                    <p className="truncate text-xs text-fg-subtle">
-                      {plugin.author || t("unknownAuthor")}
-                      {plugin.version ? ` · ${plugin.version}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                    {plugin.isRecommended ? (
-                      <Badge tone="primary">{t("recommended")}</Badge>
-                    ) : null}
-                    <Badge tone="neutral">
-                      {(PLUGIN_CATEGORIES as readonly string[]).includes(
-                        plugin.category,
-                      )
-                        ? t(`categories.${plugin.category}`)
-                        : plugin.category}
-                    </Badge>
-                  </div>
-                </div>
-                {plugin.description ? (
-                  <p className="mt-3 line-clamp-3 text-sm text-fg-muted">
-                    {plugin.description}
-                  </p>
-                ) : null}
-                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-subtle">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Puzzle className="size-3.5" />
-                    {t("installs", { count: plugin.installCount })}
-                  </span>
-                  {plugin.dependencies.length > 0 ? (
-                    <span>
-                      {t("dependencyCount", {
-                        count: plugin.dependencies.length,
-                      })}
-                    </span>
-                  ) : null}
-                </div>
-              </Card>
-            </Link>
+            <MarketPluginCard
+              plugin={plugin}
+              servers={servers}
+              defaultServerId={serverId}
+            />
           </li>
         ))}
       </ul>

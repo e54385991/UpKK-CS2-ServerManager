@@ -16,7 +16,8 @@ import type {
   GitHubRelease,
 } from "@/modules/plugins/types";
 import { serverProxyMode } from "@/modules/servers/types";
-import { confirm } from "@/shared/feedback";
+import { trackQueuedOperation } from "@/modules/servers/activity-store";
+import { confirm, notify } from "@/shared/feedback";
 import {
   mergeOperationEvents,
   parseOperationEvent,
@@ -264,6 +265,11 @@ export function GitHubInstallForm({
     }
     setOperation(result.data);
     setEvents([]);
+    trackQueuedOperation(result.data, {
+      serverName: selectedServer?.name,
+      latestMessage: result.data.message,
+    });
+    notify.info(t("queuedToTray"));
   }
 
   async function uninstall() {

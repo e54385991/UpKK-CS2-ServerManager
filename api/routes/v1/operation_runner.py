@@ -40,9 +40,14 @@ from services.server_operation_hub import (
 )
 from services.ssh_manager import SSHManager
 from services.system_dependencies import STEAMCMD_REQUIRED_PACKAGES
-from services.task_registry import action_task_registry
 
 logger = logging.getLogger(__name__)
+
+
+async def _dispatch(record: dict, factory) -> dict:
+    """Start now if this job is current; otherwise the hub runs it later."""
+    await server_operation_hub.schedule(str(record["operation_id"]), factory)
+    return record
 
 
 async def enqueue_server_operation(
@@ -60,16 +65,13 @@ async def enqueue_server_operation(
         server_id=server_id,
         action=action,
         actor_user_id=actor_user_id,
+        command=f"server {action}",
     )
     operation_id = str(record["operation_id"])
-    task = action_task_registry.create(
-        run_server_operation(
-            operation_id=operation_id,
-            request=request,
-        )
+    return await _dispatch(
+        record,
+        lambda: run_server_operation(operation_id=operation_id, request=request),
     )
-    server_operation_hub.bind_task(operation_id, task)
-    return record
 
 
 async def run_server_operation(
@@ -145,24 +147,35 @@ async def enqueue_plugin_install(
     actor_user_id: int,
     acknowledge_warning_rule_ids: list[int],
     plan_hash: str | None,
+    download_url: str | None = None,
+    upgrade_mode: bool = False,
+    install_dependencies: bool = False,
+    exclude_dirs: list[str] | None = None,
+    exclude_files: list[str] | None = None,
 ) -> dict:
     """Create an operation record and install a market plugin in the background."""
+    target = download_url or "latest"
     record = await server_operation_hub.create(
         server_id=server_id,
         action="install_plugin",
         actor_user_id=actor_user_id,
+        command=f"plugin-market install {plugin_id} --from {target}",
     )
     operation_id = str(record["operation_id"])
-    task = action_task_registry.create(
-        run_plugin_install(
+    return await _dispatch(
+        record,
+        lambda: run_plugin_install(
             operation_id=operation_id,
             plugin_id=plugin_id,
             acknowledge_warning_rule_ids=list(acknowledge_warning_rule_ids),
             plan_hash=plan_hash,
-        )
+            download_url=download_url,
+            upgrade_mode=upgrade_mode,
+            install_dependencies=install_dependencies,
+            exclude_dirs=list(exclude_dirs or []),
+            exclude_files=list(exclude_files or []),
+        ),
     )
-    server_operation_hub.bind_task(operation_id, task)
-    return record
 
 
 async def run_plugin_install(
@@ -171,6 +184,11 @@ async def run_plugin_install(
     plugin_id: int,
     acknowledge_warning_rule_ids: list[int],
     plan_hash: str | None,
+    download_url: str | None = None,
+    upgrade_mode: bool = False,
+    install_dependencies: bool = False,
+    exclude_dirs: list[str] | None = None,
+    exclude_files: list[str] | None = None,
 ) -> None:
     """Execute one queued market-plugin install through the existing planner."""
     record = await server_operation_hub.get(operation_id)
@@ -212,6 +230,11 @@ async def run_plugin_install(
                 acquire_lock=True,
                 lock_operation="plugin_install",
                 operation_id=operation_id,
+                include_dependencies=install_dependencies,
+                download_url=download_url,
+                upgrade_mode=upgrade_mode,
+                exclude_dirs=list(exclude_dirs or []),
+                exclude_files=list(exclude_files or []),
             )
             await server_operation_hub.finish(
                 operation_id,
@@ -247,16 +270,13 @@ async def enqueue_apply_apt_mirror(
         server_id=server_id,
         action="apply_apt_mirror",
         actor_user_id=actor_user_id,
+        command=f"apt-mirror apply {mirror}",
     )
     operation_id = str(record["operation_id"])
-    task = action_task_registry.create(
-        run_apply_apt_mirror(
-            operation_id=operation_id,
-            mirror=mirror,
-        )
+    return await _dispatch(
+        record,
+        lambda: run_apply_apt_mirror(operation_id=operation_id, mirror=mirror),
     )
-    server_operation_hub.bind_task(operation_id, task)
-    return record
 
 
 async def run_apply_apt_mirror(*, operation_id: str, mirror: str) -> None:
@@ -355,16 +375,13 @@ async def enqueue_s3_restore(
         server_id=server_id,
         action="s3_restore",
         actor_user_id=actor_user_id,
+        command=f"s3-restore {object_key}",
     )
     operation_id = str(record["operation_id"])
-    task = action_task_registry.create(
-        run_s3_restore(
-            operation_id=operation_id,
-            object_key=object_key,
-        )
+    return await _dispatch(
+        record,
+        lambda: run_s3_restore(operation_id=operation_id, object_key=object_key),
     )
-    server_operation_hub.bind_task(operation_id, task)
-    return record
 
 
 async def run_s3_restore(*, operation_id: str, object_key: str) -> None:
@@ -527,10 +544,13 @@ async def enqueue_github_plugin_install(
         server_id=server_id,
         action="install_github_plugin",
         actor_user_id=actor_user_id,
+        command=f"plugin-github install {repo_url}"
+        + (f" --asset {asset_name}" if asset_name else ""),
     )
     operation_id = str(record["operation_id"])
-    task = action_task_registry.create(
-        run_github_plugin_install(
+    return await _dispatch(
+        record,
+        lambda: run_github_plugin_install(
             operation_id=operation_id,
             repo_url=repo_url,
             mode=mode,
@@ -544,10 +564,8 @@ async def enqueue_github_plugin_install(
             expected_plan_hash=expected_plan_hash,
             acknowledge_warning_rule_ids=list(acknowledge_warning_rule_ids),
             acknowledge_unknown_compatibility=acknowledge_unknown_compatibility,
-        )
+        ),
     )
-    server_operation_hub.bind_task(operation_id, task)
-    return record
 
 
 async def run_github_plugin_install(
@@ -655,17 +673,18 @@ async def enqueue_github_plugin_uninstall(
         server_id=server_id,
         action="uninstall_github_plugin",
         actor_user_id=actor_user_id,
+        command=f"plugin uninstall --files {len(files_to_delete)}"
+        + (f" --market {market_plugin_id}" if market_plugin_id else ""),
     )
     operation_id = str(record["operation_id"])
-    task = action_task_registry.create(
-        run_github_plugin_uninstall(
+    return await _dispatch(
+        record,
+        lambda: run_github_plugin_uninstall(
             operation_id=operation_id,
             files_to_delete=list(files_to_delete),
             market_plugin_id=market_plugin_id,
-        )
+        ),
     )
-    server_operation_hub.bind_task(operation_id, task)
-    return record
 
 
 async def run_github_plugin_uninstall(

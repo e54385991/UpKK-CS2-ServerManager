@@ -33,7 +33,12 @@ export default async function PluginDetailPage({
   const serverId = Number(sp.serverId);
   const serversResult = await listServers();
   const servers = serversResult.ok
-    ? serversResult.data.map((server) => ({ id: server.id, name: server.name }))
+    ? serversResult.data.map((server) => ({
+        id: server.id,
+        name: server.name,
+        usePanelProxy: server.usePanelProxy,
+        githubProxy: server.githubProxy,
+      }))
     : [];
 
   return (

@@ -9,16 +9,15 @@ from sqlmodel import select
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from modules import ManagedPlugin, MarketPlugin, PluginCategory
-from services.maintenance_lock import maintenance_lock_service
 from services.plugin_conflict_service import (
     PluginPlanError,
     build_plugin_install_plan,
     validate_plugin_plan_acknowledgements,
 )
 from services.plugins.common import parse_dependency_ids
-from services.redis_manager import redis_manager
 from services.server_operation_hub import ServerOperationConflict
 
+from .operation_locks import reject_stuck_lock_unless_active
 from .operation_runner import enqueue_github_plugin_uninstall, enqueue_plugin_install
 from .operations import to_view
 from .schemas import (
@@ -258,6 +257,10 @@ async def plugin_install_preflight(
     plugin_id: int,
     db: DatabaseSession,
     current_user: ActiveUser,
+    install_dependencies: bool = Query(
+        False,
+        description="Whether to include declared dependencies in the plan (opt-in, matches the web installer)",
+    ),
 ) -> PluginInstallPlanView:
     """Resolve dependencies and conflicts without changing the server."""
     server = await require_server_access(db, server_id, current_user)
@@ -269,7 +272,7 @@ async def plugin_install_preflight(
             db,
             server_id,
             plugin_id,
-            include_dependencies=True,
+            include_dependencies=install_dependencies,
             server=server,
         )
     except PluginPlanError as exc:
@@ -295,26 +298,14 @@ async def install_market_plugin(
     if plugin is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
 
-    if await redis_manager.get(f"deployment_lock:{server_id}"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Server is currently being deployed or has a stuck deployment lock. "
-                "Clear the lock before starting another operation."
-            ),
-        )
-    if await maintenance_lock_service.is_locked(server_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Another operation already holds the server lock.",
-        )
+    await reject_stuck_lock_unless_active(server_id)
 
     try:
         plan = await build_plugin_install_plan(
             db,
             server_id,
             plugin_id,
-            include_dependencies=True,
+            include_dependencies=body.install_dependencies,
             server=server,
         )
         validate_plugin_plan_acknowledgements(plan, body.acknowledge_warning_rule_ids)
@@ -338,6 +329,11 @@ async def install_market_plugin(
             actor_user_id=current_user.id,
             acknowledge_warning_rule_ids=body.acknowledge_warning_rule_ids,
             plan_hash=body.plan_hash or plan["plan_hash"],
+            download_url=body.download_url,
+            upgrade_mode=body.upgrade_mode,
+            install_dependencies=body.install_dependencies,
+            exclude_dirs=list(body.exclude_dirs),
+            exclude_files=list(body.exclude_files),
         )
     except ServerOperationConflict as exc:
         raise HTTPException(
@@ -364,19 +360,7 @@ async def uninstall_market_plugin(
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
     if plugin is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
-    if await redis_manager.get(f"deployment_lock:{server_id}"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Server is currently being deployed or has a stuck deployment lock. "
-                "Clear the lock before starting another operation."
-            ),
-        )
-    if await maintenance_lock_service.is_locked(server_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Another operation already holds the server lock.",
-        )
+    await reject_stuck_lock_unless_active(server_id)
     try:
         record = await enqueue_github_plugin_uninstall(
             server_id=server_id,

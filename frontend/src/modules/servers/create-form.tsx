@@ -17,6 +17,19 @@ import {
   createServerAction,
 } from "@/modules/servers/actions";
 import type { ServerCreateResult } from "@/modules/servers/api";
+import {
+  getInitializedHostCredentialsAction,
+  listInitializedHostsAction,
+} from "@/modules/servers/setup-actions";
+import type {
+  InitializedHost,
+  InitializedHostCredentials,
+} from "@/modules/servers/setup-api";
+import {
+  isHostReadyToAdd,
+  rememberInitializedHost,
+  setupWizardHref,
+} from "@/modules/servers/initialized-hosts";
 import { AptMirrorSwitcher } from "@/modules/servers/apt-mirror-switcher";
 import {
   APT_MIRRORS,
@@ -34,6 +47,7 @@ import {
 import { Input, Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
+import { alertDialog } from "@/shared/feedback/alert-store";
 import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
 import { cn } from "@/shared/lib/cn";
 
@@ -49,7 +63,27 @@ const GAME_MODES = [
   "custom",
 ] as const;
 
-export function CreateServerForm() {
+function defaultsFromCredentials(
+  creds: InitializedHostCredentials | undefined,
+  markedHost?: string,
+) {
+  return {
+    name: creds?.name ?? "",
+    host: creds?.host ?? markedHost ?? "",
+    sshUser: creds?.sshUser ?? "",
+    sshPort: creds?.sshPort ?? 22,
+    sshPassword: creds?.sshPassword ?? "",
+    gameDirectory: creds?.gameDirectory ?? "/home/cs2server/cs2",
+  };
+}
+
+export function CreateServerForm({
+  initialCredentials,
+  markedInitializedHost,
+}: {
+  initialCredentials?: InitializedHostCredentials;
+  markedInitializedHost?: string;
+} = {}) {
   const t = useTranslations("serverNew");
   const router = useRouter();
   const [captcha, setCaptcha] = useState<Captcha | null>(null);
@@ -58,7 +92,15 @@ export function CreateServerForm() {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<ServerCreateResult | null>(null);
   const [copied, setCopied] = useState(false);
-  const [sshUser, setSshUser] = useState("");
+  const [hosts, setHosts] = useState<InitializedHost[]>([]);
+  const [selectedHostKey, setSelectedHostKey] = useState(
+    initialCredentials?.key ?? "",
+  );
+  const [formKey, setFormKey] = useState(0);
+  const [defaults, setDefaults] = useState(() =>
+    defaultsFromCredentials(initialCredentials, markedInitializedHost),
+  );
+  const [sshUser, setSshUser] = useState(initialCredentials?.sshUser ?? "");
   const [aptMirror, setAptMirror] = useState<AptMirrorId>("official");
   const [switchingMirror, setSwitchingMirror] = useState<AptMirrorId | null>(
     null,
@@ -77,10 +119,33 @@ export function CreateServerForm() {
       else setError(t("captchaLoadError"));
       setCaptchaLoading(false);
     });
+    void listInitializedHostsAction().then((listed) => {
+      if (active && listed.ok) setHosts(listed.data);
+    });
     return () => {
       active = false;
     };
   }, [requestCaptcha, t]);
+
+  const applyInitializedHost = useCallback(
+    async (key: string) => {
+      if (!key) return;
+      const creds = await getInitializedHostCredentialsAction(key);
+      if (!creds.ok) {
+        void alertDialog({
+          title: t("errorTitle"),
+          description: creds.error,
+        });
+        return;
+      }
+      rememberInitializedHost(creds.data.host);
+      setSelectedHostKey(key);
+      setDefaults(defaultsFromCredentials(creds.data));
+      setSshUser(creds.data.sshUser);
+      setFormKey((current) => current + 1);
+    },
+    [t],
+  );
 
   const refreshCaptcha = useCallback(() => {
     setCaptchaLoading(true);
@@ -100,13 +165,32 @@ export function CreateServerForm() {
     event.preventDefault();
     if (!captcha) return;
     setError(null);
-    setPending(true);
     const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") ?? "").trim();
+    const host = String(form.get("host") ?? "").trim();
+    const sshPort = Number(form.get("sshPort") ?? 22);
+    const nextSshUser = String(form.get("sshUser") ?? "").trim();
+    if (!isHostReadyToAdd(host, hosts, markedInitializedHost)) {
+      await alertDialog({
+        title: t("mustInitializeTitle"),
+        description: t("mustInitialize"),
+      });
+      router.push(
+        setupWizardHref({
+          name,
+          host,
+          sshPort,
+          sshUser: nextSshUser,
+        }) as Route,
+      );
+      return;
+    }
+    setPending(true);
     const result = await createServerAction({
-      name: String(form.get("name") ?? "").trim(),
-      host: String(form.get("host") ?? "").trim(),
-      sshPort: Number(form.get("sshPort") ?? 22),
-      sshUser: String(form.get("sshUser") ?? "").trim(),
+      name,
+      host,
+      sshPort,
+      sshUser: nextSshUser,
       sshPassword: String(form.get("sshPassword") ?? ""),
       sudoPassword: String(form.get("sudoPassword") ?? "") || undefined,
       aptMirror,
@@ -127,8 +211,11 @@ export function CreateServerForm() {
     });
     setPending(false);
     if (!result.ok) {
-      setError(result.error);
       refreshCaptcha();
+      void alertDialog({
+        title: t("errorTitle"),
+        description: result.error,
+      });
       return;
     }
     if (result.data.hostInitialized) {
@@ -146,7 +233,10 @@ export function CreateServerForm() {
     const result = await applyAptMirrorAction(created.id, mirror);
     setSwitchingMirror(null);
     if (!result.ok) {
-      setError(result.error);
+      void alertDialog({
+        title: t("errorTitle"),
+        description: result.error,
+      });
       return;
     }
     router.push(`/servers/${created.id}/operations` as Route);
@@ -164,13 +254,45 @@ export function CreateServerForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
+    <form key={formKey} onSubmit={onSubmit} className="space-y-6">
       {error ? (
         <div className="flex items-start gap-2 rounded-md border border-danger/30 bg-danger-muted/50 px-3 py-2 text-sm text-danger">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
           <span>{error}</span>
         </div>
       ) : null}
+
+      <Card className="border-primary/20 bg-primary/5" data-testid="create-init-gate">
+        <CardHeader>
+          <div>
+            <CardTitle>{t("mustInitializeTitle")}</CardTitle>
+            <CardDescription>{t("mustInitializeHelp")}</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          {hosts.length > 0 ? (
+            <Field className="min-w-0 flex-1" label={t("initializedSelect")} htmlFor="initializedHost">
+              <Select
+                id="initializedHost"
+                value={selectedHostKey}
+                onChange={(event) => void applyInitializedHost(event.target.value)}
+              >
+                <option value="">{t("initializedSelectPlaceholder")}</option>
+                {hosts.map((host) => (
+                  <option key={host.key} value={host.key}>
+                    {host.name} ({host.sshUser}@{host.host})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            <p className="flex-1 text-sm text-fg-muted">{t("initializedEmpty")}</p>
+          )}
+          <Button asChild variant="outline">
+            <Link href={"/servers/new?tab=setup" as Route}>{t("goToSetup")}</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       {created ? (
         <Card className="border-warn/30 bg-warn-muted/40">
@@ -241,10 +363,23 @@ export function CreateServerForm() {
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <Field className="sm:col-span-2" label={t("fields.name")} htmlFor="name">
-              <Input id="name" name="name" required maxLength={255} autoFocus />
+              <Input
+                id="name"
+                name="name"
+                required
+                maxLength={255}
+                autoFocus
+                defaultValue={defaults.name}
+              />
             </Field>
             <Field label={t("fields.host")} htmlFor="host">
-              <Input id="host" name="host" required autoComplete="off" />
+              <Input
+                id="host"
+                name="host"
+                required
+                autoComplete="off"
+                defaultValue={defaults.host}
+              />
             </Field>
             <Field label={t("fields.gamePort")} htmlFor="gamePort">
               <Input
@@ -278,7 +413,7 @@ export function CreateServerForm() {
                 type="number"
                 min={1}
                 max={65535}
-                defaultValue={22}
+                defaultValue={defaults.sshPort}
                 required
               />
             </Field>
@@ -293,6 +428,7 @@ export function CreateServerForm() {
                 type="password"
                 required
                 autoComplete="new-password"
+                defaultValue={defaults.sshPassword}
               />
             </Field>
             <Field
@@ -341,7 +477,7 @@ export function CreateServerForm() {
               <Input
                 id="gameDirectory"
                 name="gameDirectory"
-                defaultValue="/home/cs2server/cs2"
+                defaultValue={defaults.gameDirectory}
                 required
                 className="font-mono"
               />

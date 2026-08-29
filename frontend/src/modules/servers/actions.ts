@@ -23,6 +23,9 @@ import {
   startBatchInstallPlugins,
   startBatchSendCommand,
   importServerConfigs,
+  clearFailedOperations,
+  dismissFailedOperation,
+  listOperationInbox,
   listOperationLogs,
   applyAptMirror,
   applySystemDefaults,
@@ -53,6 +56,7 @@ import type {
   BatchPlugin,
   DiskSpace,
   ServerListScope,
+  OperationInbox,
   OperationJournal,
   ServerOperation,
   ServerOperationAction,
@@ -99,6 +103,24 @@ export async function restoreS3BackupAction(
   const result = await restoreS3Backup(serverId, objectKey);
   if (result.ok) revalidateServer(serverId);
   return result;
+}
+
+export async function refreshOperationInboxAction(): Promise<
+  ApiResult<OperationInbox>
+> {
+  return listOperationInbox();
+}
+
+export async function clearFailedOperationsAction(): Promise<
+  ApiResult<ActionResultDto>
+> {
+  return clearFailedOperations();
+}
+
+export async function dismissFailedOperationAction(
+  operationId: string,
+): Promise<ApiResult<ActionResultDto>> {
+  return dismissFailedOperation(operationId);
 }
 
 export async function startServerOperationAction(

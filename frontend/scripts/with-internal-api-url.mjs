@@ -9,7 +9,7 @@
  * `next dev` does not need this: next.config.ts is evaluated on startup.
  */
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -176,6 +176,15 @@ export function resolveStandaloneServer(appRoot) {
   return candidates.find((filePath) => existsSync(filePath));
 }
 
+function sameResolvedPath(from, to) {
+  if (from === to) return true;
+  try {
+    return realpathSync(from) === realpathSync(to);
+  } catch {
+    return false;
+  }
+}
+
 export function prepareStandaloneAssets(appRoot, serverPath) {
   const standaloneRoot = dirname(serverPath);
   const copies = [
@@ -183,9 +192,10 @@ export function prepareStandaloneAssets(appRoot, serverPath) {
     [resolve(appRoot, "public"), resolve(standaloneRoot, "public")],
   ];
   for (const [from, to] of copies) {
-    if (existsSync(from)) {
-      cpSync(from, to, { recursive: true, force: true });
-    }
+    // The production image already copies static/public next to server.js.
+    // Node 26 rejects cpSync when src and dest are the same path.
+    if (!existsSync(from) || sameResolvedPath(from, to)) continue;
+    cpSync(from, to, { recursive: true, force: true });
   }
 }
 

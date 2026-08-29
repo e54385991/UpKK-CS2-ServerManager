@@ -48,6 +48,7 @@ def _stream_url(server_id: int, operation_id: str) -> str:
 
 
 def to_view(record: dict[str, Any]) -> ServerOperationView:
+    command = record.get("command")
     return ServerOperationView(
         operation_id=str(record["operation_id"]),
         server_id=int(record["server_id"]),
@@ -60,6 +61,7 @@ def to_view(record: dict[str, Any]) -> ServerOperationView:
         completed_at=record.get("completed_at"),
         actor_user_id=int(record["actor_user_id"]),
         stream_url=_stream_url(int(record["server_id"]), str(record["operation_id"])),
+        command=str(command) if command else None,
     )
 
 
@@ -96,29 +98,13 @@ async def start_server_operation(
     """Accept a lifecycle action and return immediately with an operation_id."""
     await require_server_access(db, server_id, current_user)
 
-    if await redis_manager.get(f"deployment_lock:{server_id}"):
-        current = await server_operation_hub.get_current(server_id)
-        current_active = bool(current and current.get("status") in ACTIVE_STATUSES)
-        if not current_active:
+    current = await server_operation_hub.get_current(server_id)
+    current_active = bool(current and current.get("status") in ACTIVE_STATUSES)
+    if not current_active:
+        if await redis_manager.get(f"deployment_lock:{server_id}"):
             await redis_manager.delete(f"deployment_lock:{server_id}")
-        if current_active or await redis_manager.get(f"deployment_lock:{server_id}"):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "Server is currently being deployed or has a stuck deployment lock. "
-                    "Clear the lock before starting another operation."
-                ),
-            )
-    if await maintenance_lock_service.is_locked(server_id):
-        current = await server_operation_hub.get_current(server_id)
-        current_active = bool(current and current.get("status") in ACTIVE_STATUSES)
-        if not current_active:
+        if await maintenance_lock_service.is_locked(server_id):
             await maintenance_lock_service.force_release_server_lock(server_id)
-        if current_active or await maintenance_lock_service.is_locked(server_id):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Another operation already holds the server lock.",
-            )
 
     try:
         record = await enqueue_server_operation(

@@ -11562,6 +11562,195 @@
         "title": "MarketPluginView",
         "type": "object"
       },
+      "OperationInboxItem": {
+        "properties": {
+          "action": {
+            "enum": [
+              "deploy",
+              "start",
+              "stop",
+              "restart",
+              "status",
+              "update",
+              "validate",
+              "install_metamod",
+              "install_counterstrikesharp",
+              "install_cs2fixes",
+              "install_swiftly",
+              "update_metamod",
+              "update_counterstrikesharp",
+              "update_cs2fixes",
+              "update_swiftly",
+              "backup_plugins",
+              "install_plugin",
+              "install_github_plugin",
+              "uninstall_github_plugin",
+              "apply_apt_mirror",
+              "s3_restore"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_user_id": {
+            "title": "Actor User Id",
+            "type": "integer"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "latest_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Message"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "queue_position": {
+            "default": 0,
+            "title": "Queue Position",
+            "type": "integer"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "server_name": {
+            "title": "Server Name",
+            "type": "string"
+          },
+          "server_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServerStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stream_url": {
+            "title": "Stream Url",
+            "type": "string"
+          },
+          "success": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success"
+          }
+        },
+        "required": [
+          "operation_id",
+          "server_id",
+          "action",
+          "status",
+          "started_at",
+          "actor_user_id",
+          "stream_url",
+          "server_name"
+        ],
+        "title": "OperationInboxItem",
+        "type": "object"
+      },
+      "OperationInboxView": {
+        "properties": {
+          "active_count": {
+            "default": 0,
+            "title": "Active Count",
+            "type": "integer"
+          },
+          "failed_count": {
+            "default": 0,
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "failed_items": {
+            "items": {
+              "$ref": "#/components/schemas/OperationInboxItem"
+            },
+            "title": "Failed Items",
+            "type": "array"
+          },
+          "failed_retention_days": {
+            "default": 7,
+            "title": "Failed Retention Days",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OperationInboxItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "running_count": {
+            "default": 0,
+            "title": "Running Count",
+            "type": "integer"
+          }
+        },
+        "title": "OperationInboxView",
+        "type": "object"
+      },
       "OperationJournal": {
         "description": "Current operation record plus every persisted progress event.",
         "properties": {
@@ -13405,7 +13594,7 @@
         "type": "object"
       },
       "PluginInstallRequest": {
-        "description": "Acknowledge warnings and optionally pin the preflight plan hash.",
+        "description": "Acknowledge warnings and optionally pin the preflight plan hash.\n\n``install_dependencies`` is opt-in, matching the legacy web installer.",
         "properties": {
           "acknowledge_warning_rule_ids": {
             "items": {
@@ -13413,6 +13602,37 @@
             },
             "title": "Acknowledge Warning Rule Ids",
             "type": "array"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "exclude_dirs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exclude Dirs",
+            "type": "array"
+          },
+          "exclude_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exclude Files",
+            "type": "array"
+          },
+          "install_dependencies": {
+            "default": false,
+            "title": "Install Dependencies",
+            "type": "boolean"
           },
           "plan_hash": {
             "anyOf": [
@@ -13425,6 +13645,11 @@
               }
             ],
             "title": "Plan Hash"
+          },
+          "upgrade_mode": {
+            "default": false,
+            "title": "Upgrade Mode",
+            "type": "boolean"
           }
         },
         "title": "PluginInstallRequest",
@@ -16968,11 +17193,11 @@
           "name",
           "host",
           "game_port",
+          "ssh_user",
           "status",
           "default_map",
           "max_players",
           "ssh_port",
-          "ssh_user",
           "game_directory",
           "game_mode",
           "game_type",
@@ -17265,11 +17490,11 @@
           "name",
           "host",
           "game_port",
+          "ssh_user",
           "status",
           "default_map",
           "max_players",
           "ssh_port",
-          "ssh_user",
           "game_directory",
           "game_mode",
           "game_type",
@@ -17345,6 +17570,17 @@
           "actor_user_id": {
             "title": "Actor User Id",
             "type": "integer"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
           },
           "completed_at": {
             "anyOf": [
@@ -18592,6 +18828,10 @@
             "title": "Ssh Health Status",
             "type": "string"
           },
+          "ssh_user": {
+            "title": "Ssh User",
+            "type": "string"
+          },
           "status": {
             "$ref": "#/components/schemas/ServerStatus"
           },
@@ -18606,6 +18846,7 @@
           "name",
           "host",
           "game_port",
+          "ssh_user",
           "status",
           "default_map",
           "max_players"
@@ -19774,11 +20015,11 @@
           "name",
           "host",
           "game_port",
+          "ssh_user",
           "status",
           "default_map",
           "max_players",
           "ssh_port",
-          "ssh_user",
           "game_directory",
           "game_mode",
           "game_type",
@@ -28121,6 +28362,109 @@
         ]
       }
     },
+    "/api/v1/operations/inbox": {
+      "get": {
+        "description": "Active jobs plus failed jobs retained for seven days.",
+        "operationId": "list_operation_inbox_api_v1_operations_inbox_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationInboxView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Operation Inbox",
+        "tags": [
+          "v1-operations"
+        ]
+      }
+    },
+    "/api/v1/operations/inbox/failed": {
+      "delete": {
+        "description": "Remove every retained failure the caller can see.",
+        "operationId": "clear_failed_operations_api_v1_operations_inbox_failed_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Clear Failed Operations",
+        "tags": [
+          "v1-operations"
+        ]
+      }
+    },
+    "/api/v1/operations/inbox/failed/{operation_id}": {
+      "delete": {
+        "description": "Remove one failed job from the retained failure tab.",
+        "operationId": "dismiss_failed_operation_api_v1_operations_inbox_failed__operation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Dismiss Failed Operation",
+        "tags": [
+          "v1-operations"
+        ]
+      }
+    },
     "/api/v1/overview/a2s-cache": {
       "get": {
         "description": "Cached A2S map for the server list. Default reads never query A2S or SSH.",
@@ -34284,6 +34628,18 @@
             "schema": {
               "title": "Plugin Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Whether to include declared dependencies in the plan (opt-in, matches the web installer)",
+            "in": "query",
+            "name": "install_dependencies",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Whether to include declared dependencies in the plan (opt-in, matches the web installer)",
+              "title": "Install Dependencies",
+              "type": "boolean"
             }
           }
         ],

@@ -7,11 +7,10 @@ from fastapi import APIRouter, HTTPException, status
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from api.routes.servers.common import get_server_owner_user
 from modules import User
-from services.maintenance_lock import maintenance_lock_service
-from services.redis_manager import redis_manager
 from services.s3_backup_service import s3_backup_service
 from services.server_operation_hub import ServerOperationConflict
 
+from .operation_locks import reject_stuck_lock_unless_active
 from .operation_runner import enqueue_s3_restore
 from .operations import to_view
 from .schemas import S3BackupItemView, S3BackupListView, S3RestoreBody, ServerOperationView
@@ -80,19 +79,7 @@ async def restore_server_s3_backup(
             detail="Selected S3 backup does not belong to this server",
         )
 
-    if await redis_manager.get(f"deployment_lock:{server_id}"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Server is currently being deployed or has a stuck deployment lock. "
-                "Clear the lock before restoring an S3 backup."
-            ),
-        )
-    if await maintenance_lock_service.is_locked(server_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Another operation already holds the server lock.",
-        )
+    await reject_stuck_lock_unless_active(server_id)
 
     try:
         record = await enqueue_s3_restore(

@@ -3,6 +3,7 @@ import { MobileNav } from "@/modules/shell/mobile-nav";
 import { UserMenu } from "@/modules/shell/user-menu";
 import { LanguageSwitcher } from "@/modules/shell/language-switcher";
 import { StatusDot } from "@/shared/ui/badge";
+import { ActivityTray } from "@/modules/shell/activity-tray";
 import { SshPoolBadge } from "@/modules/shell/ssh-pool-badge";
 import type { SessionUser } from "@/modules/auth/session";
 
@@ -26,6 +27,7 @@ export async function Topbar({ user }: { user: SessionUser }) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <ActivityTray />
         <LanguageSwitcher />
         <UserMenu user={user} />
       </div>

@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
 import { CreateServerForm } from "@/modules/servers/create-form";
+import { getInitializedHostCredentials } from "@/modules/servers/setup-api";
 import { SetupWizard } from "@/modules/servers/setup-wizard";
 import { cn } from "@/shared/lib/cn";
 
@@ -15,7 +16,16 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function NewServerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    name?: string;
+    host?: string;
+    sshPort?: string;
+    sshUser?: string;
+    requireInit?: string;
+    from?: string;
+    initialized?: string;
+  }>;
 }) {
   const [t, tServers, tSetup, sp] = await Promise.all([
     getTranslations("serverNew"),
@@ -24,6 +34,12 @@ export default async function NewServerPage({
     searchParams,
   ]);
   const tab = sp.tab === "setup" ? "setup" : "create";
+  const sshPort = Number(sp.sshPort);
+  const prefilled =
+    tab === "create" && sp.from
+      ? await getInitializedHostCredentials(sp.from)
+      : null;
+  const initialCredentials = prefilled?.ok ? prefilled.data : undefined;
   return (
     <>
       <PageHeader
@@ -51,7 +67,22 @@ export default async function NewServerPage({
           {tSetup("tab")}
         </LinkButton>
       </div>
-      {tab === "setup" ? <SetupWizard /> : <CreateServerForm />}
+      {tab === "setup" ? (
+        <SetupWizard
+          initialName={sp.name ?? ""}
+          initialHost={sp.host ?? ""}
+          initialSshPort={Number.isFinite(sshPort) && sshPort > 0 ? sshPort : 22}
+          initialSshUser={sp.sshUser ?? ""}
+          requireInit={sp.requireInit === "1"}
+        />
+      ) : (
+        <CreateServerForm
+          initialCredentials={initialCredentials}
+          markedInitializedHost={
+            sp.initialized === "1" ? sp.host : initialCredentials?.host
+          }
+        />
+      )}
     </>
   );
 }

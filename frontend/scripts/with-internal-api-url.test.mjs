@@ -110,6 +110,16 @@ test("prefers the local standalone server over next start", () => {
   assert.equal(resolveStandaloneServer(root), standalone);
 });
 
+test("skips copying when the image already is the standalone tree", () => {
+  const root = mkdtempSync(join(tmpdir(), "upkk-image-"));
+  mkdirp(join(root, ".next", "static", "chunks"));
+  mkdirp(join(root, "public"));
+  writeFileSync(join(root, ".next", "static", "chunks", "app.js"), "ok");
+  writeFileSync(join(root, "public", "favicon.ico"), "");
+  writeFileSync(join(root, "server.js"), "");
+  assert.doesNotThrow(() => prepareStandaloneAssets(root, join(root, "server.js")));
+});
+
 test("copies static assets into the standalone tree when missing", () => {
   const root = mkdtempSync(join(tmpdir(), "upkk-assets-"));
   mkdirp(join(root, ".next", "static", "chunks"));

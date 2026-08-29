@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { getMarketPlugin } from "@/modules/plugins/api";
 import { InstallForm } from "@/modules/plugins/install-form";
+import type { MarketInstallServer } from "@/modules/plugins/types";
 import { Badge } from "@/shared/ui/badge";
 import {
   Card,
@@ -20,7 +21,7 @@ export async function PluginDetail({
 }: {
   pluginId: number;
   serverId: number | null;
-  servers: readonly { id: number; name: string }[];
+  servers: readonly MarketInstallServer[];
 }) {
   const t = await getTranslations("plugins");
   const pluginResult = await getMarketPlugin(pluginId);
@@ -95,8 +96,11 @@ export async function PluginDetail({
         <CardContent>
           <InstallForm
             pluginId={plugin.id}
+            pluginTitle={plugin.title}
+            githubUrl={plugin.githubUrl}
             servers={servers}
             defaultServerId={serverId}
+            showUninstall
           />
         </CardContent>
       </Card>

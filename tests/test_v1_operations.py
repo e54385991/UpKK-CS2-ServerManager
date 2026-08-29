@@ -92,6 +92,8 @@ def _client(*, monkeypatch, admin: bool = False):
 def setup_function() -> None:
     server_operation_hub._records.clear()
     server_operation_hub._current.clear()
+    server_operation_hub._pending.clear()
+    server_operation_hub._runners.clear()
     server_operation_hub._events.clear()
     server_operation_hub._queues.clear()
     server_operation_hub._tasks.clear()
@@ -152,8 +154,10 @@ def test_v1_start_operation_rejects_unknown_action(monkeypatch):
     assert response.status_code == 422
 
 
-def test_v1_start_operation_conflict_when_deploy_lock_held(monkeypatch):
-    client, _server, _user = _client(monkeypatch=monkeypatch)
+def test_v1_start_operation_queues_when_another_job_is_active(monkeypatch):
+    client, _server, user = _client(monkeypatch=monkeypatch)
+    record = _queued_record(action="start", actor_user_id=user.id)
+    enqueue = AsyncMock(return_value=record)
     monkeypatch.setattr(
         "api.routes.v1.operations.redis_manager.get",
         AsyncMock(return_value="1"),
@@ -162,9 +166,10 @@ def test_v1_start_operation_conflict_when_deploy_lock_held(monkeypatch):
         "api.routes.v1.operations.server_operation_hub.get_current",
         AsyncMock(return_value={"status": "running", "operation_id": "live"}),
     )
+    monkeypatch.setattr("api.routes.v1.operations.enqueue_server_operation", enqueue)
     response = client.post("/api/v1/servers/1/operations", json={"action": "start"})
-    assert response.status_code == 409
-    assert "lock" in response.json()["detail"].lower()
+    assert response.status_code == 202
+    enqueue.assert_awaited_once()
 
 
 def test_v1_start_operation_releases_stale_deployment_lock(monkeypatch):

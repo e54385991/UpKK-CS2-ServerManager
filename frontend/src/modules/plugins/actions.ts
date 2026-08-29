@@ -28,8 +28,9 @@ import type { ServerOperation } from "@/modules/servers/types";
 export async function getPluginInstallPlanAction(
   serverId: number,
   pluginId: number,
+  installDependencies = false,
 ): Promise<ApiResult<PluginInstallPlan>> {
-  return getPluginInstallPlan(serverId, pluginId);
+  return getPluginInstallPlan(serverId, pluginId, installDependencies);
 }
 
 export async function installMarketPluginAction(
@@ -38,6 +39,11 @@ export async function installMarketPluginAction(
   input: {
     readonly acknowledgeWarningRuleIds?: readonly number[];
     readonly planHash?: string;
+    readonly downloadUrl?: string | null;
+    readonly upgradeMode?: boolean;
+    readonly installDependencies?: boolean;
+    readonly excludeDirs?: readonly string[];
+    readonly excludeFiles?: readonly string[];
   },
 ): Promise<ApiResult<ServerOperation>> {
   const result = await installMarketPlugin(serverId, pluginId, input);

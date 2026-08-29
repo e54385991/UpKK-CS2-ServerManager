@@ -14,6 +14,7 @@ import {
   startServerOperationAction,
 } from "@/modules/servers/actions";
 import { toAptMirror, type AptMirrorId } from "@/modules/servers/apt-mirrors";
+import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { confirm } from "@/shared/feedback";
 import {
   CONFIRM_ACTIONS,
@@ -244,6 +245,7 @@ export function useOperationRunner({
     }
     setEvents([]);
     setOperation(result.data);
+    trackQueuedOperation(result.data);
   }
 
   async function runS3Restore(objectKey: string) {
@@ -259,6 +261,7 @@ export function useOperationRunner({
     }
     setEvents([]);
     setOperation(result.data);
+    trackQueuedOperation(result.data);
   }
 
   async function onSwitchMirror(mirror: AptMirrorId) {
@@ -275,6 +278,7 @@ export function useOperationRunner({
     setEvents([]);
     setCurrentMirror(mirror);
     setOperation(result.data);
+    trackQueuedOperation(result.data);
   }
 
   async function refreshAfterForceStop() {

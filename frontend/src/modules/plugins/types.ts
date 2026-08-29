@@ -15,6 +15,13 @@ export type PluginRef = {
   readonly title: string;
 };
 
+export type MarketInstallServer = {
+  readonly id: number;
+  readonly name: string;
+  readonly usePanelProxy?: boolean;
+  readonly githubProxy?: string | null;
+};
+
 export type MarketPlugin = {
   readonly id: number;
   readonly title: string;

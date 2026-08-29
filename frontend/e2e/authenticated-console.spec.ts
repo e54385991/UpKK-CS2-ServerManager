@@ -30,6 +30,21 @@ test("overview greets the admin and shows fleet stats", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: /打开部署教程|Open the deployment tutorial/ }),
   ).toBeVisible();
+  await expect(page.getByTestId("activity-tray-toggle")).toBeVisible();
+});
+
+test("activity tray shows queue and failed tabs", async ({ page }) => {
+  await page.goto("/overview");
+  await page.getByTestId("activity-tray-toggle").click();
+  await expect(page.getByTestId("activity-tray-panel")).toBeVisible();
+  await expect(page.getByTestId("activity-tray-tab-queue")).toBeVisible();
+  await expect(page.getByTestId("activity-tray-tab-failed")).toBeVisible();
+  await page.getByTestId("activity-tray-tab-failed").click();
+  await expect(page.getByTestId("activity-tray-tab-failed")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByText(/失败任务默认保留 7 天|Failed tasks are kept for 7 days/)).toBeVisible();
 });
 
 test("servers list exports a redacted configuration bundle", async ({
@@ -321,10 +336,7 @@ test("admin fleet toggle stays on the servers list", async ({ page }) => {
     page.getByRole("button", { name: /导出所选|Export selected/ }),
   ).toBeVisible();
   await expect(page.getByTestId("a2s-overlay").first()).toBeVisible();
-  await expect(page.getByTestId("proxy-badge").first()).toBeVisible();
-  await expect(
-    page.getByTestId("proxy-badge").first().getByText(/面板代理|GitHub 代理|直连|Panel proxy|GitHub proxy|Direct/),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /管理服务器|Manage server/ }).first()).toBeVisible();
   await expect(page.getByTestId("ssh-health").first()).toBeVisible();
   await expect(page.getByTestId("ssh-health-badge").first()).toBeVisible();
   await expect(
@@ -375,6 +387,19 @@ test("plugin catalog dialog opens without importing", async ({ page }) => {
   await expect(github.getByTestId("github-exclude-toggles")).toBeVisible();
   await expect(github.getByTestId("github-file-mapping")).toBeVisible();
   await closeDialog(page);
+
+  const cardInstall = page.getByTestId("market-install-open");
+  if ((await cardInstall.count()) > 0) {
+    await cardInstall.first().click();
+    const market = page.getByTestId("market-install-dialog");
+    await expect(market).toBeVisible();
+    await expect(market.getByTestId("market-install-form")).toBeVisible();
+    await expect(market.getByText(/升级模式|Upgrade mode/)).toBeVisible();
+    await expect(
+      market.getByText(/同时安装依赖|Install dependencies/),
+    ).toBeVisible();
+    await closeDialog(page);
+  }
 });
 
 test("settings and profile render parity fields", async ({ page }) => {

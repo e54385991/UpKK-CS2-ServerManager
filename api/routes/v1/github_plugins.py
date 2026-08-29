@@ -11,10 +11,9 @@ from api.routes.github_plugins import get_github_releases as list_legacy_release
 from modules import GitHubPluginInstallPlanRequest
 from services.ai_access import AgentAccessDenied, enforce_agent_rate_limit
 from services.github_plugin_plan_service import GitHubPlanError, build_github_install_plan
-from services.maintenance_lock import maintenance_lock_service
-from services.redis_manager import redis_manager
 from services.server_operation_hub import ServerOperationConflict
 
+from .operation_locks import reject_stuck_lock_unless_active
 from .operation_runner import enqueue_github_plugin_install, enqueue_github_plugin_uninstall
 from .operations import to_view
 from .schemas import (
@@ -253,19 +252,7 @@ async def install_github_plugin(
 ) -> ServerOperationView:
     """Accept a GitHub install and return immediately with an operation_id."""
     await require_server_access(db, server_id, current_user)
-    if await redis_manager.get(f"deployment_lock:{server_id}"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Server is currently being deployed or has a stuck deployment lock. "
-                "Clear the lock before starting another operation."
-            ),
-        )
-    if await maintenance_lock_service.is_locked(server_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Another operation already holds the server lock.",
-        )
+    await reject_stuck_lock_unless_active(server_id)
 
     try:
         await enforce_agent_rate_limit(
@@ -330,19 +317,7 @@ async def uninstall_github_plugin(
 ) -> ServerOperationView:
     """Accept a selected-file uninstall and return immediately with an operation_id."""
     await require_server_access(db, server_id, current_user)
-    if await redis_manager.get(f"deployment_lock:{server_id}"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Server is currently being deployed or has a stuck deployment lock. "
-                "Clear the lock before starting another operation."
-            ),
-        )
-    if await maintenance_lock_service.is_locked(server_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Another operation already holds the server lock.",
-        )
+    await reject_stuck_lock_unless_active(server_id)
 
     try:
         record = await enqueue_github_plugin_uninstall(

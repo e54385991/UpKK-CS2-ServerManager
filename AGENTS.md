@@ -48,3 +48,37 @@ upgrades to the single checked-in head through `migrate_db()` /
 - Never restore `SQLModel.metadata.create_all()` as a production startup path.
 - Never leave the user on an old schema, and never instruct a manual migrate
   after a model or revision change.
+
+# Delivery queue (plugins and long-running tasks)
+
+Plugin installs, GitHub installs, and other long server jobs are **submitted
+to a per-server FIFO**, not run inline in the HTTP request.
+
+- The client **POSTs and leaves**. The API returns **202** with `operation_id`
+  immediately. Do not hold the browser on the install form waiting for SSH.
+- `services.server_operation_hub` is the queue. One worker runs at a time
+  **per game server**. A second submit on the same host is **queued behind**
+  the current job (it is not a 409 unless the pending cap is hit, or a lock
+  is stuck with no active hub operation). Sequential execution avoids SSH
+  lock conflicts and overlapping plugin extracts.
+- Persist the **original command** (or a faithful command summary) on the
+  operation record so the console can show what was submitted.
+- Progress is the existing **replayable SSE** stream
+  (`GET /api/v1/servers/{id}/operations/{operation_id}/events`). Do not add a
+  second WebSocket just for panel jobs. `EventSource` cannot set
+  `Authorization`; the Next console uses
+  `/ops-stream/servers/{id}/operations/{operationId}`.
+- **Do not attach the activity tray to tmux.** `tmux` / `screen` is the game
+  or SteamCMD pane (`/live-console/{id}`). Plugin market installs and most
+  panel actions run over SSH through the hub and never enter that session.
+  The tray may offer “open live terminal” only for actions that actually use
+  the deploy/game pane (`deploy`, `update`, `validate`, `start`).
+- The global inbox is `GET /api/v1/operations/inbox`: queued + running jobs
+  for servers the caller can access, plus **failed** jobs retained for **7
+  days** (`failed_items`). Each item includes `server_name`, `command`, and
+  `latest_message`. Operators can clear one failure with
+  `DELETE /api/v1/operations/inbox/failed/{operation_id}` or all visible
+  failures with `DELETE /api/v1/operations/inbox/failed`.
+- After a process restart, in-memory runners for **pending** (not yet
+  started) jobs are gone; those records must fail cleanly instead of hanging
+  as “queued” forever.

@@ -395,6 +395,7 @@ def test_v1_list_servers_returns_only_current_user_without_secrets(monkeypatch):
     body = response.json()
     assert [item["id"] for item in body] == [7]
     assert body[0]["owner_id"] is None
+    assert body[0]["ssh_user"] == "steam"
     assert "ssh_password" not in body[0]
     assert "should-never-leak" not in str(body)
     assert "other-secret" not in str(body)

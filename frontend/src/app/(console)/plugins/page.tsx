@@ -76,6 +76,16 @@ export default async function PluginsPage({
         <MarketCatalog
           query={query}
           serverId={Number.isInteger(serverId) ? serverId : undefined}
+          servers={
+            serversResult.ok
+              ? serversResult.data.map((server) => ({
+                  id: server.id,
+                  name: server.name,
+                  usePanelProxy: server.usePanelProxy,
+                  githubProxy: server.githubProxy,
+                }))
+              : []
+          }
         />
       </Suspense>
     </>

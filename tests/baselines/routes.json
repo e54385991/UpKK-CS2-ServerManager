@@ -2106,6 +2106,30 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "GET"
+    ],
+    "name": "list_operation_inbox",
+    "path": "/api/v1/operations/inbox"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "clear_failed_operations",
+    "path": "/api/v1/operations/inbox/failed"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "dismiss_failed_operation",
+    "path": "/api/v1/operations/inbox/failed/{operation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "start_server_operation",

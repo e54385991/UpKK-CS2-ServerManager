@@ -41,6 +41,17 @@ export type ManualSetupScript = {
   readonly script: string;
 };
 
+export type InitializedHostCredentials = {
+  readonly key: string;
+  readonly name: string;
+  readonly host: string;
+  readonly sshPort: number;
+  readonly sshUser: string;
+  readonly sshPassword: string;
+  readonly gameDirectory: string;
+  readonly createdAt: number;
+};
+
 type InitializedHostDto = {
   key: string;
   name: string;
@@ -67,6 +78,17 @@ type ManualSetupScriptDto = {
   script: string;
 };
 
+type InitializedHostCredentialsDto = {
+  key: string;
+  name: string;
+  host: string;
+  ssh_port: number;
+  ssh_user: string;
+  ssh_password: string;
+  game_directory: string;
+  created_at: number;
+};
+
 function toHost(raw: InitializedHostDto): InitializedHost {
   return {
     key: raw.key,
@@ -91,6 +113,28 @@ export async function deleteInitializedHost(
   return apiFetch(`/api/v1/setup/initialized-servers/${encodeURIComponent(key)}`, {
     method: "DELETE",
   });
+}
+
+export async function getInitializedHostCredentials(
+  key: string,
+): Promise<ApiResult<InitializedHostCredentials>> {
+  const result = await apiFetch<InitializedHostCredentialsDto>(
+    `/api/v1/setup/initialized-servers/${encodeURIComponent(key)}/credentials`,
+  );
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: {
+      key: result.data.key,
+      name: result.data.name,
+      host: result.data.host,
+      sshPort: result.data.ssh_port,
+      sshUser: result.data.ssh_user,
+      sshPassword: result.data.ssh_password,
+      gameDirectory: result.data.game_directory,
+      createdAt: result.data.created_at,
+    },
+  };
 }
 
 export async function getManualSetupScript(

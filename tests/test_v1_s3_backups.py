@@ -205,12 +205,8 @@ def test_v1_restore_s3_backup_returns_202(monkeypatch):
     )
     monkeypatch.setattr("api.routes.v1.s3_backups.enqueue_s3_restore", fake_enqueue)
     monkeypatch.setattr(
-        "api.routes.v1.s3_backups.redis_manager.get",
+        "api.routes.v1.s3_backups.reject_stuck_lock_unless_active",
         AsyncMock(return_value=None),
-    )
-    monkeypatch.setattr(
-        "api.routes.v1.s3_backups.maintenance_lock_service.is_locked",
-        AsyncMock(return_value=False),
     )
 
     response = client.post(

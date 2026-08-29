@@ -15,13 +15,19 @@ import {
   deleteInitializedHostAction,
   getManualSetupScriptAction,
   listInitializedHostsAction,
-  runAutoSetupAction,
 } from "@/modules/servers/setup-actions";
 import type {
   AutoSetupResult,
   InitializedHost,
   ManualSetupScript,
 } from "@/modules/servers/setup-api";
+import { runAutoSetupFromBrowser } from "@/modules/servers/setup-client";
+import {
+  addServerAfterSetupHref,
+  rememberInitializedHost,
+} from "@/modules/servers/initialized-hosts";
+import { SetupLiveLog } from "@/modules/servers/setup-live-log";
+import { alertDialog } from "@/shared/feedback/alert-store";
 import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
 import { Button } from "@/shared/ui/button";
 import {
@@ -37,7 +43,19 @@ import { cn } from "@/shared/lib/cn";
 type Captcha = { token: string; imageUrl: string };
 type Mode = "auto" | "manual";
 
-export function SetupWizard() {
+export function SetupWizard({
+  initialName = "",
+  initialHost = "",
+  initialSshPort = 22,
+  initialSshUser = "",
+  requireInit = false,
+}: {
+  initialName?: string;
+  initialHost?: string;
+  initialSshPort?: number;
+  initialSshUser?: string;
+  requireInit?: boolean;
+}) {
   const t = useTranslations("setupWizard");
   const [mode, setMode] = useState<Mode>("auto");
   const [hosts, setHosts] = useState<InitializedHost[]>([]);
@@ -45,7 +63,9 @@ export function SetupWizard() {
   const [captchaLoading, setCaptchaLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
   const [result, setResult] = useState<AutoSetupResult | null>(null);
+  const [completedHost, setCompletedHost] = useState("");
   const [manual, setManual] = useState<ManualSetupScript | null>(null);
   const [cs2Username, setCs2Username] = useState("cs2server");
   const [copied, setCopied] = useState<string | null>(null);
@@ -108,12 +128,29 @@ export function SetupWizard() {
     event.preventDefault();
     if (!captcha) return;
     const form = new FormData(event.currentTarget);
+    const host = String(form.get("host") ?? "").trim();
+    const sessionId = crypto.randomUUID();
+    const appendLog = (message: string) => {
+      setLogs((current) => [...current, message]);
+    };
+
     setPending(true);
     setError(null);
     setResult(null);
-    const submitted = await runAutoSetupAction({
+    setLogs([]);
+    appendLog(t("wsConnecting"));
+
+    const socket = openSetupProgressSocket(sessionId, appendLog);
+    await waitForSocket(
+      socket,
+      () => appendLog(t("wsConnected")),
+      () => appendLog(t("wsFailed")),
+    );
+    appendLog(t("running"));
+
+    const submitted = await runAutoSetupFromBrowser({
       name: String(form.get("name") ?? "").trim(),
-      host: String(form.get("host") ?? "").trim(),
+      host,
       sshPort: Number(form.get("sshPort") ?? 22),
       sshUser: String(form.get("sshUser") ?? "").trim(),
       sshPassword: String(form.get("sshPassword") ?? ""),
@@ -125,13 +162,24 @@ export function SetupWizard() {
       captchaCode: String(form.get("captcha") ?? "").trim(),
       saveConfig: form.get("saveConfig") === "on",
       openGamePorts: form.get("openGamePorts") === "on",
+      sessionId,
     });
+    if (socket.readyState === WebSocket.OPEN) socket.close();
     setPending(false);
     if (!submitted.ok) {
-      setError(submitted.error);
+      appendLog(`${t("errorTitle")}: ${submitted.error}`);
       refreshCaptcha();
+      void alertDialog({
+        title: t("errorTitle"),
+        description: submitted.error,
+      });
       return;
     }
+    if (socket.readyState !== WebSocket.OPEN && submitted.data.logs.length > 0) {
+      setLogs([...submitted.data.logs]);
+    }
+    rememberInitializedHost(host);
+    setCompletedHost(host);
     setResult(submitted.data);
     refreshCaptcha();
     const listed = await listInitializedHostsAction();
@@ -140,6 +188,15 @@ export function SetupWizard() {
 
   return (
     <div className="space-y-6" data-testid="setup-wizard">
+      {requireInit ? (
+        <div
+          className="rounded-md border border-warn/30 bg-warn-muted/50 px-3 py-2 text-sm text-fg"
+          data-testid="setup-must-initialize"
+        >
+          <p className="font-medium">{t("mustInitializeTitle")}</p>
+          <p className="mt-1 text-fg-muted">{t("mustInitialize")}</p>
+        </div>
+      ) : null}
       {error ? (
         <div className="flex items-start gap-2 rounded-md border border-danger/30 bg-danger-muted/50 px-3 py-2 text-sm text-danger">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
@@ -235,10 +292,22 @@ export function SetupWizard() {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Field label={t("fields.name")} htmlFor="setup-name">
-                <Input id="setup-name" name="name" required maxLength={255} />
+                <Input
+                  id="setup-name"
+                  name="name"
+                  required
+                  maxLength={255}
+                  defaultValue={initialName}
+                />
               </Field>
               <Field label={t("fields.host")} htmlFor="setup-host">
-                <Input id="setup-host" name="host" required autoComplete="off" />
+                <Input
+                  id="setup-host"
+                  name="host"
+                  required
+                  autoComplete="off"
+                  defaultValue={initialHost}
+                />
               </Field>
               <Field label={t("fields.sshPort")} htmlFor="setup-ssh-port">
                 <Input
@@ -247,12 +316,18 @@ export function SetupWizard() {
                   type="number"
                   min={1}
                   max={65535}
-                  defaultValue={22}
+                  defaultValue={initialSshPort}
                   required
                 />
               </Field>
               <Field label={t("fields.sshUser")} htmlFor="setup-ssh-user">
-                <Input id="setup-ssh-user" name="sshUser" required autoComplete="off" />
+                <Input
+                  id="setup-ssh-user"
+                  name="sshUser"
+                  required
+                  autoComplete="off"
+                  defaultValue={initialSshUser}
+                />
               </Field>
               <Field label={t("fields.sshPassword")} htmlFor="setup-ssh-password">
                 <Input
@@ -350,6 +425,7 @@ export function SetupWizard() {
               </Button>
             </CardContent>
           </Card>
+          <SetupLiveLog logs={logs} pending={pending} />
         </form>
       ) : (
         <Card data-testid="setup-manual-script">
@@ -410,7 +486,7 @@ export function SetupWizard() {
               <p className="text-sm text-fg-muted">{t("loading")}</p>
             )}
             <Button asChild>
-              <Link href={"/servers/new" as Route}>{t("addServerNow")}</Link>
+              <Link href={"/servers/new?initialized=1" as Route}>{t("addServerNow")}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -435,19 +511,73 @@ export function SetupWizard() {
             <p>
               {t("fields.gameDirectory")}: <code>{result.gameDirectory}</code>
             </p>
-            {result.logs.length > 0 ? (
+            {logs.length === 0 && result.logs.length > 0 ? (
               <pre className="max-h-60 overflow-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs">
                 {result.logs.join("\n")}
               </pre>
             ) : null}
             <Button asChild>
-              <Link href={"/servers/new" as Route}>{t("addServerNow")}</Link>
+              <Link
+                href={
+                  addServerAfterSetupHref({
+                    host: completedHost,
+                    initializedServerId: result.initializedServerId,
+                  }) as Route
+                }
+              >
+                {t("addServerNow")}
+              </Link>
             </Button>
           </CardContent>
         </Card>
       ) : null}
     </div>
   );
+}
+
+function openSetupProgressSocket(
+  sessionId: string,
+  appendLog: (message: string) => void,
+): WebSocket {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(
+    `${protocol}//${window.location.host}/api/setup/setup-progress/${sessionId}`,
+  );
+  socket.addEventListener("message", (event) => {
+    try {
+      const payload = JSON.parse(String(event.data)) as { message?: string };
+      if (payload.message) appendLog(payload.message);
+    } catch {
+      appendLog(String(event.data));
+    }
+  });
+  return socket;
+}
+
+function waitForSocket(
+  socket: WebSocket,
+  onOpen: () => void,
+  onError: () => void,
+): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const timer = window.setTimeout(finish, 1500);
+    socket.addEventListener("open", () => {
+      window.clearTimeout(timer);
+      onOpen();
+      finish();
+    });
+    socket.addEventListener("error", () => {
+      window.clearTimeout(timer);
+      onError();
+      finish();
+    });
+  });
 }
 
 function Field({

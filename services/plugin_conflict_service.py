@@ -40,6 +40,7 @@ from services.plugin_inventory_service import (
 from services.plugins.common import PluginPlanError, parse_dependency_ids
 from services.plugins.market_integration import configure_market_plan_handlers
 from services.plugins.tracking import derive_asset_glob, upsert_managed_plugin
+from services.plugins.upgrade_exclusions import apply_upgrade_mode_exclusions
 
 ProgressCallback = Callable[..., Awaitable[None]]
 logger = logging.getLogger(__name__)
@@ -512,6 +513,33 @@ async def _latest_release_asset(
     )
 
 
+def _asset_from_download_url(plugin: MarketPlugin, download_url: str) -> dict[str, Any]:
+    """Build an install asset from a caller-selected GitHub release URL."""
+    from services.linux_runtime_service import steam_runtime_for_asset
+
+    selected_release_id = ""
+    selected_release_tag = "unknown"
+    selected_asset_name = download_url.rsplit("/", 1)[-1]
+    if download_url.startswith("https://github.com/") and "/releases/download/" in download_url:
+        release_parts = download_url.split("/releases/download/", 1)[1].split("/", 1)
+        if len(release_parts) == 2:
+            selected_release_tag = release_parts[0]
+            selected_release_id = f"tag:{selected_release_tag}"
+            selected_asset_name = release_parts[1]
+    custom_target = plugin.custom_install_path
+    return {
+        "download_url": download_url,
+        "release_id": selected_release_id,
+        "release_tag": selected_release_tag,
+        "asset_name": selected_asset_name,
+        "steam_runtime": steam_runtime_for_asset(selected_asset_name),
+        "archive_sha256": None,
+        "source_prefix": None,
+        "custom_install_path": custom_target,
+        "allowed_roots": [] if custom_target is not None else ["addons", "cfg"],
+    }
+
+
 async def _install_one(
     db: AsyncSession,
     plugin: MarketPlugin,
@@ -521,6 +549,9 @@ async def _install_one(
     operation_id: str | None = None,
     linux_runtime_profile: dict[str, Any] | None = None,
     resolved_asset: dict[str, Any] | None = None,
+    exclude_dirs: list[str] | None = None,
+    exclude_files: list[str] | None = None,
+    upgrade_mode: bool = False,
 ) -> dict[str, Any]:
     framework_key = _panel_framework_key(plugin)
     if framework_key is not None:
@@ -557,8 +588,13 @@ async def _install_one(
                     linux_runtime_profile,
                 )
             )
+            final_exclude_files = list(exclude_files or [])
+            if upgrade_mode:
+                final_exclude_files = apply_upgrade_mode_exclusions(final_exclude_files)
             request = GitHubPluginInstallRequest(
                 download_url=asset["download_url"],
+                exclude_dirs=list(exclude_dirs or []),
+                exclude_files=final_exclude_files,
                 custom_install_path=asset["custom_install_path"],
                 record_installation=False,
                 suppress_notification=False,
@@ -603,6 +639,9 @@ async def _install_one(
         return {"success": False, "plugin_id": plugin.id, "message": failure}
 
     assert asset is not None
+    tracked_exclude_files = list(exclude_files or [])
+    if upgrade_mode:
+        tracked_exclude_files = apply_upgrade_mode_exclusions(tracked_exclude_files)
     await upsert_managed_plugin(
         server_id=server.id,
         source_type="market",
@@ -615,6 +654,8 @@ async def _install_one(
         installed_asset_name=asset["asset_name"],
         asset_glob=derive_asset_glob(asset["asset_name"], asset["release_tag"]),
         custom_install_path=asset["custom_install_path"],
+        exclude_dirs=list(exclude_dirs or []),
+        exclude_files=tracked_exclude_files,
     )
     plugin.download_count += 1
     plugin.install_count += 1
@@ -671,9 +712,20 @@ async def execute_plugin_install_plan(
     acquire_lock: bool = True,
     lock_operation: str = "plugin_install_plan",
     operation_id: str | None = None,
+    include_dependencies: bool = True,
+    download_url: str | None = None,
+    upgrade_mode: bool = False,
+    exclude_dirs: list[str] | None = None,
+    exclude_files: list[str] | None = None,
 ) -> dict[str, Any]:
     """Recompute and execute a plan, stopping immediately after any failure."""
-    plan = await build_plugin_install_plan(db, server.id, plugin_id, server=server)
+    plan = await build_plugin_install_plan(
+        db,
+        server.id,
+        plugin_id,
+        include_dependencies=include_dependencies,
+        server=server,
+    )
     if expected_plan_hash and plan["plan_hash"] != expected_plan_hash:
         raise PluginPlanError("Plugin plan changed; review and approve the new plan")
     validate_plugin_plan_acknowledgements(plan, acknowledged_warning_rule_ids)
@@ -690,7 +742,11 @@ async def execute_plugin_install_plan(
         if refreshed_server is None:
             raise PluginPlanError("Server permission changed before execution")
         refreshed_plan = await build_plugin_install_plan(
-            db, server.id, plugin_id, server=refreshed_server
+            db,
+            server.id,
+            plugin_id,
+            include_dependencies=include_dependencies,
+            server=refreshed_server,
         )
         if expected_plan_hash and refreshed_plan["plan_hash"] != expected_plan_hash:
             raise PluginPlanError("Plugin plan changed; review and approve the new plan")
@@ -720,7 +776,9 @@ async def execute_plugin_install_plan(
             plugin = by_id.get(current_id)
             if plugin is None:
                 raise PluginPlanError(f"Plugin {current_id} disappeared before execution")
-            if current_id in ordinary_plugin_ids:
+            if current_id == plugin_id and download_url:
+                resolved_assets[current_id] = _asset_from_download_url(plugin, download_url)
+            elif current_id in ordinary_plugin_ids:
                 resolved_assets[current_id] = await _latest_release_asset(
                     db,
                     plugin,
@@ -732,7 +790,11 @@ async def execute_plugin_install_plan(
         for current_id in refreshed_plan["installation_order"]:
             step_id = f"plugin:{current_id}"
             latest_plan = await build_plugin_install_plan(
-                db, server.id, plugin_id, server=refreshed_server
+                db,
+                server.id,
+                plugin_id,
+                include_dependencies=include_dependencies,
+                server=refreshed_server,
             )
             validate_plugin_plan_acknowledgements(latest_plan, acknowledged_warning_rule_ids)
             if latest_plan["installation_order"] != refreshed_plan["installation_order"]:
@@ -767,6 +829,9 @@ async def execute_plugin_install_plan(
                     operation_id=operation_id,
                     linux_runtime_profile=linux_runtime_profile,
                     resolved_asset=resolved_assets.get(current_id),
+                    exclude_dirs=list(exclude_dirs or []),
+                    exclude_files=list(exclude_files or []),
+                    upgrade_mode=upgrade_mode,
                 )
             except Exception as exc:
                 result = {

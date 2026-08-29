@@ -20,6 +20,8 @@ import type {
 import type {
   DeploymentLock,
   DeploymentLogEntry,
+  OperationInbox,
+  OperationInboxItem,
   OperationJournal,
   OperationStreamEvent,
   S3BackupList,
@@ -68,6 +70,7 @@ function toSummary(raw: ServerSummaryDto): ServerSummary {
     name: raw.name,
     host: raw.host,
     gamePort: raw.game_port,
+    sshUser: raw.ssh_user,
     status: toStatus(raw.status),
     description: raw.description ?? null,
     defaultMap: raw.default_map,
@@ -328,6 +331,7 @@ export async function createServer(
 ): Promise<ApiResult<ServerCreateResult>> {
   const result = await apiFetch<ServerCreateResultDto>("/api/v1/servers", {
     method: "POST",
+    timeoutMs: 120_000,
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       name: input.name,
@@ -676,7 +680,63 @@ function toOperation(raw: ServerOperationViewDto): ServerOperation {
     completedAt: raw.completed_at ?? null,
     actorUserId: raw.actor_user_id,
     streamUrl: raw.stream_url,
+    command:
+      "command" in raw && typeof raw.command === "string" ? raw.command : null,
   };
+}
+
+type InboxItemDto = ServerOperationViewDto & {
+  server_name: string;
+  latest_message?: string | null;
+  queue_position?: number;
+};
+
+function toInboxItem(item: InboxItemDto): OperationInboxItem {
+  return {
+    ...toOperation(item),
+    serverName: item.server_name,
+    latestMessage: item.latest_message ?? null,
+    queuePosition: item.queue_position ?? 0,
+  };
+}
+
+export async function listOperationInbox(): Promise<ApiResult<OperationInbox>> {
+  const result = await apiFetch<{
+    items: InboxItemDto[];
+    failed_items?: InboxItemDto[];
+    active_count: number;
+    running_count: number;
+    failed_count?: number;
+    failed_retention_days?: number;
+  }>("/api/v1/operations/inbox");
+  if (!result.ok) return result;
+  const failedItems = (result.data.failed_items ?? []).map(toInboxItem);
+  return {
+    ok: true,
+    data: {
+      items: result.data.items.map(toInboxItem),
+      failedItems,
+      activeCount: result.data.active_count,
+      runningCount: result.data.running_count,
+      failedCount: result.data.failed_count ?? failedItems.length,
+      failedRetentionDays: result.data.failed_retention_days ?? 7,
+    },
+  };
+}
+
+export async function clearFailedOperations(): Promise<ApiResult<ActionResultDto>> {
+  return apiFetch<ActionResultDto>("/api/v1/operations/inbox/failed", {
+    method: "DELETE",
+  });
+}
+
+export async function dismissFailedOperation(
+  operationId: string,
+): Promise<ApiResult<ActionResultDto>> {
+  return apiFetch<ActionResultDto>(
+    `/api/v1/operations/inbox/failed/${operationId}`,
+    { method: "DELETE" },
+  );
 }
 
 export async function applyAptMirror(

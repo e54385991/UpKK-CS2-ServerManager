@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import type { ApiResult } from "@/shared/api/server-fetch";
 import {
   deleteInitializedHost,
+  getInitializedHostCredentials,
   getManualSetupScript,
   listInitializedHosts,
   runAutoSetup,
   type AutoSetupInput,
   type AutoSetupResult,
   type InitializedHost,
+  type InitializedHostCredentials,
   type ManualSetupScript,
 } from "@/modules/servers/setup-api";
 
@@ -31,6 +33,12 @@ export async function getManualSetupScriptAction(
   cs2Username: string,
 ): Promise<ApiResult<ManualSetupScript>> {
   return getManualSetupScript(cs2Username);
+}
+
+export async function getInitializedHostCredentialsAction(
+  key: string,
+): Promise<ApiResult<InitializedHostCredentials>> {
+  return getInitializedHostCredentials(key);
 }
 
 export async function runAutoSetupAction(

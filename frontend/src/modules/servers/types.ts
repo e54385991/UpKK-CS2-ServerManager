@@ -20,6 +20,7 @@ export type ServerSummary = {
   readonly name: string;
   readonly host: string;
   readonly gamePort: number;
+  readonly sshUser: string;
   readonly status: ServerStatus;
   readonly description: string | null;
   readonly defaultMap: string;
@@ -192,6 +193,22 @@ export type ServerOperation = {
   readonly completedAt: string | null;
   readonly actorUserId: number;
   readonly streamUrl: string;
+  readonly command: string | null;
+};
+
+export type OperationInboxItem = ServerOperation & {
+  readonly serverName: string;
+  readonly latestMessage: string | null;
+  readonly queuePosition: number;
+};
+
+export type OperationInbox = {
+  readonly items: readonly OperationInboxItem[];
+  readonly failedItems: readonly OperationInboxItem[];
+  readonly activeCount: number;
+  readonly runningCount: number;
+  readonly failedCount: number;
+  readonly failedRetentionDays: number;
 };
 
 export function isActiveOperation(operation: ServerOperation | null): boolean {

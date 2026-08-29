@@ -2493,6 +2493,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operations/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Operation Inbox
+         * @description Active jobs plus failed jobs retained for seven days.
+         */
+        get: operations["list_operation_inbox_api_v1_operations_inbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/inbox/failed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear Failed Operations
+         * @description Remove every retained failure the caller can see.
+         */
+        delete: operations["clear_failed_operations_api_v1_operations_inbox_failed_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operations/inbox/failed/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Dismiss Failed Operation
+         * @description Remove one failed job from the retained failure tab.
+         */
+        delete: operations["dismiss_failed_operation_api_v1_operations_inbox_failed__operation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/overview/a2s-cache": {
         parameters: {
             query?: never;
@@ -10605,6 +10665,77 @@ export interface components {
             /** Version */
             version?: string | null;
         };
+        /** OperationInboxItem */
+        OperationInboxItem: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore";
+            /** Actor User Id */
+            actor_user_id: number;
+            /** Command */
+            command?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Latest Message */
+            latest_message?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Operation Id */
+            operation_id: string;
+            /**
+             * Queue Position
+             * @default 0
+             */
+            queue_position: number;
+            /** Server Id */
+            server_id: number;
+            /** Server Name */
+            server_name: string;
+            server_status?: components["schemas"]["ServerStatus"] | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "failed";
+            /** Stream Url */
+            stream_url: string;
+            /** Success */
+            success?: boolean | null;
+        };
+        /** OperationInboxView */
+        OperationInboxView: {
+            /**
+             * Active Count
+             * @default 0
+             */
+            active_count: number;
+            /**
+             * Failed Count
+             * @default 0
+             */
+            failed_count: number;
+            /** Failed Items */
+            failed_items?: components["schemas"]["OperationInboxItem"][];
+            /**
+             * Failed Retention Days
+             * @default 7
+             */
+            failed_retention_days: number;
+            /** Items */
+            items?: components["schemas"]["OperationInboxItem"][];
+            /**
+             * Running Count
+             * @default 0
+             */
+            running_count: number;
+        };
         /**
          * OperationJournal
          * @description Current operation record plus every persisted progress event.
@@ -11378,12 +11509,30 @@ export interface components {
         /**
          * PluginInstallRequest
          * @description Acknowledge warnings and optionally pin the preflight plan hash.
+         *
+         *     ``install_dependencies`` is opt-in, matching the legacy web installer.
          */
         PluginInstallRequest: {
             /** Acknowledge Warning Rule Ids */
             acknowledge_warning_rule_ids?: number[];
+            /** Download Url */
+            download_url?: string | null;
+            /** Exclude Dirs */
+            exclude_dirs?: string[];
+            /** Exclude Files */
+            exclude_files?: string[];
+            /**
+             * Install Dependencies
+             * @default false
+             */
+            install_dependencies: boolean;
             /** Plan Hash */
             plan_hash?: string | null;
+            /**
+             * Upgrade Mode
+             * @default false
+             */
+            upgrade_mode: boolean;
         };
         /** PluginInstallStep */
         PluginInstallStep: {
@@ -13108,6 +13257,8 @@ export interface components {
             action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore";
             /** Actor User Id */
             actor_user_id: number;
+            /** Command */
+            command?: string | null;
             /** Completed At */
             completed_at?: string | null;
             /** Message */
@@ -13532,6 +13683,8 @@ export interface components {
              * @default unknown
              */
             ssh_health_status: string;
+            /** Ssh User */
+            ssh_user: string;
             status: components["schemas"]["ServerStatus"];
             /**
              * Use Panel Proxy
@@ -18715,6 +18868,77 @@ export interface operations {
             };
         };
     };
+    list_operation_inbox_api_v1_operations_inbox_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationInboxView"];
+                };
+            };
+        };
+    };
+    clear_failed_operations_api_v1_operations_inbox_failed_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+        };
+    };
+    dismiss_failed_operation_api_v1_operations_inbox_failed__operation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_overview_a2s_cache_api_v1_overview_a2s_cache_get: {
         parameters: {
             query?: {
@@ -22422,7 +22646,10 @@ export interface operations {
     };
     plugin_install_preflight_api_v1_servers__server_id__plugins_market__plugin_id__preflight_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Whether to include declared dependencies in the plan (opt-in, matches the web installer) */
+                install_dependencies?: boolean;
+            };
             header?: never;
             path: {
                 server_id: number;

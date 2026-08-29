@@ -179,8 +179,9 @@ def test_v1_game_updates_rejects_unknown_action(monkeypatch):
     assert response.status_code == 422
 
 
-def test_v1_game_updates_conflict_when_locked(monkeypatch):
-    client, _user = _client(monkeypatch)
+def test_v1_game_updates_releases_stale_lock_and_queues(monkeypatch):
+    client, user = _client(monkeypatch)
+    operation_id = str(uuid4())
     monkeypatch.setattr(
         "api.routes.v1.game_updates.require_server_access",
         AsyncMock(return_value=_server()),
@@ -190,12 +191,42 @@ def test_v1_game_updates_conflict_when_locked(monkeypatch):
         AsyncMock(return_value=_server()),
     )
     monkeypatch.setattr(
+        "api.routes.v1.operations.server_operation_hub.get_current",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
         "api.routes.v1.operations.redis_manager.get",
         AsyncMock(return_value="held"),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.operations.redis_manager.delete",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.operations.maintenance_lock_service.is_locked",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.operations.enqueue_server_operation",
+        AsyncMock(
+            return_value={
+                "operation_id": operation_id,
+                "server_id": 2,
+                "action": "validate",
+                "status": "queued",
+                "success": None,
+                "message": None,
+                "server_status": None,
+                "actor_user_id": user.id,
+                "started_at": "2026-08-29T00:00:00+00:00",
+                "completed_at": None,
+            }
+        ),
     )
 
     response = client.post(
         "/api/v1/servers/2/game-updates/operations",
         json={"action": "validate"},
     )
-    assert response.status_code == 409
+    assert response.status_code == 202
+    assert response.json()["operation_id"] == operation_id
