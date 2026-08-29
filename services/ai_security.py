@@ -328,7 +328,7 @@ def sanitize_tool_result(value: object) -> dict:
 
 
 async def get_effective_provider(
-    db: AsyncSession, user: User, *, require_tested: bool = True
+    db: AsyncSession, user: User, *, require_tested: bool = False
 ) -> AIProviderConfig | None:
     system = await AISystemSettings.get_or_create(db)
     personal = await db.get(UserAISettings, user.id)

@@ -272,3 +272,25 @@ def test_v1_settings_ai_get_hides_api_key(monkeypatch):
     assert body["model"] == "gpt-4.1"
     assert "api_key" not in body
     assert "sk-" not in response.text
+
+
+def test_v1_settings_ai_test_accepts_empty_body(monkeypatch):
+    client, _settings, _user = _client(monkeypatch=monkeypatch)
+    probe = AsyncMock(
+        return_value=SimpleNamespace(
+            success=True,
+            text_response_ok=True,
+            tool_calling_ok=True,
+            streaming_ok=True,
+            message="Provider ready",
+        )
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.settings.legacy_ai.test_system_ai_settings",
+        probe,
+    )
+    response = client.post("/api/v1/settings/ai/test", json={})
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["message"] == "Provider ready"
+    probe.assert_awaited_once()

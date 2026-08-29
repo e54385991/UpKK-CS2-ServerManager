@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Check, Copy, CornerDownLeft } from "lucide-react";
-import { breadcrumbs, resolveJumpPath } from "@/modules/files/paths";
+import { ArrowUp, Check, Copy, CornerDownLeft } from "lucide-react";
+import { breadcrumbs, isAtRoot, parentWithinRoot, resolveJumpPath } from "@/modules/files/paths";
+import { notify } from "@/shared/feedback";
+import { copyText } from "@/shared/lib/clipboard";
 import { Button } from "@/shared/ui/button";
 import { Input, Label } from "@/shared/ui/input";
 
@@ -22,19 +24,27 @@ export function FilesPathBar({
   const [draft, setDraft] = useState(path);
   const [copied, setCopied] = useState(false);
   const crumbs = breadcrumbs(root, path);
+  const atRoot = isAtRoot(root, path);
 
   function go() {
     onGo(resolveJumpPath(root, path, draft));
   }
 
+  function goParent() {
+    onGo(parentWithinRoot(root, path));
+  }
+
   async function copyPath() {
-    try {
-      await navigator.clipboard.writeText(path);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
+    const value = draft.trim() || path;
+    const ok = await copyText(value);
+    if (!ok) {
+      notify.error(t("copyFailed"));
       setCopied(false);
+      return;
     }
+    setCopied(true);
+    notify.success(t("copied"));
+    window.setTimeout(() => setCopied(false), 1600);
   }
 
   return (
@@ -59,6 +69,16 @@ export function FilesPathBar({
               }
             }}
           />
+          <Button
+            type="button"
+            variant="outline"
+            data-testid="files-path-parent"
+            disabled={disabled || atRoot}
+            onClick={goParent}
+          >
+            <ArrowUp />
+            {t("parent")}
+          </Button>
           <Button
             type="button"
             variant="outline"

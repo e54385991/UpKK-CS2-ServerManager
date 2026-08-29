@@ -158,7 +158,7 @@ async def ask_discord_agent(
             raise DiscordAIError("Server owner is unavailable")
         await require_agent_capabilities(db, server_id, frozenset())
         if await get_effective_provider(db, owner) is None:
-            raise DiscordAIError("No tested AI provider is enabled for the server owner")
+            raise DiscordAIError("No AI provider is enabled for the server owner")
         conversation = await _latest_conversation(
             db,
             owner_user_id=owner_user_id,

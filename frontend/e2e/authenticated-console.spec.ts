@@ -225,6 +225,16 @@ test("server workspace two-row nav reaches named surfaces", async ({ page }) => 
       .getByTestId("files-path-copy")
       .or(page.getByText(/暂时无法加载文件|Unable to load the files/)),
   ).toBeVisible();
+  await expect(
+    page
+      .getByTestId("files-path-parent")
+      .or(page.getByText(/暂时无法加载文件|Unable to load the files/)),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByTestId("files-path-go")
+      .or(page.getByText(/暂时无法加载文件|Unable to load the files/)),
+  ).toBeVisible();
 
   await nav.getByRole("link", { name: /^控制台$|^Console$/ }).click();
   await expect(page).toHaveURL(/\/servers\/1\/console$/);
@@ -481,7 +491,8 @@ test("settings and profile render parity fields", async ({ page }) => {
   await expect(page.getByText(/下载代理|Download proxy/)).toBeVisible();
   await expect(page.getByText(/全局 GitHub Token|Global GitHub token/)).toBeVisible();
   await expect(page.getByText(/密码重置|password resets|Outbound mail/)).toBeVisible();
-  // System AI is a separate fetch; stale live APIs may omit the card.
+  await expect(page.getByTestId("ai-settings-card")).toBeVisible();
+  await expect(page.getByTestId("ai-settings-test")).toBeVisible();
 
   await page.goto("/settings/profile");
   await expect(

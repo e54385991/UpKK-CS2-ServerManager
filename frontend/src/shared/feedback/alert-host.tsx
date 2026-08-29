@@ -54,10 +54,28 @@ export function AlertHost() {
         aria-labelledby="app-alert-title"
         aria-describedby={description ? "app-alert-desc" : undefined}
         data-testid="app-alert"
-        className="relative z-10 w-full max-w-md rounded-xl border border-line bg-surface shadow-panel"
+        className={
+          tone === "ok"
+            ? "relative z-10 w-full max-w-md rounded-xl border border-ok/40 bg-surface shadow-panel"
+            : tone === "warn"
+              ? "relative z-10 w-full max-w-md rounded-xl border border-warn/40 bg-surface shadow-panel"
+              : "relative z-10 w-full max-w-md rounded-xl border border-line bg-surface shadow-panel"
+        }
       >
         <div className="space-y-2 px-5 py-4">
-          <h2 id="app-alert-title" className="text-base font-semibold text-fg">
+          <h2
+            id="app-alert-title"
+            data-testid="app-alert-title"
+            className={
+              tone === "ok"
+                ? "text-base font-semibold text-ok"
+                : tone === "warn"
+                  ? "text-base font-semibold text-warn"
+                  : tone === "danger"
+                    ? "text-base font-semibold text-danger"
+                    : "text-base font-semibold text-fg"
+            }
+          >
             {title}
           </h2>
           {description ? (

@@ -27,7 +27,7 @@ export async function SettingsPanel() {
   return (
     <div className="space-y-6">
       <SettingsForm initial={result.data} />
-      {ai.ok ? <AiSettingsForm initial={ai.data} /> : null}
+      <AiSettingsForm initial={ai.ok ? ai.data : null} />
     </div>
   );
 }

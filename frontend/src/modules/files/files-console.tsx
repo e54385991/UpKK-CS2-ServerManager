@@ -34,7 +34,9 @@ import {
   startUrlDownloadAction,
 } from "@/modules/files/actions";
 import { FilesPathBar } from "@/modules/files/path-bar";
-import { parentPath } from "@/modules/files/paths";
+import { isAtRoot, parentWithinRoot } from "@/modules/files/paths";
+import { notify } from "@/shared/feedback";
+import { copyText } from "@/shared/lib/clipboard";
 import {
   ARCHIVE_FORMATS_LABEL,
   archiveExtensionLabel,
@@ -286,15 +288,18 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
             </Button>
           </div>
 
-          {workspace.path !== workspace.root ? (
-            <button
+          {!isAtRoot(workspace.root, workspace.path) ? (
+            <Button
               type="button"
-              className="flex items-center gap-2 text-sm text-fg-muted hover:text-fg"
-              onClick={() => void load(parentPath(workspace.path))}
+              variant="ghost"
+              size="sm"
+              data-testid="files-list-parent"
+              disabled={Boolean(pending)}
+              onClick={() => void load(parentWithinRoot(workspace.root, workspace.path))}
             >
-              <ArrowUp className="size-4" />
+              <ArrowUp />
               {t("parent")}
-            </button>
+            </Button>
           ) : null}
 
           {!workspace.sshOk ? (
@@ -789,12 +794,14 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   }
 
   async function copyEntryPath(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedEntry(value);
-      window.setTimeout(() => setCopiedEntry(null), 1600);
-    } catch {
+    const ok = await copyText(value);
+    if (!ok) {
+      notify.error(t("copyFailed"));
       setCopiedEntry(null);
+      return;
     }
+    setCopiedEntry(value);
+    notify.success(t("copied"));
+    window.setTimeout(() => setCopiedEntry(null), 1600);
   }
 }

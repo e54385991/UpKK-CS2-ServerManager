@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { archiveExtensionLabel, isArchiveFile } from "./types.ts";
-import { breadcrumbs, parentPath, resolveJumpPath } from "./paths.ts";
+import {
+  breadcrumbs,
+  isAtRoot,
+  parentPath,
+  parentWithinRoot,
+  resolveJumpPath,
+} from "./paths.ts";
 
 const root = "/home/steam/cs2";
 
@@ -26,6 +32,14 @@ test("resolveJumpPath joins a relative draft onto the current directory", () => 
 test("parentPath stops at the filesystem root", () => {
   assert.equal(parentPath("/home/steam/cs2/game"), "/home/steam/cs2");
   assert.equal(parentPath("/"), "/");
+});
+
+test("parentWithinRoot does not walk above the game directory", () => {
+  assert.equal(parentWithinRoot(root, `${root}/game/csgo`), `${root}/game`);
+  assert.equal(parentWithinRoot(root, `${root}/`), root);
+  assert.equal(parentWithinRoot(root, root), root);
+  assert.equal(parentWithinRoot(root, "/tmp"), root);
+  assert.equal(isAtRoot(root, `${root}/`), true);
 });
 
 test("breadcrumbs start at the game root and list each remaining segment", () => {

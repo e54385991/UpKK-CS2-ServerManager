@@ -10,6 +10,7 @@ import type {
   ProfileS3ViewDto,
   ProfileViewDto,
 } from "@/shared/api/types";
+import { toProfileAi, toProfileAiWire } from "@/modules/profile/ai-wire";
 import type {
   ProfileAiPatch,
   ProfileAiSettings,
@@ -53,30 +54,6 @@ function toS3(raw: ProfileS3ViewDto): ProfileS3Settings {
     retentionCount: raw.retention_count,
     hasSecret: raw.has_secret,
     isConfigured: raw.is_configured,
-  };
-}
-
-function toAi(raw: AssistantUserSettingsViewDto): ProfileAiSettings {
-  return {
-    mode: raw.mode === "custom" ? "custom" : "global",
-    baseUrl: raw.base_url ?? null,
-    model: raw.model ?? null,
-    apiProtocol: raw.api_protocol === "responses" ? "responses" : "chat_completions",
-    apiKeyConfigured: raw.api_key_configured,
-    reasoningEffort: raw.reasoning_effort ?? null,
-    temperature: raw.temperature ?? null,
-    topP: raw.top_p ?? null,
-    maxCompletionTokens: raw.max_completion_tokens,
-    tokenLimitParameter: raw.token_limit_parameter,
-    frequencyPenalty: raw.frequency_penalty ?? null,
-    presencePenalty: raw.presence_penalty ?? null,
-    verbosity: raw.verbosity ?? null,
-    parallelToolCalls: raw.parallel_tool_calls ?? null,
-    providerTested: raw.provider_tested,
-    toolCallingTested: raw.tool_calling_tested,
-    streamingTested: raw.streaming_tested,
-    effectiveEnabled: raw.effective_enabled,
-    effectiveSource: raw.effective_source,
   };
 }
 
@@ -253,7 +230,7 @@ export async function testS3Settings(): Promise<ApiResult<ProfileS3Test>> {
 export async function getProfileAi(): Promise<ApiResult<ProfileAiSettings>> {
   const result = await apiFetch<AssistantUserSettingsViewDto>("/api/v1/profile/ai");
   if (!result.ok) return result;
-  return { ok: true, data: toAi(result.data) };
+  return { ok: true, data: toProfileAi(result.data) };
 }
 
 export async function putProfileAi(
@@ -262,38 +239,10 @@ export async function putProfileAi(
   const result = await apiFetch<AssistantUserSettingsViewDto>("/api/v1/profile/ai", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      mode: patch.mode,
-      ...(patch.baseUrl !== undefined ? { base_url: patch.baseUrl } : {}),
-      ...(patch.model !== undefined ? { model: patch.model } : {}),
-      ...(patch.apiProtocol !== undefined ? { api_protocol: patch.apiProtocol } : {}),
-      ...(patch.apiKey !== undefined ? { api_key: patch.apiKey } : {}),
-      ...(patch.clearApiKey ? { clear_api_key: true } : {}),
-      ...(patch.reasoningEffort !== undefined
-        ? { reasoning_effort: patch.reasoningEffort }
-        : {}),
-      ...(patch.temperature !== undefined ? { temperature: patch.temperature } : {}),
-      ...(patch.topP !== undefined ? { top_p: patch.topP } : {}),
-      ...(patch.maxCompletionTokens !== undefined
-        ? { max_completion_tokens: patch.maxCompletionTokens }
-        : {}),
-      ...(patch.tokenLimitParameter !== undefined
-        ? { token_limit_parameter: patch.tokenLimitParameter }
-        : {}),
-      ...(patch.frequencyPenalty !== undefined
-        ? { frequency_penalty: patch.frequencyPenalty }
-        : {}),
-      ...(patch.presencePenalty !== undefined
-        ? { presence_penalty: patch.presencePenalty }
-        : {}),
-      ...(patch.verbosity !== undefined ? { verbosity: patch.verbosity } : {}),
-      ...(patch.parallelToolCalls !== undefined
-        ? { parallel_tool_calls: patch.parallelToolCalls }
-        : {}),
-    }),
+    body: JSON.stringify(toProfileAiWire(patch)),
   });
   if (!result.ok) return result;
-  return { ok: true, data: toAi(result.data) };
+  return { ok: true, data: toProfileAi(result.data) };
 }
 
 export async function testProfileAi(): Promise<ApiResult<AssistantProviderTestViewDto>> {

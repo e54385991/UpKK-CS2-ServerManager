@@ -8,10 +8,10 @@ import type {
   GmailAuthorizeResultDto,
   SystemSettingsViewDto,
 } from "@/shared/api/types";
+import { toAiSettings, toAiSettingsWire } from "@/modules/settings/ai-wire";
 import {
   isEmailProvider,
   isProxyMode,
-  type AiProtocol,
   type AiSystemPatch,
   type AiSystemSettings,
   type EmailProvider,
@@ -142,38 +142,6 @@ export async function deleteGmailAuthorization(): Promise<
   });
 }
 
-function toAiProtocol(value: string): AiProtocol {
-  return value === "responses" ? "responses" : "chat_completions";
-}
-
-function toAiSettings(raw: AssistantSystemSettingsViewDto): AiSystemSettings {
-  return {
-    enabled: raw.enabled,
-    baseUrl: raw.base_url ?? null,
-    model: raw.model ?? null,
-    apiProtocol: toAiProtocol(raw.api_protocol),
-    apiKeyConfigured: raw.api_key_configured,
-    adminPrompt: raw.admin_prompt ?? null,
-    privateEndpointAllowlist: raw.private_endpoint_allowlist ?? [],
-    reasoningEffort: raw.reasoning_effort ?? null,
-    temperature: raw.temperature ?? null,
-    topP: raw.top_p ?? null,
-    maxCompletionTokens: raw.max_completion_tokens,
-    tokenLimitParameter: raw.token_limit_parameter,
-    frequencyPenalty: raw.frequency_penalty ?? null,
-    presencePenalty: raw.presence_penalty ?? null,
-    verbosity: raw.verbosity ?? null,
-    parallelToolCalls: raw.parallel_tool_calls ?? null,
-    requestTimeoutSeconds: raw.request_timeout_seconds,
-    historyRetentionDays: raw.history_retention_days,
-    maxProviderRounds: raw.max_provider_rounds,
-    maxToolCallsPerRound: raw.max_tool_calls_per_round,
-    providerTested: raw.provider_tested,
-    toolCallingTested: raw.tool_calling_tested,
-    streamingTested: raw.streaming_tested,
-  };
-}
-
 export async function getAiSettings(): Promise<ApiResult<AiSystemSettings>> {
   const result = await apiFetch<AssistantSystemSettingsViewDto>("/api/v1/settings/ai");
   if (!result.ok) return result;
@@ -186,51 +154,7 @@ export async function putAiSettings(
   const result = await apiFetch<AssistantSystemSettingsViewDto>("/api/v1/settings/ai", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
-      ...(patch.baseUrl !== undefined ? { base_url: patch.baseUrl } : {}),
-      ...(patch.model !== undefined ? { model: patch.model } : {}),
-      ...(patch.apiProtocol !== undefined ? { api_protocol: patch.apiProtocol } : {}),
-      ...(patch.apiKey !== undefined ? { api_key: patch.apiKey } : {}),
-      ...(patch.clearApiKey ? { clear_api_key: true } : {}),
-      ...(patch.adminPrompt !== undefined ? { admin_prompt: patch.adminPrompt } : {}),
-      ...(patch.privateEndpointAllowlist !== undefined
-        ? { private_endpoint_allowlist: patch.privateEndpointAllowlist }
-        : {}),
-      ...(patch.reasoningEffort !== undefined
-        ? { reasoning_effort: patch.reasoningEffort }
-        : {}),
-      ...(patch.temperature !== undefined ? { temperature: patch.temperature } : {}),
-      ...(patch.topP !== undefined ? { top_p: patch.topP } : {}),
-      ...(patch.maxCompletionTokens !== undefined
-        ? { max_completion_tokens: patch.maxCompletionTokens }
-        : {}),
-      ...(patch.tokenLimitParameter !== undefined
-        ? { token_limit_parameter: patch.tokenLimitParameter }
-        : {}),
-      ...(patch.frequencyPenalty !== undefined
-        ? { frequency_penalty: patch.frequencyPenalty }
-        : {}),
-      ...(patch.presencePenalty !== undefined
-        ? { presence_penalty: patch.presencePenalty }
-        : {}),
-      ...(patch.verbosity !== undefined ? { verbosity: patch.verbosity } : {}),
-      ...(patch.parallelToolCalls !== undefined
-        ? { parallel_tool_calls: patch.parallelToolCalls }
-        : {}),
-      ...(patch.requestTimeoutSeconds !== undefined
-        ? { request_timeout_seconds: patch.requestTimeoutSeconds }
-        : {}),
-      ...(patch.historyRetentionDays !== undefined
-        ? { history_retention_days: patch.historyRetentionDays }
-        : {}),
-      ...(patch.maxProviderRounds !== undefined
-        ? { max_provider_rounds: patch.maxProviderRounds }
-        : {}),
-      ...(patch.maxToolCallsPerRound !== undefined
-        ? { max_tool_calls_per_round: patch.maxToolCallsPerRound }
-        : {}),
-    }),
+    body: JSON.stringify(toAiSettingsWire(patch)),
   });
   if (!result.ok) return result;
   return { ok: true, data: toAiSettings(result.data) };

@@ -1,7 +1,31 @@
+export function normalizeDir(path: string): string {
+  return path.replace(/\/+$/, "") || "/";
+}
+
 export function parentPath(path: string): string {
-  const trimmed = path.replace(/\/+$/, "");
+  const trimmed = normalizeDir(path);
   const index = trimmed.lastIndexOf("/");
   return index <= 0 ? "/" : trimmed.slice(0, index);
+}
+
+export function isAtRoot(root: string, path: string): boolean {
+  return normalizeDir(root) === normalizeDir(path);
+}
+
+/** Stay inside the game directory; never walk above `root`. */
+export function parentWithinRoot(root: string, path: string): string {
+  const normalizedRoot = normalizeDir(root);
+  const normalized = normalizeDir(path);
+  if (normalized === normalizedRoot) return normalizedRoot;
+  const parent = parentPath(normalized);
+  if (
+    normalizedRoot !== "/" &&
+    parent !== normalizedRoot &&
+    !parent.startsWith(`${normalizedRoot}/`)
+  ) {
+    return normalizedRoot;
+  }
+  return parent;
 }
 
 export function collapseSlashes(path: string): string {

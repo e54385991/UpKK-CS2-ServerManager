@@ -1,4 +1,4 @@
-export type AlertTone = "danger" | "default";
+export type AlertTone = "danger" | "default" | "ok" | "warn";
 
 export type AlertOptions = {
   title?: string;

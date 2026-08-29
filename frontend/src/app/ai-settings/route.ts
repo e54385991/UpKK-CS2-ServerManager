@@ -4,7 +4,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 180;
 
-/** @deprecated Prefer POST /ai-settings?scope=… */
+export function GET(request: Request) {
+  return proxyAiSettings(request, "GET");
+}
+
+export function PUT(request: Request) {
+  return proxyAiSettings(request, "PUT");
+}
+
 export function POST(request: Request) {
   return proxyAiSettings(request, "POST");
 }

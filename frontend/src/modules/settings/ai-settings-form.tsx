@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  refreshAiSettingsAction,
-  saveAiSettingsAction,
-} from "@/modules/settings/actions";
-import { testAiProvider } from "@/modules/settings/test-provider";
+  loadSystemAiSettings,
+  saveSystemAiSettings,
+  testSystemAiProvider,
+} from "@/modules/settings/ai-settings-client";
+import { EMPTY_AI_SYSTEM_SETTINGS } from "@/modules/settings/ai-wire";
 import type { AiProtocol, AiSystemPatch, AiSystemSettings } from "@/modules/settings/types";
+import { alertDialog, notify } from "@/shared/feedback";
+import { providerTestAlert, providerTestErrorAlert } from "@/modules/settings/ai-test-result";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -21,6 +24,10 @@ import { Input, Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 import { Textarea } from "@/shared/ui/textarea";
+import { cn } from "@/shared/lib/cn";
+import { ShieldCheck, TriangleAlert } from "lucide-react";
+
+type Banner = { readonly tone: "ok" | "warn" | "danger"; readonly text: string };
 
 function optionalNumber(value: string): number | null {
   const trimmed = value.trim();
@@ -29,40 +36,47 @@ function optionalNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function AiSettingsForm({ initial }: { initial: AiSystemSettings }) {
+export function AiSettingsForm({
+  initial,
+}: {
+  initial: AiSystemSettings | null;
+}) {
   const t = useTranslations("aiSettings");
-  const [settings, setSettings] = useState(initial);
-  const [enabled, setEnabled] = useState(initial.enabled);
-  const [baseUrl, setBaseUrl] = useState(initial.baseUrl ?? "");
-  const [model, setModel] = useState(initial.model ?? "");
-  const [protocol, setProtocol] = useState<AiProtocol>(initial.apiProtocol);
+  const seed = initial ?? EMPTY_AI_SYSTEM_SETTINGS;
+  const [settings, setSettings] = useState(seed);
+  const [enabled, setEnabled] = useState(seed.enabled);
+  const [baseUrl, setBaseUrl] = useState(seed.baseUrl ?? "");
+  const [model, setModel] = useState(seed.model ?? "");
+  const [protocol, setProtocol] = useState<AiProtocol>(seed.apiProtocol);
   const [apiKey, setApiKey] = useState("");
   const [clearKey, setClearKey] = useState(false);
-  const [adminPrompt, setAdminPrompt] = useState(initial.adminPrompt ?? "");
-  const [allowlist, setAllowlist] = useState(initial.privateEndpointAllowlist.join("\n"));
-  const [reasoning, setReasoning] = useState(initial.reasoningEffort ?? "");
-  const [verbosity, setVerbosity] = useState(initial.verbosity ?? "");
-  const [maxTokens, setMaxTokens] = useState(String(initial.maxCompletionTokens));
-  const [tokenField, setTokenField] = useState(initial.tokenLimitParameter);
+  const [adminPrompt, setAdminPrompt] = useState(seed.adminPrompt ?? "");
+  const [allowlist, setAllowlist] = useState(seed.privateEndpointAllowlist.join("\n"));
+  const [reasoning, setReasoning] = useState(seed.reasoningEffort ?? "");
+  const [verbosity, setVerbosity] = useState(seed.verbosity ?? "");
+  const [maxTokens, setMaxTokens] = useState(String(seed.maxCompletionTokens));
+  const [tokenField, setTokenField] = useState(seed.tokenLimitParameter);
   const [temperature, setTemperature] = useState(
-    initial.temperature == null ? "" : String(initial.temperature),
+    seed.temperature == null ? "" : String(seed.temperature),
   );
-  const [topP, setTopP] = useState(initial.topP == null ? "" : String(initial.topP));
+  const [topP, setTopP] = useState(seed.topP == null ? "" : String(seed.topP));
   const [frequency, setFrequency] = useState(
-    initial.frequencyPenalty == null ? "" : String(initial.frequencyPenalty),
+    seed.frequencyPenalty == null ? "" : String(seed.frequencyPenalty),
   );
   const [presence, setPresence] = useState(
-    initial.presencePenalty == null ? "" : String(initial.presencePenalty),
+    seed.presencePenalty == null ? "" : String(seed.presencePenalty),
   );
   const [parallelTools, setParallelTools] = useState(
-    initial.parallelToolCalls == null ? "" : String(initial.parallelToolCalls),
+    seed.parallelToolCalls == null ? "" : String(seed.parallelToolCalls),
   );
-  const [timeout, setTimeoutSeconds] = useState(String(initial.requestTimeoutSeconds));
-  const [retention, setRetention] = useState(String(initial.historyRetentionDays));
-  const [rounds, setRounds] = useState(String(initial.maxProviderRounds));
-  const [toolCalls, setToolCalls] = useState(String(initial.maxToolCallsPerRound));
-  const [pending, setPending] = useState<string | null>(null);
-  const [banner, setBanner] = useState<string | null>(null);
+  const [timeout, setTimeoutSeconds] = useState(String(seed.requestTimeoutSeconds));
+  const [retention, setRetention] = useState(String(seed.historyRetentionDays));
+  const [rounds, setRounds] = useState(String(seed.maxProviderRounds));
+  const [toolCalls, setToolCalls] = useState(String(seed.maxToolCallsPerRound));
+  const [pending, setPending] = useState<string | null>(initial ? null : "load");
+  const [banner, setBanner] = useState<Banner | null>(
+    initial ? null : { tone: "warn", text: t("loading") },
+  );
 
   function patch(enabledValue: boolean): AiSystemPatch {
     return {
@@ -96,41 +110,128 @@ export function AiSettingsForm({ initial }: { initial: AiSystemSettings }) {
   function applySaved(next: AiSystemSettings) {
     setSettings(next);
     setEnabled(next.enabled);
+    setBaseUrl(next.baseUrl ?? "");
+    setModel(next.model ?? "");
+    setProtocol(next.apiProtocol);
     setApiKey("");
     setClearKey(false);
+    setAdminPrompt(next.adminPrompt ?? "");
+    setAllowlist(next.privateEndpointAllowlist.join("\n"));
+    setReasoning(next.reasoningEffort ?? "");
+    setVerbosity(next.verbosity ?? "");
+    setMaxTokens(String(next.maxCompletionTokens));
+    setTokenField(next.tokenLimitParameter);
+    setTemperature(next.temperature == null ? "" : String(next.temperature));
+    setTopP(next.topP == null ? "" : String(next.topP));
+    setFrequency(next.frequencyPenalty == null ? "" : String(next.frequencyPenalty));
+    setPresence(next.presencePenalty == null ? "" : String(next.presencePenalty));
+    setParallelTools(next.parallelToolCalls == null ? "" : String(next.parallelToolCalls));
+    setTimeoutSeconds(String(next.requestTimeoutSeconds));
+    setRetention(String(next.historyRetentionDays));
+    setRounds(String(next.maxProviderRounds));
+    setToolCalls(String(next.maxToolCallsPerRound));
+  }
+
+  useEffect(() => {
+    if (initial) return;
+    let cancelled = false;
+    void loadSystemAiSettings().then((result) => {
+      if (cancelled) return;
+      setPending(null);
+      if (!result.ok) {
+        setBanner({ tone: "danger", text: result.error });
+        return;
+      }
+      applySaved(result.data);
+      setBanner(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initial]); // t is a stable translator; do not retrigger on locale object identity
+
+  function showBanner(next: Banner) {
+    setBanner(next);
+    if (next.tone === "ok") notify.success(next.text);
+    else if (next.tone === "danger") notify.error(next.text);
+    else notify.warning(next.text);
   }
 
   async function save() {
     setPending("save");
     setBanner(null);
-    const result = await saveAiSettingsAction(patch(enabled));
-    setPending(null);
-    if (!result.ok) {
-      setBanner(result.error || t("failed"));
-      return;
+    try {
+      const result = await saveSystemAiSettings(patch(enabled));
+      if (!result.ok) {
+        showBanner({ tone: "danger", text: result.error || t("failed") });
+        return;
+      }
+      applySaved(result.data);
+      showBanner({ tone: "ok", text: t("saved") });
+    } catch (error) {
+      showBanner({
+        tone: "danger",
+        text: error instanceof Error ? error.message : t("failed"),
+      });
+    } finally {
+      setPending(null);
     }
-    applySaved(result.data);
-    setBanner(t("saved"));
   }
 
   async function test() {
     setPending("test");
-    setBanner(null);
-    const result = await testAiProvider("system");
-    const refreshed = result.ok ? await refreshAiSettingsAction() : null;
-    setPending(null);
-    if (refreshed?.ok) applySaved(refreshed.data);
-    setBanner(result.ok ? result.data.message : result.error || t("failed"));
+    setBanner({ tone: "warn", text: t("testingHint") });
+    try {
+      const result = await testSystemAiProvider();
+      const refreshed = await loadSystemAiSettings();
+      if (refreshed.ok) applySaved(refreshed.data);
+      if (!result.ok) {
+        const text = result.error || t("failed");
+        showBanner({ tone: "danger", text });
+        await alertDialog(providerTestErrorAlert(text, t));
+        return;
+      }
+      const dialog = providerTestAlert(result.data, t);
+      showBanner({
+        tone: dialog.tone === "ok" ? "ok" : "danger",
+        text: dialog.title || result.data.message || t("failed"),
+      });
+      await alertDialog(dialog);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : t("failed");
+      showBanner({ tone: "danger", text });
+      await alertDialog(providerTestErrorAlert(text, t));
+    } finally {
+      setPending(null);
+    }
   }
 
   return (
-    <Card className="max-w-2xl">
+    <Card className="max-w-2xl" data-testid="ai-settings-card">
       <CardHeader>
         <CardTitle>{t("title")}</CardTitle>
         <CardDescription>{t("help")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {banner ? <p className="text-sm text-fg-muted">{banner}</p> : null}
+        {banner ? (
+          <div
+            role="status"
+            data-testid="ai-settings-banner"
+            className={cn(
+              "flex items-start gap-2 rounded-md border px-4 py-3 text-sm",
+              banner.tone === "ok" && "border-ok/30 bg-ok-muted/40 text-ok",
+              banner.tone === "warn" && "border-warn/30 bg-warn-muted/40 text-warn",
+              banner.tone === "danger" && "border-danger/30 bg-danger-muted/40 text-danger",
+            )}
+          >
+            {banner.tone === "ok" ? (
+              <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+            ) : (
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+            )}
+            <span>{banner.text}</span>
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Badge tone={settings.apiKeyConfigured ? "ok" : "neutral"}>
             {settings.apiKeyConfigured ? t("apiKeyOn") : t("apiKeyOff")}
@@ -356,11 +457,23 @@ export function AiSettingsForm({ initial }: { initial: AiSystemSettings }) {
             />
           </div>
         </div>
+        <p className="text-xs text-fg-subtle">{t("testingHint")}</p>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" disabled={Boolean(pending)} onClick={() => void save()}>
+          <Button
+            type="button"
+            data-testid="ai-settings-save"
+            disabled={Boolean(pending)}
+            onClick={() => void save()}
+          >
             {pending === "save" ? t("saving") : t("save")}
           </Button>
-          <Button type="button" variant="outline" disabled={Boolean(pending)} onClick={() => void test()}>
+          <Button
+            type="button"
+            variant="outline"
+            data-testid="ai-settings-test"
+            disabled={Boolean(pending)}
+            onClick={() => void test()}
+          >
             {pending === "test" ? t("testing") : t("test")}
           </Button>
         </div>

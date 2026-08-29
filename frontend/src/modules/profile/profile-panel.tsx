@@ -54,7 +54,7 @@ export async function ProfilePanel() {
       </Card>
       <ProfileCredentialsForm initial={profile} />
       {s3Result.ok ? <S3Form initial={s3Result.data} /> : null}
-      {aiResult.ok ? <UserAiForm initial={aiResult.data} /> : null}
+      <UserAiForm initial={aiResult.ok ? aiResult.data : null} />
       <SteamcmdRetryForm initial={profile} />
       <PasswordForm />
       <ApiKeyForm initial={profile} />

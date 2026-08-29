@@ -225,6 +225,15 @@ def _is_saved_provider_test(
     return True
 
 
+def _system_ready_to_enable(item: AISystemSettings) -> bool:
+    return bool(
+        item.base_url
+        and item.model
+        and item.api_key_encrypted
+        and credential_encryption_available()
+    )
+
+
 def _apply_saved_provider_test_flags(
     item: AISystemSettings | UserAISettings,
     *,
@@ -235,17 +244,6 @@ def _apply_saved_provider_test_flags(
     item.provider_tested = text_ok
     item.tool_calling_tested = tool_ok
     item.streaming_tested = streaming_ok
-    if isinstance(item, AISystemSettings):
-        all_ok = bool(text_ok and tool_ok and streaming_ok)
-        if not all_ok:
-            item.enabled = False
-        elif (
-            item.base_url
-            and item.model
-            and item.api_key_encrypted
-            and credential_encryption_available()
-        ):
-            item.enabled = True
 
 
 @router.get("/api/system/ai-settings", response_model=AISystemSettingsResponse)
@@ -304,31 +302,13 @@ async def update_system_ai_settings(
         item.provider_tested = False
         item.tool_calling_tested = False
         item.streaming_tested = False
-        item.enabled = False
     if request.enabled is not None:
-        if request.enabled and changed_provider:
-            # Saving a changed endpoint always disables execution until the
-            # new provider passes both tests. The requested enabled flag is
-            # intentionally ignored for this one update.
-            item.enabled = False
-        elif request.enabled and not (
-            item.base_url
-            and item.model
-            and item.api_key_encrypted
-            and item.provider_tested
-            and item.tool_calling_tested
-            and item.streaming_tested
-            and credential_encryption_available()
-        ):
+        if request.enabled and not _system_ready_to_enable(item):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "Configure encryption, URL, model, and API key, then pass both "
-                    "provider tests before enabling AI"
-                ),
+                detail="Configure encryption, URL, model, and API key before enabling AI",
             )
-        else:
-            item.enabled = request.enabled
+        item.enabled = request.enabled
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -518,7 +498,7 @@ async def create_ai_conversation(
     if await get_effective_provider(db, current_user) is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No tested AI provider is enabled",
+            detail="No AI provider is enabled",
         )
     if request.server_id is not None:
         await _server_for_user(db, current_user, request.server_id)
@@ -612,7 +592,7 @@ async def send_ai_message(
     if await get_effective_provider(db, current_user) is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No tested AI provider is enabled",
+            detail="No AI provider is enabled",
         )
     if conversation.server_id is not None:
         await _server_for_user(db, current_user, conversation.server_id)
