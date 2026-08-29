@@ -1451,6 +1451,7 @@
     "sshDownHelp": "This host is unreachable. Use Reconnect above first. Listing and file edits need SSH.",
     "refresh": "Refresh",
     "upload": "Upload",
+    "uploading": "Uploading…",
     "uploaded": "Upload finished.",
     "uploadFailed": "Upload failed.",
     "newFolder": "New folder",

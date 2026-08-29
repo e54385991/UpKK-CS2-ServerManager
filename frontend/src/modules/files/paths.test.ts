@@ -3,6 +3,7 @@ import test from "node:test";
 import { archiveExtensionLabel, isArchiveFile } from "./types.ts";
 import {
   breadcrumbs,
+  filesHref,
   isAtRoot,
   parentPath,
   parentWithinRoot,
@@ -50,6 +51,15 @@ test("breadcrumbs start at the game root and list each remaining segment", () =>
   );
   assert.equal(crumbs[0]?.path, root);
   assert.equal(crumbs.at(-1)?.path, `${root}/game/csgo/addons`);
+});
+
+test("filesHref omits the query on the game root", () => {
+  assert.equal(filesHref(3, root, root), "/servers/3/files");
+  assert.equal(filesHref(3, root, `${root}/`), "/servers/3/files");
+  assert.equal(
+    filesHref(3, root, `${root}/game/csgo`),
+    `/servers/3/files?path=${encodeURIComponent(`${root}/game/csgo`)}`,
+  );
 });
 
 test("isArchiveFile recognizes rar, xz, zst, and compound tar suffixes", () => {

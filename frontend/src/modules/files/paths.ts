@@ -43,6 +43,19 @@ export function resolveJumpPath(root: string, current: string, draft: string): s
   return collapseSlashes(`${base}/${trimmed}`);
 }
 
+export function filesHref(serverId: number, root: string, path: string): string {
+  return isAtRoot(root, path)
+    ? `/servers/${serverId}/files`
+    : `/servers/${serverId}/files?path=${encodeURIComponent(path)}`;
+}
+
+/** Sync the address bar without a Next.js navigation (which scrolls to top). */
+export function replaceFilesUrl(href: string): void {
+  const current = `${window.location.pathname}${window.location.search}`;
+  if (current === href) return;
+  window.history.replaceState(window.history.state, "", href);
+}
+
 export function breadcrumbs(root: string, path: string): { name: string; path: string }[] {
   const normalizedRoot = root.replace(/\/+$/, "") || "/";
   const normalized = path.replace(/\/+$/, "") || normalizedRoot;

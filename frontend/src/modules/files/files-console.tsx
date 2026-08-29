@@ -1,9 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import type { Route } from "next";
 import {
   ArrowDown,
   ArrowUp,
@@ -37,7 +35,7 @@ import {
   startUrlDownloadAction,
 } from "@/modules/files/actions";
 import { FilesPathBar } from "@/modules/files/path-bar";
-import { isAtRoot, parentWithinRoot } from "@/modules/files/paths";
+import { filesHref, isAtRoot, parentWithinRoot, replaceFilesUrl } from "@/modules/files/paths";
 import { notify } from "@/shared/feedback";
 import { copyText } from "@/shared/lib/clipboard";
 import {
@@ -75,8 +73,8 @@ type Banner = { readonly tone: "ok" | "warn" | "danger"; readonly text: string }
 
 export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const t = useTranslations("files");
-  const router = useRouter();
   const uploadRef = useRef<HTMLInputElement>(null);
+  const listAnchorRef = useRef<HTMLDivElement>(null);
   const [workspace, setWorkspace] = useState(initial);
   const [pending, setPending] = useState<string | null>(null);
   const [banner, setBanner] = useState<Banner | null>(null);
@@ -122,20 +120,25 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
 
   const load = useCallback(
     async (path: string) => {
+      const changingDir = path !== workspace.path;
+      if (changingDir) setPending("browse");
       const result = await listFilesAction(serverId, path);
       if (!result.ok) {
+        if (changingDir) setPending(null);
         setBanner({ tone: "danger", text: result.error || t("failed") });
         return;
       }
       setWorkspace(result.data);
       setQuery((current) => (result.data.path === workspace.path ? current : ""));
-      router.replace(
-        (result.data.path === result.data.root
-          ? `/servers/${serverId}/files`
-          : `/servers/${serverId}/files?path=${encodeURIComponent(result.data.path)}`) as Route,
-      );
+      replaceFilesUrl(filesHref(serverId, result.data.root, result.data.path));
+      if (changingDir) {
+        window.requestAnimationFrame(() => {
+          listAnchorRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+          window.requestAnimationFrame(() => setPending(null));
+        });
+      }
     },
-    [router, serverId, t, workspace.path],
+    [serverId, t, workspace.path],
   );
 
   useEffect(() => {
@@ -263,35 +266,6 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
             <CardTitle>{t("title")}</CardTitle>
             <CardDescription>{t("help")}</CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={Boolean(pending)}
-              onClick={() => void load(workspace.path)}
-            >
-              <RefreshCw />
-              {t("refresh")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!canMutate}
-              onClick={() => uploadRef.current?.click()}
-            >
-              <Upload />
-              {t("upload")}
-            </Button>
-            <input
-              ref={uploadRef}
-              type="file"
-              className="hidden"
-              multiple
-              onChange={(event) => void onUpload(event)}
-            />
-          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <FilesPathBar
@@ -353,49 +327,80 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
           ) : null}
 
           <div className="space-y-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-subtle" />
-              <Input
-                ref={searchRef}
-                id="files-search"
-                data-testid="files-search"
-                className="pr-10 pl-9"
-                value={query}
-                disabled={!workspace.sshOk}
-                spellCheck={false}
-                autoComplete="off"
-                placeholder={t("searchPlaceholder")}
-                aria-label={t("search")}
-                onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" || listedFiles.length !== 1) return;
-                  event.preventDefault();
-                  const only = listedFiles[0];
-                  if (!only) return;
-                  if (only.type === "directory") {
-                    void load(only.path);
-                    return;
-                  }
-                  if (isArchiveFile(only.name)) {
-                    void openExtract(only);
-                    return;
-                  }
-                  if (isTextFile(only.name)) void openEditor(only);
-                }}
-              />
-              {query ? (
-                <button
-                  type="button"
-                  className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1 text-fg-subtle hover:bg-surface-overlay hover:text-fg"
-                  aria-label={t("searchClear")}
-                  onClick={() => {
-                    setQuery("");
-                    searchRef.current?.focus();
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-48 flex-1">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-subtle" />
+                <Input
+                  ref={searchRef}
+                  id="files-search"
+                  data-testid="files-search"
+                  className="pr-10 pl-9"
+                  value={query}
+                  disabled={!workspace.sshOk}
+                  spellCheck={false}
+                  autoComplete="off"
+                  placeholder={t("searchPlaceholder")}
+                  aria-label={t("search")}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || listedFiles.length !== 1) return;
+                    event.preventDefault();
+                    const only = listedFiles[0];
+                    if (!only) return;
+                    if (only.type === "directory") {
+                      void load(only.path);
+                      return;
+                    }
+                    if (isArchiveFile(only.name)) {
+                      void openExtract(only);
+                      return;
+                    }
+                    if (isTextFile(only.name)) void openEditor(only);
                   }}
-                >
-                  <X className="size-4" />
-                </button>
-              ) : null}
+                />
+                {query ? (
+                  <button
+                    type="button"
+                    className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1 text-fg-subtle hover:bg-surface-overlay hover:text-fg"
+                    aria-label={t("searchClear")}
+                    onClick={() => {
+                      setQuery("");
+                      searchRef.current?.focus();
+                    }}
+                  >
+                    <X className="size-4" />
+                  </button>
+                ) : null}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="files-refresh"
+                disabled={Boolean(pending)}
+                onClick={() => void load(workspace.path)}
+              >
+                <RefreshCw />
+                {t("refresh")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="files-upload"
+                disabled={!canMutate}
+                onClick={() => uploadRef.current?.click()}
+              >
+                <Upload />
+                {pending === "upload" ? t("uploading") : t("upload")}
+              </Button>
+              <input
+                ref={uploadRef}
+                type="file"
+                className="hidden"
+                multiple
+                onChange={(event) => void onUpload(event)}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-1">
               {FILE_KIND_FILTERS.map((id) => (
@@ -418,6 +423,10 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
             </div>
           </div>
 
+          <div
+            ref={listAnchorRef}
+            className={cn(pending === "browse" && "pointer-events-none opacity-70")}
+          >
           {!workspace.sshOk ? (
             <p className="text-sm text-fg-muted">{t("listLocked")}</p>
           ) : totalFiles === 0 ? (
@@ -464,6 +473,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                           type="button"
                           className="inline-flex items-center gap-2 text-left font-medium text-fg hover:text-primary"
                           onClick={() => {
+                            if (pending) return;
                             if (entry.type === "directory") {
                               void load(entry.path);
                               return;
@@ -609,6 +619,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
               </table>
             </div>
           )}
+          </div>
         </CardContent>
       </Card>
 
@@ -882,7 +893,6 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     const files = event.target.files;
     if (!files || files.length === 0 || !canMutate) return;
     setPending("upload");
-    setBanner(null);
     try {
       for (const file of Array.from(files)) {
         const body = new FormData();
@@ -893,11 +903,11 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
         );
         if (!response.ok) {
           const text = await response.text();
-          setBanner({ tone: "danger", text: text || t("uploadFailed") });
+          notify.error(text || t("uploadFailed"));
           return;
         }
       }
-      setBanner({ tone: "ok", text: t("uploaded") });
+      notify.success(t("uploaded"));
       await load(workspace.path);
     } finally {
       setPending(null);

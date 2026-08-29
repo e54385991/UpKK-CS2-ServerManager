@@ -1451,6 +1451,7 @@
     "sshDownHelp": "现在连不上这台主机。请先用上方的「手动重连」。目录浏览和改文件都需要 SSH。",
     "refresh": "刷新",
     "upload": "上传",
+    "uploading": "上传中…",
     "uploaded": "上传完成。",
     "uploadFailed": "上传失败。",
     "newFolder": "新建文件夹",
