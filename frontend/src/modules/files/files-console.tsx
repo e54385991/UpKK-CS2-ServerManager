@@ -24,22 +24,20 @@ import {
   createDirectoryAction,
   createDownloadTicketAction,
   deleteFileAction,
-  extractArchiveAction,
   getExtractStatusAction,
   getFileContentAction,
   getUrlDownloadStatusAction,
-  inspectArchiveAction,
   listFilesAction,
   renameFileAction,
   saveFileContentAction,
   startUrlDownloadAction,
 } from "@/modules/files/actions";
+import { ExtractDialog } from "@/modules/files/extract-dialog";
 import { FilesPathBar } from "@/modules/files/path-bar";
 import { filesHref, isAtRoot, parentWithinRoot, replaceFilesUrl } from "@/modules/files/paths";
 import { notify } from "@/shared/feedback";
 import { copyText } from "@/shared/lib/clipboard";
 import {
-  ARCHIVE_FORMATS_LABEL,
   FILE_KIND_FILTERS,
   archiveExtensionLabel,
   filterAndSortEntries,
@@ -47,7 +45,6 @@ import {
   highlightName,
   isArchiveFile,
   isTextFile,
-  type FileArchiveInspect,
   type FileEntry,
   type FileKindFilter,
   type FileSortDir,
@@ -92,13 +89,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const [urlTaskId, setUrlTaskId] = useState<string | null>(null);
   const [urlTask, setUrlTask] = useState<FileTask | null>(null);
   const [extractEntry, setExtractEntry] = useState<FileEntry | null>(null);
-  const [inspect, setInspect] = useState<FileArchiveInspect | null>(null);
-  const [extractFolder, setExtractFolder] = useState("");
-  const [extractDest, setExtractDest] = useState("");
-  const [extractOverwrite, setExtractOverwrite] = useState(false);
-  const [stripFolder, setStripFolder] = useState(false);
   const [extractTaskId, setExtractTaskId] = useState<string | null>(null);
-  const [extractTask, setExtractTask] = useState<FileTask | null>(null);
   const [copiedEntry, setCopiedEntry] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<FileKindFilter>("all");
@@ -175,7 +166,6 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
       if (!extractTaskId) return;
       const result = await getExtractStatusAction(serverId, extractTaskId);
       if (cancelled || !result.ok) return;
-      setExtractTask(result.data);
       if (result.data.status === "completed" || result.data.status === "failed") {
         setExtractTaskId(null);
         setExtractEntry(null);
@@ -624,104 +614,17 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
       </Card>
 
       {extractEntry ? (
-        <Card data-testid="files-extract-panel">
-          <CardHeader>
-            <CardTitle>{t("extractTitle")}</CardTitle>
-            <CardDescription>
-              {extractEntry.path}
-              <span className="mt-1 block">
-                {t("formatsHelp", { formats: ARCHIVE_FORMATS_LABEL })}
-              </span>
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {inspect ? (
-              <p className="text-xs text-fg-subtle">
-                {inspect.archiveType} · {t("entries", { count: inspect.entryCount })}
-              </p>
-            ) : (
-              <p className="text-sm text-fg-muted">{t("inspecting")}</p>
-            )}
-            {inspect && inspect.folders.length > 0 ? (
-              <div>
-                <Label htmlFor="extract-folder">{t("sourceFolder")}</Label>
-                <select
-                  id="extract-folder"
-                  className="h-10 w-full rounded-md border border-line bg-surface px-3 text-sm"
-                  value={extractFolder}
-                  onChange={(event) => setExtractFolder(event.target.value)}
-                >
-                  <option value="">{t("extractAll")}</option>
-                  {inspect.folders.map((folder) => (
-                    <option key={folder} value={folder}>
-                      {folder}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-            <div>
-              <Label htmlFor="extract-dest">{t("destination")}</Label>
-              <Input
-                id="extract-dest"
-                value={extractDest}
-                onChange={(event) => setExtractDest(event.target.value)}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm text-fg-muted">
-              <input
-                type="checkbox"
-                checked={extractOverwrite}
-                onChange={(event) => setExtractOverwrite(event.target.checked)}
-                className="size-4 accent-primary"
-              />
-              {t("overwrite")}
-            </label>
-            {extractFolder ? (
-              <label className="flex items-center gap-2 text-sm text-fg-muted">
-                <input
-                  type="checkbox"
-                  checked={stripFolder}
-                  onChange={(event) => setStripFolder(event.target.checked)}
-                  className="size-4 accent-primary"
-                />
-                {t("stripFolder")}
-              </label>
-            ) : null}
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                disabled={!canMutate || Boolean(extractTaskId)}
-                onClick={() =>
-                  void run("extract", async () => {
-                    const result = await extractArchiveAction(serverId, {
-                      archivePath: extractEntry.path,
-                      destinationPath: extractDest.trim() || undefined,
-                      overwrite: extractOverwrite,
-                      sourceFolder: extractFolder || undefined,
-                      stripSourceFolder: stripFolder,
-                    });
-                    if (!result.ok) {
-                      setBanner({ tone: "danger", text: result.error || t("failed") });
-                      return false;
-                    }
-                    setExtractTaskId(result.data.taskId);
-                    setExtractTask(result.data);
-                    return false;
-                  })
-                }
-              >
-                {extractTaskId ? t("extracting") : t("extract")}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setExtractEntry(null)}>
-                {t("cancel")}
-              </Button>
-            </div>
-            {extractTask ? (
-              <p className="text-xs text-fg-subtle">{extractTask.status}</p>
-            ) : null}
-          </CardContent>
-        </Card>
+        <ExtractDialog
+          serverId={serverId}
+          entry={extractEntry}
+          destination={workspace.path}
+          onClose={() => setExtractEntry(null)}
+          onStarted={(task) => {
+            setExtractEntry(null);
+            setExtractTaskId(task.taskId);
+            setBanner({ tone: "ok", text: t("extracting") });
+          }}
+        />
       ) : null}
 
       {renameFrom ? (
@@ -941,18 +844,12 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     setEditing({ path: entry.path, name: entry.name, content: result.data.content });
   }
 
-  async function openExtract(entry: FileEntry) {
-    setExtractEntry(entry);
-    setExtractDest(workspace.path);
-    setInspect(null);
-    setExtractFolder("");
-    const result = await inspectArchiveAction(serverId, entry.path);
-    if (!result.ok) {
-      setBanner({ tone: "danger", text: result.error || t("failed") });
-      setExtractEntry(null);
+  function openExtract(entry: FileEntry) {
+    if (extractTaskId) {
+      setBanner({ tone: "warn", text: t("extractBusy") });
       return;
     }
-    setInspect(result.data);
+    setExtractEntry(entry);
   }
 
   async function copyEntryPath(value: string) {
