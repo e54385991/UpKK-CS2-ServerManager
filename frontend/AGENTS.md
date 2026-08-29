@@ -87,10 +87,16 @@ Do not reintroduce blocking, all-or-nothing server waits at the layout level.
 - Server-side calls use `src/shared/api/server-fetch.ts` (`apiFetch`), which
   attaches the bearer from the cookie and returns structured `ApiResult`
   (never throws for auth/transport failures — pages render a degraded state).
-- HTTP contract source of truth is FastAPI's OpenAPI. Regenerate types with
-  `npm run gen:api` (expects `../openapi.json`) into
-  `src/shared/api/schema.d.ts`. As `/api/v1` lands, adapt the per-domain
-  `api.ts` mappers rather than leaking raw backend shapes into the UI.
+- HTTP contract source of truth is FastAPI's OpenAPI, snapshotted at
+  `tests/baselines/openapi.json` (regenerate that with the backend's
+  `scripts/update_contract_baselines.py` whenever the API changes). Regenerate
+  the TS client with `npm run gen:api` into `src/shared/api/schema.d.ts`; import
+  DTO aliases from `src/shared/api/types.ts`.
+- The browser-facing contract is the versioned **`/api/v1`** surface
+  (`/api/v1/auth/me`, `/api/v1/servers`, `/api/v1/servers/{id}`,
+  `/api/v1/overview/summary`), which returns non-secret projections. Each domain
+  `api.ts` maps the snake_case DTO to a camelCase domain type so the UI stays
+  decoupled from wire casing; extend those mappers as more `/api/v1` lands.
 
 ## Styling
 
