@@ -29,6 +29,7 @@ from api.routes import (
     servers,
     setup,
     system_settings,
+    v1,
 )
 from api.templating import STATIC_DIRECTORY, templates
 from services.container import ContainerFactory, build_service_container
@@ -56,6 +57,7 @@ API_ROUTERS = (
     system_settings.router,
     gmail_oauth.router,
     map_management.router,
+    v1.router,
 )
 
 

@@ -1692,6 +1692,38 @@
     "methods": [
       "GET"
     ],
+    "name": "read_current_session",
+    "path": "/api/v1/auth/me"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_servers",
+    "path": "/api/v1/servers"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_server",
+    "path": "/api/v1/servers/{server_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "read_overview_summary",
+    "path": "/api/v1/overview/summary"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "root",
     "path": "/"
   },

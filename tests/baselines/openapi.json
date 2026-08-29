@@ -5776,6 +5776,35 @@
         "title": "MarketPluginUpdate",
         "type": "object"
       },
+      "OverviewSummary": {
+        "description": "Aggregate operational counters for the overview dashboard.",
+        "properties": {
+          "attention": {
+            "title": "Attention",
+            "type": "integer"
+          },
+          "capacity": {
+            "title": "Capacity",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "running",
+          "attention",
+          "capacity"
+        ],
+        "title": "OverviewSummary",
+        "type": "object"
+      },
       "PasswordReset": {
         "description": "Schema for password reset",
         "properties": {
@@ -7989,6 +8018,109 @@
         "title": "ServerCreate",
         "type": "object"
       },
+      "ServerDetail": {
+        "description": "Extended, still non-secret, server projection for the workspace.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_map": {
+            "title": "Default Map",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "game_directory": {
+            "title": "Game Directory",
+            "type": "string"
+          },
+          "game_mode": {
+            "title": "Game Mode",
+            "type": "string"
+          },
+          "game_port": {
+            "title": "Game Port",
+            "type": "integer"
+          },
+          "game_type": {
+            "title": "Game Type",
+            "type": "string"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_deployed": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Deployed"
+          },
+          "max_players": {
+            "title": "Max Players",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ssh_port": {
+            "title": "Ssh Port",
+            "type": "integer"
+          },
+          "ssh_user": {
+            "title": "Ssh User",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ServerStatus"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "host",
+          "game_port",
+          "status",
+          "default_map",
+          "max_players",
+          "ssh_port",
+          "ssh_user",
+          "game_directory",
+          "game_mode",
+          "game_type",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ServerDetail",
+        "type": "object"
+      },
       "ServerResponse": {
         "description": "Schema for server response (password authentication only)",
         "properties": {
@@ -9032,6 +9164,60 @@
         "title": "ServerStatusReport",
         "type": "object"
       },
+      "ServerSummary": {
+        "description": "Non-secret server projection for list and card views.",
+        "properties": {
+          "default_map": {
+            "title": "Default Map",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "game_port": {
+            "title": "Game Port",
+            "type": "integer"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "max_players": {
+            "title": "Max Players",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ServerStatus"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "host",
+          "game_port",
+          "status",
+          "default_map",
+          "max_players"
+        ],
+        "title": "ServerSummary",
+        "type": "object"
+      },
       "ServerUpdate": {
         "description": "Schema for updating a server (password authentication only)",
         "properties": {
@@ -9542,6 +9728,46 @@
           }
         },
         "title": "ServerUpdate",
+        "type": "object"
+      },
+      "SessionUser": {
+        "description": "The authenticated principal as the console needs it.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "is_admin": {
+            "title": "Is Admin",
+            "type": "boolean"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "is_admin",
+          "is_active"
+        ],
+        "title": "SessionUser",
         "type": "object"
       },
       "SourceCreateRequest": {
@@ -16012,6 +16238,171 @@
         "summary": "Test Email",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "description": "Return the authenticated principal for the browser session.",
+        "operationId": "read_current_session_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionUser"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Current Session",
+        "tags": [
+          "v1-auth"
+        ]
+      }
+    },
+    "/api/v1/overview/summary": {
+      "get": {
+        "description": "Aggregate operational counters across the current user's servers.",
+        "operationId": "read_overview_summary_api_v1_overview_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Overview Summary",
+        "tags": [
+          "v1-overview"
+        ]
+      }
+    },
+    "/api/v1/servers": {
+      "get": {
+        "description": "List the current user's servers as non-secret summaries.",
+        "operationId": "list_servers_api_v1_servers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skip",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Skip",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ServerSummary"
+                  },
+                  "title": "Response List Servers Api V1 Servers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Servers",
+        "tags": [
+          "v1-servers"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}": {
+      "get": {
+        "description": "Return one server the caller may access (owner or admin), non-secret.",
+        "operationId": "get_server_api_v1_servers__server_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Server",
+        "tags": [
+          "v1-servers"
         ]
       }
     },
