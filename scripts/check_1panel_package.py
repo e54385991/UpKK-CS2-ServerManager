@@ -241,9 +241,11 @@ def main() -> None:
         fail("frontend must proxy API calls to the private app:8000 listener")
     if frontend_env.get("PUBLIC_APP_URL"):
         fail("frontend must not pin PUBLIC_APP_URL; derive the browser origin from Host")
-    extra_hosts = frontend.get("extra_hosts") or []
-    if "host.docker.internal:host-gateway" not in extra_hosts:
-        fail("frontend must set extra_hosts host.docker.internal:host-gateway")
+    if frontend.get("extra_hosts"):
+        fail(
+            "1Panel compose must not set extra_hosts; host-gateway fails on "
+            "some 1Panel Docker engines and app:8000 is already on 1panel-network"
+        )
     app_env = app.get("environment")
     if not isinstance(app_env, dict) or app_env.get("CONSOLE_PUBLIC_URL") != "${BACKEND_URL}":
         fail("app must set CONSOLE_PUBLIC_URL from BACKEND_URL")

@@ -60,13 +60,10 @@ services:
     restart: always
     environment:
       INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     expose:
       - "3000"
     depends_on:
-      app:
-        condition: service_healthy
+      - app
     networks:
       - 1panel-network
     labels:
@@ -89,12 +86,11 @@ services:
     container_name: ${CONTAINER_NAME}-edge
     restart: always
     ports:
-      - ${PANEL_APP_PORT_HTTP}:80
+      - "${PANEL_APP_PORT_HTTP}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
-      frontend:
-        condition: service_healthy
+      - frontend
     networks:
       - 1panel-network
     labels:

@@ -79,6 +79,15 @@ test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
 
 ### 4. 故障排查
 
+安装卡在「启动 应用 / Creating」时，先在 1Panel **卸载**失败的应用（保留或删除空库均可），再确认没有残留容器：
+
+```bash
+docker ps -a --filter name=cs2-server-manager
+docker network inspect 1panel-network >/dev/null
+```
+
+商店包走同网 `app:8000`，不要给前端加 `host.docker.internal:host-gateway`（部分 1Panel Docker 会在 Creating 阶段直接失败）。
+
 ```bash
 docker network inspect 1panel-network
 docker logs <应用容器名>
