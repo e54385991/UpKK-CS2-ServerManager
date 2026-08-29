@@ -2,12 +2,10 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { SessionUserDto } from "@/shared/api/types";
+import { internalApiUrl } from "@/shared/config/internal-api";
 
 /** Backend HttpOnly session cookie. Its value is the JWT access token. */
 export const SESSION_COOKIE = "upkk_access_token";
-
-const INTERNAL_API_URL =
-  process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
 
 export type SessionUser = {
   readonly id: number;
@@ -28,7 +26,7 @@ export async function getSession(): Promise<SessionUser | null> {
   if (!token) return null;
 
   try {
-    const response = await fetch(`${INTERNAL_API_URL}/api/v1/auth/me`, {
+    const response = await fetch(`${internalApiUrl()}/api/v1/auth/me`, {
       headers: { authorization: `Bearer ${token}` },
       cache: "no-store",
     });

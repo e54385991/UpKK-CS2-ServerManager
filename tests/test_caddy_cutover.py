@@ -30,6 +30,7 @@ def test_root_compose_publishes_caddy_not_fastapi_as_http() -> None:
     assert "./deploy/Caddyfile:/etc/caddy/Caddyfile:ro" in COMPOSE
     assert "upkk-cs2-server-manager-web" in COMPOSE
     assert "${API_PORT:-8000}:8000" in COMPOSE
+    assert "${FRONTEND_INTERNAL_API_URL:-http://app:8000}" in COMPOSE
 
 
 def test_1panel_compose_publishes_caddy_as_public_root() -> None:

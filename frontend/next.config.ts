@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 import { lanDevOrigins } from "./dev-origins";
+import { internalApiUrl } from "./src/shared/config/internal-api";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -10,9 +11,12 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
  * the developer's FastAPI instance. The browser never talks to it directly:
  * all API traffic is proxied through Next `rewrites` so cookies stay first
  * party and there is no CORS surface.
+ *
+ * `next dev` reads this from `frontend/.env` at process start. Production
+ * standalone also honors runtime `INTERNAL_API_URL` via
+ * `scripts/with-internal-api-url.mjs` (rewrites are otherwise baked at build).
  */
-const INTERNAL_API_URL =
-  process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+const INTERNAL_API_URL = internalApiUrl();
 
 const nextConfig: NextConfig = {
   output: "standalone",

@@ -1,9 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/modules/auth/session";
-
-const INTERNAL_API_URL =
-  process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+import { internalApiUrl } from "@/shared/config/internal-api";
 
 export type ApiResult<T> =
   | { readonly ok: true; readonly data: T }
@@ -20,7 +18,7 @@ export async function apiFetch<T>(
 ): Promise<ApiResult<T>> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   try {
-    const response = await fetch(`${INTERNAL_API_URL}${path}`, {
+    const response = await fetch(`${internalApiUrl()}${path}`, {
       ...init,
       cache: "no-store",
       headers: {

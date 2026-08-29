@@ -1,12 +1,10 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/modules/auth/session";
+import { internalApiUrl } from "@/shared/config/internal-api";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const INTERNAL_API_URL =
-  process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
 
 function pipeUnbuffered(
   body: ReadableStream<Uint8Array>,
@@ -43,7 +41,7 @@ export async function POST(
 
   const { serverId, sourceId } = await context.params;
   const upstream = await fetch(
-    `${INTERNAL_API_URL}/api/v1/servers/${serverId}/plugin-configs/sources/${sourceId}/scan`,
+    `${internalApiUrl()}/api/v1/servers/${serverId}/plugin-configs/sources/${sourceId}/scan`,
     {
       method: "POST",
       headers: {

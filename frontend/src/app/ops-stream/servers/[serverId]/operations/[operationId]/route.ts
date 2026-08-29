@@ -1,12 +1,10 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/modules/auth/session";
+import { internalApiUrl } from "@/shared/config/internal-api";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const INTERNAL_API_URL =
-  process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
 
 function pipeUnbuffered(
   body: ReadableStream<Uint8Array>,
@@ -50,7 +48,7 @@ export async function GET(
   const after = request.nextUrl.searchParams.get("after") ?? "0";
 
   const upstream = await fetch(
-    `${INTERNAL_API_URL}/api/v1/servers/${serverId}/operations/${operationId}/events?after=${after}`,
+    `${internalApiUrl()}/api/v1/servers/${serverId}/operations/${operationId}/events?after=${after}`,
     {
       headers: {
         accept: "text/event-stream",

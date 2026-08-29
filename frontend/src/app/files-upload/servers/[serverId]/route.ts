@@ -1,9 +1,7 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/modules/auth/session";
-
-const INTERNAL_API_URL =
-  process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+import { internalApiUrl } from "@/shared/config/internal-api";
 
 /**
  * Cookie → Bearer upload proxy. Multipart uploads stay off Server Actions
@@ -26,7 +24,7 @@ export async function POST(
   }
 
   const upstream = await fetch(
-    `${INTERNAL_API_URL}/api/v1/servers/${serverId}/files/upload?path=${encodeURIComponent(path)}`,
+    `${internalApiUrl()}/api/v1/servers/${serverId}/files/upload?path=${encodeURIComponent(path)}`,
     {
       method: "POST",
       headers: {

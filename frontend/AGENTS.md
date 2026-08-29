@@ -99,9 +99,12 @@ is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-
 ## Backend contract & auth
 
 - **All** browser→backend traffic is proxied by Next `rewrites` in
-  `next.config.ts` (`/api/*`, `/health` → `INTERNAL_API_URL`). This keeps
-  cookies first-party and removes CORS. The browser never calls FastAPI
-  directly.
+  `next.config.ts` (`/api/*`, `/health`, `/static/*` → `INTERNAL_API_URL`).
+  This keeps cookies first-party and removes CORS. The browser never calls
+  FastAPI directly. Set `INTERNAL_API_URL` in `frontend/.env` for `next
+  dev`. Production standalone applies the same variable at process start
+  (`scripts/with-internal-api-url.mjs`) so Docker/compose can point at
+  `http://app:8000` without rebuilding the image.
 - Session: the backend sets an HttpOnly cookie `upkk_access_token` whose value is
   the JWT. `src/modules/auth/session.ts` resolves the user via
   `GET /api/auth/me` with a bearer header; `src/proxy.ts` cheaply guards console
@@ -172,9 +175,11 @@ Bilingual **zh-CN (default) + en-US** via `next-intl`, without URL routing:
 
 ## Environment
 
-Copy `.env.example` → `.env`. Key variables:
+Copy `.env.example` → `.env` in this directory (not the repo root). Restart
+Next after changing values. Key variables:
 
 - `INTERNAL_API_URL` — FastAPI origin Next proxies to (server-side only).
+  Local default `http://127.0.0.1:8000`; Compose/1Panel uses `http://app:8000`.
 - `PUBLIC_APP_URL` — public origin for absolute URLs / OAuth redirects.
 
 ## Commands

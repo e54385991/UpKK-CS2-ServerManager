@@ -123,7 +123,10 @@ services:
     container_name: cs2_frontend
     restart: unless-stopped
     environment:
-      INTERNAL_API_URL: http://app:8000
+      # Applied at container start so /api rewrites reach this service, not
+      # the image's build-time 127.0.0.1:8000 default. Override with
+      # FRONTEND_INTERNAL_API_URL if FastAPI is not the `app` service.
+      INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL:-http://app:8000}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost}
     expose:
       - "3000"
