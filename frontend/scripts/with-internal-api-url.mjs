@@ -30,24 +30,40 @@ export function hostGatewayFromRouteTable(text) {
   return undefined;
 }
 
+export function isNonLoopbackIpHost(hostname) {
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return false;
+  const parts = hostname.split(".").map(Number);
+  if (parts.some((n) => Number.isNaN(n) || n > 255)) return false;
+  return parts[0] !== 127;
+}
+
 export function apiOriginCandidates(configured, gateway) {
   const origin = configured.replace(/\/$/, "");
-  const unique = [origin];
+  const unique = [];
+  const push = (item) => {
+    if (item && !unique.includes(item)) unique.push(item);
+  };
   try {
     const url = new URL(origin);
     const port = url.port || (url.protocol === "https:" ? "443" : "80");
-    const extras = [];
+    const dockerHost = [];
     if (gateway && gateway !== url.hostname) {
-      extras.push(`${url.protocol}//${gateway}:${port}`);
+      dockerHost.push(`${url.protocol}//${gateway}:${port}`);
     }
     if (url.hostname !== "host.docker.internal") {
-      extras.push(`${url.protocol}//host.docker.internal:${port}`);
+      dockerHost.push(`${url.protocol}//host.docker.internal:${port}`);
     }
-    for (const item of extras) {
-      if (!unique.includes(item)) unique.push(item);
+    // A container using the host LAN IP (1Panel split runtimes) hairpins and
+    // hangs /api/captcha. Try the Docker host first; keep the LAN IP last.
+    if (isNonLoopbackIpHost(url.hostname)) {
+      for (const item of dockerHost) push(item);
+      push(origin);
+    } else {
+      push(origin);
+      for (const item of dockerHost) push(item);
     }
   } catch {
-    // Keep the configured origin when it is not a URL.
+    push(origin);
   }
   return unique;
 }

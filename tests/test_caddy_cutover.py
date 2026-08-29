@@ -39,4 +39,5 @@ def test_1panel_compose_publishes_caddy_as_public_root() -> None:
     assert "${PANEL_APP_PORT_HTTP}:8000" not in PANEL_COMPOSE
     assert "reverse_proxy frontend:3000" in PANEL_CADDY
     assert "INTERNAL_API_URL: http://app:8000" in PANEL_COMPOSE
+    assert "host.docker.internal:host-gateway" in PANEL_COMPOSE
     assert 'expose:\n      - "8000"' in PANEL_COMPOSE

@@ -179,7 +179,10 @@ Copy `.env.example` → `.env` in this directory (not the repo root). Restart
 Next after changing values. Key variables:
 
 - `INTERNAL_API_URL` — FastAPI origin Next proxies to (server-side only).
-  Local default `http://127.0.0.1:8000`; Compose/1Panel uses `http://app:8000`.
+  Local default `http://127.0.0.1:8000`; Compose / official 1Panel app uses
+  `http://app:8000`. Two separate 1Panel runtimes must not use the host LAN
+  IP (Docker hairpin hangs `/api/captcha`); use `host.docker.internal`, the
+  backend container name on `1panel-network`, or host-network `127.0.0.1`.
 - `PUBLIC_APP_URL` — optional public origin for absolute URLs. When unset
   (or set to a bind address like `0.0.0.0`), Next uses the request Host and
   port. OAuth already uses `window.location.origin`.

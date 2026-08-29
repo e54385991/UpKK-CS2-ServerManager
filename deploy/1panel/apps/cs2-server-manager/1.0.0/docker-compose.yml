@@ -60,6 +60,8 @@ services:
     environment:
       INTERNAL_API_URL: http://app:8000
       PUBLIC_APP_URL: ${BACKEND_URL}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "3000"
     depends_on:

@@ -63,10 +63,27 @@ test("parses the default gateway from /proc/net/route", () => {
 
 test("offers docker-host fallbacks when a LAN IP is configured", () => {
   assert.deepEqual(apiOriginCandidates("http://192.168.50.245:8000", "172.18.0.1"), [
+    "http://172.18.0.1:8000",
+    "http://host.docker.internal:8000",
     "http://192.168.50.245:8000",
+  ]);
+});
+
+test("keeps a docker DNS name first", () => {
+  assert.deepEqual(apiOriginCandidates("http://app:8000", "172.18.0.1"), [
+    "http://app:8000",
     "http://172.18.0.1:8000",
     "http://host.docker.internal:8000",
   ]);
+});
+
+test("prefers the docker host over a healthy hairpin LAN IP", async () => {
+  const origin = await pickReachableApiOrigin(
+    "http://192.168.50.245:8000",
+    async () => ({ ok: true }),
+    "172.18.0.1",
+  );
+  assert.equal(origin, "http://172.18.0.1:8000");
 });
 
 test("picks the first origin that answers /health", async () => {
