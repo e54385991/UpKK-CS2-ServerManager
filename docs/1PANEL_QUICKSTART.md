@@ -59,7 +59,7 @@ test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
 - **浏览器访问地址**：默认 `http://localhost:3000`。装完后改成实际地址，例如
   `http://192.168.50.245:3000`（改端口时一并改这里）。不要填 `0.0.0.0`；
 - **后端内部地址**：保持 `http://app:8000`。不要填 `http://192.168.x.x:8000`；
-- 前后端镜像：一般留空，使用应用包默认 Docker Hub 镜像；
+- 前后端镜像：保持表单默认的 Docker Hub 地址，不要留空（1Panel 拉镜像不会展开 `${VAR:-默认值}`）；
 - `SECRET_KEY` / `JWT_SECRET_KEY`：保持自动生成。init 脚本会把短占位值升级为 64 位十六进制密钥。
 
 应用首次启动会自动执行 Alembic 数据库迁移，无需手工运行 SQL 或迁移命令。
@@ -133,9 +133,11 @@ database name/user/password unless you are reusing an existing 1Panel database.
 Set **Console HTTP Port** to `3000` (or another free host port). That port maps to
 Caddy `:80` → Next; FastAPI stays private at `app:8000`. Set **Browser origin URL**
 to the address people type, such as `http://192.168.50.245:3000` — never `0.0.0.0`.
-Keep **Internal API URL** as `http://app:8000`. Leave the optional image fields
-empty. Keep the generated `SECRET_KEY` / `JWT_SECRET_KEY`; `init.sh` upgrades short
-placeholders to 64-character hexadecimal secrets.
+Keep **Internal API URL** as `http://app:8000`. Keep the default backend and
+frontend image fields (do not leave them empty; 1Panel cannot pull
+`${VAR:-default}` image refs). Keep the generated `SECRET_KEY` /
+`JWT_SECRET_KEY`; `init.sh` upgrades short placeholders to 64-character
+hexadecimal secrets.
 
 The application automatically runs the reviewed Alembic migrations at startup. No manual SQL or migration command is required.
 

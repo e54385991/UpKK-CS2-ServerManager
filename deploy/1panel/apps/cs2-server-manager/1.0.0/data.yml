@@ -223,41 +223,41 @@ additionalProperties:
         tr: Dahili API URL (http://app:8000 olarak bırakın)
       required: true
       type: text
-    - default: ""
+    - default: docker.io/e54385991/upkk-cs2-server-manager:main@sha256:b61052977e11f88595a3e407af790b7a9b1bda3ae6744196233a832bcc2137e6
       edit: true
       envKey: CS2_MANAGER_IMAGE
-      labelEn: Backend image (optional)
-      labelZh: 后端镜像（可选，一般不用改）
+      labelEn: Backend image
+      labelZh: 后端镜像（一般不用改）
       label:
-        en: Backend image (optional)
-        es-es: Imagen del backend (opcional)
-        ja: バックエンドイメージ（任意）
-        ms: Imej backend (pilihan)
-        pt-br: Imagem do backend (opcional)
-        ru: Образ backend (необязательно)
-        ko: 백엔드 이미지 (선택)
-        zh-Hant: 後端映像（選填，通常不用改）
-        zh: 后端镜像（可选，一般不用改）
-        tr: Backend imajı (isteğe bağlı)
-      required: false
+        en: Backend image
+        es-es: Imagen del backend
+        ja: バックエンドイメージ
+        ms: Imej backend
+        pt-br: Imagem do backend
+        ru: Образ backend
+        ko: 백엔드 이미지
+        zh-Hant: 後端映像（通常不用改）
+        zh: 后端镜像（一般不用改）
+        tr: Backend imajı
+      required: true
       type: text
-    - default: ""
+    - default: docker.io/e54385991/upkk-cs2-server-manager-web:main
       edit: true
       envKey: CS2_FRONTEND_IMAGE
-      labelEn: Frontend image (optional)
-      labelZh: 前端镜像（可选，一般不用改）
+      labelEn: Frontend image
+      labelZh: 前端镜像（一般不用改）
       label:
-        en: Frontend image (optional)
-        es-es: Imagen del frontend (opcional)
-        ja: フロントエンドイメージ（任意）
-        ms: Imej frontend (pilihan)
-        pt-br: Imagem do frontend (opcional)
-        ru: Образ frontend (необязательно)
-        ko: 프론트엔드 이미지 (선택)
-        zh-Hant: 前端映像（選填，通常不用改）
-        zh: 前端镜像（可选，一般不用改）
-        tr: Frontend imajı (isteğe bağlı)
-      required: false
+        en: Frontend image
+        es-es: Imagen del frontend
+        ja: フロントエンドイメージ
+        ms: Imej frontend
+        pt-br: Imagem do frontend
+        ru: Образ frontend
+        ko: 프론트엔드 이미지
+        zh-Hant: 前端映像（通常不用改）
+        zh: 前端镜像（一般不用改）
+        tr: Frontend imajı
+      required: true
       type: text
     - default: ""
       edit: true

@@ -40,7 +40,11 @@ def test_1panel_compose_publishes_caddy_as_public_root() -> None:
     assert "${PANEL_APP_PORT_HTTP}:80" in PANEL_COMPOSE
     assert "${PANEL_APP_PORT_HTTP}:8000" not in PANEL_COMPOSE
     assert "reverse_proxy frontend:3000" in PANEL_CADDY
-    assert "INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL:-http://app:8000}" in PANEL_COMPOSE
+    assert "INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL}" in PANEL_COMPOSE
+    assert "image: ${CS2_FRONTEND_IMAGE}" in PANEL_COMPOSE
+    assert "image: ${CS2_MANAGER_IMAGE}" in PANEL_COMPOSE
+    assert "${CS2_FRONTEND_IMAGE:-" not in PANEL_COMPOSE
+    assert "${CS2_MANAGER_IMAGE:-" not in PANEL_COMPOSE
     assert "PUBLIC_APP_URL" not in PANEL_COMPOSE
     assert "host.docker.internal:host-gateway" in PANEL_COMPOSE
     assert "CONSOLE_PUBLIC_URL: ${BACKEND_URL}" in PANEL_COMPOSE

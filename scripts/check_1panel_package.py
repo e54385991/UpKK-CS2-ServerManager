@@ -30,17 +30,36 @@ LOCALES = {
 VARIABLE_PATTERN = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+@sha256:[0-9a-f]{64}$")
 FRONTEND_IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+(?:@sha256:[0-9a-f]{64})?$")
-IMAGE_OVERRIDE_PATTERN = re.compile(r"^\$\{[A-Z][A-Z0-9_]*:-(.+)\}$")
+SIMPLE_VARIABLE_PATTERN = re.compile(r"^\$\{([A-Z][A-Z0-9_]*)\}$")
 KNOWN_1PANEL_VARIABLES = {"CONTAINER_NAME"}
 REQUIRED_SERVICES = {"app", "frontend", "caddy"}
 DEFAULT_INTERNAL_API_URL = "http://app:8000"
+DEFAULT_APP_IMAGE = (
+    "docker.io/e54385991/upkk-cs2-server-manager:main"
+    "@sha256:b61052977e11f88595a3e407af790b7a9b1bda3ae6744196233a832bcc2137e6"
+)
+DEFAULT_WEB_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager-web:main"
 
 
-def compose_image_ref(raw: object) -> str:
+def form_field_default(fields: list[Any], env_key: str) -> str:
+    field = next((item for item in fields if item.get("envKey") == env_key), None)
+    if not isinstance(field, dict):
+        return ""
+    value = field.get("default")
+    return value if isinstance(value, str) else ""
+
+
+def compose_image_ref(raw: object, fields: list[Any]) -> str:
     if not isinstance(raw, str):
         return ""
-    match = IMAGE_OVERRIDE_PATTERN.fullmatch(raw)
-    return match.group(1) if match else raw
+    # 1Panel pulls `image:` before Compose interpolation. `${VAR:-default}` is
+    # treated as a literal ref and fails with "invalid reference format".
+    if ":-" in raw:
+        fail("1Panel image refs must be ${VAR} or a literal; ${VAR:-default} cannot be pulled")
+    match = SIMPLE_VARIABLE_PATTERN.fullmatch(raw)
+    if match:
+        return form_field_default(fields, match.group(1))
+    return raw
 
 
 def require_1panel_service(name: str, service: dict[str, Any]) -> None:
@@ -204,18 +223,23 @@ def main() -> None:
         fail("app must not publish a host port; Caddy is the public root")
     if "8000" not in [str(item) for item in app.get("expose", [])]:
         fail("app must expose the private API port 8000")
-    image = compose_image_ref(app.get("image"))
+    image = compose_image_ref(app.get("image"), version_fields)
     if IMAGE_PATTERN.fullmatch(image) is None:
         fail("app image must use a tag and immutable sha256 digest")
-    frontend_image = compose_image_ref(frontend.get("image"))
+    frontend_image = compose_image_ref(frontend.get("image"), version_fields)
     if FRONTEND_IMAGE_PATTERN.fullmatch(frontend_image) is None:
         fail("frontend image must use a tagged Next.js console image")
+    if form_field_default(version_fields, "CS2_MANAGER_IMAGE") != DEFAULT_APP_IMAGE:
+        fail("CS2_MANAGER_IMAGE must default to the pinned backend image")
+    if form_field_default(version_fields, "CS2_FRONTEND_IMAGE") != DEFAULT_WEB_IMAGE:
+        fail("CS2_FRONTEND_IMAGE must default to the published frontend image")
     frontend_env = frontend.get("environment")
     if not isinstance(frontend_env, dict):
         fail("frontend environment is required")
     internal_api = frontend_env.get("INTERNAL_API_URL")
     if internal_api not in {
         DEFAULT_INTERNAL_API_URL,
+        "${FRONTEND_INTERNAL_API_URL}",
         f"${{FRONTEND_INTERNAL_API_URL:-{DEFAULT_INTERNAL_API_URL}}}",
     }:
         fail("frontend must proxy API calls to the private app:8000 listener")
@@ -318,8 +342,8 @@ def main() -> None:
             "PANEL_APP_PORT_HTTP": "18000",
             "BACKEND_URL": "http://localhost:18000",
             "FRONTEND_INTERNAL_API_URL": "http://app:8000",
-            "CS2_MANAGER_IMAGE": "",
-            "CS2_FRONTEND_IMAGE": "",
+            "CS2_MANAGER_IMAGE": DEFAULT_APP_IMAGE,
+            "CS2_FRONTEND_IMAGE": DEFAULT_WEB_IMAGE,
             "SECRET_KEY": "test-secret-key",
             "JWT_SECRET_KEY": "test-jwt-secret-key",
             "GOOGLE_CLIENT_ID": "",

@@ -1,6 +1,6 @@
 services:
   app:
-    image: ${CS2_MANAGER_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager:main@sha256:b61052977e11f88595a3e407af790b7a9b1bda3ae6744196233a832bcc2137e6}
+    image: ${CS2_MANAGER_IMAGE}
     container_name: ${CONTAINER_NAME}
     restart: always
     environment:
@@ -55,11 +55,11 @@ services:
       start_period: 30s
 
   frontend:
-    image: ${CS2_FRONTEND_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager-web:main}
+    image: ${CS2_FRONTEND_IMAGE}
     container_name: ${CONTAINER_NAME}-web
     restart: always
     environment:
-      INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL:-http://app:8000}
+      INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
