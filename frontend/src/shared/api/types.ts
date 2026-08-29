@@ -13,3 +13,5 @@ export type ServerSummaryDto = Schemas["ServerSummary"];
 export type ServerDetailDto = Schemas["ServerDetail"];
 export type OverviewSummaryDto = Schemas["OverviewSummary"];
 export type ServerStatusDto = Schemas["ServerStatus"];
+export type AuditEntryDto = Schemas["AuditEntry"];
+export type AuditPageDto = Schemas["Page_AuditEntry_"];

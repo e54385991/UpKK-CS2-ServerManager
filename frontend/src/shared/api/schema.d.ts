@@ -2071,6 +2071,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit
+         * @description List the last 30 days of audit events (admin only), paginated.
+         */
+        get: operations["list_audit_api_v1_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me": {
         parameters: {
             query?: never;
@@ -4425,6 +4445,37 @@ export interface components {
             size: number;
         };
         /**
+         * AuditEntry
+         * @description One administrator-visible audit event (metadata only, non-secret).
+         */
+        AuditEntry: {
+            /** Action */
+            action: string;
+            /** Actor Username */
+            actor_username?: string | null;
+            /** Category */
+            category: string;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Details
+             * @default {}
+             */
+            details: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Ip Address */
+            ip_address?: string | null;
+            /** Server Id */
+            server_id?: number | null;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+        };
+        /**
          * AuditLogListResponse
          * @description Paginated administrator audit log listing.
          */
@@ -6120,6 +6171,17 @@ export interface components {
             capacity: number;
             /** Running */
             running: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[AuditEntry] */
+        Page_AuditEntry_: {
+            /** Items */
+            items: components["schemas"]["AuditEntry"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
             /** Total */
             total: number;
         };
@@ -11451,6 +11513,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_api_v1_audit_get: {
+        parameters: {
+            query?: {
+                category?: string | null;
+                status?: string | null;
+                username?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AuditEntry_"];
                 };
             };
             /** @description Validation Error */
