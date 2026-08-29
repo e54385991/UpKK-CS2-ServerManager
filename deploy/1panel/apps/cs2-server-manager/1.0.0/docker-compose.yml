@@ -1,6 +1,6 @@
 services:
   app:
-    image: ${CS2_MANAGER_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager:b6d5284@sha256:7e100ad1d049f50d3b588aba6e9029750f79ed8394ad3b31621b311a744dc5b9}
+    image: ${CS2_MANAGER_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager:main@sha256:b61052977e11f88595a3e407af790b7a9b1bda3ae6744196233a832bcc2137e6}
     container_name: ${CONTAINER_NAME}
     restart: always
     environment:
