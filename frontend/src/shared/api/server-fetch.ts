@@ -33,7 +33,7 @@ export async function apiFetch<T>(
       return {
         ok: false,
         status: response.status,
-        error: `Request to ${path} failed with ${response.status}`,
+        error: await readApiError(response, path),
       };
     }
     const data = (await response.json()) as T;
@@ -45,4 +45,29 @@ export async function apiFetch<T>(
       error: error instanceof Error ? error.message : "network error",
     };
   }
+}
+
+async function readApiError(response: Response, path: string): Promise<string> {
+  const fallback = `Request to ${path} failed with ${response.status}`;
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string" && body.detail.trim()) {
+      return body.detail;
+    }
+    if (Array.isArray(body.detail) && body.detail.length > 0) {
+      const first = body.detail[0] as { msg?: unknown };
+      if (typeof first?.msg === "string" && first.msg.trim()) {
+        return first.msg;
+      }
+    }
+    if (body.detail && typeof body.detail === "object") {
+      const detail = body.detail as { message?: unknown };
+      if (typeof detail.message === "string" && detail.message.trim()) {
+        return detail.message;
+      }
+    }
+  } catch {
+    // The error body is optional; keep the status-based fallback.
+  }
+  return fallback;
 }

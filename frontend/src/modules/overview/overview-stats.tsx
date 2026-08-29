@@ -1,10 +1,13 @@
 import Link from "next/link";
+import type { Route } from "next";
 import {
   Server,
   Activity,
   CircleCheck,
   CircleAlert,
   ArrowRight,
+  Cable,
+  BookOpen,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { getTranslations } from "next-intl/server";
@@ -17,11 +20,13 @@ import { cn } from "@/shared/lib/cn";
 function StatCard({
   label,
   value,
+  hint,
   icon: Icon,
   tone = "primary",
 }: {
   label: string;
   value: number | string;
+  hint?: string;
   icon: LucideIcon;
   tone?: "primary" | "ok" | "warn" | "danger";
 }) {
@@ -46,6 +51,7 @@ function StatCard({
           {value}
         </p>
         <p className="text-xs text-fg-muted">{label}</p>
+        {hint ? <p className="text-[11px] text-fg-subtle">{hint}</p> : null}
       </div>
     </Card>
   );
@@ -75,11 +81,38 @@ export async function OverviewStats() {
   }
 
   const servers = result.data;
-  const { total, running, attention, capacity } = summaryResult.data;
+  const {
+    total,
+    running,
+    attention,
+    capacity,
+    sshConnections,
+    sshInUse,
+    sshIdle,
+    sshLeases,
+  } = summaryResult.data;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Card className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="flex size-11 items-center justify-center rounded-lg bg-primary-muted text-primary ring-1 ring-primary/30">
+            <BookOpen className="size-5" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-fg">{t("tutorialLink")}</p>
+            <p className="mt-0.5 text-xs text-fg-muted">{t("tutorialHelp")}</p>
+          </div>
+        </div>
+        <Link
+          href={"/deployment-tutorial" as Route}
+          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary-strong"
+        >
+          {t("tutorialOpen")}
+          <ArrowRight className="size-3.5" />
+        </Link>
+      </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard label={t("total")} value={total} icon={Server} />
         <StatCard
           label={t("running")}
@@ -94,6 +127,16 @@ export async function OverviewStats() {
           tone={attention > 0 ? "warn" : "primary"}
         />
         <StatCard label={t("capacity")} value={capacity} icon={Activity} />
+        <StatCard
+          label={t("sshConnections")}
+          value={sshConnections}
+          hint={t("sshConnectionsHint", {
+            leases: sshLeases,
+            idle: sshIdle,
+          })}
+          icon={Cable}
+          tone={sshLeases > 0 || sshInUse > 0 ? "ok" : "primary"}
+        />
       </div>
 
       <Card>
@@ -150,8 +193,8 @@ export async function OverviewStats() {
 export function OverviewStatsSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, index) => (
           <div
             key={index}
             className="h-[5.25rem] animate-pulse rounded-lg border border-line bg-surface"

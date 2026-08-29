@@ -17,7 +17,7 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
   const tSite = useTranslations("site");
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-surface/60 lg:flex">
+    <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface/60 md:flex">
       <div className="flex h-14 items-center gap-2.5 border-b border-line px-5">
         <Link href="/overview" className="flex items-center gap-2.5">
           <span className="flex size-8 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">

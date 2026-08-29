@@ -90,6 +90,18 @@ def test_route_registration_order_matches_the_pre_refactor_baseline():
             "name": "setup_progress_websocket",
             "methods": [],
         },
+        {
+            "kind": "APIWebSocketRoute",
+            "path": "/api/v1/servers/{server_id}/console/ssh",
+            "name": "ssh_console_websocket",
+            "methods": [],
+        },
+        {
+            "kind": "APIWebSocketRoute",
+            "path": "/api/v1/servers/{server_id}/console/game",
+            "name": "game_console_websocket",
+            "methods": [],
+        },
     ]
 
 

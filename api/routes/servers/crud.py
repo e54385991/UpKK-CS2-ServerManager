@@ -8,8 +8,15 @@ from fastapi import Request
 
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession
 from modules import ServerAgentPolicy
+from services.apt_mirrors import normalize_apt_mirror
 from services.audit_log_service import record_audit_event
 from services.discord_binding_template_service import inherit_global_discord_binding
+from services.host_initialization import (
+    AsyncsshHostRunner,
+    attach_host_initialization,
+    ensure_steamcmd_packages,
+)
+from services.system_dependencies import STEAMCMD_REQUIRED_PACKAGES
 
 from .common import *
 
@@ -57,6 +64,7 @@ async def create_server(
     await db.commit()
     # Validate SSH connection before creating server (password authentication only)
     conn = None
+    host_init = None
     try:
         if not server_data.ssh_password:
             raise HTTPException(
@@ -124,6 +132,20 @@ async def create_server(
                 detail=f"Failed to set permissions on game directory {server_data.game_directory}. Please check user permissions.",
             )
 
+        sudo_password = getattr(server_data, "sudo_password", None) or server_data.ssh_password
+        preferred_mirror = normalize_apt_mirror(getattr(server_data, "apt_mirror", None))
+        host_init = await ensure_steamcmd_packages(
+            AsyncsshHostRunner(conn, sudo_password=sudo_password),
+            STEAMCMD_REQUIRED_PACKAGES,
+            preferred_mirror=preferred_mirror,
+            apply_preferred_first=preferred_mirror is not None,
+        )
+        if not host_init.architecture_supported:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=host_init.message,
+            )
+
     except HTTPException:
         raise
     except Exception as e:
@@ -155,6 +177,10 @@ async def create_server(
             server_dict["github_proxy"] = system_settings.github_proxy_url
         # else: default_proxy_mode is 'direct', keep both as None/False
 
+    if host_init is not None and host_init.apt_mirror:
+        server_dict["apt_mirror"] = host_init.apt_mirror
+    elif getattr(server_data, "apt_mirror", None):
+        server_dict["apt_mirror"] = normalize_apt_mirror(server_data.apt_mirror)
     server = Server(**server_dict, user_id=current_user.id, api_key=generate_api_key())
     db.add(server)
     await db.flush()
@@ -173,6 +199,8 @@ async def create_server(
         )
     await db.commit()
     await db.refresh(server)
+    if host_init is not None:
+        attach_host_initialization(server, host_init)
     await record_audit_event(
         category="server",
         action="server.create",
@@ -308,6 +336,7 @@ async def update_server(
                 if field
                 not in {
                     "ssh_password",
+                    "sudo_password",
                     "server_password",
                     "rcon_password",
                     "steam_account_token",

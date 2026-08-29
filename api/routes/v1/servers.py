@@ -1,16 +1,51 @@
 """Versioned server endpoints returning non-secret projections."""
 
-from fastapi import APIRouter
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Query, Request, status
+from sqlalchemy import select
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
-from modules import Server
+from api.routes.actions.status import reconnect_ssh as reconnect_ssh_legacy
+from api.routes.servers.configuration import get_startup_command as get_startup_command_legacy
+from api.routes.servers.crud import apply_system_defaults_to_server as apply_defaults_legacy
+from api.routes.servers.crud import create_server as create_legacy_server
+from api.routes.servers.crud import update_server as update_legacy_server
+from api.routes.servers.maintenance import (
+    confirm_server_deployment as confirm_deployment_legacy,
+)
+from modules import Server, ServerCreate, ServerUpdate, User
+from services.a2s_cache_service import a2s_cache_service
+from services.disk_space_service import disk_space_service
+from services.host_initialization import host_initialization_of
+from services.maintenance_lock import maintenance_lock_service
+from services.redis_manager import redis_manager
+from services.server_operation_hub import ServerOperationConflict
+from services.ssh_connection_pool import ssh_connection_pool
 
-from .schemas import ServerDetail, ServerSummary
+from .operation_runner import enqueue_apply_apt_mirror
+from .operations import to_view
+from .overview import _a2s_view
+from .schemas import (
+    A2SCacheView,
+    ActionResult,
+    AptMirrorApplyRequest,
+    ConfirmDeploymentView,
+    DiskSpaceView,
+    ServerCreateRequest,
+    ServerCreateResult,
+    ServerDetail,
+    ServerOperationView,
+    ServerSummary,
+    ServerUpdateRequest,
+    ServerWriteResult,
+    StartupCommandView,
+)
 
 router = APIRouter(prefix="/api/v1/servers", tags=["v1-servers"])
 
 
-def _to_summary(server: Server) -> ServerSummary:
+def _to_summary(server: Server, owner: User | None = None) -> ServerSummary:
     return ServerSummary(
         id=server.id,
         name=server.name,
@@ -20,10 +55,57 @@ def _to_summary(server: Server) -> ServerSummary:
         description=server.description,
         default_map=server.default_map,
         max_players=server.max_players,
+        owner_id=owner.id if owner is not None else None,
+        owner_username=owner.username if owner is not None else None,
+        owner_is_admin=bool(owner.is_admin) if owner is not None else None,
+        use_panel_proxy=bool(getattr(server, "use_panel_proxy", False)),
+        github_proxy=getattr(server, "github_proxy", None) or None,
+        is_ssh_down=bool(getattr(server, "is_ssh_down", False)),
+        ssh_health_status=str(getattr(server, "ssh_health_status", None) or "unknown"),
+        consecutive_ssh_failures=int(getattr(server, "consecutive_ssh_failures", 0) or 0),
+        ssh_health_failure_threshold=int(getattr(server, "ssh_health_failure_threshold", 84) or 84),
+        ssh_health_check_interval_hours=int(
+            getattr(server, "ssh_health_check_interval_hours", 2) or 2
+        ),
+        last_ssh_health_check=getattr(server, "last_ssh_health_check", None),
     )
 
 
-def _to_detail(server: Server) -> ServerDetail:
+async def _owners_by_id(db, servers: list[Server]) -> dict[int, User]:
+    user_ids = {server.user_id for server in servers if getattr(server, "user_id", None)}
+    if not user_ids:
+        return {}
+    result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    return {user.id: user for user in result.scalars().all()}
+
+
+async def _ssh_pool_fields(server: Server) -> dict:
+    try:
+        info = await ssh_connection_pool.get_connection_info(server)
+    except Exception:
+        return {
+            "ssh_pooled": False,
+            "ssh_in_use": False,
+            "ssh_active_leases": 0,
+            "ssh_idle_seconds": None,
+        }
+    idle = info.get("idle_time")
+    leases = info.get("active_leases")
+    if leases is None:
+        leases = 1 if info.get("in_use") else 0
+    return {
+        "ssh_pooled": bool(info.get("connected")),
+        "ssh_in_use": bool(info.get("in_use")),
+        "ssh_active_leases": int(leases),
+        "ssh_idle_seconds": float(idle) if idle is not None else None,
+    }
+
+
+async def _to_detail(server: Server) -> ServerDetail:
+    session_manager = getattr(server, "session_manager", "tmux") or "tmux"
+    if session_manager not in {"screen", "tmux"}:
+        session_manager = "tmux"
+    pool = await _ssh_pool_fields(server)
     return ServerDetail(
         id=server.id,
         name=server.name,
@@ -38,9 +120,64 @@ def _to_detail(server: Server) -> ServerDetail:
         game_directory=server.game_directory,
         game_mode=server.game_mode,
         game_type=server.game_type,
+        server_name=getattr(server, "server_name", None) or server.name,
+        session_manager=session_manager,
+        enable_panel_monitoring=bool(getattr(server, "enable_panel_monitoring", False)),
+        monitor_interval_seconds=int(getattr(server, "monitor_interval_seconds", 60) or 60),
+        auto_restart_on_crash=bool(getattr(server, "auto_restart_on_crash", True)),
+        enable_a2s_monitoring=bool(getattr(server, "enable_a2s_monitoring", False)),
+        a2s_failure_threshold=int(getattr(server, "a2s_failure_threshold", 3) or 3),
+        a2s_check_interval_seconds=int(getattr(server, "a2s_check_interval_seconds", 60) or 60),
+        enable_auto_update=bool(getattr(server, "enable_auto_update", True)),
+        tv_enable=bool(getattr(server, "tv_enable", False)),
+        is_ssh_down=bool(getattr(server, "is_ssh_down", False)),
+        ssh_health_status=str(getattr(server, "ssh_health_status", None) or "unknown"),
+        consecutive_ssh_failures=int(getattr(server, "consecutive_ssh_failures", 0) or 0),
+        ssh_health_failure_threshold=int(getattr(server, "ssh_health_failure_threshold", 84) or 84),
+        ssh_health_check_interval_hours=int(
+            getattr(server, "ssh_health_check_interval_hours", 2) or 2
+        ),
+        last_ssh_health_check=getattr(server, "last_ssh_health_check", None),
+        last_ssh_success=getattr(server, "last_ssh_success", None),
         created_at=server.created_at,
         updated_at=server.updated_at,
         last_deployed=server.last_deployed,
+        apt_mirror=getattr(server, "apt_mirror", None),
+        has_sudo_password=bool(getattr(server, "sudo_password", None)),
+        use_panel_proxy=bool(getattr(server, "use_panel_proxy", False)),
+        github_proxy=getattr(server, "github_proxy", None) or None,
+        **pool,
+    )
+
+
+@router.post("", response_model=ServerCreateResult, status_code=status.HTTP_201_CREATED)
+async def create_server(
+    body: ServerCreateRequest,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    request: Request,
+) -> ServerCreateResult:
+    """Create a server after CAPTCHA + SSH checks, then initialize host packages."""
+    server = await create_legacy_server(
+        ServerCreate(**body.model_dump()),
+        db,
+        current_user,
+        request,
+    )
+    detail = await _to_detail(server)
+    init = host_initialization_of(server)
+    if init is None:
+        return ServerCreateResult(
+            **detail.model_dump(),
+            host_initialized=True,
+            initialization_message="",
+        )
+    return ServerCreateResult(
+        **detail.model_dump(),
+        host_initialized=init.success,
+        missing_packages=list(init.missing_after or init.missing_before),
+        manual_install_command=init.manual_install_command,
+        initialization_message=init.message,
     )
 
 
@@ -50,8 +187,19 @@ async def list_servers(
     current_user: ActiveUser,
     skip: int = 0,
     limit: int = 100,
+    scope: Literal["mine", "all"] = Query(default="mine"),
 ) -> list[ServerSummary]:
-    """List the current user's servers as non-secret summaries."""
+    """List servers the caller may see. ``scope=all`` is admin-only fleet view."""
+    if scope == "all":
+        if not current_user.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+            )
+        servers = await Server.get_all(db, skip, limit)
+        owners = await _owners_by_id(db, servers)
+        return [_to_summary(server, owners.get(server.user_id)) for server in servers]
+
     servers = await Server.get_all_by_user(db, current_user.id, skip, limit)
     return [_to_summary(server) for server in servers]
 
@@ -64,4 +212,173 @@ async def get_server(
 ) -> ServerDetail:
     """Return one server the caller may access (owner or admin), non-secret."""
     server = await require_server_access(db, server_id, current_user)
-    return _to_detail(server)
+    return await _to_detail(server)
+
+
+@router.patch("/{server_id}", response_model=ServerWriteResult)
+async def update_server(
+    server_id: int,
+    body: ServerUpdateRequest,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    request: Request,
+) -> ServerWriteResult:
+    """Patch non-secret settings. Omitted secrets stay unchanged."""
+    updated = await update_legacy_server(
+        server_id,
+        ServerUpdate(**body.model_dump(exclude_unset=True)),
+        db,
+        current_user,
+        request,
+    )
+    detail = await _to_detail(updated)
+    return ServerWriteResult(
+        **detail.model_dump(),
+        restart_required=bool(getattr(updated, "restart_required", False)),
+    )
+
+
+@router.post("/{server_id}/apply-system-defaults", response_model=ServerWriteResult)
+async def apply_server_system_defaults(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ServerWriteResult:
+    """Copy the panel default download-proxy mode onto this server."""
+    updated = await apply_defaults_legacy(server_id, db, current_user)
+    detail = await _to_detail(updated)
+    return ServerWriteResult(
+        **detail.model_dump(),
+        restart_required=bool(getattr(updated, "restart_required", False)),
+    )
+
+
+@router.post(
+    "/{server_id}/apt-mirror",
+    response_model=ServerOperationView,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def apply_server_apt_mirror(
+    server_id: int,
+    body: AptMirrorApplyRequest,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ServerOperationView:
+    """Persist the chosen apt mirror, rewrite host sources, and retry packages."""
+    server = await require_server_access(db, server_id, current_user)
+    server.apt_mirror = body.mirror
+    await db.commit()
+    await db.refresh(server)
+
+    if await redis_manager.get(f"deployment_lock:{server_id}"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Server is currently being deployed or has a stuck deployment lock. "
+                "Clear the lock before switching apt mirrors."
+            ),
+        )
+    if await maintenance_lock_service.is_locked(server_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Another operation already holds the server lock.",
+        )
+
+    try:
+        record = await enqueue_apply_apt_mirror(
+            server_id=server_id,
+            mirror=body.mirror,
+            actor_user_id=current_user.id,
+        )
+    except ServerOperationConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    return to_view(record)
+
+
+@router.post("/{server_id}/ssh-reconnect", response_model=ActionResult)
+async def reconnect_server_ssh(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ActionResult:
+    """Clear the SSH-down flag and force a pool reconnect, same as the legacy UI."""
+    result = await reconnect_ssh_legacy(server_id, db, current_user)
+    return ActionResult(success=bool(result["success"]), message=str(result["message"]))
+
+
+@router.get("/{server_id}/disk-space", response_model=DiskSpaceView)
+async def get_server_disk_space(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    force_refresh: bool = Query(default=False),
+) -> DiskSpaceView:
+    """Cached game-directory disk snapshot. Default reads never SSH."""
+    server = await require_server_access(db, server_id, current_user)
+    _ok, info = await disk_space_service.get_disk_space(
+        server,
+        force_refresh=force_refresh,
+        cache_only=not force_refresh,
+    )
+    if not info:
+        return DiskSpaceView(server_id=int(server.id), cached=False)
+    return DiskSpaceView(
+        server_id=int(server.id),
+        cached=True,
+        used_gb=info.get("used_gb"),
+        total_gb=info.get("total_gb"),
+        available_gb=info.get("available_gb"),
+        used_percent=info.get("used_percent"),
+    )
+
+
+@router.get("/{server_id}/a2s-cache", response_model=A2SCacheView)
+async def get_server_a2s_cache(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    force_refresh: bool = Query(default=False),
+) -> A2SCacheView:
+    """Cached A2S snapshot for one server. Default reads never query A2S or SSH."""
+    server = await require_server_access(db, server_id, current_user)
+    cached = (
+        await a2s_cache_service.refresh_cached_info(server)
+        if force_refresh
+        else await a2s_cache_service.get_cached_info(int(server.id))
+    )
+    return _a2s_view(int(server.id), cached if isinstance(cached, dict) else None)
+
+
+@router.get("/{server_id}/startup-command", response_model=StartupCommandView)
+async def get_server_startup_command(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> StartupCommandView:
+    """Return a masked startup-command preview. Does not require SSH."""
+    payload = await get_startup_command_legacy(server_id, db, current_user)
+    return StartupCommandView(
+        startup_command=str(payload.get("startup_command") or ""),
+        cs2_command=str(payload.get("cs2_command") or ""),
+        session_manager=str(payload.get("session_manager") or "tmux"),
+        game_mode_resolved=str(payload.get("game_mode_resolved") or ""),
+    )
+
+
+@router.post("/{server_id}/confirm-deployment", response_model=ConfirmDeploymentView)
+async def confirm_server_deployment(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ConfirmDeploymentView:
+    """Mark an undeployed server as deployed when remote verification is unavailable."""
+    payload = await confirm_deployment_legacy(server_id, db, current_user)
+    return ConfirmDeploymentView(
+        success=bool(payload.get("success")),
+        message=str(payload.get("message") or ""),
+        status=str(payload.get("status") or ""),
+        last_deployed=payload.get("last_deployed"),
+    )

@@ -32,5 +32,6 @@ export const config = {
     "/assistant/:path*",
     "/audit/:path*",
     "/settings/:path*",
+    "/live-console/:path*",
   ],
 };

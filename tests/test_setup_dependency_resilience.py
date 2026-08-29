@@ -12,7 +12,9 @@ from services.system_dependencies import (
     STEAMCMD_REQUIRED_PACKAGES,
     apt_get_command,
     installed_packages_verification_command,
+    manual_install_command,
     normalize_debian_architecture,
+    parse_missing_packages,
     steamcmd_architecture_supported,
 )
 
@@ -135,6 +137,11 @@ def test_dependency_contract_targets_ubuntu_2604_amd64():
     )
     verification = installed_packages_verification_command(STEAMCMD_REQUIRED_PACKAGES)
     assert "Missing required packages" in verification
+    assert parse_missing_packages("", "Missing required packages: lib32z1 libc6-i386") == [
+        "lib32z1",
+        "libc6-i386",
+    ]
+    assert manual_install_command(("lib32z1",)) == "sudo apt-get install -y lib32z1"
 
 
 class _PreflightManager(SSHManager):
@@ -151,6 +158,7 @@ class _PreflightManager(SSHManager):
 @pytest.mark.asyncio
 async def test_deployment_preflight_rejects_arm_before_runtime_probe():
     manager = _PreflightManager([(True, "arm64\n", "")])
+    manager.current_server = SimpleNamespace(sudo_password=None, ssh_password="secret")
 
     success, message = await manager._steamcmd_host_preflight_connected()
 
@@ -161,19 +169,14 @@ async def test_deployment_preflight_rejects_arm_before_runtime_probe():
 
 
 @pytest.mark.asyncio
-async def test_deployment_preflight_reports_missing_32_bit_runtime():
-    manager = _PreflightManager(
-        [
-            (True, "amd64\n", ""),
-            (False, "", "Missing required packages: lib32z1"),
-        ]
-    )
+async def test_deployment_preflight_requires_a_connected_server():
+    manager = _PreflightManager([])
+    manager.current_server = None
 
     success, message = await manager._steamcmd_host_preflight_connected()
 
     assert success is False
-    assert "lib32z1" in message
-    assert "Setup Wizard" in message
+    assert "Not connected" in message
 
 
 def test_manual_setup_script_contains_retry_architecture_and_runtime_guards():

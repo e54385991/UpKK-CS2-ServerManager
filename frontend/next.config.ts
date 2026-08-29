@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
+import { lanDevOrigins } from "./dev-origins";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -18,6 +19,13 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   typedRoutes: true,
+  // Keep the authored frontend/AGENTS.md stable; next dev would otherwise
+  // rewrite the header block on every start.
+  agentRules: false,
+  // `localhost` and `127.0.0.1` are different Origins. Without this, opening
+  // http://127.0.0.1:3000 or a LAN IP blocks `/_next/static` and the login
+  // CAPTCHA never hydrates. Extra hosts: ALLOWED_DEV_ORIGINS=host1,host2
+  allowedDevOrigins: lanDevOrigins(),
   // cacheComponents / partialPrefetching are intentionally OFF. See
   // frontend/AGENTS.md ("Caching & navigation"): every route is authenticated
   // and locale-cookie driven, so the shell is inherently dynamic and gains
@@ -40,6 +48,8 @@ const nextConfig: NextConfig = {
         // browser only ever sees the Next origin (first-party cookies, no CORS).
         { source: "/api/:path*", destination: `${INTERNAL_API_URL}/api/:path*` },
         { source: "/health", destination: `${INTERNAL_API_URL}/health` },
+        // Tutorial / help screenshots still live on FastAPI `/static`.
+        { source: "/static/:path*", destination: `${INTERNAL_API_URL}/static/:path*` },
       ],
       afterFiles: [],
       fallback: [],

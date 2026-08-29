@@ -1,19 +1,41 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
-import { MapPin, Users, Radio, ServerOff, TriangleAlert } from "lucide-react";
-import { listServers } from "@/modules/servers/api";
-import { SERVER_STATUS_TONE } from "@/modules/servers/types";
+import { ServerOff, TriangleAlert } from "lucide-react";
+import {
+  getSteamLatestVersion,
+  listA2SCache,
+  listDiskSpace,
+  listServers,
+} from "@/modules/servers/api";
+import { ServerFleet } from "@/modules/servers/server-fleet";
+import type {
+  A2SCache,
+  DiskSpace,
+  ServerListScope,
+  ServerStatus,
+  SteamLatestVersion,
+} from "@/modules/servers/types";
+import { SERVER_STATUS_GROUPS, serversHref } from "@/modules/servers/workspace";
 import { Card } from "@/shared/ui/card";
-import { Badge, StatusDot } from "@/shared/ui/badge";
+import { cn } from "@/shared/lib/cn";
 
-/**
- * Async server component: fetches the server list on the server and renders it.
- * Wrapped in Suspense by the page so the App Shell paints instantly while this
- * streams in.
- */
-export async function ServerList() {
+export async function ServerList({
+  status,
+  scope = "mine",
+  isAdmin = false,
+}: {
+  status?: ServerStatus;
+  scope?: ServerListScope;
+  isAdmin?: boolean;
+}) {
   const t = await getTranslations("servers");
-  const result = await listServers();
+  const [result, steam, disk, a2s] = await Promise.all([
+    listServers(scope),
+    getSteamLatestVersion(),
+    listDiskSpace(scope),
+    listA2SCache(scope),
+  ]);
 
   if (!result.ok) {
     return (
@@ -44,70 +66,162 @@ export async function ServerList() {
     );
   }
 
+  const counts = Object.fromEntries(
+    SERVER_STATUS_GROUPS.map((key) => [
+      key,
+      result.data.filter((server) => server.status === key).length,
+    ]),
+  ) as Record<ServerStatus, number>;
+
+  const visible = status
+    ? result.data.filter((server) => server.status === status)
+    : result.data;
+
+  const diskById = Object.fromEntries(
+    (disk.ok ? disk.data : []).map((item) => [item.serverId, item]),
+  ) as Record<number, DiskSpace>;
+  const a2sById = Object.fromEntries(
+    (a2s.ok ? a2s.data : []).map((item) => [item.serverId, item]),
+  ) as Record<number, A2SCache>;
+
   return (
-    <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {result.data.map((server) => {
-        const tone = SERVER_STATUS_TONE[server.status];
-        return (
-          <li key={server.id}>
-            <Link href={`/servers/${server.id}`} className="block h-full">
-              <Card className="h-full p-5 transition-colors hover:border-line-strong hover:bg-surface-raised">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <p className="truncate text-sm font-semibold text-fg">
-                      {server.name}
-                    </p>
-                    <p className="truncate font-mono text-xs text-fg-subtle">
-                      {server.host}:{server.gamePort}
-                    </p>
-                  </div>
-                  <Badge tone={tone}>
-                    <StatusDot
-                      tone={tone}
-                      pulse={server.status === "running"}
-                    />
-                    {t(`status.${server.status}`)}
-                  </Badge>
-                </div>
+    <div className="space-y-6">
+      {steam.ok && steam.data.available ? (
+        <SteamVersionBanner
+          steam={steam.data}
+          label={t("steamLatestVersion")}
+          updated={t("updated")}
+        />
+      ) : null}
+      {isAdmin ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-fg-subtle">
+            {t("fleetLabel")}
+          </span>
+          <CategoryChip
+            href={serversHref({ status })}
+            label={t("fleetMine")}
+            count={scope === "mine" ? result.data.length : undefined}
+            active={scope === "mine"}
+          />
+          <CategoryChip
+            href={serversHref({ status, scope: "all" })}
+            label={t("fleetAll")}
+            count={scope === "all" ? result.data.length : undefined}
+            active={scope === "all"}
+          />
+        </div>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <CategoryChip
+          href={serversHref({ scope })}
+          label={t("allCategories")}
+          count={result.data.length}
+          active={status == null}
+        />
+        {SERVER_STATUS_GROUPS.map((key) => (
+          <CategoryChip
+            key={key}
+            href={serversHref({ status: key, scope })}
+            label={t(`status.${key}`)}
+            count={counts[key]}
+            active={status === key}
+          />
+        ))}
+      </div>
 
-                {server.description ? (
-                  <p className="mt-3 line-clamp-2 text-sm text-fg-muted">
-                    {server.description}
-                  </p>
-                ) : null}
+      {visible.length === 0 ? (
+        <Card className="px-5 py-10 text-center text-sm text-fg-muted">
+          {t("emptyCategory")}
+        </Card>
+      ) : (
+        <ServerFleet
+          servers={visible}
+          diskById={diskById}
+          a2sById={a2sById}
+          steam={steam.ok ? steam.data : null}
+          scope={scope}
+          showOwner={scope === "all"}
+        />
+      )}
+    </div>
+  );
+}
 
-                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-fg-muted">
-                  <span className="inline-flex items-center gap-1.5">
-                    <MapPin className="size-3.5 text-fg-subtle" />
-                    {server.defaultMap}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Users className="size-3.5 text-fg-subtle" />
-                    {t("players", { count: server.maxPlayers })}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Radio className="size-3.5 text-fg-subtle" />
-                    {server.gamePort}
-                  </span>
-                </div>
-              </Card>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+function CategoryChip({
+  href,
+  label,
+  count,
+  active,
+}: {
+  href: Route;
+  label: string;
+  count?: number;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        active
+          ? "border-primary/40 bg-primary-muted text-primary"
+          : "border-line bg-surface text-fg-muted hover:border-line-strong hover:text-fg",
+      )}
+    >
+      {label}
+      {count != null ? (
+        <span className={active ? "text-primary" : "text-fg-subtle"}>
+          {count}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
+function formatTimestamp(value: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function SteamVersionBanner({
+  steam,
+  label,
+  updated,
+}: {
+  steam: SteamLatestVersion;
+  label: string;
+  updated: string;
+}) {
+  return (
+    <Card className="border-primary/20 bg-primary-muted/40 px-5 py-3 text-sm text-fg">
+      <p>
+        <span className="font-medium">{label}</span>{" "}
+        <span className="font-mono">{steam.version}</span>
+        {steam.timestamp ? (
+          <span className="ms-2 text-xs text-fg-muted">
+            ({updated} {formatTimestamp(steam.timestamp)})
+          </span>
+        ) : null}
+      </p>
+    </Card>
   );
 }
 
 export function ServerListSkeleton() {
   return (
-    <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <li
-          key={index}
-          className="h-40 animate-pulse rounded-lg border border-line bg-surface"
-        />
-      ))}
-    </ul>
+    <div className="space-y-6">
+      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <li
+            key={index}
+            className="h-40 animate-pulse rounded-lg border border-line bg-surface"
+          />
+        ))}
+      </ul>
+    </div>
   );
 }

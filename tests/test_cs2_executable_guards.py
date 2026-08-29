@@ -81,11 +81,12 @@ async def test_restart_preflight_checks_executable_before_session_manager():
 class SteamCMDRetryProbe(SSHManager):
     STEAMCMD_RETRY_DELAY = 0
 
-    def __init__(self, command_results):
+    def __init__(self, command_results, existing_pids=None):
         super().__init__()
         self.command_results = list(command_results)
         self.command_calls = 0
         self.kill_calls = 0
+        self.existing_pids = list(existing_pids or [])
 
     async def execute_command_streaming(self, *args, **kwargs):
         self.command_calls += 1
@@ -96,8 +97,18 @@ class SteamCMDRetryProbe(SSHManager):
             )
         ]
 
+    async def _list_steamcmd_pids(self, *args, **kwargs):
+        return list(self.existing_pids)
+
+    async def _steamcmd_session_manager(self, server):
+        return None
+
+    async def _steamcmd_session_running(self, server, manager=None):
+        return None
+
     async def _kill_steamcmd_processes(self, *args, **kwargs):
         self.kill_calls += 1
+        self.existing_pids = []
 
 
 @pytest.mark.asyncio
@@ -144,3 +155,58 @@ async def test_deployment_accepts_verified_file_after_interrupted_command():
     assert success is True
     assert manager.command_calls == 3
     assert manager.kill_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_unexpected_crash_without_keyword_auto_recovers():
+    server = server_fixture()
+    manager = SteamCMDRetryProbe(
+        [
+            (False, "", "Segmentation fault"),
+            (True, "Success!", ""),
+        ]
+    )
+
+    success, _, _ = await manager._execute_steamcmd_with_retry(
+        "steamcmd install",
+        server,
+        max_retries=20,
+    )
+
+    assert success is True
+    assert manager.command_calls == 2
+    assert manager.kill_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_disk_full_does_not_consume_retry_budget():
+    server = server_fixture()
+    manager = SteamCMDRetryProbe([(False, "", "No space left on device")])
+
+    success, _, _ = await manager._execute_steamcmd_with_retry(
+        "steamcmd install",
+        server,
+        max_retries=20,
+    )
+
+    assert success is False
+    assert manager.command_calls == 1
+    assert manager.kill_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_omitted_retry_budget_uses_personal_center_setting(monkeypatch):
+    server = server_fixture()
+    manager = SteamCMDRetryProbe([(False, "", "Connection reset by peer")] * 10)
+
+    async def fake_resolve(user_id):
+        assert user_id == server.user_id
+        return 3
+
+    monkeypatch.setattr("services.ssh.game.resolve_steamcmd_max_retries", fake_resolve)
+
+    success, _, _ = await manager._execute_steamcmd_with_retry("steamcmd install", server)
+
+    assert success is False
+    assert manager.command_calls == 4
+    assert manager.kill_calls == 3

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
-import { ModulePlaceholder } from "@/shared/ui/module-placeholder";
+import { CreateServerForm } from "@/modules/servers/create-form";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("serverNew");
@@ -25,7 +25,7 @@ export default async function NewServerPage() {
           </LinkButton>
         }
       />
-      <ModulePlaceholder phase={t("phase")}>{t("body")}</ModulePlaceholder>
+      <CreateServerForm />
     </>
   );
 }

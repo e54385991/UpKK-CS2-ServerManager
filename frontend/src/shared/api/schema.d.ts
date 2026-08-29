@@ -754,6 +754,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/captcha/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Captcha Challenge
+         * @description Return a one-time CAPTCHA as JSON so the console can render it on LAN.
+         */
+        get: operations["captcha_challenge_api_captcha_challenge_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/captcha/generate": {
         parameters: {
             query?: never;
@@ -2071,6 +2091,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Assistant Workspace */
+        get: operations["get_assistant_workspace_api_v1_assistant_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Assistant Conversation */
+        post: operations["create_assistant_conversation_api_v1_assistant_conversations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Assistant Conversation */
+        get: operations["get_assistant_conversation_api_v1_assistant_conversations__conversation_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Assistant Conversation */
+        delete: operations["delete_assistant_conversation_api_v1_assistant_conversations__conversation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant/conversations/{conversation_id}/interrupt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Interrupt Assistant Conversation */
+        post: operations["interrupt_assistant_conversation_api_v1_assistant_conversations__conversation_id__interrupt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant/conversations/{conversation_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send Assistant Message */
+        post: operations["send_assistant_message_api_v1_assistant_conversations__conversation_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Assistant Run */
+        get: operations["get_assistant_run_api_v1_assistant_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant/runs/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Assistant Run Events
+         * @description Replayable SSE. Cookie or Bearer — EventSource cannot set Authorization.
+         */
+        get: operations["stream_assistant_run_events_api_v1_assistant_runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant/runs/{run_id}/tools/{tool_run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide Assistant Tool */
+        post: operations["decide_assistant_tool_api_v1_assistant_runs__run_id__tools__tool_run_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit": {
         parameters: {
             query?: never;
@@ -2091,6 +2251,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/forgot-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forgot Password
+         * @description Send a password-reset email when the address matches an account.
+         */
+        post: operations["forgot_password_api_v1_auth_forgot_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/google-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Google Config
+         * @description Public Google OAuth client id for the Next.js login popup.
+         */
+        get: operations["google_config_api_v1_auth_google_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/google-oauth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Google Oauth
+         * @description Verify a Google ID token, set the session cookie, and return the same token body as login.
+         */
+        post: operations["google_oauth_api_v1_auth_google_oauth_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me": {
         parameters: {
             query?: never;
@@ -2103,6 +2323,228 @@ export interface paths {
          * @description Return the authenticated principal for the browser session.
          */
         get: operations["read_current_session_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register
+         * @description Create a console member. Does not start a session; sign in afterwards.
+         */
+        post: operations["register_api_v1_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Password
+         * @description Set a new password from a one-time reset token.
+         */
+        post: operations["reset_password_api_v1_auth_reset_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discord": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Discord Bot */
+        get: operations["get_discord_bot_api_v1_discord_get"];
+        /** Update Discord Bot */
+        put: operations["update_discord_bot_api_v1_discord_put"];
+        post?: never;
+        /** Delete Discord Bot */
+        delete: operations["delete_discord_bot_api_v1_discord_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discord/global": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Discord Global Binding */
+        get: operations["get_discord_global_binding_api_v1_discord_global_get"];
+        /** Update Discord Global Binding */
+        put: operations["update_discord_global_binding_api_v1_discord_global_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discord/global/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Discord Global Options */
+        get: operations["get_discord_global_options_api_v1_discord_global_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discord/guilds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Discord Guilds */
+        get: operations["get_discord_guilds_api_v1_discord_guilds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discord/menu": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Push Discord Menu */
+        post: operations["push_discord_menu_api_v1_discord_menu_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discord/menu/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Discord Menu Options */
+        get: operations["get_discord_menu_options_api_v1_discord_menu_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discord/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Discord Bot */
+        post: operations["test_discord_bot_api_v1_discord_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/overview/a2s-cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Overview A2S Cache
+         * @description Cached A2S map for the server list. Default reads never query A2S or SSH.
+         */
+        get: operations["read_overview_a2s_cache_api_v1_overview_a2s_cache_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/overview/disk-space": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Overview Disk Space
+         * @description Cached disk map for the server list. Default reads never SSH.
+         */
+        get: operations["read_overview_disk_space_api_v1_overview_disk_space_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/overview/steam-version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Steam Latest Version
+         * @description Return the Redis-cached Steam CS2 version. Does not call Steam or SSH.
+         */
+        get: operations["read_steam_latest_version_api_v1_overview_steam_version_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2131,6 +2573,285 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugin-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Plugin Catalog
+         * @description Return the full marketplace as a portable JSON catalog.
+         */
+        get: operations["export_plugin_catalog_api_v1_plugin_catalog_get"];
+        put?: never;
+        /**
+         * Import Plugin Catalog Route
+         * @description Import a catalog. Non-admins receive 403, matching market create.
+         */
+        post: operations["import_plugin_catalog_route_api_v1_plugin_catalog_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/github/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Github Releases
+         * @description Fetch public GitHub release archives. Optional server_id adds runtime hints.
+         */
+        get: operations["list_github_releases_api_v1_plugins_github_releases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Market Plugins
+         * @description Browse the plugin marketplace with offset pagination.
+         */
+        get: operations["list_market_plugins_api_v1_plugins_market_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Market Categories
+         * @description Return the stable marketplace category vocabulary.
+         */
+        get: operations["list_market_categories_api_v1_plugins_market_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/{plugin_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Market Plugin
+         * @description Return one marketplace plugin, including resolved dependency titles.
+         */
+        get: operations["get_market_plugin_api_v1_plugins_market__plugin_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Profile
+         * @description Return account identity plus the SteamCMD auto-recovery budget.
+         */
+        get: operations["read_profile_api_v1_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Profile
+         * @description Persist personal-center fields. Secrets are write-only.
+         */
+        patch: operations["update_profile_api_v1_profile_patch"];
+        trace?: never;
+    };
+    "/api/v1/profile/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read User Ai Settings */
+        get: operations["read_user_ai_settings_api_v1_profile_ai_get"];
+        /** Update User Ai Settings */
+        put: operations["update_user_ai_settings_api_v1_profile_ai_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profile/ai/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test User Ai Settings */
+        post: operations["test_user_ai_settings_api_v1_profile_ai_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profile/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Api Key
+         * @description Reveal the user's own panel API key so they can copy it.
+         */
+        get: operations["read_api_key_api_v1_profile_api_key_get"];
+        put?: never;
+        /**
+         * Generate User Api Key
+         * @description Generate or rotate the personal API key.
+         */
+        post: operations["generate_user_api_key_api_v1_profile_api_key_post"];
+        /**
+         * Revoke Api Key
+         * @description Revoke the personal API key.
+         */
+        delete: operations["revoke_api_key_api_v1_profile_api_key_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profile/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Password
+         * @description Replace the signed-in user's password after captcha + current-password check.
+         */
+        post: operations["change_password_api_v1_profile_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profile/s3": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read S3 Settings
+         * @description Return S3 backup settings with the secret replaced by a presence flag.
+         */
+        get: operations["read_s3_settings_api_v1_profile_s3_get"];
+        /**
+         * Update S3 Settings
+         * @description Persist S3-compatible backup settings. The secret is write-only.
+         */
+        put: operations["update_s3_settings_api_v1_profile_s3_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profile/s3/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test S3 Settings
+         * @description Exercise list/upload/download/delete against the saved S3 configuration.
+         */
+        post: operations["test_s3_settings_api_v1_profile_s3_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/server-configs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Server Configs
+         * @description Return a portable JSON bundle for the selected (or all) servers.
+         */
+        get: operations["export_server_configs_api_v1_server_configs_get"];
+        put?: never;
+        /**
+         * Import Server Configs
+         * @description Import a configuration bundle into the current user's server list.
+         */
+        post: operations["import_server_configs_api_v1_server_configs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers": {
         parameters: {
             query?: never;
@@ -2140,11 +2861,115 @@ export interface paths {
         };
         /**
          * List Servers
-         * @description List the current user's servers as non-secret summaries.
+         * @description List servers the caller may see. ``scope=all`` is admin-only fleet view.
          */
         get: operations["list_servers_api_v1_servers_get"];
         put?: never;
+        /**
+         * Create Server
+         * @description Create a server after CAPTCHA + SSH checks, then initialize host packages.
+         */
+        post: operations["create_server_api_v1_servers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/batch-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Batch Actions
+         * @description Restart, stop, or update owned servers. Admins still cannot act on others' hosts.
+         */
+        post: operations["start_batch_actions_api_v1_servers_batch_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/batch-actions/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Batch Action Journal
+         * @description JSON snapshot of every server in the batch. Actor-only, same as the live stream.
+         */
+        get: operations["read_batch_action_journal_api_v1_servers_batch_actions__batch_id__get"];
+        put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/batch-actions/{batch_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Batch Action Events
+         * @description Replayable SSE snapshot of the Redis batch journal until every server finishes.
+         */
+        get: operations["stream_batch_action_events_api_v1_servers_batch_actions__batch_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/batch-install-plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Batch Install Plugins
+         * @description Install framework plugins on owned servers. Authorization matches legacy batch.
+         */
+        post: operations["start_batch_install_plugins_api_v1_servers_batch_install_plugins_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/batch-send-command": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Batch Send Command
+         * @description Send one game command to owned servers via each host's detached session.
+         */
+        post: operations["start_batch_send_command_api_v1_servers_batch_send_command_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2163,6 +2988,1438 @@ export interface paths {
          * @description Return one server the caller may access (owner or admin), non-secret.
          */
         get: operations["get_server_api_v1_servers__server_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Server
+         * @description Patch non-secret settings. Omitted secrets stay unchanged.
+         */
+        patch: operations["update_server_api_v1_servers__server_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/a2s-cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Server A2S Cache
+         * @description Cached A2S snapshot for one server. Default reads never query A2S or SSH.
+         */
+        get: operations["get_server_a2s_cache_api_v1_servers__server_id__a2s_cache_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/agent-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Server Agent Policy */
+        get: operations["get_server_agent_policy_api_v1_servers__server_id__agent_policy_get"];
+        /** Update Server Agent Policy */
+        put: operations["update_server_agent_policy_api_v1_servers__server_id__agent_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/apply-system-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Server System Defaults
+         * @description Copy the panel default download-proxy mode onto this server.
+         */
+        post: operations["apply_server_system_defaults_api_v1_servers__server_id__apply_system_defaults_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/apt-mirror": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Server Apt Mirror
+         * @description Persist the chosen apt mirror, rewrite host sources, and retry packages.
+         */
+        post: operations["apply_server_apt_mirror_api_v1_servers__server_id__apt_mirror_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/cleanup/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete Server Cleanup Items */
+        post: operations["delete_server_cleanup_items_api_v1_servers__server_id__cleanup_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/cleanup/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scan Server Cleanup */
+        get: operations["scan_server_cleanup_api_v1_servers__server_id__cleanup_scan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/confirm-deployment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Server Deployment
+         * @description Mark an undeployed server as deployed when remote verification is unavailable.
+         */
+        post: operations["confirm_server_deployment_api_v1_servers__server_id__confirm_deployment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/console": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Console Workspace
+         * @description Report SSH and game-session reachability. SSH failures stay 200.
+         */
+        get: operations["get_console_workspace_api_v1_servers__server_id__console_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/custom-commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Custom Commands */
+        get: operations["list_custom_commands_api_v1_servers__server_id__custom_commands_get"];
+        put?: never;
+        /** Create Custom Command */
+        post: operations["create_custom_command_api_v1_servers__server_id__custom_commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/custom-commands/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute One Time Custom Command */
+        post: operations["execute_one_time_custom_command_api_v1_servers__server_id__custom_commands_execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/custom-commands/{command_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Custom Command */
+        put: operations["update_custom_command_api_v1_servers__server_id__custom_commands__command_id__put"];
+        post?: never;
+        /** Delete Custom Command */
+        delete: operations["delete_custom_command_api_v1_servers__server_id__custom_commands__command_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/custom-commands/{command_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute Saved Custom Command */
+        post: operations["execute_saved_custom_command_api_v1_servers__server_id__custom_commands__command_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/discord": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Server Discord Binding */
+        get: operations["get_server_discord_binding_api_v1_servers__server_id__discord_get"];
+        /** Update Server Discord Binding */
+        put: operations["update_server_discord_binding_api_v1_servers__server_id__discord_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/discord/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Server Discord Options */
+        get: operations["get_server_discord_options_api_v1_servers__server_id__discord_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/disk-space": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Server Disk Space
+         * @description Cached game-directory disk snapshot. Default reads never SSH.
+         */
+        get: operations["get_server_disk_space_api_v1_servers__server_id__disk_space_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Files Workspace
+         * @description List a directory. SSH failures stay 200 so the category page can render.
+         */
+        get: operations["get_files_workspace_api_v1_servers__server_id__files_get"];
+        put?: never;
+        post?: never;
+        /** Delete Path */
+        delete: operations["delete_path_api_v1_servers__server_id__files_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/archives/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extract Archive */
+        post: operations["extract_archive_api_v1_servers__server_id__files_archives_extract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/archives/extract/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Extract Status */
+        get: operations["get_extract_status_api_v1_servers__server_id__files_archives_extract__task_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/archives/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect Archive */
+        post: operations["inspect_archive_api_v1_servers__server_id__files_archives_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get File Content */
+        get: operations["get_file_content_api_v1_servers__server_id__files_content_get"];
+        /** Update File Content */
+        put: operations["update_file_content_api_v1_servers__server_id__files_content_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download File */
+        get: operations["download_file_api_v1_servers__server_id__files_download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/download-ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Download Ticket */
+        post: operations["create_download_ticket_api_v1_servers__server_id__files_download_ticket_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/download-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Download From Url */
+        post: operations["download_from_url_api_v1_servers__server_id__files_download_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/download-url/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Download Url Status */
+        get: operations["get_download_url_status_api_v1_servers__server_id__files_download_url__task_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/mkdir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Directory */
+        post: operations["create_directory_api_v1_servers__server_id__files_mkdir_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rename Path */
+        post: operations["rename_path_api_v1_servers__server_id__files_rename_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload File */
+        post: operations["upload_file_api_v1_servers__server_id__files_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/game-updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Game Updates */
+        get: operations["get_game_updates_api_v1_servers__server_id__game_updates_get"];
+        /** Update Game Updates */
+        put: operations["update_game_updates_api_v1_servers__server_id__game_updates_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/game-updates/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Game Update Operation
+         * @description Start SteamCMD update/validate through the shared operation hub (202 + SSE).
+         */
+        post: operations["start_game_update_operation_api_v1_servers__server_id__game_updates_operations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/maps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Maps Workspace
+         * @description Return the map pool and prerequisites. SSH failures stay 200.
+         */
+        get: operations["get_maps_workspace_api_v1_servers__server_id__maps_get"];
+        put?: never;
+        /** Add Map */
+        post: operations["add_map_api_v1_servers__server_id__maps_post"];
+        /** Delete Map */
+        delete: operations["delete_map_api_v1_servers__server_id__maps_delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Map Enabled
+         * @description Enable or disable a map. Official maps use an empty workshop_id.
+         */
+        patch: operations["update_map_enabled_api_v1_servers__server_id__maps_patch"];
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/maps/custom-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Custom Sync */
+        put: operations["update_custom_sync_api_v1_servers__server_id__maps_custom_sync_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/maps/custom-sync/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Custom Sync */
+        post: operations["run_custom_sync_api_v1_servers__server_id__maps_custom_sync_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/maps/plugin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Uninstall Mapchooser Plugin */
+        delete: operations["uninstall_mapchooser_plugin_api_v1_servers__server_id__maps_plugin_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/maps/plugin-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Plugin Config */
+        put: operations["update_plugin_config_api_v1_servers__server_id__maps_plugin_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/maps/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Map Preset */
+        post: operations["apply_map_preset_api_v1_servers__server_id__maps_presets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Server Operation
+         * @description Accept a lifecycle action and return immediately with an operation_id.
+         */
+        post: operations["start_server_operation_api_v1_servers__server_id__operations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/operations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Current Server Operation */
+        get: operations["get_current_server_operation_api_v1_servers__server_id__operations_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/operations/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Deployment Lock */
+        get: operations["get_deployment_lock_api_v1_servers__server_id__operations_lock_get"];
+        put?: never;
+        post?: never;
+        /** Clear Deployment Lock */
+        delete: operations["clear_deployment_lock_api_v1_servers__server_id__operations_lock_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/operations/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Operation Logs */
+        get: operations["list_operation_logs_api_v1_servers__server_id__operations_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/operations/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Server Operation */
+        get: operations["get_server_operation_api_v1_servers__server_id__operations__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/operations/{operation_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Server Operation Events */
+        get: operations["stream_server_operation_events_api_v1_servers__server_id__operations__operation_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/operations/{operation_id}/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Server Operation Journal
+         * @description JSON snapshot of persisted progress so the live log never depends on SSE.
+         */
+        get: operations["get_server_operation_journal_api_v1_servers__server_id__operations__operation_id__journal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-configs/browse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browse Source Path */
+        get: operations["browse_source_path_api_v1_servers__server_id__plugin_configs_browse_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-configs/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sources
+         * @description List persisted sources. Does not scan the remote host.
+         */
+        get: operations["list_sources_api_v1_servers__server_id__plugin_configs_sources_get"];
+        put?: never;
+        /** Create Source */
+        post: operations["create_source_api_v1_servers__server_id__plugin_configs_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-configs/sources/restore-default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Default Sources */
+        post: operations["restore_default_sources_api_v1_servers__server_id__plugin_configs_sources_restore_default_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-configs/sources/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Source */
+        delete: operations["delete_source_api_v1_servers__server_id__plugin_configs_sources__source_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-configs/sources/{source_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Config File */
+        get: operations["get_config_file_api_v1_servers__server_id__plugin_configs_sources__source_id__file_get"];
+        /** Save Config File */
+        put: operations["save_config_file_api_v1_servers__server_id__plugin_configs_sources__source_id__file_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-configs/sources/{source_id}/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Scan Source Files
+         * @description NDJSON scan stream. Same events as the legacy tab (start/progress/file/complete).
+         */
+        post: operations["scan_source_files_api_v1_servers__server_id__plugin_configs_sources__source_id__scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Plugin Updates */
+        get: operations["get_plugin_updates_api_v1_servers__server_id__plugin_updates_get"];
+        /** Update Plugin Updates */
+        put: operations["update_plugin_updates_api_v1_servers__server_id__plugin_updates_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-updates/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register Managed Plugin */
+        post: operations["register_managed_plugin_api_v1_servers__server_id__plugin_updates_plugins_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-updates/plugins/{plugin_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unregister Managed Plugin */
+        delete: operations["unregister_managed_plugin_api_v1_servers__server_id__plugin_updates_plugins__plugin_id__delete"];
+        options?: never;
+        head?: never;
+        /** Patch Managed Plugin */
+        patch: operations["patch_managed_plugin_api_v1_servers__server_id__plugin_updates_plugins__plugin_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-updates/plugins/{plugin_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Plugin Update */
+        post: operations["test_plugin_update_api_v1_servers__server_id__plugin_updates_plugins__plugin_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-updates/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Plugin Updates */
+        post: operations["run_plugin_updates_api_v1_servers__server_id__plugin_updates_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-updates/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Plugin Update Status */
+        get: operations["get_plugin_update_status_api_v1_servers__server_id__plugin_updates_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Server Plugins
+         * @description List plugins already tracked on a server the caller can access.
+         */
+        get: operations["list_server_plugins_api_v1_servers__server_id__plugins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugins/github/analyze-archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analyze Github Archive
+         * @description Inspect a GitHub release asset locally. Does not install anything.
+         */
+        get: operations["analyze_github_archive_api_v1_servers__server_id__plugins_github_analyze_archive_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugins/github/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Install Github Plugin
+         * @description Accept a GitHub install and return immediately with an operation_id.
+         */
+        post: operations["install_github_plugin_api_v1_servers__server_id__plugins_github_install_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugins/github/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan Github Plugin Install
+         * @description Build a GitHub install plan without changing the server.
+         */
+        post: operations["plan_github_plugin_install_api_v1_servers__server_id__plugins_github_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugins/github/uninstall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Uninstall Github Plugin
+         * @description Accept a selected-file uninstall and return immediately with an operation_id.
+         */
+        post: operations["uninstall_github_plugin_api_v1_servers__server_id__plugins_github_uninstall_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugins/market/{plugin_id}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Install Market Plugin
+         * @description Accept a market install and return immediately with an operation_id.
+         */
+        post: operations["install_market_plugin_api_v1_servers__server_id__plugins_market__plugin_id__install_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugins/market/{plugin_id}/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plugin Install Preflight
+         * @description Resolve dependencies and conflicts without changing the server.
+         */
+        get: operations["plugin_install_preflight_api_v1_servers__server_id__plugins_market__plugin_id__preflight_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugins/market/{plugin_id}/uninstall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Uninstall Market Plugin
+         * @description Uninstall a market plugin by deleting selected files, then drop tracking.
+         */
+        post: operations["uninstall_market_plugin_api_v1_servers__server_id__plugins_market__plugin_id__uninstall_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/s3-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Server S3 Backups
+         * @description List this server's S3 plugin backups. Never returns S3 credentials.
+         */
+        get: operations["list_server_s3_backups_api_v1_servers__server_id__s3_backups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/s3-backups/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Server S3 Backup
+         * @description Restore a listed backup: S3 download, safety snapshot, upload, extract.
+         */
+        post: operations["restore_server_s3_backup_api_v1_servers__server_id__s3_backups_restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Scheduled Tasks */
+        get: operations["list_scheduled_tasks_api_v1_servers__server_id__schedule_get"];
+        put?: never;
+        /** Create Scheduled Task */
+        post: operations["create_scheduled_task_api_v1_servers__server_id__schedule_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/schedule/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Scheduled Task */
+        get: operations["get_scheduled_task_api_v1_servers__server_id__schedule__task_id__get"];
+        /** Update Scheduled Task */
+        put: operations["update_scheduled_task_api_v1_servers__server_id__schedule__task_id__put"];
+        post?: never;
+        /** Delete Scheduled Task */
+        delete: operations["delete_scheduled_task_api_v1_servers__server_id__schedule__task_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/schedule/{task_id}/toggle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Toggle Scheduled Task */
+        post: operations["toggle_scheduled_task_api_v1_servers__server_id__schedule__task_id__toggle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/ssh-reconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconnect Server Ssh
+         * @description Clear the SSH-down flag and force a pool reconnect, same as the legacy UI.
+         */
+        post: operations["reconnect_server_ssh_api_v1_servers__server_id__ssh_reconnect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/startup-command": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Server Startup Command
+         * @description Return a masked startup-command preview. Does not require SSH.
+         */
+        get: operations["get_server_startup_command_api_v1_servers__server_id__startup_command_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read System Settings
+         * @description Return panel settings with secrets replaced by presence flags.
+         */
+        get: operations["read_system_settings_api_v1_settings_get"];
+        /**
+         * Update System Settings
+         * @description Apply a partial settings update. Omitted secrets are left unchanged.
+         */
+        put: operations["update_system_settings_api_v1_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Assistant System Settings */
+        get: operations["get_assistant_system_settings_api_v1_settings_ai_get"];
+        /** Update Assistant System Settings */
+        put: operations["update_assistant_system_settings_api_v1_settings_ai_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/ai/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Assistant System Settings */
+        post: operations["test_assistant_system_settings_api_v1_settings_ai_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/gmail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Gmail Authorization
+         * @description Clear the stored Gmail OAuth token (credentials JSON is kept).
+         */
+        delete: operations["delete_gmail_authorization_api_v1_settings_gmail_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/gmail/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start Gmail Authorize
+         * @description Return the Google OAuth consent URL. Secrets stay on the server.
+         */
+        get: operations["start_gmail_authorize_api_v1_settings_gmail_authorize_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/gmail/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Gmail Credentials
+         * @description Store Google Cloud OAuth client JSON (write-only).
+         */
+        put: operations["put_gmail_credentials_api_v1_settings_gmail_credentials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/test-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Test Email
+         * @description Send a test message using the currently saved email configuration.
+         */
+        post: operations["send_test_email_api_v1_settings_test_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ssh-pool": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Ssh Pool
+         * @description Return the current SSH pool size so the console can show live usage.
+         */
+        get: operations["read_ssh_pool_api_v1_ssh_pool_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3087,12 +5344,8 @@ export interface paths {
         post?: never;
         /**
          * Cancel Deployment
-         * @description Cancel an in-progress or stuck deployment by clearing the deployment lock
-         *     and forcefully terminating related SteamCMD processes.
-         *
-         *     This endpoint allows users to clear a deployment lock that may be stuck
-         *     due to interruptions, crashes, or other issues. It will also forcefully kill
-         *     any running SteamCMD processes to ensure a clean slate.
+         * @description Force-stop a deploy/update/validate: cancel the in-flight operation,
+         *     kill only this server's SteamCMD processes, then release the exclusive lock.
          */
         delete: operations["cancel_deployment_servers__server_id__deployment_lock_delete"];
         options?: never;
@@ -4046,6 +6299,45 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** A2SCacheListView */
+        A2SCacheListView: {
+            /** Servers */
+            servers?: components["schemas"]["A2SCacheView"][];
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+        };
+        /**
+         * A2SCacheView
+         * @description Cached A2S snapshot for one server. Default reads never query A2S or SSH.
+         */
+        A2SCacheView: {
+            /**
+             * Cached
+             * @default false
+             */
+            cached: boolean;
+            /** Last Updated */
+            last_updated?: string | null;
+            /** Map Name */
+            map_name?: string | null;
+            /** Max Players */
+            max_players?: number | null;
+            /** Player Count */
+            player_count?: number | null;
+            /** Response Time Ms */
+            response_time_ms?: number | null;
+            /** Server Id */
+            server_id: number;
+            /** Server Name */
+            server_name?: string | null;
+            /** Success */
+            success?: boolean | null;
+            /** Version */
+            version?: string | null;
+        };
         /** AIBackgroundTaskResponse */
         AIBackgroundTaskResponse: {
             /** Completed At */
@@ -4335,6 +6627,13 @@ export interface components {
             /** Success */
             success: boolean;
         };
+        /** ActionResult */
+        ActionResult: {
+            /** Message */
+            message: string;
+            /** Success */
+            success: boolean;
+        };
         /**
          * AgentCapability
          * @enum {string}
@@ -4362,6 +6661,29 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+        };
+        /** AgentPolicyUpdateRequest */
+        AgentPolicyUpdateRequest: {
+            /** Capabilities */
+            capabilities?: string[];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /** AgentPolicyView */
+        AgentPolicyView: {
+            /** Capabilities */
+            capabilities?: string[];
+            /** Disabled Reason */
+            disabled_reason?: string | null;
+            /** Effective Enabled */
+            effective_enabled: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Server Id */
+            server_id: number;
         };
         /**
          * ApiKeyGenerate
@@ -4391,6 +6713,14 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * AptMirrorApplyRequest
+         * @description Switch the host apt mirror and retry privileged package install.
+         */
+        AptMirrorApplyRequest: {
+            /** Mirror */
+            mirror: string;
         };
         /**
          * ArchiveAnalysisResponse
@@ -4443,6 +6773,376 @@ export interface components {
              * @default 0
              */
             size: number;
+        };
+        /** ArchiveFileView */
+        ArchiveFileView: {
+            /**
+             * Is Dir
+             * @default false
+             */
+            is_dir: boolean;
+            /** Path */
+            path: string;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+        };
+        /** ArchiveMappingView */
+        ArchiveMappingView: {
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+        };
+        /** AssistantConversationCreateRequest */
+        AssistantConversationCreateRequest: {
+            /** Server Id */
+            server_id?: number | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** AssistantConversationDetailView */
+        AssistantConversationDetailView: {
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: string;
+            /** Messages */
+            messages?: components["schemas"]["AssistantMessageView"][];
+            /** Server Id */
+            server_id?: number | null;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** AssistantConversationView */
+        AssistantConversationView: {
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: string;
+            /** Server Id */
+            server_id?: number | null;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** AssistantMessageCreateRequest */
+        AssistantMessageCreateRequest: {
+            /** Content */
+            content: string;
+        };
+        /** AssistantMessageView */
+        AssistantMessageView: {
+            /** Content */
+            content?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: number;
+            /** Role */
+            role: string;
+            /** Tool Name */
+            tool_name?: string | null;
+        };
+        /** AssistantProviderTestBody */
+        AssistantProviderTestBody: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Api Protocol */
+            api_protocol?: ("chat_completions" | "responses") | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Model */
+            model?: string | null;
+        };
+        /** AssistantProviderTestView */
+        AssistantProviderTestView: {
+            /** Message */
+            message: string;
+            /** Streaming Ok */
+            streaming_ok: boolean;
+            /** Success */
+            success: boolean;
+            /** Text Response Ok */
+            text_response_ok: boolean;
+            /** Tool Calling Ok */
+            tool_calling_ok: boolean;
+        };
+        /** AssistantRunDetailView */
+        AssistantRunDetailView: {
+            /** Conversation Id */
+            conversation_id: string;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+            /** Tools */
+            tools?: components["schemas"]["AssistantToolView"][];
+        };
+        /** AssistantRunView */
+        AssistantRunView: {
+            /** Conversation Id */
+            conversation_id: string;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+        };
+        /** AssistantSystemSettingsPatch */
+        AssistantSystemSettingsPatch: {
+            /** Admin Prompt */
+            admin_prompt?: string | null;
+            /** Api Key */
+            api_key?: string | null;
+            /** Api Protocol */
+            api_protocol?: ("chat_completions" | "responses") | null;
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Clear Api Key
+             * @default false
+             */
+            clear_api_key: boolean;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Frequency Penalty */
+            frequency_penalty?: number | null;
+            /** History Retention Days */
+            history_retention_days?: number | null;
+            /** Max Completion Tokens */
+            max_completion_tokens?: number | null;
+            /** Max Provider Rounds */
+            max_provider_rounds?: number | null;
+            /** Max Tool Calls Per Round */
+            max_tool_calls_per_round?: number | null;
+            /** Model */
+            model?: string | null;
+            /** Parallel Tool Calls */
+            parallel_tool_calls?: boolean | null;
+            /** Presence Penalty */
+            presence_penalty?: number | null;
+            /** Private Endpoint Allowlist */
+            private_endpoint_allowlist?: string[] | null;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            /** Request Timeout Seconds */
+            request_timeout_seconds?: number | null;
+            /** Temperature */
+            temperature?: number | null;
+            /** Token Limit Parameter */
+            token_limit_parameter?: ("max_completion_tokens" | "max_tokens" | "omit") | null;
+            /** Top P */
+            top_p?: number | null;
+            /** Verbosity */
+            verbosity?: string | null;
+        };
+        /**
+         * AssistantSystemSettingsView
+         * @description Admin AI provider. API keys stay write-only.
+         */
+        AssistantSystemSettingsView: {
+            /** Admin Prompt */
+            admin_prompt?: string | null;
+            /** Api Key Configured */
+            api_key_configured: boolean;
+            /**
+             * Api Protocol
+             * @enum {string}
+             */
+            api_protocol: "chat_completions" | "responses";
+            /** Base Url */
+            base_url?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Frequency Penalty */
+            frequency_penalty?: number | null;
+            /** History Retention Days */
+            history_retention_days: number;
+            /**
+             * Max Completion Tokens
+             * @default 2048
+             */
+            max_completion_tokens: number;
+            /** Max Provider Rounds */
+            max_provider_rounds: number;
+            /** Max Tool Calls Per Round */
+            max_tool_calls_per_round: number;
+            /** Model */
+            model?: string | null;
+            /** Parallel Tool Calls */
+            parallel_tool_calls?: boolean | null;
+            /** Presence Penalty */
+            presence_penalty?: number | null;
+            /** Private Endpoint Allowlist */
+            private_endpoint_allowlist?: string[];
+            /** Provider Tested */
+            provider_tested: boolean;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            /** Request Timeout Seconds */
+            request_timeout_seconds: number;
+            /** Streaming Tested */
+            streaming_tested: boolean;
+            /** Temperature */
+            temperature?: number | null;
+            /**
+             * Token Limit Parameter
+             * @default max_completion_tokens
+             * @enum {string}
+             */
+            token_limit_parameter: "max_completion_tokens" | "max_tokens" | "omit";
+            /** Tool Calling Tested */
+            tool_calling_tested: boolean;
+            /** Top P */
+            top_p?: number | null;
+            /** Verbosity */
+            verbosity?: string | null;
+        };
+        /** AssistantToolDecisionRequest */
+        AssistantToolDecisionRequest: {
+            /** Arguments Hash */
+            arguments_hash: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+        };
+        /** AssistantToolView */
+        AssistantToolView: {
+            /** Arguments Hash */
+            arguments_hash: string;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Requires Approval */
+            requires_approval: boolean;
+            /** Risk */
+            risk: string;
+            /** Status */
+            status: string;
+            /** Tool Name */
+            tool_name: string;
+        };
+        /** AssistantUserSettingsPatch */
+        AssistantUserSettingsPatch: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Api Protocol */
+            api_protocol?: ("chat_completions" | "responses") | null;
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Clear Api Key
+             * @default false
+             */
+            clear_api_key: boolean;
+            /** Frequency Penalty */
+            frequency_penalty?: number | null;
+            /** Max Completion Tokens */
+            max_completion_tokens?: number | null;
+            /** Mode */
+            mode?: ("global" | "custom") | null;
+            /** Model */
+            model?: string | null;
+            /** Parallel Tool Calls */
+            parallel_tool_calls?: boolean | null;
+            /** Presence Penalty */
+            presence_penalty?: number | null;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            /** Temperature */
+            temperature?: number | null;
+            /** Token Limit Parameter */
+            token_limit_parameter?: ("max_completion_tokens" | "max_tokens" | "omit") | null;
+            /** Top P */
+            top_p?: number | null;
+            /** Verbosity */
+            verbosity?: string | null;
+        };
+        /**
+         * AssistantUserSettingsView
+         * @description Personal AI provider. API keys stay write-only.
+         */
+        AssistantUserSettingsView: {
+            /** Api Key Configured */
+            api_key_configured: boolean;
+            /**
+             * Api Protocol
+             * @enum {string}
+             */
+            api_protocol: "chat_completions" | "responses";
+            /** Base Url */
+            base_url?: string | null;
+            /** Effective Enabled */
+            effective_enabled: boolean;
+            /**
+             * Effective Source
+             * @enum {string}
+             */
+            effective_source: "global" | "custom" | "none";
+            /** Frequency Penalty */
+            frequency_penalty?: number | null;
+            /**
+             * Max Completion Tokens
+             * @default 2048
+             */
+            max_completion_tokens: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "global" | "custom";
+            /** Model */
+            model?: string | null;
+            /** Parallel Tool Calls */
+            parallel_tool_calls?: boolean | null;
+            /** Presence Penalty */
+            presence_penalty?: number | null;
+            /** Provider Tested */
+            provider_tested: boolean;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            /** Streaming Tested */
+            streaming_tested: boolean;
+            /** Temperature */
+            temperature?: number | null;
+            /**
+             * Token Limit Parameter
+             * @default max_completion_tokens
+             * @enum {string}
+             */
+            token_limit_parameter: "max_completion_tokens" | "max_tokens" | "omit";
+            /** Tool Calling Tested */
+            tool_calling_tested: boolean;
+            /** Top P */
+            top_p?: number | null;
+            /** Verbosity */
+            verbosity?: string | null;
+        };
+        /** AssistantWorkspaceView */
+        AssistantWorkspaceView: {
+            /** Conversations */
+            conversations?: components["schemas"]["AssistantConversationView"][];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "global" | "custom" | "none";
+            /** Model */
+            model?: string | null;
+            /** Provider Ready */
+            provider_ready: boolean;
         };
         /**
          * AuditEntry
@@ -4526,27 +7226,24 @@ export interface components {
             user_agent?: string | null;
         };
         /**
+         * AuthTokenView
+         * @description Session token body. The HttpOnly cookie is the browser session; this mirrors login.
+         */
+        AuthTokenView: {
+            /** Access Token */
+            access_token: string;
+            /**
+             * Token Type
+             * @default bearer
+             */
+            token_type: string;
+        };
+        /**
          * AuthType
          * @description SSH Authentication types
          * @enum {string}
          */
         AuthType: "password" | "key_file";
-        /**
-         * BatchActionRequest
-         * @description Schema for batch server actions
-         */
-        BatchActionRequest: {
-            /**
-             * Action
-             * @description Action to perform on all servers
-             */
-            action: string;
-            /**
-             * Server Ids
-             * @description List of server IDs to perform action on
-             */
-            server_ids: number[];
-        };
         /**
          * BatchActionResponse
          * @description Schema for batch action response
@@ -4567,42 +7264,77 @@ export interface components {
             /** Success */
             success: boolean;
         };
-        /**
-         * BatchInstallPluginsRequest
-         * @description Schema for batch plugin installation
-         */
-        BatchInstallPluginsRequest: {
-            /**
-             * Plugins
-             * @description List of plugins to install
-             */
-            plugins: string[];
-            /**
-             * Server Ids
-             * @description List of server IDs to install plugins on
-             */
-            server_ids: number[];
+        /** BatchActionView */
+        BatchActionView: {
+            /** Accepted Server Ids */
+            accepted_server_ids?: number[];
+            /** Action */
+            action: string;
+            /** Batch Id */
+            batch_id: string;
+            /** Message */
+            message: string;
+            /** Server Count */
+            server_count: number;
+            /** Stream Url */
+            stream_url: string;
         };
-        /**
-         * BatchSendCommandRequest
-         * @description Schema for batch send command to game servers
-         */
-        BatchSendCommandRequest: {
+        /** BatchJournalView */
+        BatchJournalView: {
+            /** Action */
+            action?: string | null;
+            /** Batch Id */
+            batch_id: string;
+            /** Servers */
+            servers?: components["schemas"]["BatchServerStatusView"][];
+            summary: components["schemas"]["BatchSummaryView"];
+        };
+        /** BatchServerStatusView */
+        BatchServerStatusView: {
             /**
-             * Command
-             * @description Command to send to game servers
+             * Message
+             * @default
              */
-            command: string;
-            /**
-             * Server Ids
-             * @description List of server IDs to send command to
-             */
-            server_ids: number[];
+            message: string;
+            /** Server Id */
+            server_id: number;
+            /** Status */
+            status: string;
+        };
+        /** BatchSummaryView */
+        BatchSummaryView: {
+            /** Completed */
+            completed: number;
+            /** Failed */
+            failed: number;
+            /** In Progress */
+            in_progress: number;
+            /** Is Complete */
+            is_complete: boolean;
+            /** Succeeded */
+            succeeded: number;
+            /** Total */
+            total: number;
+        };
+        /** Body_upload_file_api_v1_servers__server_id__files_upload_post */
+        Body_upload_file_api_v1_servers__server_id__files_upload_post: {
+            /** File */
+            file: string;
         };
         /** Body_upload_file_servers__server_id__files_upload_post */
         Body_upload_file_servers__server_id__files_upload_post: {
             /** File */
             file: string;
+        };
+        /**
+         * CaptchaChallenge
+         * @description Token plus inline image so proxies do not have to forward custom headers.
+         */
+        CaptchaChallenge: {
+            /** Image */
+            image: string;
+            /** Token */
+            token: string;
         };
         /**
          * CaptchaRefreshRequest
@@ -4611,6 +7343,18 @@ export interface components {
         CaptchaRefreshRequest: {
             /** Old Token */
             old_token: string;
+        };
+        /** CleanupDeleteBody */
+        CleanupDeleteBody: {
+            /** Confirmation Text */
+            confirmation_text?: string | null;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "safe" | "archives" | "workshop";
+            /** Paths */
+            paths?: string[];
         };
         /**
          * CleanupDeleteRequest
@@ -4649,11 +7393,37 @@ export interface components {
             /** Success */
             success: boolean;
         };
+        /** CleanupDeleteView */
+        CleanupDeleteView: {
+            /**
+             * Deleted Count
+             * @default 0
+             */
+            deleted_count: number;
+            /** Failed Items */
+            failed_items?: components["schemas"]["CleanupFailedItemView"][];
+            /**
+             * Freed Bytes Estimate
+             * @default 0
+             */
+            freed_bytes_estimate: number;
+            /** Message */
+            message: string;
+            /** Success */
+            success: boolean;
+        };
         /**
          * CleanupFailedItem
          * @description Schema for a cleanup deletion failure
          */
         CleanupFailedItem: {
+            /** Error */
+            error: string;
+            /** Path */
+            path: string;
+        };
+        /** CleanupFailedItemView */
+        CleanupFailedItemView: {
             /** Error */
             error: string;
             /** Path */
@@ -4684,6 +7454,26 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** CleanupItemView */
+        CleanupItemView: {
+            /** Category */
+            category: string;
+            /** Danger Level */
+            danger_level: string;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+            /** Type */
+            type: string;
+        };
         /**
          * CleanupScanResponse
          * @description Schema for game directory cleanup scan response
@@ -4700,6 +7490,19 @@ export interface components {
             total_size: number;
             workshop_summary: components["schemas"]["CleanupWorkshopSummary"];
         };
+        /** CleanupScanView */
+        CleanupScanView: {
+            /** Archive Items */
+            archive_items?: components["schemas"]["CleanupItemView"][];
+            /** Safe Items */
+            safe_items?: components["schemas"]["CleanupItemView"][];
+            /**
+             * Total Size
+             * @default 0
+             */
+            total_size: number;
+            workshop_summary: components["schemas"]["CleanupWorkshopView"];
+        };
         /**
          * CleanupWorkshopSummary
          * @description Schema for Steam Workshop cleanup summary
@@ -4712,6 +7515,21 @@ export interface components {
             item_count: number;
             /** Items */
             items?: components["schemas"]["CleanupItem"][];
+            /** Path */
+            path: string;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+        };
+        /** CleanupWorkshopView */
+        CleanupWorkshopView: {
+            /**
+             * Item Count
+             * @default 0
+             */
+            item_count: number;
             /** Path */
             path: string;
             /**
@@ -4743,6 +7561,44 @@ export interface components {
             /** Path */
             path: string;
         };
+        /** ConfirmDeploymentView */
+        ConfirmDeploymentView: {
+            /** Last Deployed */
+            last_deployed?: string | null;
+            /** Message */
+            message: string;
+            /** Status */
+            status: string;
+            /** Success */
+            success: boolean;
+        };
+        /**
+         * ConsoleWorkspaceView
+         * @description Game and SSH console status. GET stays 200 when SSH is down.
+         */
+        ConsoleWorkspaceView: {
+            /**
+             * Game Running
+             * @default false
+             */
+            game_running: boolean;
+            /** Host */
+            host: string;
+            /** Message */
+            message?: string | null;
+            /** Server Id */
+            server_id: number;
+            /**
+             * Session Manager
+             * @default tmux
+             * @enum {string}
+             */
+            session_manager: "screen" | "tmux";
+            /** Ssh Error */
+            ssh_error?: string | null;
+            /** Ssh Ok */
+            ssh_ok: boolean;
+        };
         /**
          * CreateDirectoryRequest
          * @description Create directory request
@@ -4750,6 +7606,10 @@ export interface components {
         CreateDirectoryRequest: {
             /** Name */
             name: string;
+        };
+        /** CurrentServerOperation */
+        CurrentServerOperation: {
+            operation?: components["schemas"]["ServerOperationView"] | null;
         };
         /**
          * CustomCommandCreate
@@ -4767,6 +7627,17 @@ export interface components {
              */
             target: string;
         };
+        /** CustomCommandExecuteBody */
+        CustomCommandExecuteBody: {
+            /** Commands */
+            commands: string;
+            /**
+             * Target
+             * @default host
+             * @enum {string}
+             */
+            target: "host" | "game_process";
+        };
         /**
          * CustomCommandExecuteRequest
          * @description Schema for one-time custom command execution
@@ -4780,6 +7651,18 @@ export interface components {
              * @default host
              */
             target: string;
+        };
+        /** CustomCommandExecuteView */
+        CustomCommandExecuteView: {
+            /**
+             * Log
+             * @default
+             */
+            log: string;
+            /** Message */
+            message: string;
+            /** Success */
+            success: boolean;
         };
         /**
          * CustomCommandResponse
@@ -4824,6 +7707,42 @@ export interface components {
              */
             target?: string | null;
         };
+        /**
+         * CustomCommandView
+         * @description Saved host or game-process shortcut. Command text is user-authored, not a secret.
+         */
+        CustomCommandView: {
+            /** Commands */
+            commands: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Server Id */
+            server_id: number;
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "host" | "game_process";
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** CustomCommandWriteRequest */
+        CustomCommandWriteRequest: {
+            /** Commands */
+            commands: string;
+            /** Name */
+            name: string;
+            /**
+             * Target
+             * @default host
+             * @enum {string}
+             */
+            target: "host" | "game_process";
+        };
         /** CustomMapSyncRunRequest */
         CustomMapSyncRunRequest: {
             /** Expected Revision */
@@ -4853,6 +7772,30 @@ export interface components {
             id: number;
             /** Title */
             title: string;
+        };
+        /** DeploymentLockView */
+        DeploymentLockView: {
+            /** Lock Active */
+            lock_active: boolean;
+            server_status: components["schemas"]["ServerStatus"];
+        };
+        /**
+         * DeploymentLogEntry
+         * @description Recent operation history. Output is redacted and truncated.
+         */
+        DeploymentLogEntry: {
+            /** Action */
+            action: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Id */
+            id: number;
+            /** Output */
+            output?: string | null;
+            /** Status */
+            status: string;
         };
         /**
          * DeploymentLogResponse
@@ -4958,6 +7901,76 @@ export interface components {
             /** User Ids */
             user_ids?: string[];
         };
+        /** DiscordBindingUpdateRequest */
+        DiscordBindingUpdateRequest: {
+            /**
+             * Allow Channel Managers
+             * @default false
+             */
+            allow_channel_managers: boolean;
+            /**
+             * Allow Server Administrators
+             * @default false
+             */
+            allow_server_administrators: boolean;
+            /** Capabilities */
+            capabilities?: string[];
+            /** Channel Ids */
+            channel_ids?: string[];
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Guild Id */
+            guild_id?: string | null;
+            /** Role Ids */
+            role_ids?: string[];
+            /**
+             * Sync Existing Servers
+             * @default false
+             */
+            sync_existing_servers: boolean;
+            /** User Ids */
+            user_ids?: string[];
+        };
+        /** DiscordBindingView */
+        DiscordBindingView: {
+            /**
+             * Allow Channel Managers
+             * @default false
+             */
+            allow_channel_managers: boolean;
+            /**
+             * Allow Server Administrators
+             * @default false
+             */
+            allow_server_administrators: boolean;
+            /** Capabilities */
+            capabilities?: string[];
+            /** Channel Ids */
+            channel_ids?: string[];
+            /** Disabled Reason */
+            disabled_reason?: string | null;
+            /** Effective Enabled */
+            effective_enabled: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Guild Id */
+            guild_id?: string | null;
+            /**
+             * Response Visibility
+             * @default public
+             * @constant
+             */
+            response_visibility: "public";
+            /** Role Ids */
+            role_ids?: string[];
+            /** Server Id */
+            server_id: number;
+            /** User Ids */
+            user_ids?: string[];
+        };
         /** DiscordBotOptionsResponse */
         DiscordBotOptionsResponse: {
             /** Channels */
@@ -5004,6 +8017,11 @@ export interface components {
             /** Token */
             token?: string | null;
         };
+        /** DiscordBotTestBody */
+        DiscordBotTestBody: {
+            /** Token */
+            token?: string | null;
+        };
         /** DiscordBotTestRequest */
         DiscordBotTestRequest: {
             /** Token */
@@ -5022,6 +8040,44 @@ export interface components {
             /** Username */
             username?: string | null;
         };
+        /** DiscordBotTestView */
+        DiscordBotTestView: {
+            /** Message */
+            message: string;
+            /** Success */
+            success: boolean;
+            /** Username */
+            username?: string | null;
+        };
+        /** DiscordBotUpdateRequest */
+        DiscordBotUpdateRequest: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Message Trigger Mode */
+            message_trigger_mode?: ("mention_only" | "mention_and_greetings") | null;
+            /** Token */
+            token?: string | null;
+        };
+        /** DiscordBotView */
+        DiscordBotView: {
+            /** Connection Status */
+            connection_status: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Invite Url */
+            invite_url?: string | null;
+            /** Last Error */
+            last_error?: string | null;
+            /**
+             * Message Trigger Mode
+             * @enum {string}
+             */
+            message_trigger_mode: "mention_only" | "mention_and_greetings";
+            /** Token Configured */
+            token_configured: boolean;
+            /** Username */
+            username?: string | null;
+        };
         /**
          * DiscordCapability
          * @enum {string}
@@ -5036,6 +8092,20 @@ export interface components {
             /** Name */
             name: string;
             /** Type */
+            type: number;
+        };
+        /** DiscordChannelView */
+        DiscordChannelView: {
+            /** Guild Id */
+            guild_id: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Type
+             * @default 0
+             */
             type: number;
         };
         /** DiscordGlobalBindingResponse */
@@ -5124,6 +8194,53 @@ export interface components {
             /** User Ids */
             user_ids?: string[];
         };
+        /** DiscordGlobalBindingView */
+        DiscordGlobalBindingView: {
+            /**
+             * Allow Channel Managers
+             * @default false
+             */
+            allow_channel_managers: boolean;
+            /**
+             * Allow Server Administrators
+             * @default false
+             */
+            allow_server_administrators: boolean;
+            /** Capabilities */
+            capabilities?: string[];
+            /** Channel Ids */
+            channel_ids?: string[];
+            /** Configured */
+            configured: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Guild Id */
+            guild_id?: string | null;
+            /**
+             * Inherited By New Servers
+             * @default true
+             */
+            inherited_by_new_servers: boolean;
+            /**
+             * Matching Server Count
+             * @default 0
+             */
+            matching_server_count: number;
+            /** Role Ids */
+            role_ids?: string[];
+            /**
+             * Server Count
+             * @default 0
+             */
+            server_count: number;
+            /**
+             * Synced Server Count
+             * @default 0
+             */
+            synced_server_count: number;
+            /** User Ids */
+            user_ids?: string[];
+        };
         /** DiscordGuildOption */
         DiscordGuildOption: {
             /** Icon */
@@ -5132,6 +8249,22 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** DiscordGuildView */
+        DiscordGuildView: {
+            /** Icon */
+            icon?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** DiscordMenuPushBody */
+        DiscordMenuPushBody: {
+            /** Channel Id */
+            channel_id: string;
+            /** Guild Id */
+            guild_id: string;
         };
         /** DiscordMenuPushOptionsResponse */
         DiscordMenuPushOptionsResponse: {
@@ -5161,8 +8294,52 @@ export interface components {
             /** Message Id */
             message_id: string;
         };
+        /** DiscordMenuPushView */
+        DiscordMenuPushView: {
+            /** Channel Id */
+            channel_id: string;
+            /**
+             * Expires In Seconds
+             * @default 300
+             */
+            expires_in_seconds: number;
+            /** Guild Id */
+            guild_id: string;
+            /** Message Id */
+            message_id: string;
+        };
+        /**
+         * DiscordOptionsView
+         * @description Guild/channel/role picker. GET stays 200 when no bot token is stored.
+         */
+        DiscordOptionsView: {
+            /** Channels */
+            channels?: components["schemas"]["DiscordChannelView"][];
+            /** Guilds */
+            guilds?: components["schemas"]["DiscordGuildView"][];
+            /** Message */
+            message?: string | null;
+            /** Roles */
+            roles?: components["schemas"]["DiscordRoleView"][];
+            /** Token Configured */
+            token_configured: boolean;
+        };
         /** DiscordRoleOption */
         DiscordRoleOption: {
+            /** Guild Id */
+            guild_id: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+        };
+        /** DiscordRoleView */
+        DiscordRoleView: {
             /** Guild Id */
             guild_id: string;
             /** Id */
@@ -5236,6 +8413,37 @@ export interface components {
             /** Message */
             message?: string | null;
         };
+        /** DiskSpaceListView */
+        DiskSpaceListView: {
+            /** Servers */
+            servers?: components["schemas"]["DiskSpaceView"][];
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+        };
+        /**
+         * DiskSpaceView
+         * @description Cached host disk snapshot for one game directory. Default reads never SSH.
+         */
+        DiskSpaceView: {
+            /** Available Gb */
+            available_gb?: number | null;
+            /**
+             * Cached
+             * @default false
+             */
+            cached: boolean;
+            /** Server Id */
+            server_id: number;
+            /** Total Gb */
+            total_gb?: number | null;
+            /** Used Gb */
+            used_gb?: number | null;
+            /** Used Percent */
+            used_percent?: number | null;
+        };
         /**
          * DownloadTicketRequest
          * @description Create a short-lived browser download ticket
@@ -5261,17 +8469,12 @@ export interface components {
             /** Url */
             url: string;
         };
-        /**
-         * EmailTestRequest
-         * @description Schema for email test request
-         */
-        EmailTestRequest: {
-            /**
-             * Test Email
-             * Format: email
-             * @description Email address to send test email to
-             */
-            test_email: string;
+        /** EmailTestResult */
+        EmailTestResult: {
+            /** Message */
+            message: string;
+            /** Success */
+            success: boolean;
         };
         /**
          * ExtractArchiveRequest
@@ -5295,6 +8498,23 @@ export interface components {
              */
             strip_source_folder: boolean;
         };
+        /** FileArchiveInspectRequest */
+        FileArchiveInspectRequest: {
+            /** Archive Path */
+            archive_path: string;
+        };
+        /** FileArchiveInspectView */
+        FileArchiveInspectView: {
+            /** Archive Type */
+            archive_type: string;
+            /**
+             * Entry Count
+             * @default 0
+             */
+            entry_count: number;
+            /** Folders */
+            folders?: string[];
+        };
         /**
          * FileContentRequest
          * @description File content update request
@@ -5302,6 +8522,78 @@ export interface components {
         FileContentRequest: {
             /** Content */
             content: string;
+        };
+        /** FileContentUpdateRequest */
+        FileContentUpdateRequest: {
+            /** Content */
+            content: string;
+        };
+        /** FileContentView */
+        FileContentView: {
+            /** Content */
+            content: string;
+            /** Path */
+            path: string;
+        };
+        /** FileDownloadTicketView */
+        FileDownloadTicketView: {
+            /** Expires In */
+            expires_in: number;
+            /** Path */
+            path: string;
+            /** Ticket */
+            ticket: string;
+        };
+        /** FileEntryView */
+        FileEntryView: {
+            /**
+             * Is Symlink
+             * @default false
+             */
+            is_symlink: boolean;
+            /**
+             * Modified
+             * @default 0
+             */
+            modified: number;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /**
+             * Permissions
+             * @default 000
+             */
+            permissions: string;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "file" | "directory";
+        };
+        /** FileExtractRequest */
+        FileExtractRequest: {
+            /** Archive Path */
+            archive_path: string;
+            /** Destination Path */
+            destination_path?: string | null;
+            /**
+             * Overwrite
+             * @default false
+             */
+            overwrite: boolean;
+            /** Source Folder */
+            source_folder?: string | null;
+            /**
+             * Strip Source Folder
+             * @default false
+             */
+            strip_source_folder: boolean;
         };
         /**
          * FileInfo
@@ -5323,6 +8615,81 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** FileMkdirRequest */
+        FileMkdirRequest: {
+            /** Name */
+            name: string;
+        };
+        /** FileMutationResult */
+        FileMutationResult: {
+            /** Message */
+            message: string;
+            /** Path */
+            path?: string | null;
+            /**
+             * Success
+             * @default true
+             */
+            success: boolean;
+        };
+        /** FileRenameRequest */
+        FileRenameRequest: {
+            /** New Name */
+            new_name: string;
+            /** Old Name */
+            old_name: string;
+        };
+        /** FileTaskView */
+        FileTaskView: {
+            /** Destination */
+            destination?: string | null;
+            /** Elapsed Seconds */
+            elapsed_seconds?: number | null;
+            /** Error */
+            error?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Status */
+            status: string;
+            /** Target Path */
+            target_path?: string | null;
+            /** Task Id */
+            task_id: string;
+        };
+        /** FileUrlDownloadRequest */
+        FileUrlDownloadRequest: {
+            /** Destination Path */
+            destination_path: string;
+            /** Filename */
+            filename?: string | null;
+            /**
+             * Overwrite
+             * @default false
+             */
+            overwrite: boolean;
+            /** Url */
+            url: string;
+        };
+        /**
+         * FilesWorkspaceView
+         * @description Directory listing. GET stays 200 when SSH is down.
+         */
+        FilesWorkspaceView: {
+            /** Files */
+            files?: components["schemas"]["FileEntryView"][];
+            /** Message */
+            message?: string | null;
+            /** Path */
+            path: string;
+            /** Root */
+            root: string;
+            /** Server Id */
+            server_id: number;
+            /** Ssh Error */
+            ssh_error?: string | null;
+            /** Ssh Ok */
+            ssh_ok: boolean;
+        };
         /**
          * ForgotPasswordRequest
          * @description Schema for forgot password request
@@ -5343,6 +8710,66 @@ export interface components {
              * Format: email
              */
             email: string;
+        };
+        /** GameUpdateOperationRequest */
+        GameUpdateOperationRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "update" | "validate";
+        };
+        /** GameUpdatesSettingsRequest */
+        GameUpdatesSettingsRequest: {
+            /** Enable Auto Update */
+            enable_auto_update: boolean;
+            /** Update Check Interval Hours */
+            update_check_interval_hours: number;
+        };
+        /**
+         * GameUpdatesView
+         * @description Steam advertised version versus installed steam.inf, plus game auto-update.
+         */
+        GameUpdatesView: {
+            /** Advertised Version */
+            advertised_version?: string | null;
+            /** Current Game Version */
+            current_game_version?: string | null;
+            /**
+             * Enable Auto Update
+             * @default true
+             */
+            enable_auto_update: boolean;
+            /** Installed Build Id */
+            installed_build_id?: string | null;
+            /**
+             * Installed Source
+             * @default unknown
+             * @enum {string}
+             */
+            installed_source: "steam.inf" | "database" | "unknown";
+            /** Installed Version */
+            installed_version?: string | null;
+            /** Last Update Check */
+            last_update_check?: string | null;
+            /** Last Update Time */
+            last_update_time?: string | null;
+            /**
+             * Steam Check Ok
+             * @default false
+             */
+            steam_check_ok: boolean;
+            /** Steam Error */
+            steam_error?: string | null;
+            /** Steam Message */
+            steam_message?: string | null;
+            /** Up To Date */
+            up_to_date?: boolean | null;
+            /**
+             * Update Check Interval Hours
+             * @default 1
+             */
+            update_check_interval_hours: number;
         };
         /**
          * GenerateServerTokenRequest
@@ -5377,6 +8804,103 @@ export interface components {
             /** Success */
             success: boolean;
         };
+        /** GitHubArchiveView */
+        GitHubArchiveView: {
+            /** All Dirs */
+            all_dirs?: string[];
+            /** All Files */
+            all_files?: components["schemas"]["ArchiveFileView"][];
+            /** Archive Type */
+            archive_type?: string | null;
+            /**
+             * Has Addons Dir
+             * @default false
+             */
+            has_addons_dir: boolean;
+            /** Root Dirs */
+            root_dirs?: string[];
+        };
+        /** GitHubInstallPlanRequest */
+        GitHubInstallPlanRequest: {
+            /** Asset Name */
+            asset_name?: string | null;
+            /**
+             * Config Policy
+             * @default preserve
+             * @enum {string}
+             */
+            config_policy: "preserve" | "overwrite";
+            /** Exclude Dirs */
+            exclude_dirs?: string[];
+            /** Exclude Files */
+            exclude_files?: string[];
+            /**
+             * Mode
+             * @default install
+             * @enum {string}
+             */
+            mode: "install" | "upgrade";
+            /** Recipe Id */
+            recipe_id?: number | null;
+            /** Repo Url */
+            repo_url: string;
+            /** Source Prefix */
+            source_prefix?: string | null;
+            /** Target Prefix */
+            target_prefix?: string | null;
+        };
+        /** GitHubInstallPlanView */
+        GitHubInstallPlanView: {
+            /** Already Installed */
+            already_installed?: number[];
+            /** Archive Sha256 */
+            archive_sha256?: string | null;
+            /** Asset Name */
+            asset_name?: string | null;
+            /**
+             * Compatibility Unknown
+             * @default false
+             */
+            compatibility_unknown: boolean;
+            /** Config Policy */
+            config_policy: string;
+            /** Conflict Warnings */
+            conflict_warnings?: components["schemas"]["PluginConflictView"][];
+            /** Dependencies */
+            dependencies?: components["schemas"]["PluginRef"][];
+            /** Exclude Dirs */
+            exclude_dirs?: string[];
+            /** Exclude Files */
+            exclude_files?: string[];
+            /** Hard Conflicts */
+            hard_conflicts?: components["schemas"]["PluginConflictView"][];
+            linux_runtime_profile?: components["schemas"]["LinuxRuntimeProfileView"] | null;
+            /** Mapping */
+            mapping?: components["schemas"]["ArchiveMappingView"][];
+            /**
+             * Mapping Required
+             * @default false
+             */
+            mapping_required: boolean;
+            /** Mode */
+            mode: string;
+            /** Plan Hash */
+            plan_hash: string;
+            /** Recipe Id */
+            recipe_id?: number | null;
+            /** Release Name */
+            release_name?: string | null;
+            /** Release Tag */
+            release_tag?: string | null;
+            /** Repo Url */
+            repo_url: string;
+            /** Server Id */
+            server_id: number;
+            /** Source Prefix */
+            source_prefix?: string | null;
+            /** Warnings */
+            warnings?: string[];
+        };
         /** GitHubInstallRecipeCreate */
         GitHubInstallRecipeCreate: {
             /** Config Globs */
@@ -5398,6 +8922,44 @@ export interface components {
              * @enum {string}
              */
             target_prefix: "addons" | "cfg";
+        };
+        /** GitHubInstallRequest */
+        GitHubInstallRequest: {
+            /**
+             * Acknowledge Unknown Compatibility
+             * @default false
+             */
+            acknowledge_unknown_compatibility: boolean;
+            /** Acknowledge Warning Rule Ids */
+            acknowledge_warning_rule_ids?: number[];
+            /** Asset Name */
+            asset_name?: string | null;
+            /**
+             * Config Policy
+             * @default preserve
+             * @enum {string}
+             */
+            config_policy: "preserve" | "overwrite";
+            /** Exclude Dirs */
+            exclude_dirs?: string[];
+            /** Exclude Files */
+            exclude_files?: string[];
+            /** Expected Plan Hash */
+            expected_plan_hash: string;
+            /**
+             * Mode
+             * @default install
+             * @enum {string}
+             */
+            mode: "install" | "upgrade";
+            /** Recipe Id */
+            recipe_id?: number | null;
+            /** Repo Url */
+            repo_url: string;
+            /** Source Prefix */
+            source_prefix?: string | null;
+            /** Target Prefix */
+            target_prefix?: string | null;
         };
         /** GitHubPluginInspectRequest */
         GitHubPluginInspectRequest: {
@@ -5451,6 +9013,10 @@ export interface components {
              * @enum {string}
              */
             config_policy: "preserve" | "overwrite";
+            /** Exclude Dirs */
+            exclude_dirs?: string[];
+            /** Exclude Files */
+            exclude_files?: string[];
             /** Expected Plan Hash */
             expected_plan_hash: string;
             /**
@@ -5463,6 +9029,10 @@ export interface components {
             recipe_id?: number | null;
             /** Repo Url */
             repo_url: string;
+            /** Source Prefix */
+            source_prefix?: string | null;
+            /** Target Prefix */
+            target_prefix?: string | null;
         };
         /** GitHubPluginInstallPlanRequest */
         GitHubPluginInstallPlanRequest: {
@@ -5474,6 +9044,10 @@ export interface components {
              * @enum {string}
              */
             config_policy: "preserve" | "overwrite";
+            /** Exclude Dirs */
+            exclude_dirs?: string[];
+            /** Exclude Files */
+            exclude_files?: string[];
             /**
              * Mode
              * @default install
@@ -5484,6 +9058,10 @@ export interface components {
             recipe_id?: number | null;
             /** Repo Url */
             repo_url: string;
+            /** Source Prefix */
+            source_prefix?: string | null;
+            /** Target Prefix */
+            target_prefix?: string | null;
         };
         /** GitHubPluginInstallPlanResponse */
         GitHubPluginInstallPlanResponse: {
@@ -5697,6 +9275,45 @@ export interface components {
             /** Steam Runtime */
             steam_runtime?: ("steamrt3" | "steamrt4") | null;
         };
+        /** GitHubReleaseAssetView */
+        GitHubReleaseAssetView: {
+            /** Browser Download Url */
+            browser_download_url: string;
+            /** Content Type */
+            content_type?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Runtime Compatibility
+             * @default not_applicable
+             */
+            runtime_compatibility: string;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+            /** Steam Runtime */
+            steam_runtime?: string | null;
+        };
+        /** GitHubReleaseView */
+        GitHubReleaseView: {
+            /** Assets */
+            assets?: components["schemas"]["GitHubReleaseAssetView"][];
+            /** Id */
+            id?: string | null;
+            /** Name */
+            name?: string | null;
+            /**
+             * Prerelease
+             * @default false
+             */
+            prerelease: boolean;
+            /** Published At */
+            published_at?: string | null;
+            /** Tag Name */
+            tag_name: string;
+        };
         /**
          * GitHubReleasesResponse
          * @description Schema for GitHub releases response
@@ -5716,6 +9333,16 @@ export interface components {
             repo_owner?: string | null;
             /** Success */
             success: boolean;
+        };
+        /** GitHubReleasesView */
+        GitHubReleasesView: {
+            linux_runtime_profile?: components["schemas"]["LinuxRuntimeProfileView"] | null;
+            /** Releases */
+            releases?: components["schemas"]["GitHubReleaseView"][];
+            /** Repo Name */
+            repo_name?: string | null;
+            /** Repo Owner */
+            repo_owner?: string | null;
         };
         /**
          * GitHubRepoInfo
@@ -5744,6 +9371,31 @@ export interface components {
             token_prefix?: string | null;
         };
         /**
+         * GitHubUninstallRequest
+         * @description Delete selected plugin files under the server csgo directory.
+         */
+        GitHubUninstallRequest: {
+            /** Files To Delete */
+            files_to_delete: string[];
+            /** Market Plugin Id */
+            market_plugin_id?: number | null;
+        };
+        /** GmailAuthorizeResult */
+        GmailAuthorizeResult: {
+            /** Authorization Url */
+            authorization_url: string;
+            /** State */
+            state?: string | null;
+        };
+        /**
+         * GmailCredentialsUpload
+         * @description Write-only Google Cloud OAuth client JSON for Gmail API.
+         */
+        GmailCredentialsUpload: {
+            /** Credentials Json */
+            credentials_json: string;
+        };
+        /**
          * GmailCredentialsUploadRequest
          * @description Schema for Gmail OAuth credentials upload
          */
@@ -5753,6 +9405,22 @@ export interface components {
              * @description The contents of the credentials.json file from Google Cloud Console
              */
             credentials_json: string;
+        };
+        /**
+         * GoogleConfigView
+         * @description Public Google OAuth client configuration. ``client_id`` is the browser OAuth client.
+         */
+        GoogleConfigView: {
+            /**
+             * Client Id
+             * @default
+             */
+            client_id: string;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
         };
         /**
          * GoogleOAuthRequest
@@ -5773,6 +9441,18 @@ export interface components {
              * Username
              * @description Username for new account (if registering)
              */
+            username?: string | null;
+        };
+        /**
+         * GoogleSignInRequest
+         * @description Google identity-token sign-in. New accounts also send a username and password.
+         */
+        GoogleSignInRequest: {
+            /** Id Token */
+            id_token: string;
+            /** Password */
+            password?: string | null;
+            /** Username */
             username?: string | null;
         };
         /** HTTPValidationError */
@@ -5811,6 +9491,29 @@ export interface components {
             reason: string;
             /** Recommended Steam Runtime */
             recommended_steam_runtime?: ("steamrt3" | "steamrt4") | null;
+        };
+        /** LinuxRuntimeProfileView */
+        LinuxRuntimeProfileView: {
+            /**
+             * Detection Source
+             * @default unknown
+             */
+            detection_source: string;
+            /** Distro Id */
+            distro_id?: string | null;
+            /** Distro Version */
+            distro_version?: string | null;
+            /** Glibc Version */
+            glibc_version?: string | null;
+            /** Pretty Name */
+            pretty_name?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Recommended Steam Runtime */
+            recommended_steam_runtime?: string | null;
         };
         /** ManagedPluginCreate */
         ManagedPluginCreate: {
@@ -5859,6 +9562,58 @@ export interface components {
              * @default github
              */
             source_type: string;
+        };
+        /**
+         * ManagedPluginRegisterRequest
+         * @description Register an already-installed plugin or framework for auto-update.
+         */
+        ManagedPluginRegisterRequest: {
+            /** Asset Glob */
+            asset_glob?: string | null;
+            /**
+             * Auto Update Enabled
+             * @default false
+             */
+            auto_update_enabled: boolean;
+            /**
+             * Backup Before Update
+             * @default false
+             */
+            backup_before_update: boolean;
+            /** Custom Install Path */
+            custom_install_path?: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Exclude Dirs */
+            exclude_dirs?: string[];
+            /** Exclude Files */
+            exclude_files?: string[];
+            /** Framework Key */
+            framework_key?: string | null;
+            /** Installed Release Id */
+            installed_release_id?: string | null;
+            /**
+             * Installed Version
+             * @default unknown
+             */
+            installed_version: string;
+            /** Market Plugin Id */
+            market_plugin_id?: number | null;
+            /** Repo Url */
+            repo_url?: string | null;
+            /**
+             * Restart After Update
+             * @default false
+             */
+            restart_after_update: boolean;
+            /** Source Key */
+            source_key?: string | null;
+            /**
+             * Source Type
+             * @default github
+             * @enum {string}
+             */
+            source_type: "github" | "market" | "framework";
         };
         /** ManagedPluginResponse */
         ManagedPluginResponse: {
@@ -5936,6 +9691,92 @@ export interface components {
             /** Restart After Update */
             restart_after_update?: boolean | null;
         };
+        /**
+         * ManagedPluginUpdateView
+         * @description Managed plugin plus auto-update exclusion paths.
+         */
+        ManagedPluginUpdateView: {
+            /** Auto Update Enabled */
+            auto_update_enabled: boolean;
+            /**
+             * Backup Before Update
+             * @default false
+             */
+            backup_before_update: boolean;
+            /** Display Name */
+            display_name: string;
+            /** Exclude Dirs */
+            exclude_dirs?: string[];
+            /** Exclude Files */
+            exclude_files?: string[];
+            /** Framework Key */
+            framework_key?: string | null;
+            /** Id */
+            id: number;
+            /** Installed Version */
+            installed_version: string;
+            /** Last Check At */
+            last_check_at?: string | null;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Status */
+            last_status?: string | null;
+            /** Last Update At */
+            last_update_at?: string | null;
+            /** Latest Version */
+            latest_version?: string | null;
+            /** Market Plugin Id */
+            market_plugin_id?: number | null;
+            /** Repo Url */
+            repo_url?: string | null;
+            /**
+             * Restart After Update
+             * @default false
+             */
+            restart_after_update: boolean;
+            /** Server Id */
+            server_id: number;
+            /** Source Key */
+            source_key: string;
+            /** Source Type */
+            source_type: string;
+        };
+        /**
+         * ManagedPluginView
+         * @description A plugin already tracked on one game server.
+         */
+        ManagedPluginView: {
+            /** Auto Update Enabled */
+            auto_update_enabled: boolean;
+            /** Display Name */
+            display_name: string;
+            /** Framework Key */
+            framework_key?: string | null;
+            /** Id */
+            id: number;
+            /** Installed Version */
+            installed_version: string;
+            /** Last Check At */
+            last_check_at?: string | null;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Status */
+            last_status?: string | null;
+            /** Last Update At */
+            last_update_at?: string | null;
+            /** Latest Version */
+            latest_version?: string | null;
+            /** Market Plugin Id */
+            market_plugin_id?: number | null;
+            /** Repo Url */
+            repo_url?: string | null;
+            /** Server Id */
+            server_id: number;
+            /** Source Key */
+            source_key: string;
+            /** Source Type */
+            source_type: string;
+        };
         /** MapAddRequest */
         MapAddRequest: {
             /**
@@ -5975,6 +9816,20 @@ export interface components {
             /** Expected Revision */
             expected_revision?: string | null;
         };
+        /** MapEnabledPatchRequest */
+        MapEnabledPatchRequest: {
+            /** Enabled */
+            enabled: boolean;
+            /** Expected Revision */
+            expected_revision: string;
+            /** Name */
+            name: string;
+            /**
+             * Workshop Id
+             * @default
+             */
+            workshop_id: string;
+        };
         /** MapEnabledUpdateRequest */
         MapEnabledUpdateRequest: {
             /** Enabled */
@@ -5986,6 +9841,44 @@ export interface components {
             /** Workshop Id */
             workshop_id: string;
         };
+        /**
+         * MapEntryView
+         * @description One MapChooser pool entry. Official maps use an empty workshop_id.
+         */
+        MapEntryView: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Filename
+             * @default
+             */
+            filename: string;
+            /**
+             * Min Players
+             * @default
+             */
+            min_players: string;
+            /** Name */
+            name: string;
+            /**
+             * Only Nominate
+             * @default false
+             */
+            only_nominate: boolean;
+            /**
+             * Restricted Times
+             * @default
+             */
+            restricted_times: string;
+            /**
+             * Workshop Id
+             * @default
+             */
+            workshop_id: string;
+        };
         /** MapIdentityRequest */
         MapIdentityRequest: {
             /** Expected Revision */
@@ -5993,6 +9886,59 @@ export interface components {
             /** Name */
             name: string;
             /** Workshop Id */
+            workshop_id: string;
+        };
+        /** MapPluginConfigUpdateRequest */
+        MapPluginConfigUpdateRequest: {
+            /** Expected Revision */
+            expected_revision?: string | null;
+            /** Values */
+            values: {
+                [key: string]: boolean | number | string;
+            };
+        };
+        /** MapPluginConfigView */
+        MapPluginConfigView: {
+            /** Config Error */
+            config_error?: string | null;
+            /** Fields */
+            fields?: components["schemas"]["MapPluginFieldView"][];
+            /** File Exists */
+            file_exists: boolean;
+            /** Revision */
+            revision: string;
+            /** Unsupported Fields */
+            unsupported_fields?: string[];
+        };
+        /** MapPluginFieldView */
+        MapPluginFieldView: {
+            /** Group */
+            group: string;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Known
+             * @default true
+             */
+            known: boolean;
+            /** Value */
+            value: boolean | number | string;
+        };
+        /**
+         * MapPoolIdentityRequest
+         * @description Identify a pool entry. Official maps send an empty workshop_id.
+         */
+        MapPoolIdentityRequest: {
+            /** Expected Revision */
+            expected_revision: string;
+            /** Name */
+            name: string;
+            /**
+             * Workshop Id
+             * @default
+             */
             workshop_id: string;
         };
         /** MapPresetApplyRequest */
@@ -6006,6 +9952,110 @@ export interface components {
              * @enum {string}
              */
             preset: "official" | "kz" | "ze";
+        };
+        /** MapSyncRunRequest */
+        MapSyncRunRequest: {
+            /** Expected Revision */
+            expected_revision: string;
+        };
+        /** MapSyncUpdateRequest */
+        MapSyncUpdateRequest: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Interval Seconds
+             * @default 300
+             */
+            interval_seconds: number;
+            /** Url */
+            url: string;
+        };
+        /** MapSyncView */
+        MapSyncView: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Interval Seconds
+             * @default 300
+             */
+            interval_seconds: number;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Run */
+            last_run?: string | null;
+            /** Last Status */
+            last_status?: string | null;
+            /** Next Run */
+            next_run?: string | null;
+            /**
+             * Run Count
+             * @default 0
+             */
+            run_count: number;
+            /**
+             * Url
+             * @default
+             */
+            url: string;
+        };
+        /**
+         * MapsWorkspaceView
+         * @description MapChooser workspace. GET stays 200 when SSH or prerequisites are down.
+         */
+        MapsWorkspaceView: {
+            /** Config Error */
+            config_error?: string | null;
+            /**
+             * Counterstrikesharp Installed
+             * @default false
+             */
+            counterstrikesharp_installed: boolean;
+            custom_sync: components["schemas"]["MapSyncView"];
+            /**
+             * Mapchooser Installed
+             * @default false
+             */
+            mapchooser_installed: boolean;
+            /** Maps */
+            maps?: components["schemas"]["MapEntryView"][];
+            /**
+             * Maps File Exists
+             * @default false
+             */
+            maps_file_exists: boolean;
+            /** Maps Path */
+            maps_path?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Plugin Center Name */
+            plugin_center_name?: string | null;
+            plugin_config?: components["schemas"]["MapPluginConfigView"] | null;
+            /**
+             * Plugin Config File Exists
+             * @default false
+             */
+            plugin_config_file_exists: boolean;
+            /** Plugin Config Path */
+            plugin_config_path?: string | null;
+            /**
+             * Ready
+             * @default false
+             */
+            ready: boolean;
+            /** Revision */
+            revision?: string | null;
+            /** Server Id */
+            server_id: number;
+            /** Ssh Error */
+            ssh_error?: string | null;
+            /** Ssh Ok */
+            ssh_ok: boolean;
         };
         /**
          * MarketPluginCreate
@@ -6161,6 +10211,69 @@ export interface components {
             version?: string | null;
         };
         /**
+         * MarketPluginView
+         * @description Non-secret marketplace listing. GitHub URLs are public repository links.
+         */
+        MarketPluginView: {
+            /** Author */
+            author?: string | null;
+            /** Category */
+            category: string;
+            /** Dependencies */
+            dependencies?: components["schemas"]["PluginRef"][];
+            /** Description */
+            description?: string | null;
+            /** Download Count */
+            download_count: number;
+            /** Github Url */
+            github_url: string;
+            /** Icon Url */
+            icon_url?: string | null;
+            /** Id */
+            id: number;
+            /** Install Count */
+            install_count: number;
+            /** Is Recommended */
+            is_recommended: boolean;
+            /** Tags */
+            tags?: string | null;
+            /** Title */
+            title: string;
+            /** Version */
+            version?: string | null;
+        };
+        /**
+         * OperationJournal
+         * @description Current operation record plus every persisted progress event.
+         */
+        OperationJournal: {
+            /** Events */
+            events?: components["schemas"]["OperationJournalEvent"][];
+            operation: components["schemas"]["ServerOperationView"];
+        };
+        /**
+         * OperationJournalEvent
+         * @description One persisted operation log line for JSON replay (SSE fallback).
+         */
+        OperationJournalEvent: {
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+            /** Operation Id */
+            operation_id: string;
+            /** Sequence */
+            sequence: string;
+            /** Server Status */
+            server_status?: string | null;
+            /** Success */
+            success?: boolean | null;
+            /** Timestamp */
+            timestamp: string;
+            /** Type */
+            type: string;
+        };
+        /**
          * OverviewSummary
          * @description Aggregate operational counters for the overview dashboard.
          */
@@ -6171,6 +10284,26 @@ export interface components {
             capacity: number;
             /** Running */
             running: number;
+            /**
+             * Ssh Connections
+             * @default 0
+             */
+            ssh_connections: number;
+            /**
+             * Ssh Idle
+             * @default 0
+             */
+            ssh_idle: number;
+            /**
+             * Ssh In Use
+             * @default 0
+             */
+            ssh_in_use: number;
+            /**
+             * Ssh Leases
+             * @default 0
+             */
+            ssh_leases: number;
             /** Total */
             total: number;
         };
@@ -6178,6 +10311,17 @@ export interface components {
         Page_AuditEntry_: {
             /** Items */
             items: components["schemas"]["AuditEntry"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[MarketPluginView] */
+        Page_MarketPluginView_: {
+            /** Items */
+            items: components["schemas"]["MarketPluginView"][];
             /** Limit */
             limit: number;
             /** Offset */
@@ -6206,6 +10350,31 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /**
+         * PasswordResetCompleteRequest
+         * @description Public reset-password body. The token is the one-time value from the email link.
+         */
+        PasswordResetCompleteRequest: {
+            /** New Password */
+            new_password: string;
+            /** Token */
+            token: string;
+        };
+        /**
+         * PasswordResetEmailRequest
+         * @description Public forgot-password body. CAPTCHA-gated; does not reveal whether the email exists.
+         */
+        PasswordResetEmailRequest: {
+            /** Captcha Code */
+            captcha_code: string;
+            /** Captcha Token */
+            captcha_token: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
         };
         /** PluginAutoUpdateResponse */
         PluginAutoUpdateResponse: {
@@ -6238,6 +10407,322 @@ export interface components {
             plugin_post_update_command_ids?: number[];
             /** Plugin Update Check Interval Hours */
             plugin_update_check_interval_hours: number;
+        };
+        /**
+         * PluginCatalogConflict
+         * @description A symmetric conflict rule identified by GitHub repository URLs.
+         */
+        PluginCatalogConflict: {
+            /**
+             * Is Enabled
+             * @default true
+             */
+            is_enabled: boolean;
+            /** Plugin A Url */
+            plugin_a_url: string;
+            /** Plugin B Url */
+            plugin_b_url: string;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Severity
+             * @default hard
+             * @enum {string}
+             */
+            severity: "hard" | "warning";
+        };
+        /**
+         * PluginCatalogEntry
+         * @description One marketplace plugin in a portable catalog, keyed by GitHub URL.
+         */
+        PluginCatalogEntry: {
+            /** Author */
+            author?: string | null;
+            /**
+             * Category
+             * @default other
+             */
+            category: string;
+            /** Custom Install Path */
+            custom_install_path?: string | null;
+            /** Dependencies */
+            dependencies?: string[];
+            /** Description */
+            description?: string | null;
+            /** Github Url */
+            github_url: string;
+            /** Icon Url */
+            icon_url?: string | null;
+            /**
+             * Is Recommended
+             * @default false
+             */
+            is_recommended: boolean;
+            /** Tags */
+            tags?: string | null;
+            /** Title */
+            title: string;
+            /** Version */
+            version?: string | null;
+        };
+        /**
+         * PluginCatalogExport
+         * @description Portable plugin-market catalog. Local numeric IDs are never included.
+         */
+        PluginCatalogExport: {
+            /** Conflicts */
+            conflicts?: components["schemas"]["PluginCatalogConflict"][];
+            /** Exported At */
+            exported_at?: string | null;
+            /**
+             * Format
+             * @default upkk-cs2-plugin-catalog
+             * @constant
+             */
+            format: "upkk-cs2-plugin-catalog";
+            /** Plugins */
+            plugins?: components["schemas"]["PluginCatalogEntry"][];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * PluginCatalogImportRequest
+         * @description Admin-only catalog import with skip/update conflict handling.
+         */
+        PluginCatalogImportRequest: {
+            /**
+             * Conflict Strategy
+             * @default skip
+             * @enum {string}
+             */
+            conflict_strategy: "skip" | "update";
+            /** Conflicts */
+            conflicts?: components["schemas"]["PluginCatalogConflict"][];
+            /** Exported At */
+            exported_at?: string | null;
+            /**
+             * Format
+             * @default upkk-cs2-plugin-catalog
+             * @constant
+             */
+            format: "upkk-cs2-plugin-catalog";
+            /** Plugins */
+            plugins?: components["schemas"]["PluginCatalogEntry"][];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * PluginCatalogImportResponse
+         * @description Summary returned after processing a plugin catalog import.
+         */
+        PluginCatalogImportResponse: {
+            /** Failed */
+            failed: number;
+            /** Imported */
+            imported: number;
+            /** Results */
+            results: components["schemas"]["PluginCatalogImportResult"][];
+            /** Skipped */
+            skipped: number;
+            /** Total */
+            total: number;
+            /** Updated */
+            updated: number;
+        };
+        /**
+         * PluginCatalogImportResult
+         * @description Result for one plugin or conflict rule in a catalog import.
+         */
+        PluginCatalogImportResult: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "imported" | "updated" | "skipped" | "failed";
+            /** Index */
+            index: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "plugin" | "conflict";
+            /** Message */
+            message?: string | null;
+            /** Name */
+            name: string;
+            /** Plugin Id */
+            plugin_id?: number | null;
+        };
+        /** PluginCategoryList */
+        PluginCategoryList: {
+            /** Items */
+            items: components["schemas"]["PluginCategoryView"][];
+        };
+        /** PluginCategoryView */
+        PluginCategoryView: {
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+        };
+        /** PluginConfigBrowseItemView */
+        PluginConfigBrowseItemView: {
+            /** Name */
+            name: string;
+            /** Path */
+            path?: string | null;
+            /**
+             * Selectable
+             * @default false
+             */
+            selectable: boolean;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "file" | "directory" | "symlink";
+        };
+        /** PluginConfigBrowseView */
+        PluginConfigBrowseView: {
+            /** Items */
+            items?: components["schemas"]["PluginConfigBrowseItemView"][];
+            /** Path */
+            path: string;
+        };
+        /** PluginConfigChange */
+        PluginConfigChange: {
+            /** Id */
+            id: string;
+            /** Value */
+            value?: boolean | number | string | null;
+        };
+        /** PluginConfigFieldView */
+        PluginConfigFieldView: {
+            /**
+             * Comment
+             * @default
+             */
+            comment: string;
+            /** Group */
+            group: string;
+            /** Id */
+            id: string;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Line
+             * @default 0
+             */
+            line: number;
+            /** Value */
+            value?: boolean | number | string | null;
+        };
+        /** PluginConfigFileView */
+        PluginConfigFileView: {
+            /** Content */
+            content: string;
+            /** Fields */
+            fields?: components["schemas"]["PluginConfigFieldView"][];
+            /** Format */
+            format: string;
+            /** Message */
+            message?: string | null;
+            /** Name */
+            name: string;
+            /** Parse Error */
+            parse_error?: string | null;
+            /** Path */
+            path: string;
+            /** Revision */
+            revision: string;
+            /**
+             * Visual Supported
+             * @default false
+             */
+            visual_supported: boolean;
+        };
+        /** PluginConfigSaveRequest */
+        PluginConfigSaveRequest: {
+            /** Changes */
+            changes?: components["schemas"]["PluginConfigChange"][];
+            /** Content */
+            content?: string | null;
+            /** Expected Revision */
+            expected_revision: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "visual" | "raw";
+            /** Path */
+            path: string;
+        };
+        /** PluginConfigSourceCreateRequest */
+        PluginConfigSourceCreateRequest: {
+            /** Path */
+            path: string;
+        };
+        /** PluginConfigSourceDeleteResult */
+        PluginConfigSourceDeleteResult: {
+            /**
+             * Success
+             * @default true
+             */
+            success: boolean;
+        };
+        /**
+         * PluginConfigSourceView
+         * @description A persisted plugin-config file or directory under the game root.
+         */
+        PluginConfigSourceView: {
+            /** Absolute Path */
+            absolute_path: string;
+            /** Id */
+            id?: number | null;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /**
+             * Persisted
+             * @default false
+             */
+            persisted: boolean;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "file" | "directory";
+        };
+        /**
+         * PluginConfigSourcesView
+         * @description Source list. GET is database-only and does not open SSH.
+         */
+        PluginConfigSourcesView: {
+            /** Game Directory */
+            game_directory: string;
+            /** Server Id */
+            server_id: number;
+            /** Sources */
+            sources?: components["schemas"]["PluginConfigSourceView"][];
         };
         /** PluginConfigUpdateRequest */
         PluginConfigUpdateRequest: {
@@ -6290,6 +10775,19 @@ export interface components {
         PluginConflictRulesUpdate: {
             /** Rules */
             rules?: components["schemas"]["PluginConflictRuleInput"][];
+        };
+        /** PluginConflictView */
+        PluginConflictView: {
+            /** Plugin A Id */
+            plugin_a_id: number;
+            /** Plugin B Id */
+            plugin_b_id: number;
+            /** Reason */
+            reason: string;
+            /** Rule Id */
+            rule_id: number;
+            /** Severity */
+            severity: string;
         };
         /** PluginDiagnosticExecuteRequest */
         PluginDiagnosticExecuteRequest: {
@@ -6373,6 +10871,67 @@ export interface components {
             }[];
         };
         /**
+         * PluginInstallPlanView
+         * @description Deterministic install preflight. Does not mutate the server.
+         */
+        PluginInstallPlanView: {
+            /** Already Installed */
+            already_installed?: number[];
+            /** Blocked */
+            blocked: boolean;
+            /** Compatibility Unknown */
+            compatibility_unknown?: string[];
+            /** Dependencies */
+            dependencies?: components["schemas"]["PluginRef"][];
+            /** Hard Conflicts */
+            hard_conflicts?: components["schemas"]["PluginConflictView"][];
+            /** Installation Order */
+            installation_order?: number[];
+            /** Plan Hash */
+            plan_hash: string;
+            plugin: components["schemas"]["PluginRef"];
+            /** Server Id */
+            server_id: number;
+            /** Steps */
+            steps?: components["schemas"]["PluginInstallStep"][];
+            /** Tracking Records Without Remote Evidence */
+            tracking_records_without_remote_evidence?: string[];
+            /** Warnings */
+            warnings?: components["schemas"]["PluginConflictView"][];
+        };
+        /**
+         * PluginInstallRequest
+         * @description Acknowledge warnings and optionally pin the preflight plan hash.
+         */
+        PluginInstallRequest: {
+            /** Acknowledge Warning Rule Ids */
+            acknowledge_warning_rule_ids?: number[];
+            /** Plan Hash */
+            plan_hash?: string | null;
+        };
+        /** PluginInstallStep */
+        PluginInstallStep: {
+            /** Kind */
+            kind: string;
+            /** Order */
+            order: number;
+            /** Plugin Id */
+            plugin_id: number;
+            /** Reason */
+            reason: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+        };
+        /** PluginRef */
+        PluginRef: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+        };
+        /**
          * PluginUninstallRequest
          * @description Schema for plugin uninstallation request
          */
@@ -6402,6 +10961,287 @@ export interface components {
             message: string;
             /** Success */
             success: boolean;
+        };
+        /** PluginUpdateStatusView */
+        PluginUpdateStatusView: {
+            /**
+             * Current
+             * @default 0
+             */
+            current: number;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Logs */
+            logs?: string[];
+            /** Message */
+            message?: string | null;
+            /**
+             * Phase
+             * @default idle
+             */
+            phase: string;
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * State
+             * @default idle
+             */
+            state: string;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /** PluginUpdatesPluginPatch */
+        PluginUpdatesPluginPatch: {
+            /** Auto Update Enabled */
+            auto_update_enabled?: boolean | null;
+            /** Backup Before Update */
+            backup_before_update?: boolean | null;
+            /** Exclude Dirs */
+            exclude_dirs?: string[] | null;
+            /** Exclude Files */
+            exclude_files?: string[] | null;
+            /** Restart After Update */
+            restart_after_update?: boolean | null;
+        };
+        /** PluginUpdatesSettingsRequest */
+        PluginUpdatesSettingsRequest: {
+            /** Enable Plugin Auto Update */
+            enable_plugin_auto_update: boolean;
+            /**
+             * Enable Plugin Post Update Commands
+             * @default false
+             */
+            enable_plugin_post_update_commands: boolean;
+            /** Plugin Post Update Command Ids */
+            plugin_post_update_command_ids?: number[];
+            /** Plugin Update Check Interval Hours */
+            plugin_update_check_interval_hours: number;
+        };
+        /** PluginUpdatesView */
+        PluginUpdatesView: {
+            /** Enable Plugin Auto Update */
+            enable_plugin_auto_update: boolean;
+            /**
+             * Enable Plugin Post Update Commands
+             * @default false
+             */
+            enable_plugin_post_update_commands: boolean;
+            /** Last Plugin Update Check */
+            last_plugin_update_check?: string | null;
+            /** Plugin Post Update Command Ids */
+            plugin_post_update_command_ids?: number[];
+            /** Plugin Update Check Interval Hours */
+            plugin_update_check_interval_hours: number;
+            /** Plugins */
+            plugins?: components["schemas"]["ManagedPluginUpdateView"][];
+        };
+        /**
+         * ProfileApiKeyGenerate
+         * @description Optional captcha when rotating the personal API key from the console.
+         */
+        ProfileApiKeyGenerate: {
+            /** Captcha Code */
+            captcha_code?: string | null;
+            /** Captcha Token */
+            captcha_token?: string | null;
+        };
+        /**
+         * ProfileApiKeyView
+         * @description The user's own panel API key. Returned only on this dedicated reveal endpoint.
+         */
+        ProfileApiKeyView: {
+            /** Api Key */
+            api_key: string;
+            /** Created At */
+            created_at?: string | null;
+        };
+        /**
+         * ProfilePasswordChange
+         * @description Change the signed-in user's password. Requires the current password and captcha.
+         */
+        ProfilePasswordChange: {
+            /** Captcha Code */
+            captcha_code: string;
+            /** Captcha Token */
+            captcha_token: string;
+            /** Confirm Password */
+            confirm_password: string;
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
+        };
+        /**
+         * ProfilePatch
+         * @description Personal-center updates. Sensitive fields are write-only and captcha-gated.
+         */
+        ProfilePatch: {
+            /** Captcha Code */
+            captcha_code?: string | null;
+            /** Captcha Token */
+            captcha_token?: string | null;
+            /**
+             * Clear Github Token
+             * @default false
+             */
+            clear_github_token: boolean;
+            /**
+             * Clear Steam Api Key
+             * @default false
+             */
+            clear_steam_api_key: boolean;
+            /** Email */
+            email?: string | null;
+            /** Github Token */
+            github_token?: string | null;
+            /** Steam Api Key */
+            steam_api_key?: string | null;
+            /** Steamcmd Max Retries */
+            steamcmd_max_retries?: number | null;
+        };
+        /**
+         * ProfileS3Patch
+         * @description Partial S3 backup update. Secret is write-only; captcha is required.
+         */
+        ProfileS3Patch: {
+            /** Access Key Id */
+            access_key_id?: string | null;
+            /** Bucket */
+            bucket?: string | null;
+            /** Captcha Code */
+            captcha_code: string;
+            /** Captcha Token */
+            captcha_token: string;
+            /**
+             * Clear Secret
+             * @default false
+             */
+            clear_secret: boolean;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Endpoint Url */
+            endpoint_url?: string | null;
+            /** Prefix */
+            prefix?: string | null;
+            /** Region */
+            region?: string | null;
+            /** Retention Count */
+            retention_count?: number | null;
+            /** Secret Access Key */
+            secret_access_key?: string | null;
+            /** Use Ssl */
+            use_ssl?: boolean | null;
+        };
+        /** ProfileS3TestStep */
+        ProfileS3TestStep: {
+            /** Message */
+            message: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+        };
+        /** ProfileS3TestView */
+        ProfileS3TestView: {
+            /** Message */
+            message: string;
+            /** Steps */
+            steps?: components["schemas"]["ProfileS3TestStep"][];
+            /** Success */
+            success: boolean;
+        };
+        /**
+         * ProfileS3View
+         * @description S3-compatible backup settings. The secret key is never echoed.
+         */
+        ProfileS3View: {
+            /** Access Key Id */
+            access_key_id?: string | null;
+            /** Bucket */
+            bucket?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Endpoint Url */
+            endpoint_url?: string | null;
+            /**
+             * Has Secret
+             * @default false
+             */
+            has_secret: boolean;
+            /**
+             * Is Configured
+             * @default false
+             */
+            is_configured: boolean;
+            /** Prefix */
+            prefix?: string | null;
+            /** Region */
+            region?: string | null;
+            /**
+             * Retention Count
+             * @default 10
+             */
+            retention_count: number;
+            /**
+             * Use Ssl
+             * @default true
+             */
+            use_ssl: boolean;
+        };
+        /**
+         * ProfileView
+         * @description Personal-center projection. Secrets stay write-only except the API key reveal.
+         */
+        ProfileView: {
+            /** Created At */
+            created_at?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Github Token Prefix */
+            github_token_prefix?: string | null;
+            /**
+             * Has Api Key
+             * @default false
+             */
+            has_api_key: boolean;
+            /**
+             * Has Github Token
+             * @default false
+             */
+            has_github_token: boolean;
+            /**
+             * Has Steam Api Key
+             * @default false
+             */
+            has_steam_api_key: boolean;
+            /** Id */
+            id: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Is Admin */
+            is_admin: boolean;
+            /** Steam Api Key Prefix */
+            steam_api_key_prefix?: string | null;
+            /**
+             * Steamcmd Max Retries
+             * @default 20
+             */
+            steamcmd_max_retries: number;
+            /**
+             * Steamcmd Max Retries Default
+             * @default 20
+             */
+            steamcmd_max_retries_default: number;
+            /**
+             * Steamcmd Max Retries Limit
+             * @default 100
+             */
+            steamcmd_max_retries_limit: number;
+            /** Username */
+            username: string;
         };
         /**
          * RedisServerDetail
@@ -6455,6 +11295,25 @@ export interface components {
             ssh_user: string;
         };
         /**
+         * RegisterRequest
+         * @description Public self-registration body. CAPTCHA-gated; creates a non-admin member.
+         */
+        RegisterRequest: {
+            /** Captcha Code */
+            captcha_code: string;
+            /** Captcha Token */
+            captcha_token: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+            /** Username */
+            username: string;
+        };
+        /**
          * RenameRequest
          * @description Rename file/directory request
          */
@@ -6489,6 +11348,40 @@ export interface components {
             last_modified?: string | null;
             /** Size */
             size: number;
+        };
+        /**
+         * S3BackupItemView
+         * @description One S3 plugin-backup object. The object key is a path, not an access key.
+         */
+        S3BackupItemView: {
+            /** Filename */
+            filename: string;
+            /** Key */
+            key: string;
+            /** Last Modified */
+            last_modified?: string | null;
+            /** Size */
+            size: number;
+        };
+        /**
+         * S3BackupListView
+         * @description S3 backup listing. Credentials never appear; an empty list is valid when unconfigured.
+         */
+        S3BackupListView: {
+            /** Configured */
+            configured: boolean;
+            /** Items */
+            items: components["schemas"]["S3BackupItemView"][];
+            /** Message */
+            message?: string | null;
+        };
+        /**
+         * S3RestoreBody
+         * @description Restore one listed backup. The object key must belong to this server's prefix.
+         */
+        S3RestoreBody: {
+            /** Object Key */
+            object_key: string;
         };
         /**
          * S3RestoreRequest
@@ -6607,6 +11500,28 @@ export interface components {
              */
             schedule_value: string;
         };
+        /** ScheduledTaskCreateRequest */
+        ScheduledTaskCreateRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "start" | "stop" | "restart" | "update" | "validate" | "backup_plugins";
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Schedule Type
+             * @enum {string}
+             */
+            schedule_type: "daily" | "weekly" | "interval" | "cron";
+            /** Schedule Value */
+            schedule_value: string;
+        };
         /**
          * ScheduledTaskResponse
          * @description Schema for scheduled task response
@@ -6678,6 +11593,53 @@ export interface components {
              */
             schedule_value?: string | null;
         };
+        /** ScheduledTaskUpdateRequest */
+        ScheduledTaskUpdateRequest: {
+            /** Action */
+            action?: ("start" | "stop" | "restart" | "update" | "validate" | "backup_plugins") | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Schedule Type */
+            schedule_type?: ("daily" | "weekly" | "interval" | "cron") | null;
+            /** Schedule Value */
+            schedule_value?: string | null;
+        };
+        /** ScheduledTaskView */
+        ScheduledTaskView: {
+            /** Action */
+            action: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Id */
+            id: number;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Run */
+            last_run?: string | null;
+            /** Last Status */
+            last_status?: string | null;
+            /** Name */
+            name: string;
+            /** Next Run */
+            next_run?: string | null;
+            /**
+             * Run Count
+             * @default 0
+             */
+            run_count: number;
+            /** Schedule Type */
+            schedule_type: string;
+            /** Schedule Value */
+            schedule_value: string;
+            /** Server Id */
+            server_id: number;
+            /** Updated At */
+            updated_at?: string | null;
+        };
         /**
          * ServerAction
          * @description Schema for server actions
@@ -6718,6 +11680,11 @@ export interface components {
             a2s_query_port?: number | null;
             /** Additional Parameters */
             additional_parameters?: string | null;
+            /**
+             * Apt Mirror
+             * @description Preferred apt mirror: official, ustc, or tuna/tsinghua
+             */
+            apt_mirror?: string | null;
             /** @default password */
             auth_type: components["schemas"]["AuthType"];
             /**
@@ -6942,6 +11909,32 @@ export interface components {
             use_panel_proxy: boolean;
         };
         /**
+         * ServerConfigExport
+         * @description Top-level portable server configuration export document.
+         */
+        ServerConfigExport: {
+            /** Exported At */
+            exported_at?: string | null;
+            /**
+             * Format
+             * @default upkk-cs2-server-config
+             * @constant
+             */
+            format: "upkk-cs2-server-config";
+            /**
+             * Include Secrets
+             * @default false
+             */
+            include_secrets: boolean;
+            /** Servers */
+            servers: components["schemas"]["ServerConfigEntry"][];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
          * ServerConfigImportRequest
          * @description Import request with a selectable conflict strategy.
          */
@@ -7039,6 +12032,11 @@ export interface components {
             a2s_query_port?: number | null;
             /** Additional Parameters */
             additional_parameters?: string | null;
+            /**
+             * Apt Mirror
+             * @description Preferred apt mirror: official, ustc, or tuna/tsinghua
+             */
+            apt_mirror?: string | null;
             /**
              * Auto Clear Crash Hours
              * @description Hours offline before auto-clearing crash history (0 or None = disabled, default 2 hours recommended)
@@ -7210,10 +12208,106 @@ export interface components {
             use_panel_proxy: boolean;
         };
         /**
-         * ServerDetail
-         * @description Extended, still non-secret, server projection for the workspace.
+         * ServerCreateRequest
+         * @description Create a server. Secret fields are write-only and never echoed.
          */
-        ServerDetail: {
+        ServerCreateRequest: {
+            /** Apt Mirror */
+            apt_mirror?: string | null;
+            /** Captcha Code */
+            captcha_code: string;
+            /** Captcha Token */
+            captcha_token: string;
+            /**
+             * Default Map
+             * @default de_dust2
+             */
+            default_map: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Game Directory
+             * @default /home/cs2server/cs2
+             */
+            game_directory: string;
+            /**
+             * Game Mode
+             * @default competitive
+             */
+            game_mode: string;
+            /**
+             * Game Port
+             * @default 27015
+             */
+            game_port: number;
+            /**
+             * Game Type
+             * @default 0
+             */
+            game_type: string;
+            /** Host */
+            host: string;
+            /**
+             * Max Players
+             * @default 32
+             */
+            max_players: number;
+            /** Name */
+            name: string;
+            /** Rcon Password */
+            rcon_password?: string | null;
+            /**
+             * Server Name
+             * @default CS2 Server
+             */
+            server_name: string;
+            /**
+             * Session Manager
+             * @default tmux
+             * @enum {string}
+             */
+            session_manager: "screen" | "tmux";
+            /** Ssh Password */
+            ssh_password: string;
+            /**
+             * Ssh Port
+             * @default 22
+             */
+            ssh_port: number;
+            /** Ssh User */
+            ssh_user: string;
+            /** Steam Account Token */
+            steam_account_token?: string | null;
+            /** Sudo Password */
+            sudo_password?: string | null;
+        };
+        /**
+         * ServerCreateResult
+         * @description Create response: the server plus host-initialization outcome.
+         */
+        ServerCreateResult: {
+            /**
+             * A2S Check Interval Seconds
+             * @default 60
+             */
+            a2s_check_interval_seconds: number;
+            /**
+             * A2S Failure Threshold
+             * @default 3
+             */
+            a2s_failure_threshold: number;
+            /** Apt Mirror */
+            apt_mirror?: string | null;
+            /**
+             * Auto Restart On Crash
+             * @default true
+             */
+            auto_restart_on_crash: boolean;
+            /**
+             * Consecutive Ssh Failures
+             * @default 0
+             */
+            consecutive_ssh_failures: number;
             /**
              * Created At
              * Format: date-time
@@ -7223,6 +12317,21 @@ export interface components {
             default_map: string;
             /** Description */
             description?: string | null;
+            /**
+             * Enable A2S Monitoring
+             * @default false
+             */
+            enable_a2s_monitoring: boolean;
+            /**
+             * Enable Auto Update
+             * @default true
+             */
+            enable_auto_update: boolean;
+            /**
+             * Enable Panel Monitoring
+             * @default false
+             */
+            enable_panel_monitoring: boolean;
             /** Game Directory */
             game_directory: string;
             /** Game Mode */
@@ -7231,26 +12340,321 @@ export interface components {
             game_port: number;
             /** Game Type */
             game_type: string;
+            /** Github Proxy */
+            github_proxy?: string | null;
+            /**
+             * Has Sudo Password
+             * @default false
+             */
+            has_sudo_password: boolean;
             /** Host */
             host: string;
+            /**
+             * Host Initialized
+             * @default true
+             */
+            host_initialized: boolean;
             /** Id */
             id: number;
+            /**
+             * Initialization Message
+             * @default
+             */
+            initialization_message: string;
+            /**
+             * Is Ssh Down
+             * @default false
+             */
+            is_ssh_down: boolean;
             /** Last Deployed */
             last_deployed?: string | null;
+            /** Last Ssh Health Check */
+            last_ssh_health_check?: string | null;
+            /** Last Ssh Success */
+            last_ssh_success?: string | null;
+            /** Manual Install Command */
+            manual_install_command?: string | null;
             /** Max Players */
             max_players: number;
+            /** Missing Packages */
+            missing_packages?: string[];
+            /**
+             * Monitor Interval Seconds
+             * @default 60
+             */
+            monitor_interval_seconds: number;
             /** Name */
             name: string;
+            /** Owner Id */
+            owner_id?: number | null;
+            /** Owner Is Admin */
+            owner_is_admin?: boolean | null;
+            /** Owner Username */
+            owner_username?: string | null;
+            /** Server Name */
+            server_name: string;
+            /**
+             * Session Manager
+             * @default tmux
+             * @enum {string}
+             */
+            session_manager: "screen" | "tmux";
+            /**
+             * Ssh Active Leases
+             * @default 0
+             */
+            ssh_active_leases: number;
+            /**
+             * Ssh Health Check Interval Hours
+             * @default 2
+             */
+            ssh_health_check_interval_hours: number;
+            /**
+             * Ssh Health Failure Threshold
+             * @default 84
+             */
+            ssh_health_failure_threshold: number;
+            /**
+             * Ssh Health Status
+             * @default unknown
+             */
+            ssh_health_status: string;
+            /** Ssh Idle Seconds */
+            ssh_idle_seconds?: number | null;
+            /**
+             * Ssh In Use
+             * @default false
+             */
+            ssh_in_use: boolean;
+            /**
+             * Ssh Pooled
+             * @default false
+             */
+            ssh_pooled: boolean;
             /** Ssh Port */
             ssh_port: number;
             /** Ssh User */
             ssh_user: string;
             status: components["schemas"]["ServerStatus"];
             /**
+             * Tv Enable
+             * @default false
+             */
+            tv_enable: boolean;
+            /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Use Panel Proxy
+             * @default false
+             */
+            use_panel_proxy: boolean;
+        };
+        /**
+         * ServerDetail
+         * @description Extended, still non-secret, server projection for the workspace.
+         */
+        ServerDetail: {
+            /**
+             * A2S Check Interval Seconds
+             * @default 60
+             */
+            a2s_check_interval_seconds: number;
+            /**
+             * A2S Failure Threshold
+             * @default 3
+             */
+            a2s_failure_threshold: number;
+            /** Apt Mirror */
+            apt_mirror?: string | null;
+            /**
+             * Auto Restart On Crash
+             * @default true
+             */
+            auto_restart_on_crash: boolean;
+            /**
+             * Consecutive Ssh Failures
+             * @default 0
+             */
+            consecutive_ssh_failures: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Default Map */
+            default_map: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Enable A2S Monitoring
+             * @default false
+             */
+            enable_a2s_monitoring: boolean;
+            /**
+             * Enable Auto Update
+             * @default true
+             */
+            enable_auto_update: boolean;
+            /**
+             * Enable Panel Monitoring
+             * @default false
+             */
+            enable_panel_monitoring: boolean;
+            /** Game Directory */
+            game_directory: string;
+            /** Game Mode */
+            game_mode: string;
+            /** Game Port */
+            game_port: number;
+            /** Game Type */
+            game_type: string;
+            /** Github Proxy */
+            github_proxy?: string | null;
+            /**
+             * Has Sudo Password
+             * @default false
+             */
+            has_sudo_password: boolean;
+            /** Host */
+            host: string;
+            /** Id */
+            id: number;
+            /**
+             * Is Ssh Down
+             * @default false
+             */
+            is_ssh_down: boolean;
+            /** Last Deployed */
+            last_deployed?: string | null;
+            /** Last Ssh Health Check */
+            last_ssh_health_check?: string | null;
+            /** Last Ssh Success */
+            last_ssh_success?: string | null;
+            /** Max Players */
+            max_players: number;
+            /**
+             * Monitor Interval Seconds
+             * @default 60
+             */
+            monitor_interval_seconds: number;
+            /** Name */
+            name: string;
+            /** Owner Id */
+            owner_id?: number | null;
+            /** Owner Is Admin */
+            owner_is_admin?: boolean | null;
+            /** Owner Username */
+            owner_username?: string | null;
+            /** Server Name */
+            server_name: string;
+            /**
+             * Session Manager
+             * @default tmux
+             * @enum {string}
+             */
+            session_manager: "screen" | "tmux";
+            /**
+             * Ssh Active Leases
+             * @default 0
+             */
+            ssh_active_leases: number;
+            /**
+             * Ssh Health Check Interval Hours
+             * @default 2
+             */
+            ssh_health_check_interval_hours: number;
+            /**
+             * Ssh Health Failure Threshold
+             * @default 84
+             */
+            ssh_health_failure_threshold: number;
+            /**
+             * Ssh Health Status
+             * @default unknown
+             */
+            ssh_health_status: string;
+            /** Ssh Idle Seconds */
+            ssh_idle_seconds?: number | null;
+            /**
+             * Ssh In Use
+             * @default false
+             */
+            ssh_in_use: boolean;
+            /**
+             * Ssh Pooled
+             * @default false
+             */
+            ssh_pooled: boolean;
+            /** Ssh Port */
+            ssh_port: number;
+            /** Ssh User */
+            ssh_user: string;
+            status: components["schemas"]["ServerStatus"];
+            /**
+             * Tv Enable
+             * @default false
+             */
+            tv_enable: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Use Panel Proxy
+             * @default false
+             */
+            use_panel_proxy: boolean;
+        };
+        /**
+         * ServerOperationRequest
+         * @description Start a long-running server action. The HTTP request returns immediately.
+         */
+        ServerOperationRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins";
+        };
+        /**
+         * ServerOperationView
+         * @description Non-secret projection of one async server operation.
+         */
+        ServerOperationView: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore";
+            /** Actor User Id */
+            actor_user_id: number;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Operation Id */
+            operation_id: string;
+            /** Server Id */
+            server_id: number;
+            server_status?: components["schemas"]["ServerStatus"] | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "failed";
+            /** Stream Url */
+            stream_url: string;
+            /** Success */
+            success?: boolean | null;
         };
         /**
          * ServerResponse
@@ -7603,21 +13007,61 @@ export interface components {
          * @description Non-secret server projection for list and card views.
          */
         ServerSummary: {
+            /**
+             * Consecutive Ssh Failures
+             * @default 0
+             */
+            consecutive_ssh_failures: number;
             /** Default Map */
             default_map: string;
             /** Description */
             description?: string | null;
             /** Game Port */
             game_port: number;
+            /** Github Proxy */
+            github_proxy?: string | null;
             /** Host */
             host: string;
             /** Id */
             id: number;
+            /**
+             * Is Ssh Down
+             * @default false
+             */
+            is_ssh_down: boolean;
+            /** Last Ssh Health Check */
+            last_ssh_health_check?: string | null;
             /** Max Players */
             max_players: number;
             /** Name */
             name: string;
+            /** Owner Id */
+            owner_id?: number | null;
+            /** Owner Is Admin */
+            owner_is_admin?: boolean | null;
+            /** Owner Username */
+            owner_username?: string | null;
+            /**
+             * Ssh Health Check Interval Hours
+             * @default 2
+             */
+            ssh_health_check_interval_hours: number;
+            /**
+             * Ssh Health Failure Threshold
+             * @default 84
+             */
+            ssh_health_failure_threshold: number;
+            /**
+             * Ssh Health Status
+             * @default unknown
+             */
+            ssh_health_status: string;
             status: components["schemas"]["ServerStatus"];
+            /**
+             * Use Panel Proxy
+             * @default false
+             */
+            use_panel_proxy: boolean;
         };
         /**
          * ServerUpdate
@@ -7646,6 +13090,11 @@ export interface components {
             a2s_query_port?: number | null;
             /** Additional Parameters */
             additional_parameters?: string | null;
+            /**
+             * Apt Mirror
+             * @description Preferred apt mirror: official, ustc, or tuna/tsinghua
+             */
+            apt_mirror?: string | null;
             /**
              * Auto Clear Crash Hours
              * @description Hours offline before auto-clearing crash history (0 or None = disabled)
@@ -7763,6 +13212,230 @@ export interface components {
             use_panel_proxy?: boolean | null;
         };
         /**
+         * ServerUpdateRequest
+         * @description Partial server update. Secrets are write-only; omit to leave unchanged.
+         */
+        ServerUpdateRequest: {
+            /** A2S Check Interval Seconds */
+            a2s_check_interval_seconds?: number | null;
+            /** A2S Failure Threshold */
+            a2s_failure_threshold?: number | null;
+            /** Apt Mirror */
+            apt_mirror?: string | null;
+            /** Auto Restart On Crash */
+            auto_restart_on_crash?: boolean | null;
+            /** Default Map */
+            default_map?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Enable A2S Monitoring */
+            enable_a2s_monitoring?: boolean | null;
+            /** Enable Auto Update */
+            enable_auto_update?: boolean | null;
+            /** Enable Panel Monitoring */
+            enable_panel_monitoring?: boolean | null;
+            /** Game Directory */
+            game_directory?: string | null;
+            /** Game Mode */
+            game_mode?: string | null;
+            /** Game Port */
+            game_port?: number | null;
+            /** Game Type */
+            game_type?: string | null;
+            /** Github Proxy */
+            github_proxy?: string | null;
+            /** Host */
+            host?: string | null;
+            /** Max Players */
+            max_players?: number | null;
+            /** Monitor Interval Seconds */
+            monitor_interval_seconds?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Rcon Password */
+            rcon_password?: string | null;
+            /** Server Name */
+            server_name?: string | null;
+            /** Session Manager */
+            session_manager?: ("screen" | "tmux") | null;
+            /** Ssh Password */
+            ssh_password?: string | null;
+            /** Ssh Port */
+            ssh_port?: number | null;
+            /** Ssh User */
+            ssh_user?: string | null;
+            /** Steam Account Token */
+            steam_account_token?: string | null;
+            /** Sudo Password */
+            sudo_password?: string | null;
+            /** Tv Enable */
+            tv_enable?: boolean | null;
+            /** Use Panel Proxy */
+            use_panel_proxy?: boolean | null;
+        };
+        /**
+         * ServerWriteResult
+         * @description Detail plus whether a running server needs a restart after the write.
+         */
+        ServerWriteResult: {
+            /**
+             * A2S Check Interval Seconds
+             * @default 60
+             */
+            a2s_check_interval_seconds: number;
+            /**
+             * A2S Failure Threshold
+             * @default 3
+             */
+            a2s_failure_threshold: number;
+            /** Apt Mirror */
+            apt_mirror?: string | null;
+            /**
+             * Auto Restart On Crash
+             * @default true
+             */
+            auto_restart_on_crash: boolean;
+            /**
+             * Consecutive Ssh Failures
+             * @default 0
+             */
+            consecutive_ssh_failures: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Default Map */
+            default_map: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Enable A2S Monitoring
+             * @default false
+             */
+            enable_a2s_monitoring: boolean;
+            /**
+             * Enable Auto Update
+             * @default true
+             */
+            enable_auto_update: boolean;
+            /**
+             * Enable Panel Monitoring
+             * @default false
+             */
+            enable_panel_monitoring: boolean;
+            /** Game Directory */
+            game_directory: string;
+            /** Game Mode */
+            game_mode: string;
+            /** Game Port */
+            game_port: number;
+            /** Game Type */
+            game_type: string;
+            /** Github Proxy */
+            github_proxy?: string | null;
+            /**
+             * Has Sudo Password
+             * @default false
+             */
+            has_sudo_password: boolean;
+            /** Host */
+            host: string;
+            /** Id */
+            id: number;
+            /**
+             * Is Ssh Down
+             * @default false
+             */
+            is_ssh_down: boolean;
+            /** Last Deployed */
+            last_deployed?: string | null;
+            /** Last Ssh Health Check */
+            last_ssh_health_check?: string | null;
+            /** Last Ssh Success */
+            last_ssh_success?: string | null;
+            /** Max Players */
+            max_players: number;
+            /**
+             * Monitor Interval Seconds
+             * @default 60
+             */
+            monitor_interval_seconds: number;
+            /** Name */
+            name: string;
+            /** Owner Id */
+            owner_id?: number | null;
+            /** Owner Is Admin */
+            owner_is_admin?: boolean | null;
+            /** Owner Username */
+            owner_username?: string | null;
+            /**
+             * Restart Required
+             * @default false
+             */
+            restart_required: boolean;
+            /** Server Name */
+            server_name: string;
+            /**
+             * Session Manager
+             * @default tmux
+             * @enum {string}
+             */
+            session_manager: "screen" | "tmux";
+            /**
+             * Ssh Active Leases
+             * @default 0
+             */
+            ssh_active_leases: number;
+            /**
+             * Ssh Health Check Interval Hours
+             * @default 2
+             */
+            ssh_health_check_interval_hours: number;
+            /**
+             * Ssh Health Failure Threshold
+             * @default 84
+             */
+            ssh_health_failure_threshold: number;
+            /**
+             * Ssh Health Status
+             * @default unknown
+             */
+            ssh_health_status: string;
+            /** Ssh Idle Seconds */
+            ssh_idle_seconds?: number | null;
+            /**
+             * Ssh In Use
+             * @default false
+             */
+            ssh_in_use: boolean;
+            /**
+             * Ssh Pooled
+             * @default false
+             */
+            ssh_pooled: boolean;
+            /** Ssh Port */
+            ssh_port: number;
+            /** Ssh User */
+            ssh_user: string;
+            status: components["schemas"]["ServerStatus"];
+            /**
+             * Tv Enable
+             * @default false
+             */
+            tv_enable: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Use Panel Proxy
+             * @default false
+             */
+            use_panel_proxy: boolean;
+        };
+        /**
          * SessionUser
          * @description The authenticated principal as the console needs it.
          */
@@ -7784,12 +13457,129 @@ export interface components {
             path: string;
         };
         /**
+         * SshPoolView
+         * @description Non-secret SSH connection-pool snapshot for the console chrome.
+         */
+        SshPoolView: {
+            /**
+             * Connections
+             * @default 0
+             */
+            connections: number;
+            /**
+             * Draining
+             * @default 0
+             */
+            draining: number;
+            /**
+             * Idle
+             * @default 0
+             */
+            idle: number;
+            /**
+             * Idle Timeout
+             * @default 900
+             */
+            idle_timeout: number;
+            /**
+             * In Use
+             * @default 0
+             */
+            in_use: number;
+            /**
+             * Keepalive Count Max
+             * @default 3
+             */
+            keepalive_count_max: number;
+            /**
+             * Keepalive Interval
+             * @default 30
+             */
+            keepalive_interval: number;
+            /**
+             * Leases
+             * @default 0
+             */
+            leases: number;
+            /**
+             * Max Lifetime
+             * @default 3600
+             */
+            max_lifetime: number;
+        };
+        /**
+         * StartupCommandView
+         * @description Masked startup-command preview. Passwords and tokens are never returned in clear text.
+         */
+        StartupCommandView: {
+            /** Cs2 Command */
+            cs2_command: string;
+            /** Game Mode Resolved */
+            game_mode_resolved: string;
+            /** Session Manager */
+            session_manager: string;
+            /** Startup Command */
+            startup_command: string;
+        };
+        /**
          * SteamApiKeyResponse
          * @description Schema for Steam API key response
          */
         SteamApiKeyResponse: {
             /** Steam Api Key */
             steam_api_key?: string | null;
+        };
+        /**
+         * SteamLatestVersionView
+         * @description Cached Steam CS2 advertised version. Never queries Steam on this request.
+         */
+        SteamLatestVersionView: {
+            /**
+             * Available
+             * @default false
+             */
+            available: boolean;
+            /** Message */
+            message?: string | null;
+            /** Timestamp */
+            timestamp?: string | null;
+            /** Version */
+            version?: string | null;
+        };
+        /**
+         * SystemSettingsPatch
+         * @description Partial admin update. Secret fields are write-only and never echoed.
+         */
+        SystemSettingsPatch: {
+            /**
+             * Clear Global Github Token
+             * @default false
+             */
+            clear_global_github_token: boolean;
+            /** Default Proxy Mode */
+            default_proxy_mode?: ("direct" | "panel" | "github_url") | null;
+            /** Email Enabled */
+            email_enabled?: boolean | null;
+            /** Email From Address */
+            email_from_address?: string | null;
+            /** Email From Name */
+            email_from_name?: string | null;
+            /** Email Provider */
+            email_provider?: ("gmail" | "smtp") | null;
+            /** Github Proxy Url */
+            github_proxy_url?: string | null;
+            /** Global Github Token */
+            global_github_token?: string | null;
+            /** Smtp Host */
+            smtp_host?: string | null;
+            /** Smtp Password */
+            smtp_password?: string | null;
+            /** Smtp Port */
+            smtp_port?: number | null;
+            /** Smtp Use Tls */
+            smtp_use_tls?: boolean | null;
+            /** Smtp Username */
+            smtp_username?: string | null;
         };
         /**
          * SystemSettingsResponse
@@ -7863,6 +13653,52 @@ export interface components {
             smtp_use_tls?: boolean | null;
             /** Smtp Username */
             smtp_username?: string | null;
+        };
+        /**
+         * SystemSettingsView
+         * @description Admin system settings with secrets replaced by presence flags.
+         */
+        SystemSettingsView: {
+            /**
+             * Default Proxy Mode
+             * @enum {string}
+             */
+            default_proxy_mode: "direct" | "panel" | "github_url";
+            /** Email Enabled */
+            email_enabled: boolean;
+            /** Email From Address */
+            email_from_address?: string | null;
+            /** Email From Name */
+            email_from_name?: string | null;
+            /**
+             * Email Provider
+             * @enum {string}
+             */
+            email_provider: "gmail" | "smtp";
+            /** Github Proxy Url */
+            github_proxy_url?: string | null;
+            /** Global Github Token Prefix */
+            global_github_token_prefix?: string | null;
+            /** Gmail Ready */
+            gmail_ready: boolean;
+            /** Has Global Github Token */
+            has_global_github_token: boolean;
+            /** Has Gmail Credentials */
+            has_gmail_credentials: boolean;
+            /** Has Gmail Token */
+            has_gmail_token: boolean;
+            /** Has Smtp Password */
+            has_smtp_password: boolean;
+            /** Smtp Host */
+            smtp_host?: string | null;
+            /** Smtp Port */
+            smtp_port?: number | null;
+            /** Smtp Use Tls */
+            smtp_use_tls: boolean;
+            /** Smtp Username */
+            smtp_username?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /**
          * Token
@@ -8073,6 +13909,101 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** BatchActionRequest */
+        api__routes__v1__schemas__BatchActionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "restart" | "stop" | "update";
+            /** Server Ids */
+            server_ids: number[];
+        };
+        /** BatchInstallPluginsRequest */
+        api__routes__v1__schemas__BatchInstallPluginsRequest: {
+            /** Plugins */
+            plugins: ("metamod" | "counterstrikesharp" | "cs2fixes")[];
+            /** Server Ids */
+            server_ids: number[];
+        };
+        /** BatchSendCommandRequest */
+        api__routes__v1__schemas__BatchSendCommandRequest: {
+            /** Command */
+            command: string;
+            /** Server Ids */
+            server_ids: number[];
+        };
+        /**
+         * EmailTestRequest
+         * @description Send a test message through the currently saved email configuration.
+         */
+        api__routes__v1__schemas__EmailTestRequest: {
+            /**
+             * Test Email
+             * Format: email
+             */
+            test_email: string;
+        };
+        /**
+         * BatchActionRequest
+         * @description Schema for batch server actions
+         */
+        modules__schemas__servers__BatchActionRequest: {
+            /**
+             * Action
+             * @description Action to perform on all servers
+             */
+            action: string;
+            /**
+             * Server Ids
+             * @description List of server IDs to perform action on
+             */
+            server_ids: number[];
+        };
+        /**
+         * BatchInstallPluginsRequest
+         * @description Schema for batch plugin installation
+         */
+        modules__schemas__servers__BatchInstallPluginsRequest: {
+            /**
+             * Plugins
+             * @description List of plugins to install
+             */
+            plugins: string[];
+            /**
+             * Server Ids
+             * @description List of server IDs to install plugins on
+             */
+            server_ids: number[];
+        };
+        /**
+         * BatchSendCommandRequest
+         * @description Schema for batch send command to game servers
+         */
+        modules__schemas__servers__BatchSendCommandRequest: {
+            /**
+             * Command
+             * @description Command to send to game servers
+             */
+            command: string;
+            /**
+             * Server Ids
+             * @description List of server IDs to send command to
+             */
+            server_ids: number[];
+        };
+        /**
+         * EmailTestRequest
+         * @description Schema for email test request
+         */
+        modules__schemas__system__EmailTestRequest: {
+            /**
+             * Test Email
+             * Format: email
+             * @description Email address to send test email to
+             */
+            test_email: string;
         };
     };
     responses: never;
@@ -9375,6 +15306,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SteamApiKeyResponse"];
+                };
+            };
+        };
+    };
+    captcha_challenge_api_captcha_challenge_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptchaChallenge"];
                 };
             };
         };
@@ -11502,7 +17453,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["EmailTestRequest"];
+                "application/json": components["schemas"]["modules__schemas__system__EmailTestRequest"];
             };
         };
         responses: {
@@ -11513,6 +17464,287 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_workspace_api_v1_assistant_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantWorkspaceView"];
+                };
+            };
+        };
+    };
+    create_assistant_conversation_api_v1_assistant_conversations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantConversationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_conversation_api_v1_assistant_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversationDetailView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_assistant_conversation_api_v1_assistant_conversations__conversation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    interrupt_assistant_conversation_api_v1_assistant_conversations__conversation_id__interrupt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_assistant_message_api_v1_assistant_conversations__conversation_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantMessageCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantRunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_run_api_v1_assistant_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantRunDetailView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_assistant_run_events_api_v1_assistant_runs__run_id__events_get: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_assistant_tool_api_v1_assistant_runs__run_id__tools__tool_run_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                tool_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantToolDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
                 };
             };
             /** @description Validation Error */
@@ -11561,6 +17793,92 @@ export interface operations {
             };
         };
     };
+    forgot_password_api_v1_auth_forgot_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    google_config_api_v1_auth_google_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleConfigView"];
+                };
+            };
+        };
+    };
+    google_oauth_api_v1_auth_google_oauth_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleSignInRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthTokenView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_current_session_api_v1_auth_me_get: {
         parameters: {
             query?: never;
@@ -11577,6 +17895,430 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionUser"];
+                };
+            };
+        };
+    };
+    register_api_v1_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionUser"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_password_api_v1_auth_reset_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discord_bot_api_v1_discord_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordBotView"];
+                };
+            };
+        };
+    };
+    update_discord_bot_api_v1_discord_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordBotUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordBotView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_discord_bot_api_v1_discord_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+        };
+    };
+    get_discord_global_binding_api_v1_discord_global_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordGlobalBindingView"];
+                };
+            };
+        };
+    };
+    update_discord_global_binding_api_v1_discord_global_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordBindingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordGlobalBindingView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discord_global_options_api_v1_discord_global_options_get: {
+        parameters: {
+            query?: {
+                guild_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordOptionsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discord_guilds_api_v1_discord_guilds_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordOptionsView"];
+                };
+            };
+        };
+    };
+    push_discord_menu_api_v1_discord_menu_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordMenuPushBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordMenuPushView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discord_menu_options_api_v1_discord_menu_options_get: {
+        parameters: {
+            query?: {
+                guild_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordOptionsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_discord_bot_api_v1_discord_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordBotTestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordBotTestView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_overview_a2s_cache_api_v1_overview_a2s_cache_get: {
+        parameters: {
+            query?: {
+                scope?: "mine" | "all";
+                force_refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["A2SCacheListView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_overview_disk_space_api_v1_overview_disk_space_get: {
+        parameters: {
+            query?: {
+                scope?: "mine" | "all";
+                force_refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiskSpaceListView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_steam_latest_version_api_v1_overview_steam_version_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SteamLatestVersionView"];
                 };
             };
         };
@@ -11601,11 +18343,567 @@ export interface operations {
             };
         };
     };
+    export_plugin_catalog_api_v1_plugin_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginCatalogExport"];
+                };
+            };
+        };
+    };
+    import_plugin_catalog_route_api_v1_plugin_catalog_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginCatalogImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginCatalogImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_github_releases_api_v1_plugins_github_releases_get: {
+        parameters: {
+            query: {
+                repo_url: string;
+                count?: number;
+                server_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubReleasesView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_market_plugins_api_v1_plugins_market_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                category?: string | null;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_MarketPluginView_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_market_categories_api_v1_plugins_market_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginCategoryList"];
+                };
+            };
+        };
+    };
+    get_market_plugin_api_v1_plugins_market__plugin_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_profile_api_v1_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileView"];
+                };
+            };
+        };
+    };
+    update_profile_api_v1_profile_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfilePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_user_ai_settings_api_v1_profile_ai_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantUserSettingsView"];
+                };
+            };
+        };
+    };
+    update_user_ai_settings_api_v1_profile_ai_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantUserSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantUserSettingsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_user_ai_settings_api_v1_profile_ai_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantProviderTestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantProviderTestView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_api_key_api_v1_profile_api_key_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileApiKeyView"];
+                };
+            };
+        };
+    };
+    generate_user_api_key_api_v1_profile_api_key_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileApiKeyGenerate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileApiKeyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_api_key_api_v1_profile_api_key_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+        };
+    };
+    change_password_api_v1_profile_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfilePasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_s3_settings_api_v1_profile_s3_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileS3View"];
+                };
+            };
+        };
+    };
+    update_s3_settings_api_v1_profile_s3_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileS3Patch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileS3View"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_s3_settings_api_v1_profile_s3_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileS3TestView"];
+                };
+            };
+        };
+    };
+    export_server_configs_api_v1_server_configs_get: {
+        parameters: {
+            query?: {
+                server_ids?: number[] | null;
+                /** @description Include SSH, game, Steam, and Discord credentials. Default is a redacted copy. */
+                include_secrets?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerConfigExport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_server_configs_api_v1_server_configs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServerConfigImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerConfigImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_servers_api_v1_servers_get: {
         parameters: {
             query?: {
                 skip?: number;
                 limit?: number;
+                scope?: "mine" | "all";
             };
             header?: never;
             path?: never;
@@ -11620,6 +18918,200 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_server_api_v1_servers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServerCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerCreateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_batch_actions_api_v1_servers_batch_actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["api__routes__v1__schemas__BatchActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchActionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_batch_action_journal_api_v1_servers_batch_actions__batch_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchJournalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_batch_action_events_api_v1_servers_batch_actions__batch_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_batch_install_plugins_api_v1_servers_batch_install_plugins_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["api__routes__v1__schemas__BatchInstallPluginsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchActionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_batch_send_command_api_v1_servers_batch_send_command_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["api__routes__v1__schemas__BatchSendCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchActionView"];
                 };
             };
             /** @description Validation Error */
@@ -11660,6 +19152,3219 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_server_api_v1_servers__server_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServerUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_a2s_cache_api_v1_servers__server_id__a2s_cache_get: {
+        parameters: {
+            query?: {
+                force_refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["A2SCacheView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_agent_policy_api_v1_servers__server_id__agent_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPolicyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_server_agent_policy_api_v1_servers__server_id__agent_policy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentPolicyUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPolicyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_server_system_defaults_api_v1_servers__server_id__apply_system_defaults_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerWriteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_server_apt_mirror_api_v1_servers__server_id__apt_mirror_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AptMirrorApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_server_cleanup_items_api_v1_servers__server_id__cleanup_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CleanupDeleteBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CleanupDeleteView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_server_cleanup_api_v1_servers__server_id__cleanup_scan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CleanupScanView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_server_deployment_api_v1_servers__server_id__confirm_deployment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmDeploymentView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_console_workspace_api_v1_servers__server_id__console_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_custom_commands_api_v1_servers__server_id__custom_commands_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomCommandView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_custom_command_api_v1_servers__server_id__custom_commands_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomCommandWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomCommandView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_one_time_custom_command_api_v1_servers__server_id__custom_commands_execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomCommandExecuteBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomCommandExecuteView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_custom_command_api_v1_servers__server_id__custom_commands__command_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                command_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomCommandWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomCommandView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_custom_command_api_v1_servers__server_id__custom_commands__command_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                command_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_saved_custom_command_api_v1_servers__server_id__custom_commands__command_id__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                command_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomCommandExecuteView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_discord_binding_api_v1_servers__server_id__discord_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordBindingView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_server_discord_binding_api_v1_servers__server_id__discord_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordBindingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordBindingView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_discord_options_api_v1_servers__server_id__discord_options_get: {
+        parameters: {
+            query?: {
+                guild_id?: string | null;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordOptionsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_disk_space_api_v1_servers__server_id__disk_space_get: {
+        parameters: {
+            query?: {
+                force_refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiskSpaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_files_workspace_api_v1_servers__server_id__files_get: {
+        parameters: {
+            query?: {
+                path?: string | null;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilesWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_path_api_v1_servers__server_id__files_delete: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extract_archive_api_v1_servers__server_id__files_archives_extract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileExtractRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTaskView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_extract_status_api_v1_servers__server_id__files_archives_extract__task_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTaskView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_archive_api_v1_servers__server_id__files_archives_inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileArchiveInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileArchiveInspectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_file_content_api_v1_servers__server_id__files_content_get: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileContentView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_file_content_api_v1_servers__server_id__files_content_put: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileContentUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_file_api_v1_servers__server_id__files_download_get: {
+        parameters: {
+            query: {
+                path: string;
+                ticket?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_download_ticket_api_v1_servers__server_id__files_download_ticket_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DownloadTicketRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileDownloadTicketView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_from_url_api_v1_servers__server_id__files_download_url_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileUrlDownloadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTaskView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_download_url_status_api_v1_servers__server_id__files_download_url__task_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTaskView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_directory_api_v1_servers__server_id__files_mkdir_post: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileMkdirRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_path_api_v1_servers__server_id__files_rename_post: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_file_api_v1_servers__server_id__files_upload_post: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_file_api_v1_servers__server_id__files_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_game_updates_api_v1_servers__server_id__game_updates_get: {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameUpdatesView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_game_updates_api_v1_servers__server_id__game_updates_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GameUpdatesSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameUpdatesView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_game_update_operation_api_v1_servers__server_id__game_updates_operations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GameUpdateOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_maps_workspace_api_v1_servers__server_id__maps_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_map_api_v1_servers__server_id__maps_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_map_api_v1_servers__server_id__maps_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapPoolIdentityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_map_enabled_api_v1_servers__server_id__maps_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapEnabledPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_custom_sync_api_v1_servers__server_id__maps_custom_sync_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapSyncUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_custom_sync_api_v1_servers__server_id__maps_custom_sync_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapSyncRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uninstall_mapchooser_plugin_api_v1_servers__server_id__maps_plugin_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapChooserUninstallRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_plugin_config_api_v1_servers__server_id__maps_plugin_config_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapPluginConfigUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_map_preset_api_v1_servers__server_id__maps_presets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapPresetApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapsWorkspaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_server_operation_api_v1_servers__server_id__operations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServerOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_server_operation_api_v1_servers__server_id__operations_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentServerOperation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_deployment_lock_api_v1_servers__server_id__operations_lock_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentLockView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_deployment_lock_api_v1_servers__server_id__operations_lock_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_operation_logs_api_v1_servers__server_id__operations_logs_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentLogEntry"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_operation_api_v1_servers__server_id__operations__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_server_operation_events_api_v1_servers__server_id__operations__operation_id__events_get: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_operation_journal_api_v1_servers__server_id__operations__operation_id__journal_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationJournal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_source_path_api_v1_servers__server_id__plugin_configs_browse_get: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginConfigBrowseView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sources_api_v1_servers__server_id__plugin_configs_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginConfigSourcesView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_source_api_v1_servers__server_id__plugin_configs_sources_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginConfigSourceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginConfigSourceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_default_sources_api_v1_servers__server_id__plugin_configs_sources_restore_default_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginConfigSourcesView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_source_api_v1_servers__server_id__plugin_configs_sources__source_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginConfigSourceDeleteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_config_file_api_v1_servers__server_id__plugin_configs_sources__source_id__file_get: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginConfigFileView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_config_file_api_v1_servers__server_id__plugin_configs_sources__source_id__file_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginConfigSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginConfigFileView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_source_files_api_v1_servers__server_id__plugin_configs_sources__source_id__scan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_plugin_updates_api_v1_servers__server_id__plugin_updates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginUpdatesView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_plugin_updates_api_v1_servers__server_id__plugin_updates_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginUpdatesSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginUpdatesView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_managed_plugin_api_v1_servers__server_id__plugin_updates_plugins_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManagedPluginRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPluginUpdateView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unregister_managed_plugin_api_v1_servers__server_id__plugin_updates_plugins__plugin_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_managed_plugin_api_v1_servers__server_id__plugin_updates_plugins__plugin_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginUpdatesPluginPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPluginUpdateView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_plugin_update_api_v1_servers__server_id__plugin_updates_plugins__plugin_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_plugin_updates_api_v1_servers__server_id__plugin_updates_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_plugin_update_status_api_v1_servers__server_id__plugin_updates_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginUpdateStatusView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_server_plugins_api_v1_servers__server_id__plugins_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedPluginView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_github_archive_api_v1_servers__server_id__plugins_github_analyze_archive_get: {
+        parameters: {
+            query: {
+                download_url: string;
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubArchiveView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    install_github_plugin_api_v1_servers__server_id__plugins_github_install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitHubInstallRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_github_plugin_install_api_v1_servers__server_id__plugins_github_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitHubInstallPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubInstallPlanView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uninstall_github_plugin_api_v1_servers__server_id__plugins_github_uninstall_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitHubUninstallRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    install_market_plugin_api_v1_servers__server_id__plugins_market__plugin_id__install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginInstallRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plugin_install_preflight_api_v1_servers__server_id__plugins_market__plugin_id__preflight_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginInstallPlanView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    uninstall_market_plugin_api_v1_servers__server_id__plugins_market__plugin_id__uninstall_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                plugin_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitHubUninstallRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_server_s3_backups_api_v1_servers__server_id__s3_backups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["S3BackupListView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_server_s3_backup_api_v1_servers__server_id__s3_backups_restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["S3RestoreBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_scheduled_tasks_api_v1_servers__server_id__schedule_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTaskView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_scheduled_task_api_v1_servers__server_id__schedule_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduledTaskCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTaskView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scheduled_task_api_v1_servers__server_id__schedule__task_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTaskView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_scheduled_task_api_v1_servers__server_id__schedule__task_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduledTaskUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTaskView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_scheduled_task_api_v1_servers__server_id__schedule__task_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    toggle_scheduled_task_api_v1_servers__server_id__schedule__task_id__toggle_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledTaskView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reconnect_server_ssh_api_v1_servers__server_id__ssh_reconnect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_server_startup_command_api_v1_servers__server_id__startup_command_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartupCommandView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_system_settings_api_v1_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsView"];
+                };
+            };
+        };
+    };
+    update_system_settings_api_v1_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_system_settings_api_v1_settings_ai_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSystemSettingsView"];
+                };
+            };
+        };
+    };
+    update_assistant_system_settings_api_v1_settings_ai_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantSystemSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSystemSettingsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_assistant_system_settings_api_v1_settings_ai_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantProviderTestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantProviderTestView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_gmail_authorization_api_v1_settings_gmail_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+        };
+    };
+    start_gmail_authorize_api_v1_settings_gmail_authorize_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GmailAuthorizeResult"];
+                };
+            };
+        };
+    };
+    put_gmail_credentials_api_v1_settings_gmail_credentials_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GmailCredentialsUpload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_test_email_api_v1_settings_test_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["api__routes__v1__schemas__EmailTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_ssh_pool_api_v1_ssh_pool_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SshPoolView"];
                 };
             };
         };
@@ -12081,7 +22786,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BatchActionRequest"];
+                "application/json": components["schemas"]["modules__schemas__servers__BatchActionRequest"];
             };
         };
         responses: {
@@ -12145,7 +22850,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BatchInstallPluginsRequest"];
+                "application/json": components["schemas"]["modules__schemas__servers__BatchInstallPluginsRequest"];
             };
         };
         responses: {
@@ -12178,7 +22883,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BatchSendCommandRequest"];
+                "application/json": components["schemas"]["modules__schemas__servers__BatchSendCommandRequest"];
             };
         };
         responses: {

@@ -107,10 +107,12 @@ class MaintenanceLockService:
             logger.warning("Cleared stale AI server operation lock for server %s", server_id)
         return released
 
-    async def force_release_server_lock(self, server_id: int) -> bool:
+    async def force_release_server_lock(
+        self, server_id: int, *, ignore_local: bool = False
+    ) -> bool:
         """Release a lock owned by work recovered as interrupted at startup."""
         local_lock = self._locks.get(server_id)
-        if local_lock is not None and local_lock.locked():
+        if not ignore_local and local_lock is not None and local_lock.locked():
             return False
         key = f"server_operation_lock:{server_id}"
         token = await redis_manager.get_lock_token(key)

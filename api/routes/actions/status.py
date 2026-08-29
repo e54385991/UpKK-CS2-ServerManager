@@ -77,6 +77,9 @@ async def reconnect_ssh(
             )
             await db.commit()
 
+            from services.steamcmd_watch import maybe_resume_steamcmd_watch
+
+            asyncio.create_task(maybe_resume_steamcmd_watch(server))
             return {"success": True, "message": msg}
         else:
             return {"success": False, "message": msg}

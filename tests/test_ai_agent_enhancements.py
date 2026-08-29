@@ -28,6 +28,7 @@ from services.ai_tools import (
 )
 from services.github_plugin_plan_service import (
     GitHubPlanError,
+    _apply_user_mapping,
     _archive_entries,
     _detect_mapping,
     _github_plan_confirmation_payload,
@@ -203,6 +204,26 @@ def test_csgo_wrappers_flat_css_and_config_mapping_are_deterministic():
     assert prefix is None
     assert required is False
     assert mapping[0]["target"] == "addons/counterstrikesharp/plugins/Example"
+
+
+def test_user_mapping_resolves_ambiguous_archive_layout():
+    entries = [
+        {"path": "payload/plugin.dll", "size": 4, "is_dir": False},
+        {"path": "payload", "size": 0, "is_dir": True},
+    ]
+    prefix, mapping, required = _detect_mapping(entries, "mystery")
+    assert required is True
+    source, mapped = _apply_user_mapping(entries, "payload", "addons/counterstrikesharp/plugins")
+    assert source == "payload"
+    assert mapped == [{"source": "payload", "target": "addons/counterstrikesharp/plugins"}]
+
+
+def test_user_mapping_rejects_missing_source_and_unsafe_target():
+    entries = [{"path": "payload/plugin.dll", "size": 4, "is_dir": False}]
+    with pytest.raises(GitHubPlanError, match="not found"):
+        _apply_user_mapping(entries, "missing", "addons")
+    with pytest.raises(GitHubPlanError, match="addons or cfg"):
+        _apply_user_mapping(entries, "payload", "opt/cs2")
 
 
 def test_stable_linux_asset_filter_prefers_installable_release_archives():

@@ -24,6 +24,8 @@ services:
       API_PORT: 8000
       DEBUG: ${DEBUG:-False}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:8000}
+      CONSOLE_PUBLIC_URL: ${CONSOLE_PUBLIC_URL:-http://localhost:3000}
+      LEGACY_HTML_CONSOLE: ${LEGACY_HTML_CONSOLE:-redirect}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ASYNCSSH_LOG_LEVEL: ${ASYNCSSH_LOG_LEVEL:-WARNING}
       SECRET_KEY: ${SECRET_KEY:-}
@@ -33,6 +35,9 @@ services:
       AI_CREDENTIAL_ENCRYPTION_KEY: ${AI_CREDENTIAL_ENCRYPTION_KEY:-}
       SSH_AUTH_MODE: ${SSH_AUTH_MODE:-password}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    expose:
+      - "8000"
+    # Public HTTP is Caddy → Next. Keep 8000 published only for local API debugging.
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
@@ -109,6 +114,37 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  frontend:
+    image: ${CS2_FRONTEND_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager-web:main}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cs2_frontend
+    restart: unless-stopped
+    environment:
+      INTERNAL_API_URL: http://app:8000
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost}
+    expose:
+      - "3000"
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - cs2_network
+
+  caddy:
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    container_name: cs2_caddy
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - frontend
+    networks:
+      - cs2_network
 
 volumes:
   app_data:

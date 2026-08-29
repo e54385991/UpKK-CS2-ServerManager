@@ -1,0 +1,18 @@
+# Local cutover proof: Caddy on :80 talks only to Next on the host.
+# Compose / 1Panel Caddyfiles use the `frontend` service name instead.
+# /google-callback is served by Next on this origin (not FastAPI :8000).
+# Usage:
+#   docker run --rm -p 18080:80 --add-host=host.docker.internal:host-gateway \
+#     -v "$PWD/deploy/Caddyfile.host:/etc/caddy/Caddyfile:ro" \
+#     caddy:2.10-alpine
+{
+	admin off
+}
+
+:80 {
+	encode gzip
+
+	reverse_proxy host.docker.internal:3000 {
+		flush_interval -1
+	}
+}

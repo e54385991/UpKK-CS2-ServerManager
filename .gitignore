@@ -15,6 +15,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+# The Python packaging ignore above also matches Next's shared helpers.
+!frontend/src/shared/lib/
+!frontend/src/shared/lib/**
 lib64/
 parts/
 sdist/

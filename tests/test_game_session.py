@@ -24,6 +24,7 @@ from services.game_session import (
     session_manager_order,
     session_name,
     start_session_command,
+    steamcmd_session_name,
     stop_session_command,
 )
 
@@ -207,6 +208,11 @@ def test_screen_and_tmux_lifecycle_commands(manager, expected):
     assert start_session_command(manager, name, "bash /srv/run-server.sh") == expected["start"]
     assert stop_session_command(manager, name) == expected["stop"]
     assert attach_command(manager, name) == expected["attach"]
+
+
+def test_steamcmd_session_is_not_the_game_console_session():
+    assert steamcmd_session_name(7) == "cs2steamcmd_7"
+    assert steamcmd_session_name(7) != session_name(7)
 
 
 def test_session_exists_commands_match_the_complete_session_name():

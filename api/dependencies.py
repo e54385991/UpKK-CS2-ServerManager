@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules import (
@@ -15,6 +16,7 @@ from modules import (
     get_current_web_user,
     get_db,
 )
+from modules.auth import WEB_SESSION_COOKIE, _get_active_user_for_token, optional_oauth2_scheme
 from services.container import ServiceContainer
 from services.maintenance_lock import maintenance_lock_service
 from services.ssh_manager import SSHManager
@@ -25,6 +27,38 @@ ActiveUser = Annotated[User, Depends(get_current_active_user)]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
 WebUser = Annotated[User, Depends(get_current_web_user)]
 WebAdmin = Annotated[User, Depends(get_current_web_admin)]
+
+
+async def get_bearer_or_cookie_user(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(optional_oauth2_scheme)],
+    db: DatabaseSession,
+) -> User:
+    """Authenticate EventSource/SSE with Bearer or the first-party session cookie.
+
+    ``EventSource`` cannot set an ``Authorization`` header. The Next.js rewrite
+    forwards the HttpOnly session cookie, so GET streams accept either.
+    Mutations still require Bearer via ``ActiveUser``.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if credentials is not None:
+        user = await _get_active_user_for_token(credentials.credentials, db)
+        if user is None:
+            raise credentials_exception
+        return user
+
+    token = request.cookies.get(WEB_SESSION_COOKIE)
+    user = await _get_active_user_for_token(token, db) if token else None
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+StreamUser = Annotated[User, Depends(get_bearer_or_cookie_user)]
 
 
 def get_service_container(request: Request) -> ServiceContainer:

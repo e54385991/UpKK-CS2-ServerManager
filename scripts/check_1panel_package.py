@@ -29,7 +29,23 @@ LOCALES = {
 }
 VARIABLE_PATTERN = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+@sha256:[0-9a-f]{64}$")
+FRONTEND_IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+(?:@sha256:[0-9a-f]{64})?$")
 KNOWN_1PANEL_VARIABLES = {"CONTAINER_NAME"}
+REQUIRED_SERVICES = {"app", "frontend", "caddy"}
+
+
+def require_1panel_service(name: str, service: dict[str, Any]) -> None:
+    if service.get("restart") != "always":
+        fail(f"{name} must use restart: always")
+    labels = service.get("labels")
+    if not isinstance(labels, dict) or labels.get("createdBy") != "Apps":
+        fail(f"{name} must have labels.createdBy: Apps")
+    if "1panel-network" not in service.get("networks", []):
+        fail(f"{name} must join 1panel-network")
+    for volume in service.get("volumes", []):
+        source = str(volume).split(":", 1)[0]
+        if source.startswith("/") or "docker.sock" in source:
+            fail(f"dangerous host volume is not allowed: {volume}")
 
 
 def fail(message: str) -> None:
@@ -109,6 +125,7 @@ def main() -> None:
         PACKAGE_ROOT / "data.yml",
         VERSION_ROOT / "data.yml",
         VERSION_ROOT / "docker-compose.yml",
+        VERSION_ROOT / "Caddyfile",
         VERSION_ROOT / "data/.gitkeep",
         VERSION_ROOT / "scripts/init.sh",
     )
@@ -149,35 +166,65 @@ def main() -> None:
 
     compose = load_yaml(VERSION_ROOT / "docker-compose.yml")
     services = compose.get("services")
-    if not isinstance(services, dict) or set(services) != {"app"}:
-        fail("the package must contain only the app service")
+    if not isinstance(services, dict) or set(services) != REQUIRED_SERVICES:
+        fail("the package must contain app, frontend, and caddy services")
     app = services["app"]
+    frontend = services["frontend"]
+    caddy = services["caddy"]
     if not isinstance(app, dict):
         fail("app service must be a mapping")
+    if not isinstance(frontend, dict):
+        fail("frontend service must be a mapping")
+    if not isinstance(caddy, dict):
+        fail("caddy service must be a mapping")
+    require_1panel_service("app", app)
+    require_1panel_service("frontend", frontend)
+    require_1panel_service("caddy", caddy)
     if app.get("container_name") != "${CONTAINER_NAME}":
         fail("app must use container_name: ${CONTAINER_NAME}")
-    if app.get("restart") != "always":
-        fail("app must use restart: always")
-    if app.get("labels", {}).get("createdBy") != "Apps":
-        fail("app must have labels.createdBy: Apps")
+    if frontend.get("container_name") != "${CONTAINER_NAME}-web":
+        fail("frontend must use container_name: ${CONTAINER_NAME}-web")
+    if caddy.get("container_name") != "${CONTAINER_NAME}-edge":
+        fail("caddy must use container_name: ${CONTAINER_NAME}-edge")
     networks = compose.get("networks", {})
     if networks.get("1panel-network", {}).get("external") is not True:
         fail("1panel-network must be external")
-    if "1panel-network" not in app.get("networks", []):
-        fail("app must join 1panel-network")
     if "./data:/app/data" not in app.get("volumes", []):
         fail("app must persist ./data:/app/data")
+    if app.get("ports"):
+        fail("app must not publish a host port; Caddy is the public root")
+    if "8000" not in [str(item) for item in app.get("expose", [])]:
+        fail("app must expose the private API port 8000")
     image = app.get("image")
     if not isinstance(image, str) or IMAGE_PATTERN.fullmatch(image) is None:
         fail("app image must use a tag and immutable sha256 digest")
-    variables = set(VARIABLE_PATTERN.findall((VERSION_ROOT / "docker-compose.yml").read_text()))
+    frontend_image = frontend.get("image")
+    if (
+        not isinstance(frontend_image, str)
+        or FRONTEND_IMAGE_PATTERN.fullmatch(frontend_image) is None
+    ):
+        fail("frontend image must use a tagged Next.js console image")
+    frontend_env = frontend.get("environment")
+    if (
+        not isinstance(frontend_env, dict)
+        or frontend_env.get("INTERNAL_API_URL") != "http://app:8000"
+    ):
+        fail("frontend must proxy API calls to the private app:8000 listener")
+    caddy_image = caddy.get("image")
+    if not isinstance(caddy_image, str) or IMAGE_PATTERN.fullmatch(caddy_image) is None:
+        fail("caddy image must use a tag and immutable sha256 digest")
+    caddyfile = (VERSION_ROOT / "Caddyfile").read_text(encoding="utf-8")
+    if "reverse_proxy frontend:3000" not in caddyfile:
+        fail("1Panel Caddyfile must reverse-proxy the public root to Next :3000")
+    if "reverse_proxy app:8000" in caddyfile:
+        fail("1Panel Caddyfile must not expose FastAPI as the public root")
+    if "./Caddyfile:/etc/caddy/Caddyfile:ro" not in caddy.get("volumes", []):
+        fail("caddy must mount the package Caddyfile read-only")
+    compose_text = (VERSION_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    variables = set(VARIABLE_PATTERN.findall(compose_text))
     undeclared = variables - declared_variables - KNOWN_1PANEL_VARIABLES
     if undeclared:
         fail(f"compose variables are missing from formFields: {sorted(undeclared)}")
-    for volume in app.get("volumes", []):
-        source = str(volume).split(":", 1)[0]
-        if source.startswith("/") or "docker.sock" in source:
-            fail(f"dangerous host volume is not allowed: {volume}")
     if not (VERSION_ROOT / "scripts/init.sh").stat().st_mode & 0o111:
         fail("scripts/init.sh must be executable")
     redis_field = next(
@@ -206,10 +253,10 @@ def main() -> None:
         or port_field.get("edit") is not True
     ):
         fail("PANEL_APP_PORT_HTTP must be an editable external port field")
-    if "${PANEL_APP_PORT_HTTP}:8000" not in (VERSION_ROOT / "docker-compose.yml").read_text(
-        encoding="utf-8"
-    ):
-        fail("compose must map PANEL_APP_PORT_HTTP to the container port 8000")
+    if "${PANEL_APP_PORT_HTTP}:80" not in compose_text:
+        fail("compose must map PANEL_APP_PORT_HTTP to Caddy port 80")
+    if "${PANEL_APP_PORT_HTTP}:8000" in compose_text:
+        fail("compose must not map the public HTTP port onto FastAPI :8000")
     for secret_key in ("SECRET_KEY", "JWT_SECRET_KEY"):
         secret_field = next(
             (field for field in version_fields if field.get("envKey") == secret_key), None

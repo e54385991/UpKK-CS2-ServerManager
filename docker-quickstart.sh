@@ -95,7 +95,9 @@ JWT_ACCESS_TOKEN_EXPIRE_MINUTES=10080
 AI_CREDENTIAL_ENCRYPTION_KEY=$ai_key
 API_HOST=0.0.0.0
 API_PORT=8000
-BACKEND_URL=http://localhost:8000
+HTTP_PORT=80
+BACKEND_URL=http://localhost
+PUBLIC_APP_URL=http://localhost
 DEBUG=False
 LOG_LEVEL=INFO
 EOF
@@ -116,10 +118,18 @@ main() {
     cd "$INSTALL_DIR"
     docker_cmd compose up -d
 
-    log "等待应用健康检查"
+    public_port="${HTTP_PORT:-80}"
+    if [ -f .env ]; then
+        parsed_port="$(awk -F= '/^HTTP_PORT=/{print $2}' .env | tail -1 | tr -d '[:space:]')"
+        if [ -n "$parsed_port" ]; then
+            public_port="$parsed_port"
+        fi
+    fi
+    log "等待公网入口健康检查（Caddy → Next）"
     for _ in $(seq 1 60); do
-        if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
-            log "部署完成：http://$(hostname -I 2>/dev/null | awk '{print $1}' || printf 'localhost'):8000"
+        if curl -fsS "http://127.0.0.1:${public_port}/health" >/dev/null 2>&1; then
+            log "部署完成：http://$(hostname -I 2>/dev/null | awk '{print $1}' || printf 'localhost'):${public_port}"
+            log "公网入口是 Caddy → Next；FastAPI :8000 仅作内网 API"
             log "首次登录：admin / admin123（登录后请立即修改密码）"
             docker_cmd compose ps
             exit 0

@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     API_PORT: int
     DEBUG: bool
     BACKEND_URL: str
+    # Public Next.js origin. FastAPI leftover HTML pages 307 here by default.
+    # In the Caddy three-service topology this is the public gateway origin.
+    CONSOLE_PUBLIC_URL: str = "http://127.0.0.1:3000"
+    # redirect | serve | gone — default sends the old Jinja console to Next.
+    LEGACY_HTML_CONSOLE: str = "redirect"
 
     # Logging Configuration
     # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"

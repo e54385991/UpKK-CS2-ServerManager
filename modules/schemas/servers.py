@@ -15,6 +15,23 @@ from modules.server_startup import (
 from .auth import UserResponse
 from .common import *
 
+_APT_MIRROR_ALIASES = {
+    "official": "official",
+    "ustc": "ustc",
+    "tuna": "tuna",
+    "tsinghua": "tuna",
+    "thu": "tuna",
+}
+
+
+def _normalize_apt_mirror_field(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = _APT_MIRROR_ALIASES.get(value.strip().lower())
+    if normalized is None:
+        raise ValueError("apt_mirror must be official, ustc, or tuna/tsinghua")
+    return normalized
+
 
 class ServerCreate(SQLModel):
     """Schema for creating a new server (password authentication only)"""
@@ -25,6 +42,11 @@ class ServerCreate(SQLModel):
     ssh_user: str = Field(..., min_length=1, max_length=100)
     ssh_password: str = Field(..., min_length=1, description="SSH password (required)")
     sudo_password: Optional[str] = None
+    apt_mirror: Optional[str] = Field(
+        default=None,
+        max_length=32,
+        description="Preferred apt mirror: official, ustc, or tuna/tsinghua",
+    )
     game_port: int = Field(default=27015, ge=1, le=65535)
     game_directory: str = Field(default="/home/cs2server/cs2")
     description: Optional[str] = None
@@ -185,6 +207,13 @@ class ServerCreate(SQLModel):
             raise ValueError("Steam account token must only contain alphanumeric characters")
         return v
 
+    @field_validator("apt_mirror")
+    @classmethod
+    def validate_apt_mirror(cls, v):
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        return _normalize_apt_mirror_field(v)
+
     @model_validator(mode="after")
     def validate_proxy_mutual_exclusivity(self):
         """Ensure github_proxy and use_panel_proxy are mutually exclusive"""
@@ -290,6 +319,11 @@ class ServerUpdate(SQLModel):
     ssh_user: Optional[str] = Field(None, min_length=1, max_length=100)
     ssh_password: Optional[str] = None
     sudo_password: Optional[str] = None
+    apt_mirror: Optional[str] = Field(
+        None,
+        max_length=32,
+        description="Preferred apt mirror: official, ustc, or tuna/tsinghua",
+    )
     game_port: Optional[int] = Field(None, ge=1, le=65535)
     game_directory: Optional[str] = None
     description: Optional[str] = None
@@ -439,6 +473,13 @@ class ServerUpdate(SQLModel):
         if not re.match(r"^[A-Za-z0-9]+$", v):
             raise ValueError("Steam account token must only contain alphanumeric characters")
         return v
+
+    @field_validator("apt_mirror")
+    @classmethod
+    def validate_apt_mirror(cls, v):
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        return _normalize_apt_mirror_field(v)
 
     @model_validator(mode="after")
     def validate_proxy_mutual_exclusivity(self):

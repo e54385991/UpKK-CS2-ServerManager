@@ -2,6 +2,8 @@
 CAPTCHA API routes
 """
 
+import base64
+
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -18,10 +20,26 @@ class CaptchaResponse(BaseModel):
     token: str
 
 
+class CaptchaChallenge(BaseModel):
+    """Token plus inline image so proxies do not have to forward custom headers."""
+
+    token: str
+    image: str
+
+
 class CaptchaRefreshRequest(BaseModel):
     """Request model for CAPTCHA refresh"""
 
     old_token: str
+
+
+@router.get("/challenge")
+async def captcha_challenge(request: Request) -> CaptchaChallenge:
+    """Return a one-time CAPTCHA as JSON so the console can render it on LAN."""
+    await enforce_rate_limit(request, "captcha", limit=60, window=60)
+    token, image_bytes = await captcha_service.generate_captcha()
+    encoded = base64.b64encode(image_bytes).decode("ascii")
+    return CaptchaChallenge(token=token, image=f"data:image/png;base64,{encoded}")
 
 
 @router.get("/generate")
@@ -30,7 +48,7 @@ async def generate_captcha(request: Request):
     Generate a new CAPTCHA
     Returns the token in JSON and client should call /api/captcha/image/{token} to get the image
     """
-    await enforce_rate_limit(request, "captcha", limit=30, window=60)
+    await enforce_rate_limit(request, "captcha", limit=60, window=60)
     token, _ = await captcha_service.generate_captcha()
     return CaptchaResponse(token=token)
 
@@ -45,7 +63,7 @@ async def get_captcha_image(token: str, request: Request):
     # Instead, client should call /generate first to get a token
     # Then call this endpoint with that token
     # To prevent abuse, we generate a new captcha and return it
-    await enforce_rate_limit(request, "captcha", limit=30, window=60)
+    await enforce_rate_limit(request, "captcha", limit=60, window=60)
     new_token, image_bytes = await captcha_service.generate_captcha()
 
     return Response(
@@ -66,6 +84,6 @@ async def refresh_captcha(refresh_request: CaptchaRefreshRequest, request: Reque
     Refresh a CAPTCHA (invalidate old one and get new token)
     Client should call /api/captcha/image/{new_token} to get the new image
     """
-    await enforce_rate_limit(request, "captcha", limit=30, window=60)
+    await enforce_rate_limit(request, "captcha", limit=60, window=60)
     new_token, _ = await captcha_service.refresh_captcha(refresh_request.old_token)
     return CaptchaResponse(token=new_token)

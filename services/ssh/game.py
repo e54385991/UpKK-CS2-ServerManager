@@ -7,14 +7,30 @@ from modules.server_startup import (
     normalize_default_map,
     resolved_game_mode,
 )
+from services.host_initialization import SshManagerHostRunner, ensure_steamcmd_packages
+from services.steamcmd_guard import (
+    STEAMCMD_FORCE_TERMINATED,
+    cs2_deploy_steamcmd_failure_message,
+    steamcmd_cancel_requested,
+    steamcmd_pgrep_command,
+)
+from services.steamcmd_retry import (
+    clamp_steamcmd_max_retries,
+    is_steamcmd_failure_retryable,
+    resolve_steamcmd_max_retries,
+    steamcmd_retry_delay_seconds,
+)
+from services.steamcmd_session import (
+    incremental_console_lines,
+    parse_steamcmd_exit_code,
+    steamcmd_exit_path,
+    wrap_steamcmd_payload,
+)
 from services.system_dependencies import (
     APT_RETRY_ATTEMPTS,
     APT_RETRY_DELAYS_SECONDS,
-    STEAMCMD_RUNTIME_PACKAGES,
+    STEAMCMD_REQUIRED_PACKAGES,
     apt_get_command,
-    installed_packages_verification_command,
-    normalize_debian_architecture,
-    steamcmd_architecture_supported,
 )
 
 from .common import *
@@ -23,31 +39,30 @@ from .common import *
 class GameLifecycleMixin:
     """Internal game behavior; instantiate through SSHManager."""
 
-    async def _steamcmd_host_preflight_connected(self) -> Tuple[bool, str]:
-        """Verify architecture and the 32-bit runtime before downloading SteamCMD."""
-        success, stdout, stderr = await self.execute_command(
-            "dpkg --print-architecture 2>/dev/null || uname -m"
-        )
-        architecture = normalize_debian_architecture(stdout)
-        if not success or not steamcmd_architecture_supported(architecture):
-            detected = architecture or stderr.strip() or "unknown"
-            return False, (
-                f"Unsupported server architecture: {detected}. "
-                "SteamCMD/CS2 requires amd64 (x86_64); arm64/aarch64 cannot run it natively."
-            )
+    async def _steamcmd_host_preflight_connected(self, progress_callback=None) -> Tuple[bool, str]:
+        """Detect missing SteamCMD packages, install them when possible, then re-verify."""
+        server = getattr(self, "current_server", None)
+        if server is None:
+            return False, "Not connected to a server host"
 
-        success, stdout, stderr = await self.execute_command(
-            installed_packages_verification_command(STEAMCMD_RUNTIME_PACKAGES)
-        )
-        if not success:
-            detail = stderr.strip() or stdout.strip() or "required packages are missing"
-            packages = " ".join(STEAMCMD_RUNTIME_PACKAGES)
-            return False, (
-                f"SteamCMD runtime preflight failed: {detail}. "
-                f"Run the Setup Wizard again or install: sudo apt-get install -y {packages}"
-            )
+        async def send_progress(message: str):
+            if progress_callback is None:
+                return
+            if asyncio.iscoroutinefunction(progress_callback):
+                await progress_callback(message)
+            else:
+                progress_callback(message)
 
-        return True, f"amd64 runtime verified ({', '.join(STEAMCMD_RUNTIME_PACKAGES)})"
+        result = await ensure_steamcmd_packages(
+            SshManagerHostRunner(self, server),
+            STEAMCMD_REQUIRED_PACKAGES,
+            progress=send_progress,
+            preferred_mirror=getattr(server, "apt_mirror", None),
+            apply_preferred_first=bool(getattr(server, "apt_mirror", None)),
+        )
+        if result.apt_mirror and getattr(server, "apt_mirror", None) != result.apt_mirror:
+            server.apt_mirror = result.apt_mirror
+        return result.success, result.message
 
     async def deploy_cs2_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
         """
@@ -77,7 +92,9 @@ class GameLifecycleMixin:
 
         try:
             await send_progress("Checking SteamCMD architecture and 32-bit runtime...")
-            preflight_success, preflight_message = await self._steamcmd_host_preflight_connected()
+            preflight_success, preflight_message = await self._steamcmd_host_preflight_connected(
+                send_progress
+            )
             if not preflight_success:
                 await send_progress(f"✗ {preflight_message}")
                 return False, preflight_message
@@ -116,9 +133,10 @@ class GameLifecycleMixin:
                     await send_progress("✗ /home/cs2server directory is not writable")
 
                     # Try to fix permissions if we have sudo password
-                    if server.sudo_password:
+                    privileged_password = server.sudo_password or server.ssh_password
+                    if privileged_password:
                         await send_progress("Attempting to fix permissions...")
-                        fix_perms_cmd = f"echo '{server.sudo_password}' | sudo -S chown -R cs2server:cs2server /home/cs2server && echo '{server.sudo_password}' | sudo -S chmod 755 /home/cs2server"
+                        fix_perms_cmd = f"echo '{privileged_password}' | sudo -S chown -R cs2server:cs2server /home/cs2server && echo '{privileged_password}' | sudo -S chmod 755 /home/cs2server"
                         fix_success, _, fix_stderr = await self.execute_command(fix_perms_cmd)
 
                         if fix_success:
@@ -173,7 +191,9 @@ class GameLifecycleMixin:
                         await send_progress("Trying to install with sudo and automatic retries...")
                         for attempt in range(1, APT_RETRY_ATTEMPTS + 1):
                             success, stdout, stderr = await self.execute_sudo_command(
-                                install_cmd, server.sudo_password, timeout=600
+                                install_cmd,
+                                server.sudo_password or server.ssh_password,
+                                timeout=600,
                             )
                             if success:
                                 break
@@ -357,12 +377,17 @@ class GameLifecycleMixin:
             await send_progress("✓ SteamCMD extracted successfully")
 
             # Install CS2 server (App ID: 730) with streaming output and automatic retry
+            max_retries = await resolve_steamcmd_max_retries(getattr(server, "user_id", None))
             await send_progress("=" * 60)
             await send_progress("Installing CS2 server via SteamCMD...")
             await send_progress("This will download approximately 30GB and may take 15-30 minutes")
             await send_progress(
-                "Auto-retry is enabled: up to 5 retries whenever the required "
-                "CS2 executable is still missing"
+                f"Auto-retry is enabled: up to {max_retries} recoveries after "
+                "network drops, crashes, or an unexpected SteamCMD exit"
+            )
+            await send_progress(
+                "SteamCMD runs in a detached tmux/screen session so SSH "
+                "reconnect does not stop the download."
             )
             await send_progress("Please be patient, you will see real-time progress below:")
             await send_progress("=" * 60)
@@ -403,17 +428,17 @@ class GameLifecycleMixin:
                 server,
                 progress_callback=send_progress,
                 timeout=1800,  # 30 minutes per attempt
-                max_retries=self.STEAMCMD_MAX_RETRIES,
+                max_retries=max_retries,
                 completion_check=verify_cs2_installation,
             )
 
             if not success:
                 executable_path = self._cs2_executable_path(server)
                 error_detail = stderr.strip() if stderr else "Installation incomplete"
-                alarm_message = (
-                    "🚨 CS2 部署失败报警：SteamCMD 初次执行及 5 次自动重试后，"
-                    f"仍未找到文件 {executable_path}。部署已中断；请重新部署或运行修复。"
-                    f" 错误详情：{error_detail}"
+                alarm_message = cs2_deploy_steamcmd_failure_message(
+                    max_retries=max_retries,
+                    executable_path=executable_path,
+                    error_detail=error_detail,
                 )
                 await send_progress(alarm_message)
                 logger.error(
@@ -421,7 +446,7 @@ class GameLifecycleMixin:
                     "after %s retries",
                     server.id,
                     executable_path,
-                    self.STEAMCMD_MAX_RETRIES,
+                    max_retries,
                 )
                 return False, alarm_message
 
@@ -1545,54 +1570,183 @@ class GameLifecycleMixin:
             else:
                 progress_callback(message)
 
+    async def _steamcmd_session_manager(self, server: Server) -> str | None:
+        """Prefer the server's configured manager; fall back to the other one."""
+        preferred = normalize_session_manager(server.session_manager)
+        for manager in session_manager_order(preferred):
+            success, _, _ = await self.execute_command(availability_command(manager), timeout=10)
+            if success:
+                return manager
+        return None
+
+    async def _steamcmd_session_running(
+        self, server: Server, manager: str | None = None
+    ) -> str | None:
+        name = steamcmd_session_name(int(server.id))
+        preferred = manager or server.session_manager
+        return await find_running_session_manager(self.execute_command, preferred, name, timeout=10)
+
+    async def _read_steamcmd_exit_code(self, server: Server) -> int | None:
+        path = steamcmd_exit_path(server.game_directory)
+        success, stdout, _ = await self.execute_command(
+            f"test -f {shlex.quote(path)} && cat {shlex.quote(path)} || true",
+            timeout=10,
+        )
+        if not success:
+            return None
+        return parse_steamcmd_exit_code(stdout)
+
+    async def _stream_steamcmd_with_heartbeat(
+        self,
+        command: str,
+        server: Server,
+        send_progress,
+        timeout: int,
+    ) -> Tuple[bool, str, str]:
+        """Run SteamCMD in a detached tmux/screen session and poll the pane.
+
+        The download must survive SSH reconnect. The CS2 game session
+        (``cs2server_<id>``) is separate from ``cs2steamcmd_<id>``.
+        """
+        manager = await self._steamcmd_session_manager(server)
+        if manager is None:
+            await send_progress(
+                "tmux/screen not found on the host; SteamCMD will run on this "
+                "SSH session and can stop if the connection drops."
+            )
+            return await self.execute_command_streaming(
+                command,
+                output_callback=send_progress,
+                timeout=timeout,
+            )
+
+        name = steamcmd_session_name(int(server.id))
+        exit_path = steamcmd_exit_path(server.game_directory)
+        running = await self._steamcmd_session_running(server, manager)
+        if running:
+            await send_progress(
+                f"Reattached to existing {running} session {name}. "
+                "SteamCMD was already detached from SSH."
+            )
+        else:
+            await self.execute_command(f"rm -f -- {shlex.quote(exit_path)}", timeout=10)
+            payload = wrap_steamcmd_payload(command, exit_path)
+            start_cmd = start_session_command(manager, name, payload)
+            await send_progress(
+                f"Starting SteamCMD in detached {manager} session {name} (survives SSH reconnect)."
+            )
+            success, stdout, stderr = await self.execute_command(start_cmd, timeout=30)
+            if not success:
+                return False, stdout, stderr or "Failed to start SteamCMD session"
+            started = await self._steamcmd_session_running(server, manager)
+            if started is None:
+                exit_code = await self._read_steamcmd_exit_code(server)
+                if exit_code is not None:
+                    return (
+                        exit_code == 0,
+                        stdout,
+                        "" if exit_code == 0 else f"SteamCMD exited {exit_code}",
+                    )
+                return False, stdout, stderr or "SteamCMD session did not start"
+
+        await send_progress(f"Watching {manager} session {name}; waiting for SteamCMD output…")
+        deadline = time.monotonic() + max(int(timeout), 60)
+        last_capture = ""
+        last_heartbeat = 0.0
+        captured_chunks: list[str] = []
+        while time.monotonic() < deadline:
+            server_id = getattr(server, "id", None)
+            if server_id is not None and await steamcmd_cancel_requested(server_id):
+                await self._kill_steamcmd_processes(server)
+                return False, "\n".join(captured_chunks), STEAMCMD_FORCE_TERMINATED
+
+            try:
+                active = await self._steamcmd_session_running(server, manager)
+                capture_ok, capture, _ = await self.execute_command(
+                    capture_console_command(manager, name, lines=120),
+                    timeout=15,
+                )
+                if capture_ok:
+                    for line in incremental_console_lines(last_capture, capture or ""):
+                        captured_chunks.append(line)
+                        await send_progress(line)
+                    last_capture = capture or last_capture
+
+                if active is None:
+                    exit_code = await self._read_steamcmd_exit_code(server)
+                    if exit_code is not None:
+                        return (
+                            exit_code == 0,
+                            "\n".join(captured_chunks),
+                            "" if exit_code == 0 else f"SteamCMD exited {exit_code}",
+                        )
+                    pids = await self._list_steamcmd_pids(server)
+                    if not pids:
+                        return (
+                            False,
+                            "\n".join(captured_chunks),
+                            "SteamCMD session ended unexpectedly",
+                        )
+                elif time.monotonic() - last_heartbeat >= 20:
+                    last_heartbeat = time.monotonic()
+                    path = f"{server.game_directory}/cs2"
+                    _, size_out, _ = await self.execute_command(
+                        f"du -sh -- {shlex.quote(path)} 2>/dev/null || echo unknown",
+                        timeout=20,
+                    )
+                    size = (size_out or "unknown").strip().splitlines()
+                    size_text = size[0] if size else "unknown"
+                    pids = await self._list_steamcmd_pids(server)
+                    await send_progress(
+                        f"SteamCMD session {name} running ({len(pids)} pid). game dir {size_text}"
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                await send_progress(f"SSH hiccup while watching SteamCMD session {name}: {exc}")
+            await asyncio.sleep(2)
+
+        return False, "\n".join(captured_chunks), "Command timeout"
+
+    async def _list_steamcmd_pids(self, server: Server) -> list[str]:
+        """Return SteamCMD PIDs bound to this server's game directory only."""
+        success, stdout, _stderr = await self.execute_command(
+            steamcmd_pgrep_command(server.game_directory), timeout=10
+        )
+        if not success or not stdout.strip():
+            return []
+        return [pid for pid in stdout.strip().splitlines() if pid.isdigit()]
+
     async def _kill_steamcmd_processes(self, server: Server, progress_callback=None) -> None:
-        """
-        Kill any existing steamcmd processes for this server to prevent concurrent updates
-
-        Args:
-            server: Server instance
-            progress_callback: Optional callback for progress messages
-        """
+        """Stop this server's SteamCMD session and matching processes."""
         try:
-            # Find steamcmd processes related to this server's directory
-            # We look for processes that contain both "steamcmd" and the server's game directory path
-            game_dir = server.game_directory
-
-            # First, check if there are any steamcmd processes running for this server
-            check_cmd = f"pgrep -f 'steamcmd.*{game_dir}' || true"
-            success, stdout, stderr = await self.execute_command(check_cmd, timeout=10)
-
-            if stdout.strip():
-                pids = stdout.strip().split("\n")
+            name = steamcmd_session_name(int(server.id))
+            for manager in session_manager_order(server.session_manager):
+                await self.execute_command(force_stop_session_command(manager, name), timeout=10)
+            pids = await self._list_steamcmd_pids(server)
+            if not pids:
                 await self._send_progress_if_callback(
                     progress_callback,
-                    f"⚠ Found {len(pids)} existing steamcmd process(es), terminating...",
+                    f"✓ SteamCMD session {name} stopped",
                 )
-
-                # Kill the processes
-                for pid in pids:
-                    if pid:
-                        kill_cmd = f"kill -9 {pid} 2>/dev/null || true"
-                        await self.execute_command(kill_cmd, timeout=5)
-
-                # Give a moment for processes to terminate
-                await asyncio.sleep(0.5)
-
-                # Verify they're gone
-                verify_cmd = f"pgrep -f 'steamcmd.*{game_dir}' || true"
-                success, verify_output, _ = await self.execute_command(verify_cmd, timeout=10)
-
-                if verify_output.strip():
-                    await self._send_progress_if_callback(
-                        progress_callback, "⚠ Some steamcmd processes may still be running"
-                    )
-                else:
-                    await self._send_progress_if_callback(
-                        progress_callback, "✓ All existing steamcmd processes terminated"
-                    )
-
+                return
+            await self._send_progress_if_callback(
+                progress_callback,
+                f"⚠ Found {len(pids)} existing steamcmd process(es) for this server, terminating...",
+            )
+            for pid in pids:
+                await self.execute_command(f"kill -9 {pid} 2>/dev/null || true", timeout=5)
+            await asyncio.sleep(0.5)
+            leftover = await self._list_steamcmd_pids(server)
+            if leftover:
+                await self._send_progress_if_callback(
+                    progress_callback, "⚠ Some steamcmd processes may still be running"
+                )
+            else:
+                await self._send_progress_if_callback(
+                    progress_callback, "✓ All existing steamcmd processes terminated"
+                )
         except Exception as e:
-            # Non-critical error, log but continue
             await self._send_progress_if_callback(
                 progress_callback, f"Note: Error checking for existing steamcmd processes: {str(e)}"
             )
@@ -1672,26 +1826,18 @@ class GameLifecycleMixin:
             server: Server instance
             progress_callback: Optional async callback for progress updates
             timeout: Command timeout in seconds
-            max_retries: Maximum number of retries (default: STEAMCMD_MAX_RETRIES, must be >= 0)
+            max_retries: Recovery attempts after the first run. ``None`` loads
+                the owner's personal-center setting (default 20).
             completion_check: Async check run after every exit/error. A false
-                result forces a retry regardless of SteamCMD's exit status.
+                result forces a retry unless the failure is permanent (disk full).
 
         Returns:
             Tuple[bool, str, str]: (success, stdout, stderr)
         """
-        # Validate and set max_retries
         if max_retries is None:
-            max_retries = self.STEAMCMD_MAX_RETRIES
-
-        # Ensure max_retries is a non-negative integer
-        if not isinstance(max_retries, int):
-            logger.warning(
-                f"Invalid max_retries type: {type(max_retries)}. Using default: {self.STEAMCMD_MAX_RETRIES}"
-            )
-            max_retries = self.STEAMCMD_MAX_RETRIES
-        elif max_retries < 0:
-            logger.warning(f"Negative max_retries: {max_retries}. Using 0 (no retries)")
-            max_retries = 0
+            max_retries = await resolve_steamcmd_max_retries(getattr(server, "user_id", None))
+        else:
+            max_retries = clamp_steamcmd_max_retries(max_retries)
 
         async def send_progress(message: str):
             """Helper to send progress updates"""
@@ -1724,31 +1870,44 @@ class GameLifecycleMixin:
             retry_reason = ""
             retryable = False
 
+            server_id = getattr(server, "id", None)
+            if server_id is not None and await steamcmd_cancel_requested(server_id):
+                await send_progress("✗ SteamCMD force-stop requested; leaving this server's lock")
+                return False, stdout, STEAMCMD_FORCE_TERMINATED
+
             try:
                 if attempt > 0:
-                    await self._kill_steamcmd_processes(server, progress_callback)
-                    delay = self.STEAMCMD_RETRY_DELAY * (2 ** (attempt - 1))
-                    await send_progress(
-                        f"⏳ Retry attempt {attempt}/{max_retries} - "
-                        f"waiting {delay} seconds before retry..."
-                    )
-                    await asyncio.sleep(delay)
-                    await send_progress(f"🔄 Starting retry attempt {attempt}/{max_retries}...")
+                    still_running = await self._steamcmd_session_running(server)
+                    if still_running or await self._list_steamcmd_pids(server):
+                        await send_progress(
+                            "SteamCMD detached session is still running; "
+                            "resuming the log instead of starting another download."
+                        )
+                    else:
+                        await self._kill_steamcmd_processes(server, progress_callback)
+                        delay = steamcmd_retry_delay_seconds(attempt, self.STEAMCMD_RETRY_DELAY)
+                        await send_progress(
+                            f"⏳ Auto-recover {attempt}/{max_retries} - "
+                            f"waiting {int(delay)} seconds before retry..."
+                        )
+                        await asyncio.sleep(delay)
+                        if server_id is not None and await steamcmd_cancel_requested(server_id):
+                            await send_progress("✗ SteamCMD force-stop requested during backoff")
+                            return False, stdout, STEAMCMD_FORCE_TERMINATED
+                        await send_progress(
+                            f"🔄 Starting recovery attempt {attempt}/{max_retries}..."
+                        )
 
-                success, stdout, stderr = await self.execute_command_streaming(
+                success, stdout, stderr = await self._stream_steamcmd_with_heartbeat(
                     command,
-                    output_callback=progress_callback,
+                    server,
+                    send_progress,
                     timeout=timeout,
                 )
 
                 if not success:
-                    output_lower = " ".join(
-                        filter(None, [(stderr or "").lower(), (stdout or "").lower()])
-                    )
-                    retryable = any(
-                        error in output_lower for error in self.STEAMCMD_RETRYABLE_ERRORS
-                    )
-                    retry_reason = stderr or stdout or "Unknown error"
+                    retryable = is_steamcmd_failure_retryable(stdout, stderr)
+                    retry_reason = stderr or stdout or "SteamCMD exited unexpectedly"
             except asyncio.TimeoutError:
                 success = False
                 stderr = "Command timeout"
@@ -1776,10 +1935,15 @@ class GameLifecycleMixin:
                 return True, stdout, stderr
 
             if completion_verified is False:
-                retryable = True
-                retry_reason = "Required deployment file is missing"
                 artifact_error = "Required deployment file is missing after SteamCMD exit"
                 stderr = f"{stderr}; {artifact_error}" if stderr else artifact_error
+                retry_reason = "Required deployment file is missing"
+                # Incomplete downloads (including a zero exit) are recoverable.
+                # Permanent errors such as a full disk are not.
+                if success or is_steamcmd_failure_retryable(stdout, stderr):
+                    retryable = True
+                else:
+                    retryable = False
             elif success:
                 if attempt > 0:
                     await send_progress(
@@ -1790,8 +1954,8 @@ class GameLifecycleMixin:
             error_snippet = retry_reason[:200] if retry_reason else "Unknown error"
             if attempt < max_retries and retryable:
                 await send_progress(
-                    f"⚠ SteamCMD attempt {attempt + 1}/{max_retries + 1} "
-                    f"did not complete: {error_snippet}"
+                    f"⚠ SteamCMD exited unexpectedly "
+                    f"({attempt + 1}/{max_retries + 1}); auto-recovering: {error_snippet}"
                 )
                 logger.warning(
                     "SteamCMD attempt %s failed for server %s: %s",
@@ -1891,9 +2055,10 @@ class GameLifecycleMixin:
             await send_progress(f"   {update_cmd}")
             await send_progress("=" * 60)
             await send_progress("Updating CS2 server files via SteamCMD...")
+            max_retries = await resolve_steamcmd_max_retries(getattr(server, "user_id", None))
             await send_progress(
-                f"Auto-retry is enabled: up to {self.STEAMCMD_MAX_RETRIES} "
-                "automatic retries on network errors"
+                f"Auto-retry is enabled: up to {max_retries} "
+                "automatic recoveries on network errors, crashes, or unexpected exits"
             )
 
             # Use retry mechanism for SteamCMD update
@@ -1902,6 +2067,7 @@ class GameLifecycleMixin:
                 server,
                 progress_callback=send_progress,
                 timeout=1800,  # 30 minutes per attempt
+                max_retries=max_retries,
             )
 
             if not success:
@@ -2037,9 +2203,10 @@ class GameLifecycleMixin:
             await send_progress("=" * 60)
             await send_progress("Updating and validating CS2 server files via SteamCMD...")
             await send_progress("This may take a while as all files will be validated...")
+            max_retries = await resolve_steamcmd_max_retries(getattr(server, "user_id", None))
             await send_progress(
-                f"Auto-retry is enabled: up to {self.STEAMCMD_MAX_RETRIES} "
-                "automatic retries on network errors"
+                f"Auto-retry is enabled: up to {max_retries} "
+                "automatic recoveries on network errors, crashes, or unexpected exits"
             )
 
             # Use retry mechanism for SteamCMD validation
@@ -2048,6 +2215,7 @@ class GameLifecycleMixin:
                 server,
                 progress_callback=send_progress,
                 timeout=10800,  # 3h per attempt
+                max_retries=max_retries,
             )
 
             if not success and stderr and "error" in stderr.lower():

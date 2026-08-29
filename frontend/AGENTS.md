@@ -7,7 +7,8 @@ Next.js — APIs, conventions, and file structure may differ from your training
 data. **Before writing any Next.js code, read the version-matched guide under
 `node_modules/next/dist/docs/`** (e.g. `dist/docs/01-app/...`). Heed deprecation
 notices (for example, the request-interception file is `proxy.ts`, not
-`middleware.ts`).
+`middleware.ts`). `next.config.ts` sets `agentRules: false` so `next dev`
+does not rewrite this file.
 
 <!-- END:nextjs-agent-rules -->
 
@@ -114,10 +115,31 @@ is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-
   the TS client with `npm run gen:api` into `src/shared/api/schema.d.ts`; import
   DTO aliases from `src/shared/api/types.ts`.
 - The browser-facing contract is the versioned **`/api/v1`** surface
-  (`/api/v1/auth/me`, `/api/v1/servers`, `/api/v1/servers/{id}`,
-  `/api/v1/overview/summary`), which returns non-secret projections. Each domain
-  `api.ts` maps the snake_case DTO to a camelCase domain type so the UI stays
-  decoupled from wire casing; extend those mappers as more `/api/v1` lands.
+  (`/api/v1/auth/me`, `/api/v1/servers` (GET list + POST create),
+  `/api/v1/servers/{id}`,
+  `/api/v1/overview/summary`, `/api/v1/audit`, `/api/v1/settings`,
+  `/api/v1/settings/test-email`, `/api/v1/settings/gmail/*`,
+  `/api/v1/servers/{id}/operations` and its current/logs/lock/SSE children,
+  `/api/v1/plugins/market` (+ categories/detail),
+  `/api/v1/servers/{id}/plugins`,
+  `/api/v1/servers/{id}/plugins/market/{pluginId}/preflight`,
+  `/api/v1/servers/{id}/plugins/market/{pluginId}/install`),
+  which returns non-secret projections. Secret mutation (GitHub token, SMTP
+  password, Gmail credentials) is write-only: the GET view exposes presence
+  flags and a token prefix, never the secret itself. Creating a server also
+  treats SSH/RCON/GSLT as write-only. Mutations from the
+  console go through Next.js Server Actions in `src/modules/<domain>/actions.ts`,
+  which attach the session JWT as Bearer — the browser never reads the HttpOnly
+  cookie. Long-running server actions and market plugin installs return **202**
+  with an `operation_id`;
+  the live log is a replayable SSE stream. `EventSource` cannot set
+  `Authorization`, so the console connects to
+  `/ops-stream/servers/{id}/operations/{operationId}` (a Next Route Handler
+  that upgrades the session cookie to Bearer). The FastAPI SSE GET also
+  accepts the session cookie as a same-origin fallback.
+  Each domain `api.ts` maps the snake_case DTO to a camelCase domain type so
+  the UI stays decoupled from wire casing; extend those mappers as more
+  `/api/v1` lands.
 
 ## Internationalization (i18n)
 
@@ -129,7 +151,9 @@ Bilingual **zh-CN (default) + en-US** via `next-intl`, without URL routing:
 - Message catalogs live in `src/i18n/messages/{zh-CN,en-US}.json` and MUST keep
   identical key sets. Namespaces: `site`, `nav`, `shell`, `login`, `overview`,
   `servers`, `serverDetail`, `serverNew`, `plugins`, `assistant`, `settings`,
-  `audit`, `profile`.
+  `audit`, `profile`. The `settings` namespace covers the admin system-settings
+  form (proxy, GitHub token, SMTP/Gmail). The `plugins` namespace covers the
+  marketplace catalog, install preflight, and the per-server installed list.
 - Server Components: `const t = await getTranslations("ns")`. Client Components:
   `const t = useTranslations("ns")`. The root layout provides messages via
   `NextIntlClientProvider` and sets `<html lang>`.
@@ -170,7 +194,11 @@ Before marking frontend work done, `npm run lint`, `npm run typecheck`, and
 ## Roadmap (phased parity)
 
 This app is being built to full parity with the legacy UI in phases: server
-lifecycle & monitoring, plugins/maps/files/console, AI/Discord, settings, then
-visual/perf acceptance and the root-path cutover. Audit logs and full
-zh-CN/en-US i18n are already implemented. Placeholder routes render an explicit
-"in progress" state; replace them as each domain's `/api/v1` contract lands.
+lifecycle & monitoring, plugins/maps/files/console, AI/Discord, then
+visual/perf acceptance and the root-path cutover. Audit logs, admin system
+settings (read/write), the server operations center (202 + `operation_id` +
+replayable SSE), the add-server wizard (CAPTCHA + SSH check), the plugin
+marketplace (browse + preflight + 202 install), and full zh-CN/en-US i18n
+are already implemented.
+Placeholder routes render an explicit "in progress" state; replace them as
+each domain's `/api/v1` contract lands.

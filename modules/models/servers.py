@@ -50,6 +50,8 @@ class Server(SQLModel, table=True):
     ssh_password: Optional[str] = Field(default=None, max_length=255)
     ssh_key_path: Optional[str] = Field(default=None, max_length=500)
     sudo_password: Optional[str] = Field(default=None, max_length=255)
+    # Preferred Ubuntu/Debian apt mirror (official / ustc / tuna). Not SteamCMD.
+    apt_mirror: Optional[str] = Field(default=None, max_length=32)
 
     # Server configuration
     game_port: int = Field(default=27015)

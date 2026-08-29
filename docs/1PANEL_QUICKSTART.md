@@ -52,15 +52,16 @@ test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
   数据库资源中登记，避免同名资源冲突；
 - Redis 服务选择已安装的 Redis 实例，并填写密码和 DB 编号；
 - 外部 HTTP 端口默认 `8000`，如端口冲突可更换为其他未占用端口（例如 `18000`）。该端口
-  是宿主机对外访问端口，容器内部端口仍固定为 `8000`；修改后访问
-  `http://服务器IP:外部端口`，并在防火墙/安全组放行该端口；
+  是宿主机对外访问端口，映射到 Caddy `:80`，再反代 Next `:3000`。FastAPI 只在容器网
+  内监听 `:8000`，不再作为公网根路径。修改后访问 `http://服务器IP:外部端口`，并在
+  防火墙/安全组放行该端口；
 - `SECRET_KEY` 和 `JWT_SECRET_KEY` 保持 1Panel 自动生成的随机值；安装脚本会把表单
   生成的短占位值升级为 64 位十六进制（256-bit SHA-256）随机密钥；已有长度不少于
   32 位的自定义值不会被轮换；
-- 应用监听地址 `API_HOST` 已固定为 `0.0.0.0`，因此会监听所有网卡；`BACKEND_URL` 默认
-  是可通过 1Panel 校验的 `http://0.0.0.0:8000` 占位值。首次安装后，如果要生成密码
-  重置链接、OAuth 回调或反向代理链接，请改成用户实际访问地址；反向代理场景应填写
-  HTTPS 公网地址。
+- FastAPI 在容器网内监听 `0.0.0.0:8000`，不映射到宿主机。`BACKEND_URL` 默认是可
+  通过 1Panel 校验的 `http://0.0.0.0:8000` 占位值（对应外部 HTTP 端口，即 Caddy
+  公网入口）。首次安装后，如果要生成密码重置链接、OAuth 回调或反向代理链接，请
+  改成用户实际访问地址；反向代理场景应填写 HTTPS 公网地址。
 
 应用首次启动会自动执行 Alembic 数据库迁移，无需手工运行 SQL 或迁移命令。
 
@@ -128,7 +129,7 @@ Copy the package root, not only `1.0.0` and not the whole repository. If the syn
 
 Open **App Store → Local Apps → Refresh**, select **CS2 Server Manager**, and install it.
 
-In the form, select the PostgreSQL and Redis service instances. 1Panel automatically generates `PANEL_DB_NAME`, `PANEL_DB_USER`, and `PANEL_DB_USER_PASSWORD` and creates the PostgreSQL database/user during the install task; keep the generated application and JWT secrets, choose an external HTTP port (default `8000`, or any unused host port such as `18000`), and set `BACKEND_URL` to the public URL (HTTPS when using a reverse proxy). The external port maps to the container's fixed port `8000`; open the selected host port in your firewall/security group and access `http://server-ip:<port>`. To reuse an existing database/user, register it in 1Panel first and replace the generated values without colliding with an existing resource. The container listens on all interfaces through `API_HOST=0.0.0.0`; the default `BACKEND_URL` is the validation-safe placeholder `http://0.0.0.0:8000` and should be replaced with the real public URL for reset links and OAuth callbacks. The init script upgrades short 1Panel placeholders to 64-character hexadecimal (256-bit SHA-256) secrets while preserving custom values of at least 32 characters.
+In the form, select the PostgreSQL and Redis service instances. 1Panel automatically generates `PANEL_DB_NAME`, `PANEL_DB_USER`, and `PANEL_DB_USER_PASSWORD` and creates the PostgreSQL database/user during the install task; keep the generated application and JWT secrets, choose an external HTTP port (default `8000`, or any unused host port such as `18000`), and set `BACKEND_URL` to the public URL (HTTPS when using a reverse proxy). The external port maps to Caddy `:80` (Next is the public root; FastAPI stays private on `:8000`). Open the selected host port in your firewall/security group and access `http://server-ip:<port>`. To reuse an existing database/user, register it in 1Panel first and replace the generated values without colliding with an existing resource. The API container listens on all interfaces through `API_HOST=0.0.0.0` but is not published; the default `BACKEND_URL` is the validation-safe placeholder `http://0.0.0.0:8000` and should be replaced with the real public URL for reset links and OAuth callbacks. The init script upgrades short 1Panel placeholders to 64-character hexadecimal (256-bit SHA-256) secrets while preserving custom values of at least 32 characters.
 
 The application automatically runs the reviewed Alembic migrations at startup. No manual SQL or migration command is required.
 

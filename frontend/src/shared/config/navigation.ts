@@ -5,6 +5,7 @@ import {
   Server,
   Boxes,
   Bot,
+  MessageCircle,
   ScrollText,
   Settings2,
 } from "lucide-react";
@@ -42,6 +43,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   {
     titleKey: "sectionManage",
     items: [
+      { href: "/settings/discord" as Route, key: "discord", icon: MessageCircle },
       { href: "/audit", key: "audit", icon: ScrollText, adminOnly: true },
       { href: "/settings", key: "settings", icon: Settings2, adminOnly: true },
     ],

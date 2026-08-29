@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { RefreshCw, LogIn, TriangleAlert } from "lucide-react";
-import { Input, Label } from "@/shared/ui/input";
-import { Button } from "@/shared/ui/button";
+import { GoogleLoginButton } from "@/modules/auth/google-login";
+import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
 import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { Input, Label } from "@/shared/ui/input";
 
 type Captcha = { token: string; imageUrl: string };
 type Translate = ReturnType<typeof useTranslations>;
@@ -29,18 +32,7 @@ export function LoginForm() {
   const [pending, setPending] = useState(false);
 
   const requestCaptcha = useCallback(async (): Promise<Captcha | null> => {
-    try {
-      const response = await fetch(
-        `/api/captcha/image/refresh?ts=${Date.now()}`,
-        { cache: "no-store" },
-      );
-      const token = response.headers.get("X-Captcha-Token");
-      const blob = await response.blob();
-      if (!token) return null;
-      return { token, imageUrl: URL.createObjectURL(blob) };
-    } catch {
-      return null;
-    }
+    return fetchCaptchaChallenge();
   }, []);
 
   useEffect(() => {
@@ -60,7 +52,9 @@ export function LoginForm() {
     setCaptchaLoading(true);
     void requestCaptcha().then((next) => {
       setCaptcha((prev) => {
-        if (prev) URL.revokeObjectURL(prev.imageUrl);
+        if (prev?.imageUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(prev.imageUrl);
+        }
         return next ?? prev;
       });
       if (!next) setError(t("captchaLoadError"));
@@ -134,6 +128,12 @@ export function LoginForm() {
           required
           placeholder="••••••••"
         />
+        <Link
+          href={"/forgot-password" as Route}
+          className="mt-2 inline-block text-xs text-primary hover:underline"
+        >
+          {t("forgotPassword")}
+        </Link>
       </div>
 
       <div>
@@ -178,6 +178,15 @@ export function LoginForm() {
         <LogIn className="size-4" />
         {pending ? t("submitting") : t("submit")}
       </Button>
+
+      <GoogleLoginButton nextPath={nextPath} />
+
+      <p className="text-center text-sm text-fg-muted">
+        {t("noAccount")}{" "}
+        <Link href={"/register" as Route} className="text-primary hover:underline">
+          {t("registerHere")}
+        </Link>
+      </p>
     </form>
   );
 }

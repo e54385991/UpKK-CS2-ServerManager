@@ -12,6 +12,8 @@ const eslintConfig = [
       ".next/**",
       "node_modules/**",
       "src/shared/api/schema.d.ts",
+      "e2e/**",
+      "playwright.config.ts",
     ],
   },
   {

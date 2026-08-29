@@ -2,7 +2,10 @@
 
 # ruff: noqa: F403,F405
 
+import time
+
 from services.bounded_output import BoundedLineBuffer
+from services.ssh.stream_progress import iter_ssh_progress_lines
 
 from .common import *
 
@@ -670,8 +673,12 @@ class ConnectionMixin:
         stderr_lines = BoundedLineBuffer(self.STREAMING_OUTPUT_MAX_BYTES)
 
         async def _execute():
-            # Create the process
-            process = await self.conn.create_process(command)
+            # PTY makes SteamCMD flush \\r progress instead of buffering a
+            # whole download with no newlines.
+            try:
+                process = await self.conn.create_process(command, term_type="xterm")
+            except TypeError:
+                process = await self.conn.create_process(command)
 
             # Helper to send output via callback
             async def send_output(line: str):
@@ -683,13 +690,16 @@ class ConnectionMixin:
 
             # Read stdout and stderr concurrently
             async def read_stream(stream, lines_list, prefix=""):
-                """Read from a stream and collect lines"""
+                """Read from a stream and collect lines, including CR progress."""
+                last_line = ""
+                last_emit_at = 0.0
                 try:
-                    async for line in stream:
-                        line = line.rstrip("\n\r")
-                        if line:  # Only process non-empty lines
-                            lines_list.append(line)
-                            # Send to callback with prefix
+                    async for line in iter_ssh_progress_lines(stream):
+                        lines_list.append(line)
+                        now = time.monotonic()
+                        if line != last_line or now - last_emit_at >= 2.0:
+                            last_line = line
+                            last_emit_at = now
                             await send_output(f"{prefix}{line}" if prefix else line)
                 except Exception as e:
                     await send_output(f"Stream read error: {str(e)}")

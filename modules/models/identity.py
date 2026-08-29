@@ -30,6 +30,7 @@ class User(SQLModel, table=True):
     s3_prefix: Optional[str] = Field(default=None, max_length=255)
     s3_use_ssl: bool = Field(default=True)
     s3_retention_count: Optional[int] = Field(default=10)
+    steamcmd_max_retries: int = Field(default=20)
     google_id: Optional[str] = Field(
         default=None, max_length=255, unique=True, index=True
     )  # Google OAuth ID

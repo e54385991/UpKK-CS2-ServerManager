@@ -29,3 +29,9 @@ yarn-error.log*
 *.tsbuildinfo
 
 # generated API types are checked in; regenerate with `npm run gen:api`
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/e2e/.auth/

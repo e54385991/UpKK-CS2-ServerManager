@@ -8,12 +8,16 @@ curl -fsSLO https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/m
 docker compose up -d
 ```
 
-本仓库默认使用公开镜像 `docker.io/e54385991/upkk-cs2-server-manager:main`；也可以通过
-`CS2_MANAGER_IMAGE` 环境变量覆盖镜像地址。运行者不需要手工执行
-`docker pull`，Compose 会自动拉取镜像。
+本仓库默认使用公开镜像 `docker.io/e54385991/upkk-cs2-server-manager:main`（API）和
+`docker.io/e54385991/upkk-cs2-server-manager-web:main`（Next 控制台）；也可以通过
+`CS2_MANAGER_IMAGE` / `CS2_FRONTEND_IMAGE` 覆盖。运行者不需要手工执行
+`docker pull`，Compose 会自动拉取镜像。源码目录下可用 `docker compose up -d --build`
+现场构建控制台。
 
-默认会启动应用、PostgreSQL 18 和 Redis 8，应用启动时自动执行 Alembic 数据库迁移。
-全新数据卷首次启动时会自动创建管理员账户。访问 <http://localhost:8000> 后使用以下
+默认会启动 Caddy、Next、FastAPI、PostgreSQL 18 和 Redis 8。浏览器只访问 Caddy
+（默认 <http://localhost>，`HTTP_PORT` 可改）；FastAPI `:8000` 仅作内网 API / 调试，
+不再作为公网根路径。应用启动时自动执行 Alembic 数据库迁移。
+全新数据卷首次启动时会自动创建管理员账户。访问公网入口后使用以下
 默认凭据登录：
 
 - 用户名：`admin`
@@ -51,6 +55,6 @@ docker compose up -d --build
 - `DOCKERHUB_USERNAME`：Docker Hub 用户名或组织名；
 - `DOCKERHUB_TOKEN`：Docker Hub Access Token，至少具有目标仓库的推送权限。
 
-创建公开仓库 `upkk-cs2-server-manager` 后，推送 `main` 或 `v*` 标签会自动生成
-`main`、语义化版本和提交 SHA 镜像标签。当前发布工作流使用完整 commit SHA 锁定的
-官方 Docker Actions。
+创建公开仓库 `upkk-cs2-server-manager` 和 `upkk-cs2-server-manager-web` 后，推送
+`main` 或 `v*` 标签会自动生成 API 与 Next 控制台的 `main`、语义化版本和提交 SHA
+镜像标签。当前发布工作流使用完整 commit SHA 锁定的官方 Docker Actions。

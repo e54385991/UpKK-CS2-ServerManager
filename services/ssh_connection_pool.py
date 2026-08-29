@@ -117,10 +117,12 @@ class SSHConnectionPool:
 
     def __init__(
         self,
-        idle_timeout: int = 300,  # 5 minutes
+        idle_timeout: int = 900,  # 15 minutes — keep warm sockets for reuse
         max_lifetime: int = 3600,  # 1 hour
         cleanup_interval: int = 60,  # 1 minute
         max_reconnections_per_hour: int = 10,
+        keepalive_interval: int = 30,
+        keepalive_count_max: int = 3,
     ):  # Max reconnections per hour
         """
         Initialize connection pool
@@ -130,6 +132,8 @@ class SSHConnectionPool:
             max_lifetime: Close connections older than this many seconds
             cleanup_interval: Run cleanup every N seconds
             max_reconnections_per_hour: Maximum reconnection attempts per hour per connection
+            keepalive_interval: SSH-level keepalive seconds (NAT/firewall friendly)
+            keepalive_count_max: Missed keepalives before AsyncSSH drops the socket
         """
         if self._initialized:
             return
@@ -139,6 +143,8 @@ class SSHConnectionPool:
         self.max_lifetime = max_lifetime
         self.cleanup_interval = cleanup_interval
         self.max_reconnections_per_hour = max_reconnections_per_hour
+        self.keepalive_interval = keepalive_interval
+        self.keepalive_count_max = keepalive_count_max
 
         # Connection storage: ConnectionKey -> PooledConnection
         self.connections: Dict[ConnectionKey, PooledConnection] = {}
@@ -153,6 +159,7 @@ class SSHConnectionPool:
         logger.info(
             f"SSH Connection Pool initialized: "
             f"idle_timeout={idle_timeout}s, max_lifetime={max_lifetime}s, "
+            f"keepalive={keepalive_interval}s/{keepalive_count_max}, "
             f"max_reconnections_per_hour={max_reconnections_per_hour}"
         )
 
@@ -327,6 +334,8 @@ class SSHConnectionPool:
             "username": server.ssh_user,
             "known_hosts": None,
             "connect_timeout": 15,
+            "keepalive_interval": self.keepalive_interval,
+            "keepalive_count_max": self.keepalive_count_max,
         }
         if server.is_password_auth:
             return await asyncssh.connect(password=server.ssh_password, **common)
@@ -723,17 +732,24 @@ class SSHConnectionPool:
     async def get_pool_stats(self) -> Dict:
         """Get statistics about the connection pool"""
         async with self.pool_lock:
-            total = len(self.connections)
-            alive = sum(1 for pc in self.connections.values() if pc.is_alive())
-            in_use = sum(1 for pc in self.connections.values() if pc.in_use_count > 0)
+            active = list(self.connections.values())
+            draining = list(self._draining_connections.values())
+            total = len(active)
+            alive = sum(1 for pc in active if pc.is_alive())
+            in_use = sum(1 for pc in active if pc.in_use_count > 0)
+            leases = sum(pc.in_use_count for pc in active) + sum(pc.in_use_count for pc in draining)
 
             return {
                 "total_connections": total,
                 "alive_connections": alive,
                 "in_use_connections": in_use,
                 "idle_connections": alive - in_use,
+                "active_leases": leases,
+                "draining_connections": len(draining),
                 "idle_timeout": self.idle_timeout,
                 "max_lifetime": self.max_lifetime,
+                "keepalive_interval": self.keepalive_interval,
+                "keepalive_count_max": self.keepalive_count_max,
             }
 
     async def get_connection_info(self, server: Server) -> dict:
@@ -766,6 +782,7 @@ class SSHConnectionPool:
                     "connection_age": now - pooled_conn.created_at,
                     "idle_time": now - pooled_conn.last_used,
                     "in_use": pooled_conn.in_use_count > 0,
+                    "active_leases": pooled_conn.in_use_count,
                     "reconnection_count": len(recent_reconnections),
                     "max_reconnections": self.max_reconnections_per_hour,
                     "pooling_enabled": True,
@@ -779,6 +796,7 @@ class SSHConnectionPool:
                     "connection_age": None,
                     "idle_time": None,
                     "in_use": False,
+                    "active_leases": 0,
                     "reconnection_count": 0,
                     "max_reconnections": self.max_reconnections_per_hour,
                     "pooling_enabled": True,
