@@ -28,17 +28,13 @@ LOCALES = {
     "tr",
 }
 VARIABLE_PATTERN = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
-IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+@sha256:[0-9a-f]{64}$")
-FRONTEND_IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+(?:@sha256:[0-9a-f]{64})?$")
+IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+(?:@sha256:[0-9a-f]{64})?$")
 SIMPLE_VARIABLE_PATTERN = re.compile(r"^\$\{([A-Z][A-Z0-9_]*)\}$")
 KNOWN_1PANEL_VARIABLES = {"CONTAINER_NAME"}
 REQUIRED_SERVICES = {"app", "frontend", "caddy"}
 DEFAULT_INTERNAL_API_URL = "http://app:8000"
-DEFAULT_APP_IMAGE = (
-    "docker.io/e54385991/upkk-cs2-server-manager:main"
-    "@sha256:b61052977e11f88595a3e407af790b7a9b1bda3ae6744196233a832bcc2137e6"
-)
-DEFAULT_WEB_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager-web:main"
+DEFAULT_APP_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager:latest"
+DEFAULT_WEB_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager-web:latest"
 
 
 def form_field_default(fields: list[Any], env_key: str) -> str:
@@ -225,9 +221,9 @@ def main() -> None:
         fail("app must expose the private API port 8000")
     image = compose_image_ref(app.get("image"), version_fields)
     if IMAGE_PATTERN.fullmatch(image) is None:
-        fail("app image must use a tag and immutable sha256 digest")
+        fail("app image must use a tagged Docker Hub image")
     frontend_image = compose_image_ref(frontend.get("image"), version_fields)
-    if FRONTEND_IMAGE_PATTERN.fullmatch(frontend_image) is None:
+    if IMAGE_PATTERN.fullmatch(frontend_image) is None:
         fail("frontend image must use a tagged Next.js console image")
     if form_field_default(version_fields, "CS2_MANAGER_IMAGE") != DEFAULT_APP_IMAGE:
         fail("CS2_MANAGER_IMAGE must default to the pinned backend image")

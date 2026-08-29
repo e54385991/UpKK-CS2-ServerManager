@@ -16,8 +16,8 @@ curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/ma
 
 本仓库默认使用公开镜像：
 
-- `docker.io/e54385991/upkk-cs2-server-manager:main`（FastAPI）
-- `docker.io/e54385991/upkk-cs2-server-manager-web:main`（Next 控制台）
+- `docker.io/e54385991/upkk-cs2-server-manager:latest`（FastAPI，linux/amd64 + linux/arm64）
+- `docker.io/e54385991/upkk-cs2-server-manager-web:latest`（Next 控制台，linux/amd64 + linux/arm64）
 
 也可用 `CS2_MANAGER_IMAGE` / `CS2_FRONTEND_IMAGE` 覆盖。Compose 会自动拉取镜像。源码目录下可用 `docker compose up -d --build` 现场构建。
 

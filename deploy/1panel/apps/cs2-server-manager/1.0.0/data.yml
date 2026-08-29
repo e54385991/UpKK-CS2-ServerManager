@@ -223,7 +223,7 @@ additionalProperties:
         tr: Dahili API URL (http://app:8000 olarak bırakın)
       required: true
       type: text
-    - default: docker.io/e54385991/upkk-cs2-server-manager:main@sha256:b61052977e11f88595a3e407af790b7a9b1bda3ae6744196233a832bcc2137e6
+    - default: docker.io/e54385991/upkk-cs2-server-manager:latest
       edit: true
       envKey: CS2_MANAGER_IMAGE
       labelEn: Backend image
@@ -241,7 +241,7 @@ additionalProperties:
         tr: Backend imajı
       required: true
       type: text
-    - default: docker.io/e54385991/upkk-cs2-server-manager-web:main
+    - default: docker.io/e54385991/upkk-cs2-server-manager-web:latest
       edit: true
       envKey: CS2_FRONTEND_IMAGE
       labelEn: Frontend image

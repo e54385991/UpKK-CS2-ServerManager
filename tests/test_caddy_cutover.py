@@ -41,6 +41,9 @@ def test_1panel_compose_publishes_caddy_as_public_root() -> None:
     assert "${PANEL_APP_PORT_HTTP}:8000" not in PANEL_COMPOSE
     assert "reverse_proxy frontend:3000" in PANEL_CADDY
     assert "INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL}" in PANEL_COMPOSE
+    assert "upkk-cs2-server-manager:latest" in (
+        PROJECT_ROOT / "deploy/1panel/apps/cs2-server-manager/1.0.0/data.yml"
+    ).read_text(encoding="utf-8")
     assert "image: ${CS2_FRONTEND_IMAGE}" in PANEL_COMPOSE
     assert "image: ${CS2_MANAGER_IMAGE}" in PANEL_COMPOSE
     assert "${CS2_FRONTEND_IMAGE:-" not in PANEL_COMPOSE

@@ -17,6 +17,8 @@ def test_release_compose_needs_no_repo_bind_mounts() -> None:
     assert "INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL:-http://app:8000}" in COMPOSE
     assert "PUBLIC_APP_URL" not in COMPOSE
     assert "${HTTP_PORT:-3000}:3000" in COMPOSE
+    assert "upkk-cs2-server-manager:latest" in COMPOSE
+    assert "upkk-cs2-server-manager-web:latest" in COMPOSE
 
 
 def test_debug_compose_is_the_only_host_publish_for_api_and_db() -> None:
