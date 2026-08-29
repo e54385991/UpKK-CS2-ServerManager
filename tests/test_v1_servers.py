@@ -582,6 +582,21 @@ def test_v1_startup_command_is_masked(monkeypatch):
     assert "should-never-leak" not in str(body)
 
 
+def test_v1_delete_server_forwards_to_legacy(monkeypatch):
+    client, _user = _client(monkeypatch)
+    captured: dict[str, object] = {}
+
+    async def fake_delete(server_id, db, current_user, request):
+        captured["server_id"] = server_id
+        return None
+
+    monkeypatch.setattr("api.routes.v1.servers.delete_legacy_server", fake_delete)
+    response = client.delete("/api/v1/servers/7")
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert captured["server_id"] == 7
+
+
 def test_v1_confirm_deployment(monkeypatch):
     client, _user = _client(monkeypatch)
     stamped = datetime.now(timezone.utc)

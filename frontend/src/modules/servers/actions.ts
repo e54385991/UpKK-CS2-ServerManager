@@ -7,6 +7,7 @@ import {
   clearDeploymentLock,
   confirmServerDeployment,
   createServer,
+  deleteServer,
   exportServerConfigs,
   getCurrentServerOperation,
   getDeploymentLock,
@@ -194,6 +195,26 @@ export async function createServerAction(
     revalidatePath(`/servers/${result.data.id}`);
   }
   return result;
+}
+
+export async function deleteServerAction(
+  serverId: number,
+): Promise<ApiResult<ActionResultDto>> {
+  const result = await deleteServer(serverId);
+  if (result.ok) revalidateAfterServerDelete(serverId);
+  return result;
+}
+
+export async function revalidateAfterServerDeleteAction(
+  serverId: number,
+): Promise<void> {
+  revalidateAfterServerDelete(serverId);
+}
+
+function revalidateAfterServerDelete(serverId: number) {
+  revalidateServer(serverId);
+  revalidatePath("/servers");
+  revalidatePath("/overview");
 }
 
 export async function updateServerAction(

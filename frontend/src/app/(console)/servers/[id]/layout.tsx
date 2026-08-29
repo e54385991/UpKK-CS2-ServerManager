@@ -7,6 +7,7 @@ import {
   getServer,
 } from "@/modules/servers/api";
 import { isDeployProgressVisible } from "@/modules/console/live-console";
+import { DeleteServerButton } from "@/modules/servers/delete-server-button";
 import { SshReconnectCard } from "@/modules/servers/ssh-reconnect-card";
 import { parseServerId } from "@/modules/servers/workspace";
 import { ServerWorkspaceNav } from "@/modules/servers/workspace-nav";
@@ -70,9 +71,18 @@ export default async function ServerWorkspaceLayout({
         }
         description={t("workspaceHelp")}
         actions={
-          <LinkButton href="/servers" variant="outline">
-            {tServers("backToList")}
-          </LinkButton>
+          <>
+            {server ? (
+              <DeleteServerButton
+                serverId={server.id}
+                name={server.name}
+                redirectToList
+              />
+            ) : null}
+            <LinkButton href="/servers" variant="outline">
+              {tServers("backToList")}
+            </LinkButton>
+          </>
         }
       />
       {server ? (

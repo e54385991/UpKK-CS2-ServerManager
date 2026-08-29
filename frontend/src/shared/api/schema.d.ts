@@ -3094,7 +3094,11 @@ export interface paths {
         get: operations["get_server_api_v1_servers__server_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Server
+         * @description Remove the panel record. Game files on the host are not uninstalled.
+         */
+        delete: operations["delete_server_api_v1_servers__server_id__delete"];
         options?: never;
         head?: never;
         /**
@@ -20164,6 +20168,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_server_api_v1_servers__server_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
                 };
             };
             /** @description Validation Error */

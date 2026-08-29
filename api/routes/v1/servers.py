@@ -11,6 +11,7 @@ from api.routes.actions.status import reconnect_ssh as reconnect_ssh_legacy
 from api.routes.servers.configuration import get_startup_command as get_startup_command_legacy
 from api.routes.servers.crud import apply_system_defaults_to_server as apply_defaults_legacy
 from api.routes.servers.crud import create_server as create_legacy_server
+from api.routes.servers.crud import delete_server as delete_legacy_server
 from api.routes.servers.crud import update_server as update_legacy_server
 from api.routes.servers.maintenance import (
     confirm_server_deployment as confirm_deployment_legacy,
@@ -246,6 +247,18 @@ async def update_server(
         **detail.model_dump(),
         restart_required=bool(getattr(updated, "restart_required", False)),
     )
+
+
+@router.delete("/{server_id}", response_model=ActionResult)
+async def delete_server(
+    server_id: int,
+    request: Request,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ActionResult:
+    """Remove the panel record. Game files on the host are not uninstalled."""
+    await delete_legacy_server(server_id, db, current_user, request)
+    return ActionResult(success=True, message="Server deleted")
 
 
 @router.post("/{server_id}/apply-system-defaults", response_model=ServerWriteResult)

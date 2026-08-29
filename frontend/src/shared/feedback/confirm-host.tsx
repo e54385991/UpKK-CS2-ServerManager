@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Button } from "@/shared/ui/button";
+import { Input, Label } from "@/shared/ui/input";
 import {
   getConfirmServerSnapshot,
   getConfirmSnapshot,
@@ -35,17 +36,50 @@ export function ConfirmHost() {
 
   if (!request || typeof document === "undefined") return null;
 
-  const { options } = request;
-  const title = options.title ?? t("title");
-  const description = options.description;
-  const tone = options.tone ?? "danger";
-
   return createPortal(
+    <ConfirmDialog
+      key={request.id}
+      title={request.options.title ?? t("title")}
+      description={request.options.description}
+      confirmLabel={request.options.confirmLabel ?? t("confirm")}
+      cancelLabel={request.options.cancelLabel ?? t("cancel")}
+      closeLabel={t("close")}
+      challengeLabel={request.options.challengeLabel ?? t("challenge")}
+      challenge={request.options.challenge}
+      tone={request.options.tone ?? "danger"}
+    />,
+    document.body,
+  );
+}
+
+function ConfirmDialog({
+  title,
+  description,
+  confirmLabel,
+  cancelLabel,
+  closeLabel,
+  challengeLabel,
+  challenge,
+  tone,
+}: {
+  title: string;
+  description?: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  closeLabel: string;
+  challengeLabel: string;
+  challenge?: string;
+  tone: "danger" | "default";
+}) {
+  const [typed, setTyped] = useState("");
+  const ready = !challenge || typed.trim() === challenge;
+
+  return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center">
       <button
         type="button"
         className="absolute inset-0 bg-black/65"
-        aria-label={t("close")}
+        aria-label={closeLabel}
         onClick={() => resolveConfirm(false)}
       />
       <div
@@ -56,7 +90,7 @@ export function ConfirmHost() {
         data-testid="app-confirm"
         className="relative z-10 w-full max-w-md rounded-xl border border-line bg-surface shadow-panel"
       >
-        <div className="space-y-2 px-5 py-4">
+        <div className="space-y-3 px-5 py-4">
           <h2 id="app-confirm-title" className="text-base font-semibold text-fg">
             {title}
           </h2>
@@ -68,27 +102,48 @@ export function ConfirmHost() {
               {description}
             </p>
           ) : null}
+          {challenge ? (
+            <div>
+              <Label htmlFor="app-confirm-challenge">{challengeLabel}</Label>
+              <Input
+                id="app-confirm-challenge"
+                data-testid="app-confirm-challenge"
+                value={typed}
+                autoFocus
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => setTyped(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && ready) {
+                    event.preventDefault();
+                    resolveConfirm(true);
+                  }
+                }}
+              />
+            </div>
+          ) : null}
         </div>
         <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
           <Button
             type="button"
             variant="secondary"
-            autoFocus={tone === "danger"}
+            autoFocus={!challenge && tone === "danger"}
             onClick={() => resolveConfirm(false)}
           >
-            {options.cancelLabel ?? t("cancel")}
+            {cancelLabel}
           </Button>
           <Button
             type="button"
             variant={tone === "danger" ? "danger" : "primary"}
-            autoFocus={tone !== "danger"}
+            disabled={!ready}
+            autoFocus={!challenge && tone !== "danger"}
             onClick={() => resolveConfirm(true)}
           >
-            {options.confirmLabel ?? t("confirm")}
+            {confirmLabel}
           </Button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
   );
 }

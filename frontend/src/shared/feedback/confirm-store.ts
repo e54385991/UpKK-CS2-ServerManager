@@ -6,6 +6,9 @@ export type ConfirmOptions = {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: ConfirmTone;
+  /** When set, Confirm stays disabled until the user types this exact value. */
+  challenge?: string;
+  challengeLabel?: string;
 };
 
 export type ConfirmRequest = {

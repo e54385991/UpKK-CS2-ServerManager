@@ -23,12 +23,18 @@ import type {
 } from "@/modules/servers/setup-api";
 import { runAutoSetupFromBrowser } from "@/modules/servers/setup-client";
 import {
+  CS2_USERNAME_PATTERN,
+  isCs2Username,
+} from "@/modules/servers/cs2-username";
+import {
   addServerAfterSetupHref,
   rememberInitializedHost,
 } from "@/modules/servers/initialized-hosts";
 import { SetupLiveLog } from "@/modules/servers/setup-live-log";
 import { alertDialog } from "@/shared/feedback/alert-store";
 import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
+import { copyText } from "@/shared/lib/clipboard";
+import { randomId } from "@/shared/lib/random-id";
 import { Button } from "@/shared/ui/button";
 import {
   Card,
@@ -100,7 +106,7 @@ export function SetupWizard({
   }, [t]);
 
   useEffect(() => {
-    if (!/^[a-z_][a-z0-9_-]*$/.test(cs2Username)) return;
+    if (!isCs2Username(cs2Username)) return;
     void getManualSetupScriptAction(cs2Username).then((script) => {
       if (script.ok) setManual(script.data);
     });
@@ -116,12 +122,8 @@ export function SetupWizard({
   }
 
   async function copy(value: string, id: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(id);
-    } catch {
-      setCopied(null);
-    }
+    const ok = await copyText(value);
+    setCopied(ok ? id : null);
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -129,7 +131,7 @@ export function SetupWizard({
     if (!captcha) return;
     const form = new FormData(event.currentTarget);
     const host = String(form.get("host") ?? "").trim();
-    const sessionId = crypto.randomUUID();
+    const sessionId = randomId();
     const appendLog = (message: string) => {
       setLogs((current) => [...current, message]);
     };
@@ -140,50 +142,62 @@ export function SetupWizard({
     setLogs([]);
     appendLog(t("wsConnecting"));
 
-    const socket = openSetupProgressSocket(sessionId, appendLog);
-    await waitForSocket(
-      socket,
-      () => appendLog(t("wsConnected")),
-      () => appendLog(t("wsFailed")),
-    );
-    appendLog(t("running"));
+    let socket: WebSocket | null = null;
+    try {
+      socket = openSetupProgressSocket(sessionId, appendLog);
+      await waitForSocket(
+        socket,
+        () => appendLog(t("wsConnected")),
+        () => appendLog(t("wsFailed")),
+      );
+      appendLog(t("running"));
 
-    const submitted = await runAutoSetupFromBrowser({
-      name: String(form.get("name") ?? "").trim(),
-      host,
-      sshPort: Number(form.get("sshPort") ?? 22),
-      sshUser: String(form.get("sshUser") ?? "").trim(),
-      sshPassword: String(form.get("sshPassword") ?? ""),
-      sudoPassword: differentSudo
-        ? String(form.get("sudoPassword") ?? "") || undefined
-        : undefined,
-      cs2Username: String(form.get("cs2Username") ?? "cs2server").trim(),
-      captchaToken: captcha.token,
-      captchaCode: String(form.get("captcha") ?? "").trim(),
-      saveConfig: true,
-      openGamePorts: form.get("openGamePorts") === "on",
-      sessionId,
-    });
-    if (socket.readyState === WebSocket.OPEN) socket.close();
-    setPending(false);
-    if (!submitted.ok) {
-      appendLog(`${t("errorTitle")}: ${submitted.error}`);
+      const submitted = await runAutoSetupFromBrowser({
+        name: String(form.get("name") ?? "").trim(),
+        host,
+        sshPort: Number(form.get("sshPort") ?? 22),
+        sshUser: String(form.get("sshUser") ?? "").trim(),
+        sshPassword: String(form.get("sshPassword") ?? ""),
+        sudoPassword: differentSudo
+          ? String(form.get("sudoPassword") ?? "") || undefined
+          : undefined,
+        cs2Username: String(form.get("cs2Username") ?? "cs2server").trim(),
+        captchaToken: captcha.token,
+        captchaCode: String(form.get("captcha") ?? "").trim(),
+        saveConfig: true,
+        openGamePorts: form.get("openGamePorts") === "on",
+        sessionId,
+      });
+      if (!submitted.ok) {
+        appendLog(`${t("errorTitle")}: ${submitted.error}`);
+        refreshCaptcha();
+        void alertDialog({
+          title: t("errorTitle"),
+          description: submitted.error,
+        });
+        return;
+      }
+      if (socket.readyState !== WebSocket.OPEN && submitted.data.logs.length > 0) {
+        setLogs([...submitted.data.logs]);
+      }
+      rememberInitializedHost(host);
+      setCompletedHost(host);
+      setResult(submitted.data);
+      refreshCaptcha();
+      const listed = await listInitializedHostsAction();
+      if (listed.ok) setHosts(listed.data);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : t("errorTitle");
+      appendLog(`${t("errorTitle")}: ${message}`);
       refreshCaptcha();
       void alertDialog({
         title: t("errorTitle"),
-        description: submitted.error,
+        description: message,
       });
-      return;
+    } finally {
+      if (socket?.readyState === WebSocket.OPEN) socket.close();
+      setPending(false);
     }
-    if (socket.readyState !== WebSocket.OPEN && submitted.data.logs.length > 0) {
-      setLogs([...submitted.data.logs]);
-    }
-    rememberInitializedHost(host);
-    setCompletedHost(host);
-    setResult(submitted.data);
-    refreshCaptcha();
-    const listed = await listInitializedHostsAction();
-    if (listed.ok) setHosts(listed.data);
   }
 
   return (
@@ -344,7 +358,7 @@ export function SetupWizard({
                   name="cs2Username"
                   value={cs2Username}
                   onChange={(event) => setCs2Username(event.target.value)}
-                  pattern="[a-z_][a-z0-9_-]*"
+                  pattern={CS2_USERNAME_PATTERN}
                   required
                 />
               </Field>
@@ -441,7 +455,7 @@ export function SetupWizard({
                 id="manual-cs2-user"
                 value={cs2Username}
                 onChange={(event) => setCs2Username(event.target.value)}
-                pattern="[a-z_][a-z0-9_-]*"
+                pattern={CS2_USERNAME_PATTERN}
               />
             </Field>
             {manual ? (

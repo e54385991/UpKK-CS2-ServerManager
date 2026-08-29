@@ -1922,6 +1922,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "DELETE"
+    ],
+    "name": "delete_server",
+    "path": "/api/v1/servers/{server_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "apply_server_system_defaults",

@@ -236,6 +236,14 @@ export async function getServer(
   return { ok: true, data: toDetail(result.data) };
 }
 
+export async function deleteServer(
+  id: number,
+): Promise<ApiResult<ActionResultDto>> {
+  return apiFetch<ActionResultDto>(`/api/v1/servers/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export type ServerUpdateInput = {
   readonly name?: string;
   readonly host?: string;

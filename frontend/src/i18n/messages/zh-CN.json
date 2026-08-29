@@ -10,7 +10,8 @@
     "confirm": "确认",
     "ok": "知道了",
     "cancel": "取消",
-    "close": "关闭"
+    "close": "关闭",
+    "challenge": "确认数字"
   },
   "nav": {
     "sectionOperate": "运维",
@@ -200,6 +201,17 @@
       }
     },
     "manageServer": "管理服务器",
+    "delete": "删除",
+    "deleteTitle": "删除服务器",
+    "deleteFirst": "确定从面板删除「{name}」？\n这只会去掉控制台记录，不会卸载游戏主机上的文件。",
+    "deleteFirstConfirm": "继续删除",
+    "deleteChallengeTitle": "输入数字确认删除",
+    "deleteChallengeHelp": "请输入 {code} 以确认删除「{name}」。",
+    "deleteChallengeLabel": "确认数字",
+    "deleteConfirm": "确认删除",
+    "deleting": "删除中…",
+    "deleted": "已从面板删除 {name}。",
+    "deleteFailed": "无法删除这台服务器。",
     "noDescription": "没有备注",
     "card": {
       "host": "主机",

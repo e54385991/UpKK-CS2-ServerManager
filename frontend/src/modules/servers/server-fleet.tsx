@@ -13,6 +13,7 @@ import {
   startBatchInstallPluginsAction,
   startBatchSendCommandAction,
 } from "@/modules/servers/actions";
+import { DeleteServerButton } from "@/modules/servers/delete-server-button";
 import {
   DiskSpaceRefreshButton,
   ServerDiskRefreshButton,
@@ -511,9 +512,12 @@ function ServerCard({
 
         <SshHealthBlock server={server} />
 
-        <Button asChild className="mt-4 w-full" size="sm">
-          <Link href={`/servers/${server.id}` as Route}>{t("manageServer")}</Link>
-        </Button>
+        <div className="mt-4 flex gap-2">
+          <Button asChild className="min-w-0 flex-1" size="sm">
+            <Link href={`/servers/${server.id}` as Route}>{t("manageServer")}</Link>
+          </Button>
+          <DeleteServerButton serverId={server.id} name={server.name} />
+        </div>
       </Card>
     </li>
   );

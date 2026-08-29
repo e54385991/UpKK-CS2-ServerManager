@@ -10,7 +10,8 @@
     "confirm": "Confirm",
     "ok": "OK",
     "cancel": "Cancel",
-    "close": "Close"
+    "close": "Close",
+    "challenge": "Confirmation number"
   },
   "nav": {
     "sectionOperate": "Operate",
@@ -200,6 +201,17 @@
       }
     },
     "manageServer": "Manage server",
+    "delete": "Delete",
+    "deleteTitle": "Delete server",
+    "deleteFirst": "Remove “{name}” from the panel?\nThis deletes the console record only. Game files on the host are not uninstalled.",
+    "deleteFirstConfirm": "Continue",
+    "deleteChallengeTitle": "Type the number to confirm",
+    "deleteChallengeHelp": "Type {code} to confirm deleting “{name}”.",
+    "deleteChallengeLabel": "Confirmation number",
+    "deleteConfirm": "Delete now",
+    "deleting": "Deleting…",
+    "deleted": "Removed {name} from the panel.",
+    "deleteFailed": "Could not delete this server.",
     "noDescription": "No description",
     "card": {
       "host": "Host",

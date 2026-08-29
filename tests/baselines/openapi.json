@@ -30537,6 +30537,52 @@
       }
     },
     "/api/v1/servers/{server_id}": {
+      "delete": {
+        "description": "Remove the panel record. Game files on the host are not uninstalled.",
+        "operationId": "delete_server_api_v1_servers__server_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Server",
+        "tags": [
+          "v1-servers"
+        ]
+      },
       "get": {
         "description": "Return one server the caller may access (owner or admin), non-secret.",
         "operationId": "get_server_api_v1_servers__server_id__get",
