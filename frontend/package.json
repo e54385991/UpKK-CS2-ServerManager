@@ -13,7 +13,7 @@
     "start": "next start --port 3000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "gen:api": "npx -y openapi-typescript@7 ../openapi.json -o src/shared/api/schema.d.ts"
+    "gen:api": "npx -y openapi-typescript@7 ../tests/baselines/openapi.json -o src/shared/api/schema.d.ts"
   },
   "dependencies": {
     "next": "16.3.3",

@@ -7,7 +7,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { listServers } from "@/modules/servers/api";
+import { listServers, getOverviewSummary } from "@/modules/servers/api";
 import { SERVER_STATUS_META } from "@/modules/servers/types";
 import { Card } from "@/shared/ui/card";
 import { Badge, StatusDot } from "@/shared/ui/badge";
@@ -51,27 +51,33 @@ function StatCard({
 }
 
 export async function OverviewStats() {
-  const result = await listServers();
+  // Counts come from the server-side aggregate; the recent list reuses the
+  // summaries endpoint. Both are fetched in parallel.
+  const [summaryResult, result] = await Promise.all([
+    getOverviewSummary(),
+    listServers(),
+  ]);
 
-  if (!result.ok) {
+  if (!summaryResult.ok || !result.ok) {
+    const status = !summaryResult.ok
+      ? summaryResult.status
+      : !result.ok
+        ? result.status
+        : 0;
     return (
       <Card className="border-warn/30 bg-warn-muted/40 px-5 py-4 text-sm text-warn">
-        暂时无法获取运维总览数据（{result.status || "网络错误"}）。
+        暂时无法获取运维总览数据（{status || "网络错误"}）。
       </Card>
     );
   }
 
   const servers = result.data;
-  const running = servers.filter((s) => s.status === "running").length;
-  const attention = servers.filter(
-    (s) => s.status === "error" || s.status === "unknown",
-  ).length;
-  const capacity = servers.reduce((sum, s) => sum + s.maxPlayers, 0);
+  const { total, running, attention, capacity } = summaryResult.data;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="服务器总数" value={servers.length} icon={Server} />
+        <StatCard label="服务器总数" value={total} icon={Server} />
         <StatCard label="运行中" value={running} icon={CircleCheck} tone="ok" />
         <StatCard
           label="需要关注"

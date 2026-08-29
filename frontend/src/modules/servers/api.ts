@@ -1,23 +1,11 @@
 import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
+import type {
+  ServerSummaryDto,
+  ServerDetailDto,
+  OverviewSummaryDto,
+} from "@/shared/api/types";
 import type { ServerStatus, ServerSummary } from "@/modules/servers/types";
-
-/**
- * Raw backend server shape. The current backend serves the full record on
- * `GET /servers`; we map it to the non-secret {@link ServerSummary} here so the
- * rest of the app depends only on the safe projection. When `/api/v1` lands,
- * only this adapter changes.
- */
-type RawServer = {
-  id: number;
-  name: string;
-  host: string;
-  game_port: number;
-  status: string;
-  description: string | null;
-  default_map: string;
-  max_players: number;
-};
 
 const KNOWN_STATUSES: readonly ServerStatus[] = [
   "pending",
@@ -34,7 +22,13 @@ function toStatus(value: string): ServerStatus {
     : "unknown";
 }
 
-function toSummary(raw: RawServer): ServerSummary {
+/**
+ * Map the wire DTO (snake_case, from the generated OpenAPI schema) to the
+ * camelCase domain type the UI consumes. Keeping this adapter isolates the UI
+ * from wire-format details; if the `/api/v1` contract changes, only this
+ * mapper and the regenerated schema move.
+ */
+function toSummary(raw: ServerSummaryDto): ServerSummary {
   return {
     id: raw.id,
     name: raw.name,
@@ -48,7 +42,56 @@ function toSummary(raw: RawServer): ServerSummary {
 }
 
 export async function listServers(): Promise<ApiResult<ServerSummary[]>> {
-  const result = await apiFetch<RawServer[]>("/servers");
+  const result = await apiFetch<ServerSummaryDto[]>("/api/v1/servers");
   if (!result.ok) return result;
   return { ok: true, data: result.data.map(toSummary) };
+}
+
+export type ServerDetail = ServerSummary & {
+  readonly sshPort: number;
+  readonly sshUser: string;
+  readonly gameDirectory: string;
+  readonly gameMode: string;
+  readonly gameType: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly lastDeployed: string | null;
+};
+
+function toDetail(raw: ServerDetailDto): ServerDetail {
+  return {
+    ...toSummary(raw),
+    sshPort: raw.ssh_port,
+    sshUser: raw.ssh_user,
+    gameDirectory: raw.game_directory,
+    gameMode: raw.game_mode,
+    gameType: raw.game_type,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+    lastDeployed: raw.last_deployed ?? null,
+  };
+}
+
+export async function getServer(
+  id: number,
+): Promise<ApiResult<ServerDetail>> {
+  const result = await apiFetch<ServerDetailDto>(`/api/v1/servers/${id}`);
+  if (!result.ok) return result;
+  return { ok: true, data: toDetail(result.data) };
+}
+
+export type OverviewSummary = {
+  readonly total: number;
+  readonly running: number;
+  readonly attention: number;
+  readonly capacity: number;
+};
+
+export async function getOverviewSummary(): Promise<
+  ApiResult<OverviewSummary>
+> {
+  const result = await apiFetch<OverviewSummaryDto>("/api/v1/overview/summary");
+  if (!result.ok) return result;
+  const { total, running, attention, capacity } = result.data;
+  return { ok: true, data: { total, running, attention, capacity } };
 }
