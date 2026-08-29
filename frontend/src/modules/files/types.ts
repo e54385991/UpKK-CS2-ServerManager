@@ -141,3 +141,96 @@ export function formatFileSize(bytes: number): string {
   }
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
+
+export type FileKindFilter = "all" | "folders" | "files" | "archives" | "text";
+export type FileSortKey = "name" | "size" | "modified";
+export type FileSortDir = "asc" | "desc";
+
+export const FILE_KIND_FILTERS = [
+  "all",
+  "folders",
+  "files",
+  "archives",
+  "text",
+] as const satisfies readonly FileKindFilter[];
+
+export function listEntries(files: readonly FileEntry[]): FileEntry[] {
+  return files.filter((entry) => entry.name !== "." && entry.name !== "..");
+}
+
+export function queryTokens(query: string): string[] {
+  return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+export function matchesFileQuery(entry: FileEntry, query: string): boolean {
+  const tokens = queryTokens(query);
+  if (tokens.length === 0) return true;
+  const haystack = entry.name.toLowerCase();
+  return tokens.every((token) => haystack.includes(token));
+}
+
+export function matchesKindFilter(entry: FileEntry, kind: FileKindFilter): boolean {
+  if (kind === "all") return true;
+  if (kind === "folders") return entry.type === "directory";
+  if (kind === "files") return entry.type === "file";
+  if (kind === "archives") return entry.type === "file" && isArchiveFile(entry.name);
+  return entry.type === "file" && isTextFile(entry.name);
+}
+
+export function compareEntries(
+  left: FileEntry,
+  right: FileEntry,
+  key: FileSortKey,
+  dir: FileSortDir,
+): number {
+  if (left.type !== right.type) return left.type === "directory" ? -1 : 1;
+  const sign = dir === "asc" ? 1 : -1;
+  if (key === "size") return (left.size - right.size) * sign;
+  if (key === "modified") return (left.modified - right.modified) * sign;
+  return left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) * sign;
+}
+
+export function filterAndSortEntries(
+  files: readonly FileEntry[],
+  query: string,
+  kind: FileKindFilter,
+  sortKey: FileSortKey,
+  sortDir: FileSortDir,
+): FileEntry[] {
+  return listEntries(files)
+    .filter((entry) => matchesKindFilter(entry, kind) && matchesFileQuery(entry, query))
+    .sort((left, right) => compareEntries(left, right, sortKey, sortDir));
+}
+
+export type NamePart = {
+  readonly text: string;
+  readonly match: boolean;
+};
+
+export function highlightName(name: string, query: string): NamePart[] {
+  const tokens = [...new Set(queryTokens(query))].sort((left, right) => right.length - left.length);
+  if (tokens.length === 0) return [{ text: name, match: false }];
+
+  const marks = new Array<boolean>(name.length).fill(false);
+  const lower = name.toLowerCase();
+  for (const token of tokens) {
+    let from = 0;
+    while (from < lower.length) {
+      const index = lower.indexOf(token, from);
+      if (index === -1) break;
+      marks.fill(true, index, index + token.length);
+      from = index + token.length;
+    }
+  }
+
+  const parts: NamePart[] = [];
+  let cursor = 0;
+  while (cursor < name.length) {
+    const match = marks[cursor] === true;
+    let end = cursor + 1;
+    while (end < name.length && marks[end] === match) end += 1;
+    parts.push({ text: name.slice(cursor, end), match });
+    cursor = end;
+  }
+  return parts;
+}

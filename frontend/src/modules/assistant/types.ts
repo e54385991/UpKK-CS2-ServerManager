@@ -37,4 +37,30 @@ export type AssistantTool = {
   readonly status: string;
   readonly requiresApproval: boolean;
   readonly error: string | null;
+  readonly arguments: Record<string, unknown>;
+  readonly summary: unknown;
 };
+
+export type AssistantRunDetail = AssistantRun & {
+  readonly tools: readonly AssistantTool[];
+};
+
+export type AssistantServerOption = {
+  readonly id: number;
+  readonly name: string;
+  readonly host: string;
+  readonly gamePort: number;
+  readonly sshUser: string;
+  readonly status: string;
+};
+
+export const ASSISTANT_EXAMPLE_KEYS = [
+  "cssLogs",
+  "crashIsolation",
+  "marketInstall",
+  "githubInstall",
+  "githubSearch",
+  "workshop",
+] as const;
+
+export type AssistantExampleKey = (typeof ASSISTANT_EXAMPLE_KEYS)[number];

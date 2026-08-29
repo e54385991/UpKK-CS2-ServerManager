@@ -4,53 +4,24 @@ import type {
   ActionResultDto,
   AssistantConversationDetailViewDto,
   AssistantConversationViewDto,
+  AssistantRunDetailViewDto,
   AssistantRunViewDto,
   AssistantWorkspaceViewDto,
 } from "@/shared/api/types";
+import {
+  toConversation,
+  toConversationDetail,
+  toRun,
+  toRunDetail,
+  toWorkspace,
+} from "@/modules/assistant/assistant-wire";
 import type {
   AssistantConversation,
   AssistantConversationDetail,
-  AssistantMessage,
   AssistantRun,
+  AssistantRunDetail,
   AssistantWorkspace,
 } from "@/modules/assistant/types";
-
-function toConversation(raw: AssistantConversationViewDto): AssistantConversation {
-  return {
-    id: raw.id,
-    serverId: raw.server_id ?? null,
-    title: raw.title,
-  };
-}
-
-function toMessage(
-  raw: NonNullable<AssistantConversationDetailViewDto["messages"]>[number],
-): AssistantMessage {
-  return {
-    id: raw.id,
-    role: raw.role,
-    content: raw.content ?? null,
-    toolName: raw.tool_name ?? null,
-  };
-}
-
-function toWorkspace(raw: AssistantWorkspaceViewDto): AssistantWorkspace {
-  return {
-    providerReady: raw.provider_ready,
-    mode: raw.mode,
-    model: raw.model ?? null,
-    conversations: (raw.conversations ?? []).map(toConversation),
-  };
-}
-
-function toRun(raw: AssistantRunViewDto): AssistantRun {
-  return {
-    id: raw.id,
-    conversationId: raw.conversation_id,
-    status: raw.status,
-    error: raw.error ?? null,
-  };
-}
 
 export async function getAssistantWorkspace(): Promise<ApiResult<AssistantWorkspace>> {
   const result = await apiFetch<AssistantWorkspaceViewDto>("/api/v1/assistant");
@@ -60,11 +31,12 @@ export async function getAssistantWorkspace(): Promise<ApiResult<AssistantWorksp
 
 export async function createAssistantConversation(
   title?: string,
+  serverId?: number | null,
 ): Promise<ApiResult<AssistantConversation>> {
   const result = await apiFetch<AssistantConversationViewDto>("/api/v1/assistant/conversations", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title: title ?? null }),
+    body: JSON.stringify({ title: title ?? null, server_id: serverId ?? null }),
   });
   if (!result.ok) return result;
   return { ok: true, data: toConversation(result.data) };
@@ -77,13 +49,7 @@ export async function getAssistantConversation(
     `/api/v1/assistant/conversations/${conversationId}`,
   );
   if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      ...toConversation(result.data),
-      messages: (result.data.messages ?? []).map(toMessage),
-    },
-  };
+  return { ok: true, data: toConversationDetail(result.data) };
 }
 
 export async function sendAssistantMessage(
@@ -109,6 +75,14 @@ export async function interruptAssistantConversation(
     `/api/v1/assistant/conversations/${conversationId}/interrupt`,
     { method: "POST" },
   );
+}
+
+export async function getAssistantRun(
+  runId: string,
+): Promise<ApiResult<AssistantRunDetail>> {
+  const result = await apiFetch<AssistantRunDetailViewDto>(`/api/v1/assistant/runs/${runId}`);
+  if (!result.ok) return result;
+  return { ok: true, data: toRunDetail(result.data) };
 }
 
 export async function decideAssistantTool(

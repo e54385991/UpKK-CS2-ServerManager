@@ -27,8 +27,9 @@ export async function refreshAssistantAction(): Promise<ApiResult<AssistantWorks
 
 export async function createConversationAction(
   title?: string,
+  serverId?: number | null,
 ): Promise<ApiResult<AssistantConversation>> {
-  const result = await createAssistantConversation(title);
+  const result = await createAssistantConversation(title, serverId);
   if (result.ok) revalidateAssistant();
   return result;
 }

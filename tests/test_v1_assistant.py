@@ -82,3 +82,34 @@ def test_v1_assistant_workspace_when_provider_is_ready(monkeypatch):
     assert body["provider_ready"] is True
     assert body["mode"] == "global"
     assert body["conversations"] == []
+
+
+def test_v1_assistant_create_conversation_forwards_server_id(monkeypatch):
+    client, _user = _client(monkeypatch)
+    captured: dict[str, object] = {}
+
+    async def _create(body, db, current_user):
+        captured["server_id"] = body.server_id
+        captured["title"] = body.title
+        return SimpleNamespace(
+            id="conv-42",
+            server_id=body.server_id,
+            title=body.title or "New conversation",
+            created_at=None,
+            updated_at=None,
+        )
+
+    monkeypatch.setattr(
+        "api.routes.v1.assistant.legacy.create_ai_conversation",
+        _create,
+    )
+
+    response = client.post(
+        "/api/v1/assistant/conversations",
+        json={"server_id": 7, "title": "Update host"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert captured["server_id"] == 7
+    assert body["server_id"] == 7
+    assert body["title"] == "Update host"
