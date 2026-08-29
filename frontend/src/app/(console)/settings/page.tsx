@@ -7,6 +7,8 @@ import { PageHeader } from "@/shared/ui/page-header";
 import { Badge } from "@/shared/ui/badge";
 import { Card } from "@/shared/ui/card";
 
+export const maxDuration = 180;
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("settings");
   return { title: t("title") };

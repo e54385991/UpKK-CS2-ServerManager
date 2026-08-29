@@ -9,7 +9,7 @@ import pytest
 
 from services.game_version import inspect_game_version, versions_match
 from services.steam_api_service import steam_api_service, steam_version_query
-from services.steam_inf_service import parse_steam_inf_fields
+from services.steam_inf_service import parse_steam_inf_fields, steam_inf_service
 
 
 def test_parse_steam_inf_fields_reads_patch_and_server_build():
@@ -18,6 +18,24 @@ def test_parse_steam_inf_fields_reads_patch_and_server_build():
     )
     assert version == "1.41.2.5"
     assert build == "14125"
+
+
+@pytest.mark.asyncio
+async def test_get_steam_inf_details_coerces_numeric_cached_build(monkeypatch):
+    server = SimpleNamespace(id=4)
+
+    async def fake_get(key: str):
+        if key == "steam_inf:version:4":
+            return "1.41.7.8"
+        if key == "steam_inf:build:4":
+            return 2000897
+        return None
+
+    monkeypatch.setattr("services.steam_inf_service.redis_manager.get", fake_get)
+    ok, version, build = await steam_inf_service.get_steam_inf_details(server)
+    assert ok is True
+    assert version == "1.41.7.8"
+    assert build == "2000897"
 
 
 def test_parse_steam_inf_fields_falls_back_to_client_version():

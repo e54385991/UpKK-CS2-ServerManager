@@ -241,5 +241,7 @@ export async function testAiSettings(): Promise<ApiResult<AssistantProviderTestV
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{}",
+    // Text + streamed tool probe can each use the provider timeout (default 60s).
+    timeoutMs: 180_000,
   });
 }

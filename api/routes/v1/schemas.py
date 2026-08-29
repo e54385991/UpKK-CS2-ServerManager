@@ -2013,6 +2013,21 @@ class GameUpdatesView(BaseModel):
     last_update_time: datetime | None = None
     current_game_version: str | None = None
 
+    @field_validator(
+        "installed_version",
+        "installed_build_id",
+        "advertised_version",
+        "current_game_version",
+        mode="before",
+    )
+    @classmethod
+    def stringify_optional_version_fields(cls, value: object) -> str | None:
+        """Redis JSON turns numeric build ids into ints; keep the public contract as text."""
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
 
 class GameUpdatesSettingsRequest(BaseModel):
     enable_auto_update: bool

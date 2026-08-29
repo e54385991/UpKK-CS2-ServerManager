@@ -5,8 +5,8 @@ import { useTranslations } from "next-intl";
 import {
   refreshProfileAiAction,
   saveProfileAiAction,
-  testProfileAiAction,
 } from "@/modules/profile/actions";
+import { testAiProvider } from "@/modules/settings/test-provider";
 import type { AiMode, AiProtocol, ProfileAiPatch, ProfileAiSettings } from "@/modules/profile/types";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -100,7 +100,7 @@ export function UserAiForm({ initial }: { initial: ProfileAiSettings }) {
   async function test() {
     setPending("test");
     setBanner(null);
-    const result = await testProfileAiAction();
+    const result = await testAiProvider("profile");
     const refreshed = result.ok ? await refreshProfileAiAction() : null;
     setPending(null);
     if (refreshed?.ok) applySaved(refreshed.data);

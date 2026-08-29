@@ -21,6 +21,16 @@ _SERVER_VERSION_RE = re.compile(r"ServerVersion=(\d+)")
 _CLIENT_VERSION_RE = re.compile(r"ClientVersion=(\d+)")
 
 
+def _optional_text(value: object) -> Optional[str]:
+    """Normalize Redis/JSON values so numeric build ids stay strings."""
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    text = str(value).strip()
+    return text or None
+
+
 def parse_steam_inf_fields(output: str) -> Tuple[Optional[str], Optional[str]]:
     """Extract PatchVersion and ServerVersion/ClientVersion from steam.inf text."""
     patch = _PATCH_VERSION_RE.search(output or "")
@@ -168,9 +178,9 @@ class SteamInfService:
         build_key = f"steam_inf:build:{server.id}"
 
         if not force_refresh:
-            cached_version = await redis_manager.get(cache_key)
+            cached_version = _optional_text(await redis_manager.get(cache_key))
             if cached_version:
-                cached_build = await redis_manager.get(build_key)
+                cached_build = _optional_text(await redis_manager.get(build_key))
                 logger.debug(
                     f"Using cached steam.inf version for server {server.id}: {cached_version}"
                 )

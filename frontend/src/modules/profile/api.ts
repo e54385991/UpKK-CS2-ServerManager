@@ -301,5 +301,6 @@ export async function testProfileAi(): Promise<ApiResult<AssistantProviderTestVi
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{}",
+    timeoutMs: 180_000,
   });
 }

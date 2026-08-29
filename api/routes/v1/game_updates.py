@@ -25,12 +25,19 @@ router = APIRouter(prefix="/api/v1/servers", tags=["v1-game-updates"])
 logger = logging.getLogger(__name__)
 
 
+def _optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def _view(server, snapshot: GameVersionStatus) -> GameUpdatesView:
     return GameUpdatesView(
-        installed_version=snapshot.installed_version,
-        installed_build_id=snapshot.installed_build_id,
+        installed_version=_optional_text(snapshot.installed_version),
+        installed_build_id=_optional_text(snapshot.installed_build_id),
         installed_source=snapshot.installed_source,
-        advertised_version=snapshot.advertised_version,
+        advertised_version=_optional_text(snapshot.advertised_version),
         up_to_date=snapshot.up_to_date,
         steam_check_ok=snapshot.steam_check_ok,
         steam_message=snapshot.steam_message,
@@ -41,7 +48,7 @@ def _view(server, snapshot: GameVersionStatus) -> GameUpdatesView:
         ),
         last_update_check=getattr(server, "last_update_check", None),
         last_update_time=getattr(server, "last_update_time", None),
-        current_game_version=getattr(server, "current_game_version", None),
+        current_game_version=_optional_text(getattr(server, "current_game_version", None)),
     )
 
 

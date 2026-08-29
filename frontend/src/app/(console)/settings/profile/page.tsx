@@ -7,6 +7,8 @@ import {
 } from "@/modules/profile/profile-panel";
 import { PageHeader } from "@/shared/ui/page-header";
 
+export const maxDuration = 180;
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("profile");
   return { title: t("title") };

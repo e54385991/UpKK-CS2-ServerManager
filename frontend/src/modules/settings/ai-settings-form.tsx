@@ -5,8 +5,8 @@ import { useTranslations } from "next-intl";
 import {
   refreshAiSettingsAction,
   saveAiSettingsAction,
-  testAiSettingsAction,
 } from "@/modules/settings/actions";
+import { testAiProvider } from "@/modules/settings/test-provider";
 import type { AiProtocol, AiSystemPatch, AiSystemSettings } from "@/modules/settings/types";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -116,7 +116,7 @@ export function AiSettingsForm({ initial }: { initial: AiSystemSettings }) {
   async function test() {
     setPending("test");
     setBanner(null);
-    const result = await testAiSettingsAction();
+    const result = await testAiProvider("system");
     const refreshed = result.ok ? await refreshAiSettingsAction() : null;
     setPending(null);
     if (refreshed?.ok) applySaved(refreshed.data);
