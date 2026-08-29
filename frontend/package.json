@@ -11,6 +11,7 @@
     "dev": "next dev --turbopack --hostname 0.0.0.0 --port 3000",
     "build": "next build",
     "start": "node ./scripts/with-internal-api-url.mjs",
+    "build:start": "npm run build && npm run start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "gen:api": "npx -y openapi-typescript@7 ../tests/baselines/openapi.json -o src/shared/api/schema.d.ts",

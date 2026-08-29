@@ -14,6 +14,7 @@ const eslintConfig = [
       "src/shared/api/schema.d.ts",
       "e2e/**",
       "playwright.config.ts",
+      "**/*.test.ts",
     ],
   },
   {

@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
+import { publicAppUrlFromHeaders } from "@/shared/config/public-app-url";
 import { FeedbackHost } from "@/shared/feedback/feedback-host";
 import "./globals.css";
 
@@ -20,6 +22,7 @@ const geistMono = Geist_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("site");
   return {
+    metadataBase: new URL(publicAppUrlFromHeaders(await headers())),
     title: {
       default: `${t("name")} · ${t("fullName")}`,
       template: `%s · ${t("name")}`,
