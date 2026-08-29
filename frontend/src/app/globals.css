@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+/*
+ * Tactical operations theme — a restrained, professional control-console look.
+ * Graphite surfaces, a cool cyan primary, and disciplined green/amber/red
+ * status accents. Tokens are defined once here and consumed everywhere via
+ * Tailwind utility classes (bg-surface, text-muted, border-line, …).
+ */
+@theme {
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, "SFMono-Regular", "JetBrains Mono",
+    "Cascadia Code", Menlo, Consolas, monospace;
+
+  /* Core graphite surface ramp (darkest → lightest). */
+  --color-canvas: #08090c;
+  --color-surface: #0d0f14;
+  --color-surface-raised: #12151c;
+  --color-surface-overlay: #171b24;
+  --color-line: #232936;
+  --color-line-strong: #303747;
+
+  /* Text ramp. */
+  --color-fg: #e6e9ef;
+  --color-fg-muted: #9aa3b2;
+  --color-fg-subtle: #6b7484;
+
+  /* Cool cyan primary. */
+  --color-primary: #22d3ee;
+  --color-primary-strong: #06b6d4;
+  --color-primary-foreground: #04141a;
+  --color-primary-muted: #0e3b45;
+
+  /* Status accents — deliberately calm, not neon. */
+  --color-ok: #34d399;
+  --color-ok-muted: #0f3b31;
+  --color-warn: #fbbf24;
+  --color-warn-muted: #3d3113;
+  --color-danger: #f87171;
+  --color-danger-muted: #3d1a1c;
+  --color-info: #60a5fa;
+  --color-info-muted: #16305a;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.02) inset,
+    0 8px 24px -12px rgb(0 0 0 / 0.6);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+  }
+
+  /* Subtle tactical grid backdrop on the canvas. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(circle at 15% -10%, rgb(34 211 238 / 0.06), transparent 45%),
+      radial-gradient(circle at 100% 0%, rgb(96 165 250 / 0.05), transparent 40%),
+      linear-gradient(to bottom, var(--color-canvas), var(--color-canvas));
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-primary) 32%, transparent);
+    color: var(--color-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-fg-subtle);
+    background-clip: content-box;
+  }
+}
+
+@utility grid-fade {
+  background-image:
+    linear-gradient(var(--color-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(circle at 50% 0%, black, transparent 70%);
+}

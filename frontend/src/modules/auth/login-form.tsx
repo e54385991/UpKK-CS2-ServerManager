@@ -1,0 +1,207 @@
+"use client";
+
+import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
+import { RefreshCw, LogIn, TriangleAlert } from "lucide-react";
+import { Input, Label } from "@/shared/ui/input";
+import { Button } from "@/shared/ui/button";
+import { cn } from "@/shared/lib/cn";
+
+type Captcha = { token: string; imageUrl: string };
+
+/**
+ * Login form wired to the existing backend auth + CAPTCHA endpoints through the
+ * Next API proxy (first-party cookies, no CORS). On success the backend sets
+ * the HttpOnly session cookie and we navigate into the console.
+ */
+export function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = sanitizeNext(searchParams.get("next"));
+
+  const [captcha, setCaptcha] = useState<Captcha | null>(null);
+  const [captchaLoading, setCaptchaLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  // Pure IO: request a fresh CAPTCHA and return it. Holds no React state so it
+  // is safe to call from effects and event handlers alike.
+  const requestCaptcha = useCallback(async (): Promise<Captcha | null> => {
+    try {
+      const response = await fetch(
+        `/api/captcha/image/refresh?ts=${Date.now()}`,
+        { cache: "no-store" },
+      );
+      const token = response.headers.get("X-Captcha-Token");
+      const blob = await response.blob();
+      if (!token) return null;
+      return { token, imageUrl: URL.createObjectURL(blob) };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Initial load: state is only set inside the async callback once the external
+  // request settles, never synchronously in the effect body.
+  useEffect(() => {
+    let active = true;
+    void requestCaptcha().then((next) => {
+      if (!active) return;
+      if (next) setCaptcha(next);
+      else setError("验证码加载失败，请刷新重试。");
+      setCaptchaLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [requestCaptcha]);
+
+  // Manual refresh from a user gesture.
+  const refreshCaptcha = useCallback(() => {
+    setCaptchaLoading(true);
+    void requestCaptcha().then((next) => {
+      setCaptcha((prev) => {
+        if (prev) URL.revokeObjectURL(prev.imageUrl);
+        return next ?? prev;
+      });
+      if (!next) setError("验证码加载失败，请刷新重试。");
+      setCaptchaLoading(false);
+    });
+  }, [requestCaptcha]);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!captcha) return;
+    setError(null);
+    setPending(true);
+
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          username: String(form.get("username") ?? ""),
+          password: String(form.get("password") ?? ""),
+          captcha_token: captcha.token,
+          captcha_code: String(form.get("captcha") ?? ""),
+        }),
+      });
+
+      if (response.ok) {
+        router.replace(nextPath);
+        router.refresh();
+        return;
+      }
+
+      const detail = await extractDetail(response);
+      setError(detail);
+      void refreshCaptcha();
+    } catch {
+      setError("网络错误，请稍后重试。");
+      void refreshCaptcha();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      {error ? (
+        <div className="flex items-center gap-2 rounded-md border border-danger/30 bg-danger-muted/50 px-3 py-2 text-sm text-danger">
+          <TriangleAlert className="size-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      <div>
+        <Label htmlFor="username">用户名</Label>
+        <Input
+          id="username"
+          name="username"
+          autoComplete="username"
+          required
+          autoFocus
+          placeholder="admin"
+        />
+      </div>
+
+      <div>
+        <Label htmlFor="password">密码</Label>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+          placeholder="••••••••"
+        />
+      </div>
+
+      <div>
+        <Label htmlFor="captcha">验证码</Label>
+        <div className="flex items-center gap-3">
+          <Input
+            id="captcha"
+            name="captcha"
+            required
+            inputMode="text"
+            autoComplete="off"
+            maxLength={4}
+            className="uppercase tracking-[0.3em]"
+            placeholder="4 位"
+          />
+          <button
+            type="button"
+            onClick={refreshCaptcha}
+            aria-label="刷新验证码"
+            className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
+          >
+            {captcha && !captchaLoading ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={captcha.imageUrl}
+                alt="验证码"
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <span className="text-xs text-fg-subtle">加载中…</span>
+            )}
+            <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
+              <RefreshCw
+                className={cn("size-3", captchaLoading && "animate-spin")}
+              />
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <Button type="submit" size="lg" className="w-full" disabled={pending}>
+        <LogIn className="size-4" />
+        {pending ? "登录中…" : "登录"}
+      </Button>
+    </form>
+  );
+}
+
+function sanitizeNext(value: string | null): Route {
+  // Only allow same-origin absolute paths to prevent open-redirects. The value
+  // is a runtime string, so it is asserted into the typed-routes space.
+  if (value && value.startsWith("/") && !value.startsWith("//")) {
+    return value as Route;
+  }
+  return "/overview";
+}
+
+async function extractDetail(response: Response): Promise<string> {
+  try {
+    const data = (await response.json()) as { detail?: unknown };
+    if (typeof data.detail === "string") return data.detail;
+  } catch {
+    // ignore
+  }
+  if (response.status === 401) return "用户名或密码错误。";
+  if (response.status === 400) return "验证码无效或已过期。";
+  return `登录失败（${response.status}）。`;
+}
