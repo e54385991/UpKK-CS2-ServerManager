@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { SITE } from "@/shared/config/site";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,15 +16,18 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: `${SITE.name} · ${SITE.fullName}`,
-    template: `%s · ${SITE.name}`,
-  },
-  description: SITE.description,
-  applicationName: SITE.fullName,
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("site");
+  return {
+    title: {
+      default: `${t("name")} · ${t("fullName")}`,
+      template: `%s · ${t("name")}`,
+    },
+    description: t("tagline"),
+    applicationName: t("fullName"),
+    robots: { index: false, follow: false },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#08090c",
@@ -32,15 +36,20 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {children}
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          {children}
+        </NextIntlClientProvider>
       </body>
     </html>
   );

@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { ScrollText, ChevronLeft, ChevronRight } from "lucide-react";
 import { listAudit, type AuditQuery } from "@/modules/audit/api";
-import { categoryLabel, statusMeta } from "@/modules/audit/types";
+import { statusTone } from "@/modules/audit/types";
 import { Card } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 
@@ -12,6 +13,7 @@ function formatTime(iso: string | null): string {
 }
 
 export async function AuditTable({ query }: { query: AuditQuery }) {
+  const t = await getTranslations("audit");
   const result = await listAudit(query);
 
   if (!result.ok) {
@@ -19,8 +21,8 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
     return (
       <Card className="border-warn/30 bg-warn-muted/40 px-5 py-4 text-sm text-warn">
         {forbidden
-          ? "仅管理员可查看审计日志。"
-          : `暂时无法获取审计日志（${result.status || "网络错误"}）。`}
+          ? t("forbidden")
+          : t("fetchError", { status: result.status || "network" })}
       </Card>
     );
   }
@@ -33,7 +35,7 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
         <span className="flex size-12 items-center justify-center rounded-full bg-surface-overlay text-fg-subtle">
           <ScrollText className="size-6" />
         </span>
-        <p className="text-sm text-fg-muted">没有匹配的审计事件。</p>
+        <p className="text-sm text-fg-muted">{t("empty")}</p>
       </Card>
     );
   }
@@ -58,18 +60,18 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
         <table className="w-full min-w-[720px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg-subtle">
-              <th className="px-4 py-3 font-medium">时间</th>
-              <th className="px-4 py-3 font-medium">分类</th>
-              <th className="px-4 py-3 font-medium">动作</th>
-              <th className="px-4 py-3 font-medium">状态</th>
-              <th className="px-4 py-3 font-medium">用户</th>
-              <th className="px-4 py-3 font-medium">IP</th>
-              <th className="px-4 py-3 font-medium">来源</th>
+              <th className="px-4 py-3 font-medium">{t("columns.time")}</th>
+              <th className="px-4 py-3 font-medium">{t("columns.category")}</th>
+              <th className="px-4 py-3 font-medium">{t("columns.action")}</th>
+              <th className="px-4 py-3 font-medium">{t("columns.status")}</th>
+              <th className="px-4 py-3 font-medium">{t("columns.user")}</th>
+              <th className="px-4 py-3 font-medium">{t("columns.ip")}</th>
+              <th className="px-4 py-3 font-medium">{t("columns.source")}</th>
             </tr>
           </thead>
           <tbody>
             {items.map((entry) => {
-              const meta = statusMeta(entry.status);
+              const tone = statusTone(entry.status);
               return (
                 <tr
                   key={entry.id}
@@ -79,11 +81,11 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
                     {formatTime(entry.createdAt)}
                   </td>
                   <td className="px-4 py-2.5">
-                    <Badge tone="neutral">{categoryLabel(entry.category)}</Badge>
+                    <Badge tone="neutral">{t(`categories.${entry.category}`)}</Badge>
                   </td>
                   <td className="px-4 py-2.5 text-fg">{entry.action}</td>
                   <td className="px-4 py-2.5">
-                    <Badge tone={meta.tone}>{meta.label}</Badge>
+                    <Badge tone={tone}>{t(`statuses.${entry.status}`)}</Badge>
                   </td>
                   <td className="px-4 py-2.5 text-fg-muted">
                     {entry.actorUsername ?? "—"}
@@ -100,23 +102,21 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
       </div>
 
       <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3 text-xs text-fg-muted">
-        <span>
-          第 <span className="tabular-nums text-fg">{from}</span>–
-          <span className="tabular-nums text-fg">{to}</span> / 共{" "}
-          <span className="tabular-nums text-fg">{total}</span> 条
+        <span className="tabular-nums">
+          {t("pageInfo", { from, to, total })}
         </span>
         <div className="flex items-center gap-2">
           <PagerLink
             enabled={hasPrev}
             query={pageQuery(prevOffset)}
-            aria-label="上一页"
+            aria-label={t("prev")}
           >
             <ChevronLeft className="size-4" />
           </PagerLink>
           <PagerLink
             enabled={hasNext}
             query={pageQuery(nextOffset)}
-            aria-label="下一页"
+            aria-label={t("next")}
           >
             <ChevronRight className="size-4" />
           </PagerLink>

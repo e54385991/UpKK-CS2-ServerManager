@@ -26,14 +26,17 @@ export type ServerSummary = {
   readonly maxPlayers: number;
 };
 
-export const SERVER_STATUS_META: Record<
-  ServerStatus,
-  { readonly label: string; readonly tone: "ok" | "warn" | "danger" | "info" | "neutral" }
-> = {
-  running: { label: "运行中", tone: "ok" },
-  deploying: { label: "部署中", tone: "info" },
-  pending: { label: "待部署", tone: "warn" },
-  stopped: { label: "已停止", tone: "neutral" },
-  error: { label: "异常", tone: "danger" },
-  unknown: { label: "未知", tone: "neutral" },
+export type Tone = "ok" | "warn" | "danger" | "info" | "neutral";
+
+/**
+ * Status → visual tone. Human labels are resolved via i18n at render time
+ * (`servers.status.<status>`), so this map holds presentation only.
+ */
+export const SERVER_STATUS_TONE: Record<ServerStatus, Tone> = {
+  running: "ok",
+  deploying: "info",
+  pending: "warn",
+  stopped: "neutral",
+  error: "danger",
+  unknown: "neutral",
 };

@@ -1,0 +1,156 @@
+{
+  "site": {
+    "name": "CS2 控制台",
+    "fullName": "CS2 Server Manager",
+    "tagline": "Counter-Strike 2 多服务器运维控制台"
+  },
+  "nav": {
+    "sectionOperate": "运维",
+    "sectionManage": "管理",
+    "overview": "总览",
+    "servers": "服务器",
+    "plugins": "插件中心",
+    "assistant": "AI 助手",
+    "audit": "审计日志",
+    "settings": "系统设置"
+  },
+  "shell": {
+    "gatewayOnline": "网关在线",
+    "admin": "管理员",
+    "user": "普通用户",
+    "profile": "个人资料",
+    "logout": "退出登录",
+    "signingOut": "退出中…",
+    "openNav": "打开导航",
+    "closeNav": "关闭导航",
+    "language": "语言"
+  },
+  "login": {
+    "username": "用户名",
+    "password": "密码",
+    "captcha": "验证码",
+    "captchaPlaceholder": "4 位",
+    "refreshCaptcha": "刷新验证码",
+    "loading": "加载中…",
+    "submit": "登录",
+    "submitting": "登录中…",
+    "captchaLoadError": "验证码加载失败，请刷新重试。",
+    "networkError": "网络错误，请稍后重试。",
+    "invalidCredentials": "用户名或密码错误。",
+    "invalidCaptcha": "验证码无效或已过期。",
+    "failed": "登录失败（{status}）。"
+  },
+  "overview": {
+    "welcome": "欢迎回来，{name}",
+    "welcomeNoName": "欢迎回来",
+    "description": "运维态势一览：服务器规模、运行状态与需要关注的告警。",
+    "total": "服务器总数",
+    "running": "运行中",
+    "attention": "需要关注",
+    "capacity": "总容量（人）",
+    "recent": "最近的服务器",
+    "viewAll": "查看全部",
+    "emptyRecent": "还没有服务器。前往「服务器」页面添加第一台。",
+    "fetchError": "暂时无法获取运维总览数据（{status}）。"
+  },
+  "servers": {
+    "title": "服务器",
+    "description": "集中查看、部署与运维你的 Counter-Strike 2 服务器。",
+    "add": "添加服务器",
+    "emptyTitle": "还没有服务器",
+    "emptyDesc": "添加你的第一台 Counter-Strike 2 服务器，开始集中运维。",
+    "players": "{count} 人",
+    "backToList": "返回列表",
+    "fetchError": "暂时无法从后端获取服务器列表（{status}）。请确认 FastAPI 服务与会话有效后重试。",
+    "status": {
+      "running": "运行中",
+      "deploying": "部署中",
+      "pending": "待部署",
+      "stopped": "已停止",
+      "error": "异常",
+      "unknown": "未知"
+    }
+  },
+  "serverDetail": {
+    "title": "服务器 #{id}",
+    "description": "服务器工作区：概览、操作、监控、配置、插件、地图、文件与控制台。",
+    "connection": "连接与运行",
+    "address": "地址",
+    "ssh": "SSH",
+    "defaultMap": "默认地图",
+    "maxPlayers": "最大人数",
+    "gameMode": "游戏模式",
+    "directory": "目录",
+    "fetchError": "暂时无法获取该服务器详情（{status}）。",
+    "workspacePhase": "服务器工作区 · 建设中",
+    "workspaceBody": "可分享的子路由工作区将替代旧版横向 Tab，在生命周期与运维阶段逐步接入。"
+  },
+  "serverNew": {
+    "title": "添加服务器",
+    "description": "通过 SSH 连接一台主机，随后即可一键部署 Counter-Strike 2。",
+    "phase": "初始化向导 · 建设中",
+    "body": "SSH 校验、CAPTCHA 与部署向导将在服务器生命周期阶段接入 /api/v1 后上线。"
+  },
+  "plugins": {
+    "title": "插件中心",
+    "description": "浏览、安装与更新 Metamod、CounterStrikeSharp 及插件市场内容。",
+    "phase": "插件中心 · 建设中",
+    "body": "插件市场、依赖与冲突审批、批量安装将在插件阶段接入 /api/v1 后上线。"
+  },
+  "assistant": {
+    "title": "AI 助手",
+    "description": "以对话方式排障与运维，工具调用需显式审批后执行。",
+    "phase": "AI 助手 · 建设中",
+    "body": "流式对话、工具审批与可重放事件将在 AI 阶段基于可重放 SSE 接入。"
+  },
+  "settings": {
+    "title": "系统设置",
+    "description": "面板级配置：安全、集成、下载代理与自动化默认值。",
+    "phase": "系统设置 · 建设中",
+    "body": "分组配置表单与安全策略将在系统管理阶段接入 /api/v1 设置接口后上线。"
+  },
+  "audit": {
+    "title": "审计日志",
+    "description": "记录关键操作与安全事件，支持按分类与状态检索（保留最近 30 天）。",
+    "forbidden": "仅管理员可查看审计日志。",
+    "fetchError": "暂时无法获取审计日志（{status}）。",
+    "empty": "没有匹配的审计事件。",
+    "allCategories": "全部分类",
+    "allStatuses": "全部状态",
+    "filterCategory": "按分类筛选",
+    "filterStatus": "按状态筛选",
+    "pageInfo": "第 {from}–{to} / 共 {total} 条",
+    "prev": "上一页",
+    "next": "下一页",
+    "columns": {
+      "time": "时间",
+      "category": "分类",
+      "action": "动作",
+      "status": "状态",
+      "user": "用户",
+      "ip": "IP",
+      "source": "来源"
+    },
+    "categories": {
+      "auth": "认证",
+      "discord": "Discord",
+      "server": "服务器",
+      "settings": "设置"
+    },
+    "statuses": {
+      "success": "成功",
+      "failure": "失败",
+      "cancelled": "已取消",
+      "expired": "已过期",
+      "requested": "已请求"
+    }
+  },
+  "profile": {
+    "title": "个人资料",
+    "description": "查看你的账号信息与角色。",
+    "account": "账号",
+    "username": "用户名",
+    "email": "邮箱",
+    "role": "角色"
+  }
+}

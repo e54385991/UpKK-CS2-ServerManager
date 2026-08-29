@@ -1,25 +1,31 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
 import { ModulePlaceholder } from "@/shared/ui/module-placeholder";
 
-export const metadata: Metadata = { title: "添加服务器" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("serverNew");
+  return { title: t("title") };
+}
 
-export default function NewServerPage() {
+export default async function NewServerPage() {
+  const [t, tServers] = await Promise.all([
+    getTranslations("serverNew"),
+    getTranslations("servers"),
+  ]);
   return (
     <>
       <PageHeader
-        title="添加服务器"
-        description="通过 SSH 连接一台主机，随后即可一键部署 Counter-Strike 2。"
+        title={t("title")}
+        description={t("description")}
         actions={
           <LinkButton href="/servers" variant="outline">
-            返回列表
+            {tServers("backToList")}
           </LinkButton>
         }
       />
-      <ModulePlaceholder phase="初始化向导 · 建设中">
-        SSH 校验、CAPTCHA 与部署向导将在服务器生命周期阶段接入 /api/v1 后上线。
-      </ModulePlaceholder>
+      <ModulePlaceholder phase={t("phase")}>{t("body")}</ModulePlaceholder>
     </>
   );
 }

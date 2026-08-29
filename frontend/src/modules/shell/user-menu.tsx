@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { LogOut, UserRound, ChevronDown } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import type { SessionUser } from "@/modules/auth/session";
@@ -11,6 +12,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
   const [pending, setPending] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const t = useTranslations("shell");
 
   useEffect(() => {
     function onClick(event: MouseEvent) {
@@ -65,7 +67,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
               {user.username}
             </p>
             <p className="truncate text-xs text-fg-subtle">
-              {user.isAdmin ? "管理员" : "普通用户"}
+              {user.isAdmin ? t("admin") : t("user")}
             </p>
           </div>
           <a
@@ -74,7 +76,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
             className="flex items-center gap-2.5 px-3 py-2 text-sm text-fg-muted transition-colors hover:bg-surface-raised hover:text-fg"
           >
             <UserRound className="size-4" />
-            个人资料
+            {t("profile")}
           </a>
           <button
             role="menuitem"
@@ -86,7 +88,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
             )}
           >
             <LogOut className="size-4" />
-            {pending ? "退出中…" : "退出登录"}
+            {pending ? t("signingOut") : t("logout")}
           </button>
         </div>
       ) : null}

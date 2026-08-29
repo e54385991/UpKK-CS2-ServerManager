@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
+import { useTranslations } from "next-intl";
 import { RefreshCw, LogIn, TriangleAlert } from "lucide-react";
 import { Input, Label } from "@/shared/ui/input";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 
 type Captcha = { token: string; imageUrl: string };
+type Translate = ReturnType<typeof useTranslations>;
 
 /**
  * Login form wired to the existing backend auth + CAPTCHA endpoints through the
@@ -16,6 +18,7 @@ type Captcha = { token: string; imageUrl: string };
  * the HttpOnly session cookie and we navigate into the console.
  */
 export function LoginForm() {
+  const t = useTranslations("login");
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = sanitizeNext(searchParams.get("next"));
@@ -25,8 +28,6 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  // Pure IO: request a fresh CAPTCHA and return it. Holds no React state so it
-  // is safe to call from effects and event handlers alike.
   const requestCaptcha = useCallback(async (): Promise<Captcha | null> => {
     try {
       const response = await fetch(
@@ -42,22 +43,19 @@ export function LoginForm() {
     }
   }, []);
 
-  // Initial load: state is only set inside the async callback once the external
-  // request settles, never synchronously in the effect body.
   useEffect(() => {
     let active = true;
     void requestCaptcha().then((next) => {
       if (!active) return;
       if (next) setCaptcha(next);
-      else setError("验证码加载失败，请刷新重试。");
+      else setError(t("captchaLoadError"));
       setCaptchaLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [requestCaptcha]);
+  }, [requestCaptcha, t]);
 
-  // Manual refresh from a user gesture.
   const refreshCaptcha = useCallback(() => {
     setCaptchaLoading(true);
     void requestCaptcha().then((next) => {
@@ -65,10 +63,10 @@ export function LoginForm() {
         if (prev) URL.revokeObjectURL(prev.imageUrl);
         return next ?? prev;
       });
-      if (!next) setError("验证码加载失败，请刷新重试。");
+      if (!next) setError(t("captchaLoadError"));
       setCaptchaLoading(false);
     });
-  }, [requestCaptcha]);
+  }, [requestCaptcha, t]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,12 +93,11 @@ export function LoginForm() {
         return;
       }
 
-      const detail = await extractDetail(response);
-      setError(detail);
-      void refreshCaptcha();
+      setError(await extractDetail(response, t));
+      refreshCaptcha();
     } catch {
-      setError("网络错误，请稍后重试。");
-      void refreshCaptcha();
+      setError(t("networkError"));
+      refreshCaptcha();
     } finally {
       setPending(false);
     }
@@ -116,7 +113,7 @@ export function LoginForm() {
       ) : null}
 
       <div>
-        <Label htmlFor="username">用户名</Label>
+        <Label htmlFor="username">{t("username")}</Label>
         <Input
           id="username"
           name="username"
@@ -128,7 +125,7 @@ export function LoginForm() {
       </div>
 
       <div>
-        <Label htmlFor="password">密码</Label>
+        <Label htmlFor="password">{t("password")}</Label>
         <Input
           id="password"
           name="password"
@@ -140,7 +137,7 @@ export function LoginForm() {
       </div>
 
       <div>
-        <Label htmlFor="captcha">验证码</Label>
+        <Label htmlFor="captcha">{t("captcha")}</Label>
         <div className="flex items-center gap-3">
           <Input
             id="captcha"
@@ -150,23 +147,23 @@ export function LoginForm() {
             autoComplete="off"
             maxLength={4}
             className="uppercase tracking-[0.3em]"
-            placeholder="4 位"
+            placeholder={t("captchaPlaceholder")}
           />
           <button
             type="button"
             onClick={refreshCaptcha}
-            aria-label="刷新验证码"
+            aria-label={t("refreshCaptcha")}
             className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
           >
             {captcha && !captchaLoading ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={captcha.imageUrl}
-                alt="验证码"
+                alt={t("captcha")}
                 className="h-full w-full object-contain"
               />
             ) : (
-              <span className="text-xs text-fg-subtle">加载中…</span>
+              <span className="text-xs text-fg-subtle">{t("loading")}</span>
             )}
             <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
               <RefreshCw
@@ -179,29 +176,30 @@ export function LoginForm() {
 
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         <LogIn className="size-4" />
-        {pending ? "登录中…" : "登录"}
+        {pending ? t("submitting") : t("submit")}
       </Button>
     </form>
   );
 }
 
 function sanitizeNext(value: string | null): Route {
-  // Only allow same-origin absolute paths to prevent open-redirects. The value
-  // is a runtime string, so it is asserted into the typed-routes space.
   if (value && value.startsWith("/") && !value.startsWith("//")) {
     return value as Route;
   }
   return "/overview";
 }
 
-async function extractDetail(response: Response): Promise<string> {
+async function extractDetail(
+  response: Response,
+  t: Translate,
+): Promise<string> {
   try {
     const data = (await response.json()) as { detail?: unknown };
     if (typeof data.detail === "string") return data.detail;
   } catch {
     // ignore
   }
-  if (response.status === 401) return "用户名或密码错误。";
-  if (response.status === 400) return "验证码无效或已过期。";
-  return `登录失败（${response.status}）。`;
+  if (response.status === 401) return t("invalidCredentials");
+  if (response.status === 400) return t("invalidCaptcha");
+  return t("failed", { status: response.status });
 }

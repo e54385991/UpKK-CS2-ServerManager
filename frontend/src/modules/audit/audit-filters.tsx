@@ -2,7 +2,11 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, type ChangeEvent } from "react";
-import { AUDIT_CATEGORIES, AUDIT_STATUSES } from "@/modules/audit/types";
+import { useTranslations } from "next-intl";
+import {
+  AUDIT_CATEGORY_VALUES,
+  AUDIT_STATUS_VALUES,
+} from "@/modules/audit/types";
 import { cn } from "@/shared/lib/cn";
 
 const selectClass = cn(
@@ -13,6 +17,7 @@ const selectClass = cn(
 export function AuditFilters() {
   const router = useRouter();
   const params = useSearchParams();
+  const t = useTranslations("audit");
 
   const update = useCallback(
     (key: string, value: string) => {
@@ -34,29 +39,29 @@ export function AuditFilters() {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <select
-        aria-label="按分类筛选"
+        aria-label={t("filterCategory")}
         className={selectClass}
         value={params.get("category") ?? ""}
         onChange={onCategory}
       >
-        <option value="">全部分类</option>
-        {AUDIT_CATEGORIES.map((c) => (
-          <option key={c.value} value={c.value}>
-            {c.label}
+        <option value="">{t("allCategories")}</option>
+        {AUDIT_CATEGORY_VALUES.map((value) => (
+          <option key={value} value={value}>
+            {t(`categories.${value}`)}
           </option>
         ))}
       </select>
 
       <select
-        aria-label="按状态筛选"
+        aria-label={t("filterStatus")}
         className={selectClass}
         value={params.get("status") ?? ""}
         onChange={onStatus}
       >
-        <option value="">全部状态</option>
-        {AUDIT_STATUSES.map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
+        <option value="">{t("allStatuses")}</option>
+        {AUDIT_STATUS_VALUES.map((value) => (
+          <option key={value} value={value}>
+            {t(`statuses.${value}`)}
           </option>
         ))}
       </select>

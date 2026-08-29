@@ -7,8 +7,9 @@ import {
   ArrowRight,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import { listServers, getOverviewSummary } from "@/modules/servers/api";
-import { SERVER_STATUS_META } from "@/modules/servers/types";
+import { SERVER_STATUS_TONE } from "@/modules/servers/types";
 import { Card } from "@/shared/ui/card";
 import { Badge, StatusDot } from "@/shared/ui/badge";
 import { cn } from "@/shared/lib/cn";
@@ -53,7 +54,9 @@ function StatCard({
 export async function OverviewStats() {
   // Counts come from the server-side aggregate; the recent list reuses the
   // summaries endpoint. Both are fetched in parallel.
-  const [summaryResult, result] = await Promise.all([
+  const [t, tServers, summaryResult, result] = await Promise.all([
+    getTranslations("overview"),
+    getTranslations("servers"),
     getOverviewSummary(),
     listServers(),
   ]);
@@ -66,7 +69,7 @@ export async function OverviewStats() {
         : 0;
     return (
       <Card className="border-warn/30 bg-warn-muted/40 px-5 py-4 text-sm text-warn">
-        暂时无法获取运维总览数据（{status || "网络错误"}）。
+        {t("fetchError", { status: status || "network" })}
       </Card>
     );
   }
@@ -77,36 +80,41 @@ export async function OverviewStats() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="服务器总数" value={total} icon={Server} />
-        <StatCard label="运行中" value={running} icon={CircleCheck} tone="ok" />
+        <StatCard label={t("total")} value={total} icon={Server} />
         <StatCard
-          label="需要关注"
+          label={t("running")}
+          value={running}
+          icon={CircleCheck}
+          tone="ok"
+        />
+        <StatCard
+          label={t("attention")}
           value={attention}
           icon={CircleAlert}
           tone={attention > 0 ? "warn" : "primary"}
         />
-        <StatCard label="总容量（人）" value={capacity} icon={Activity} />
+        <StatCard label={t("capacity")} value={capacity} icon={Activity} />
       </div>
 
       <Card>
         <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-          <h2 className="text-sm font-semibold text-fg">最近的服务器</h2>
+          <h2 className="text-sm font-semibold text-fg">{t("recent")}</h2>
           <Link
             href="/servers"
             className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary-strong"
           >
-            查看全部
+            {t("viewAll")}
             <ArrowRight className="size-3.5" />
           </Link>
         </div>
         {servers.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-fg-muted">
-            还没有服务器。前往「服务器」页面添加第一台。
+            {t("emptyRecent")}
           </p>
         ) : (
           <ul className="divide-y divide-line">
             {servers.slice(0, 5).map((server) => {
-              const meta = SERVER_STATUS_META[server.status];
+              const tone = SERVER_STATUS_TONE[server.status];
               return (
                 <li key={server.id}>
                   <Link
@@ -121,12 +129,12 @@ export async function OverviewStats() {
                         {server.host}:{server.gamePort}
                       </p>
                     </div>
-                    <Badge tone={meta.tone}>
+                    <Badge tone={tone}>
                       <StatusDot
-                        tone={meta.tone}
+                        tone={tone}
                         pulse={server.status === "running"}
                       />
-                      {meta.label}
+                      {tServers(`status.${server.status}`)}
                     </Badge>
                   </Link>
                 </li>

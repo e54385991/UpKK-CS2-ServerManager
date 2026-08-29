@@ -1,18 +1,22 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Crosshair } from "lucide-react";
 import { getSession } from "@/modules/auth/session";
-import { SITE } from "@/shared/config/site";
 import { LoginForm } from "@/modules/auth/login-form";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 
-export const metadata: Metadata = { title: "登录" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("login");
+  return { title: t("submit") };
+}
 
 export default async function LoginPage() {
   // If already authenticated, skip the form.
   if (await getSession()) redirect("/overview");
+  const t = await getTranslations("site");
 
   return (
     <main className="relative flex min-h-dvh items-center justify-center px-4 py-12">
@@ -23,9 +27,9 @@ export default async function LoginPage() {
             <Crosshair className="size-6" />
           </span>
           <h1 className="text-lg font-semibold tracking-tight text-fg">
-            {SITE.name}
+            {t("name")}
           </h1>
-          <p className="mt-1 text-sm text-fg-muted">{SITE.tagline}</p>
+          <p className="mt-1 text-sm text-fg-muted">{t("tagline")}</p>
         </div>
 
         <Card className="p-6">
@@ -35,7 +39,7 @@ export default async function LoginPage() {
         </Card>
 
         <p className="mt-6 text-center text-xs text-fg-subtle">
-          {SITE.fullName}
+          {t("fullName")}
         </p>
       </div>
     </main>

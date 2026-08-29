@@ -1,22 +1,27 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
 import { ServerList, ServerListSkeleton } from "@/modules/servers/server-list";
 
-export const metadata: Metadata = { title: "服务器" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("servers");
+  return { title: t("title") };
+}
 
-export default function ServersPage() {
+export default async function ServersPage() {
+  const t = await getTranslations("servers");
   return (
     <>
       <PageHeader
-        title="服务器"
-        description="集中查看、部署与运维你的 Counter-Strike 2 服务器。"
+        title={t("title")}
+        description={t("description")}
         actions={
           <LinkButton href="/servers/new">
             <Plus className="size-4" />
-            添加服务器
+            {t("add")}
           </LinkButton>
         }
       />

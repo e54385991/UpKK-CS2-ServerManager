@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { getSession } from "@/modules/auth/session";
 import { PageHeader } from "@/shared/ui/page-header";
 import {
@@ -7,15 +8,25 @@ import {
   OverviewStatsSkeleton,
 } from "@/modules/overview/overview-stats";
 
-export const metadata: Metadata = { title: "总览" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("nav");
+  return { title: t("overview") };
+}
 
 export default async function OverviewPage() {
-  const session = await getSession();
+  const [session, t] = await Promise.all([
+    getSession(),
+    getTranslations("overview"),
+  ]);
   return (
     <>
       <PageHeader
-        title={`欢迎回来${session ? `，${session.username}` : ""}`}
-        description="运维态势一览：服务器规模、运行状态与需要关注的告警。"
+        title={
+          session
+            ? t("welcome", { name: session.username })
+            : t("welcomeNoName")
+        }
+        description={t("description")}
       />
       <Suspense fallback={<OverviewStatsSkeleton />}>
         <OverviewStats />

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { Crosshair } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { NAV_SECTIONS } from "@/shared/config/navigation";
-import { SITE } from "@/shared/config/site";
 import { NavLink } from "@/modules/shell/nav-link";
 
 /**
@@ -13,6 +13,9 @@ import { NavLink } from "@/modules/shell/nav-link";
  * re-renders the page region.
  */
 export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
+  const t = useTranslations("nav");
+  const tSite = useTranslations("site");
+
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-surface/60 lg:flex">
       <div className="flex h-14 items-center gap-2.5 border-b border-line px-5">
@@ -21,7 +24,7 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
             <Crosshair className="size-4.5" />
           </span>
           <span className="text-sm font-semibold tracking-tight text-fg">
-            {SITE.name}
+            {tSite("name")}
           </span>
         </Link>
       </div>
@@ -35,14 +38,14 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
           return (
             <div key={section.titleKey}>
               <p className="px-3 pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-fg-subtle">
-                {section.title}
+                {t(section.titleKey)}
               </p>
               <div className="space-y-1">
                 {items.map((item) => (
                   <NavLink
                     key={item.href}
                     href={item.href}
-                    label={item.label}
+                    label={t(item.key)}
                     icon={item.icon}
                   />
                 ))}
@@ -53,7 +56,7 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
       </nav>
 
       <div className="border-t border-line px-5 py-3 text-[0.6875rem] text-fg-subtle">
-        {SITE.fullName}
+        {tSite("fullName")}
       </div>
     </aside>
   );

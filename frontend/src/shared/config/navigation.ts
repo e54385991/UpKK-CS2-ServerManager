@@ -11,72 +11,39 @@ import {
 
 export type NavItem = {
   readonly href: Route;
-  readonly labelKey: string;
-  readonly label: string;
+  /** Translation key under the `nav` namespace. */
+  readonly key: string;
   readonly icon: LucideIcon;
   /** When true, only administrators see this entry. */
   readonly adminOnly?: boolean;
 };
 
 export type NavSection = {
+  /** Translation key under the `nav` namespace. */
   readonly titleKey: string;
-  readonly title: string;
   readonly items: readonly NavItem[];
 };
 
 /**
- * Primary console navigation. Kept declarative so the sidebar, mobile drawer,
- * and command palette all render from a single source of truth.
+ * Primary console navigation. Declarative so the sidebar, mobile drawer, and
+ * command palette render from one source of truth; labels are resolved via i18n
+ * (`nav` namespace) at render time.
  */
 export const NAV_SECTIONS: readonly NavSection[] = [
   {
-    titleKey: "nav.section.operate",
-    title: "运维",
+    titleKey: "sectionOperate",
     items: [
-      {
-        href: "/overview",
-        labelKey: "nav.overview",
-        label: "总览",
-        icon: LayoutDashboard,
-      },
-      {
-        href: "/servers",
-        labelKey: "nav.servers",
-        label: "服务器",
-        icon: Server,
-      },
-      {
-        href: "/plugins",
-        labelKey: "nav.plugins",
-        label: "插件中心",
-        icon: Boxes,
-      },
-      {
-        href: "/assistant",
-        labelKey: "nav.assistant",
-        label: "AI 助手",
-        icon: Bot,
-      },
+      { href: "/overview", key: "overview", icon: LayoutDashboard },
+      { href: "/servers", key: "servers", icon: Server },
+      { href: "/plugins", key: "plugins", icon: Boxes },
+      { href: "/assistant", key: "assistant", icon: Bot },
     ],
   },
   {
-    titleKey: "nav.section.manage",
-    title: "管理",
+    titleKey: "sectionManage",
     items: [
-      {
-        href: "/audit",
-        labelKey: "nav.audit",
-        label: "审计日志",
-        icon: ScrollText,
-        adminOnly: true,
-      },
-      {
-        href: "/settings",
-        labelKey: "nav.settings",
-        label: "系统设置",
-        icon: Settings2,
-        adminOnly: true,
-      },
+      { href: "/audit", key: "audit", icon: ScrollText, adminOnly: true },
+      { href: "/settings", key: "settings", icon: Settings2, adminOnly: true },
     ],
   },
 ] as const;

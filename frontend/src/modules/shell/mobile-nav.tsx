@@ -4,14 +4,17 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, Crosshair } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { NAV_SECTIONS } from "@/shared/config/navigation";
-import { SITE } from "@/shared/config/site";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 
 export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const t = useTranslations("nav");
+  const tSite = useTranslations("site");
+  const tShell = useTranslations("shell");
 
   return (
     <>
@@ -19,7 +22,7 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
         variant="ghost"
         size="icon"
         className="lg:hidden"
-        aria-label="打开导航"
+        aria-label={tShell("openNav")}
         aria-expanded={open}
         onClick={() => setOpen(true)}
       >
@@ -39,13 +42,13 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
                   <Crosshair className="size-4.5" />
                 </span>
                 <span className="text-sm font-semibold text-fg">
-                  {SITE.name}
+                  {tSite("name")}
                 </span>
               </span>
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="关闭导航"
+                aria-label={tShell("closeNav")}
                 onClick={() => setOpen(false)}
               >
                 <X className="size-5" />
@@ -60,7 +63,7 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
                 return (
                   <div key={section.titleKey}>
                     <p className="px-3 pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-fg-subtle">
-                      {section.title}
+                      {t(section.titleKey)}
                     </p>
                     <div className="space-y-1">
                       {items.map((item) => {
@@ -85,7 +88,7 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
                                 active ? "text-primary" : "text-fg-subtle",
                               )}
                             />
-                            {item.label}
+                            {t(item.key)}
                           </Link>
                         );
                       })}

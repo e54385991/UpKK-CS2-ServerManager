@@ -1,12 +1,16 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { requireSession } from "@/modules/auth/session";
 import { PageHeader } from "@/shared/ui/page-header";
 import { Card } from "@/shared/ui/card";
 import { AuditFilters } from "@/modules/audit/audit-filters";
 import { AuditTable, AuditTableSkeleton } from "@/modules/audit/audit-table";
 
-export const metadata: Metadata = { title: "审计日志" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("audit");
+  return { title: t("title") };
+}
 
 const PAGE_SIZE = 25;
 
@@ -22,15 +26,18 @@ export default async function AuditPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const session = await requireSession();
-  const sp = await searchParams;
+  const [session, t, sp] = await Promise.all([
+    requireSession(),
+    getTranslations("audit"),
+    searchParams,
+  ]);
 
   if (!session.isAdmin) {
     return (
       <>
-        <PageHeader title="审计日志" description="记录关键操作与安全事件。" />
+        <PageHeader title={t("title")} description={t("description")} />
         <Card className="border-warn/30 bg-warn-muted/40 px-5 py-4 text-sm text-warn">
-          仅管理员可查看审计日志。
+          {t("forbidden")}
         </Card>
       </>
     );
@@ -51,8 +58,8 @@ export default async function AuditPage({
   return (
     <>
       <PageHeader
-        title="审计日志"
-        description="记录关键操作与安全事件，支持按分类与状态检索（保留最近 30 天）。"
+        title={t("title")}
+        description={t("description")}
         actions={<AuditFilters />}
       />
       <Suspense key={key} fallback={<AuditTableSkeleton />}>

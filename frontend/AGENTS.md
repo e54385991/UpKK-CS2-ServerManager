@@ -98,6 +98,25 @@ Do not reintroduce blocking, all-or-nothing server waits at the layout level.
   `api.ts` maps the snake_case DTO to a camelCase domain type so the UI stays
   decoupled from wire casing; extend those mappers as more `/api/v1` lands.
 
+## Internationalization (i18n)
+
+Bilingual **zh-CN (default) + en-US** via `next-intl`, without URL routing:
+
+- Active locale comes from the `locale` cookie (SSR-authoritative), falling back
+  to `Accept-Language`, then the default — see `src/i18n/request.ts` and
+  `src/i18n/config.ts`. The Next plugin is wired in `next.config.ts`.
+- Message catalogs live in `src/i18n/messages/{zh-CN,en-US}.json` and MUST keep
+  identical key sets. Namespaces: `site`, `nav`, `shell`, `login`, `overview`,
+  `servers`, `serverDetail`, `serverNew`, `plugins`, `assistant`, `settings`,
+  `audit`, `profile`.
+- Server Components: `const t = await getTranslations("ns")`. Client Components:
+  `const t = useTranslations("ns")`. The root layout provides messages via
+  `NextIntlClientProvider` and sets `<html lang>`.
+- The topbar `LanguageSwitcher` writes the `locale` cookie and calls
+  `router.refresh()`. Do not hardcode user-facing strings — add a key to both
+  catalogs instead. Because the layout reads the cookie, routes render
+  dynamically (expected for this authenticated console).
+
 ## Styling
 
 - Design tokens (tactical-ops dark theme: graphite surfaces, cyan primary,
@@ -130,7 +149,7 @@ Before marking frontend work done, `npm run lint`, `npm run typecheck`, and
 ## Roadmap (phased parity)
 
 This app is being built to full parity with the legacy UI in phases: server
-lifecycle & monitoring, plugins/maps/files/console, AI/Discord, settings/audit,
-full zh-CN/en-US i18n, then visual/perf acceptance and the root-path cutover.
-Placeholder routes render an explicit "建设中" state; replace them as each
-domain's `/api/v1` contract lands.
+lifecycle & monitoring, plugins/maps/files/console, AI/Discord, settings, then
+visual/perf acceptance and the root-path cutover. Audit logs and full
+zh-CN/en-US i18n are already implemented. Placeholder routes render an explicit
+"in progress" state; replace them as each domain's `/api/v1` contract lands.

@@ -1,0 +1,156 @@
+{
+  "site": {
+    "name": "CS2 Console",
+    "fullName": "CS2 Server Manager",
+    "tagline": "Multi-server operations console for Counter-Strike 2"
+  },
+  "nav": {
+    "sectionOperate": "Operate",
+    "sectionManage": "Manage",
+    "overview": "Overview",
+    "servers": "Servers",
+    "plugins": "Plugins",
+    "assistant": "AI Assistant",
+    "audit": "Audit Log",
+    "settings": "Settings"
+  },
+  "shell": {
+    "gatewayOnline": "Gateway online",
+    "admin": "Administrator",
+    "user": "Member",
+    "profile": "Profile",
+    "logout": "Sign out",
+    "signingOut": "Signing out…",
+    "openNav": "Open navigation",
+    "closeNav": "Close navigation",
+    "language": "Language"
+  },
+  "login": {
+    "username": "Username",
+    "password": "Password",
+    "captcha": "Captcha",
+    "captchaPlaceholder": "4 chars",
+    "refreshCaptcha": "Refresh captcha",
+    "loading": "Loading…",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "captchaLoadError": "Failed to load the captcha. Please refresh and retry.",
+    "networkError": "Network error. Please try again.",
+    "invalidCredentials": "Incorrect username or password.",
+    "invalidCaptcha": "The captcha is invalid or has expired.",
+    "failed": "Sign-in failed ({status})."
+  },
+  "overview": {
+    "welcome": "Welcome back, {name}",
+    "welcomeNoName": "Welcome back",
+    "description": "Operations at a glance: fleet size, running state, and what needs attention.",
+    "total": "Total servers",
+    "running": "Running",
+    "attention": "Needs attention",
+    "capacity": "Total capacity (players)",
+    "recent": "Recent servers",
+    "viewAll": "View all",
+    "emptyRecent": "No servers yet. Add your first one from the Servers page.",
+    "fetchError": "Unable to load overview data right now ({status})."
+  },
+  "servers": {
+    "title": "Servers",
+    "description": "View, deploy, and operate your Counter-Strike 2 servers in one place.",
+    "add": "Add server",
+    "emptyTitle": "No servers yet",
+    "emptyDesc": "Add your first Counter-Strike 2 server to start managing centrally.",
+    "players": "{count} players",
+    "backToList": "Back to list",
+    "fetchError": "Unable to load servers from the backend ({status}). Verify the FastAPI service and your session, then retry.",
+    "status": {
+      "running": "Running",
+      "deploying": "Deploying",
+      "pending": "Pending",
+      "stopped": "Stopped",
+      "error": "Error",
+      "unknown": "Unknown"
+    }
+  },
+  "serverDetail": {
+    "title": "Server #{id}",
+    "description": "Server workspace: overview, operations, monitoring, config, plugins, maps, files and console.",
+    "connection": "Connection & runtime",
+    "address": "Address",
+    "ssh": "SSH",
+    "defaultMap": "Default map",
+    "maxPlayers": "Max players",
+    "gameMode": "Game mode",
+    "directory": "Directory",
+    "fetchError": "Unable to load this server's details ({status}).",
+    "workspacePhase": "Server workspace · In progress",
+    "workspaceBody": "A shareable sub-route workspace will replace the legacy horizontal tabs, landing across the lifecycle and operations phases."
+  },
+  "serverNew": {
+    "title": "Add server",
+    "description": "Connect a host over SSH, then deploy Counter-Strike 2 with one click.",
+    "phase": "Setup wizard · In progress",
+    "body": "SSH validation, CAPTCHA and the deployment wizard land once the lifecycle phase wires up /api/v1."
+  },
+  "plugins": {
+    "title": "Plugins",
+    "description": "Browse, install and update Metamod, CounterStrikeSharp and marketplace content.",
+    "phase": "Plugins · In progress",
+    "body": "The marketplace, dependency/conflict approvals and batch installs land once the plugins phase wires up /api/v1."
+  },
+  "assistant": {
+    "title": "AI Assistant",
+    "description": "Troubleshoot and operate conversationally; tool calls run only after explicit approval.",
+    "phase": "AI Assistant · In progress",
+    "body": "Streaming chat, tool approvals and replayable events land in the AI phase over replayable SSE."
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Panel-level configuration: security, integrations, download proxy and automation defaults.",
+    "phase": "Settings · In progress",
+    "body": "Grouped configuration forms and security policy land once the admin phase wires up /api/v1 settings."
+  },
+  "audit": {
+    "title": "Audit Log",
+    "description": "Records key actions and security events; filter by category and status (last 30 days).",
+    "forbidden": "Only administrators can view the audit log.",
+    "fetchError": "Unable to load the audit log ({status}).",
+    "empty": "No matching audit events.",
+    "allCategories": "All categories",
+    "allStatuses": "All statuses",
+    "filterCategory": "Filter by category",
+    "filterStatus": "Filter by status",
+    "pageInfo": "{from}–{to} of {total}",
+    "prev": "Previous",
+    "next": "Next",
+    "columns": {
+      "time": "Time",
+      "category": "Category",
+      "action": "Action",
+      "status": "Status",
+      "user": "User",
+      "ip": "IP",
+      "source": "Source"
+    },
+    "categories": {
+      "auth": "Auth",
+      "discord": "Discord",
+      "server": "Server",
+      "settings": "Settings"
+    },
+    "statuses": {
+      "success": "Success",
+      "failure": "Failure",
+      "cancelled": "Cancelled",
+      "expired": "Expired",
+      "requested": "Requested"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "description": "Review your account details and role.",
+    "account": "Account",
+    "username": "Username",
+    "email": "Email",
+    "role": "Role"
+  }
+}

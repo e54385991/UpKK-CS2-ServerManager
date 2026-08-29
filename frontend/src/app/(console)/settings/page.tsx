@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/shared/ui/page-header";
 import { ModulePlaceholder } from "@/shared/ui/module-placeholder";
 
-export const metadata: Metadata = { title: "系统设置" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("settings");
+  return { title: t("title") };
+}
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const t = await getTranslations("settings");
   return (
     <>
-      <PageHeader
-        title="系统设置"
-        description="面板级配置：安全、集成、下载代理与自动化默认值。"
-      />
-      <ModulePlaceholder phase="系统设置 · 建设中">
-        分组配置表单与安全策略将在系统管理阶段接入 /api/v1 设置接口后上线。
-      </ModulePlaceholder>
+      <PageHeader title={t("title")} description={t("description")} />
+      <ModulePlaceholder phase={t("phase")}>{t("body")}</ModulePlaceholder>
     </>
   );
 }

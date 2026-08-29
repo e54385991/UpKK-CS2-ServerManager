@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { MapPin, Users, Radio, ServerOff, TriangleAlert } from "lucide-react";
 import { listServers } from "@/modules/servers/api";
-import { SERVER_STATUS_META } from "@/modules/servers/types";
+import { SERVER_STATUS_TONE } from "@/modules/servers/types";
 import { Card } from "@/shared/ui/card";
 import { Badge, StatusDot } from "@/shared/ui/badge";
 
@@ -11,16 +12,14 @@ import { Badge, StatusDot } from "@/shared/ui/badge";
  * streams in.
  */
 export async function ServerList() {
+  const t = await getTranslations("servers");
   const result = await listServers();
 
   if (!result.ok) {
     return (
       <Card className="flex items-center gap-3 border-warn/30 bg-warn-muted/40 px-5 py-4 text-sm text-warn">
         <TriangleAlert className="size-4 shrink-0" />
-        <span>
-          暂时无法从后端获取服务器列表（{result.status || "网络错误"}）。请确认
-          FastAPI 服务与会话有效后重试。
-        </span>
+        <span>{t("fetchError", { status: result.status || "network" })}</span>
       </Card>
     );
   }
@@ -32,16 +31,14 @@ export async function ServerList() {
           <ServerOff className="size-6" />
         </span>
         <div className="space-y-1">
-          <p className="text-sm font-medium text-fg">还没有服务器</p>
-          <p className="text-sm text-fg-muted">
-            添加你的第一台 Counter-Strike 2 服务器，开始集中运维。
-          </p>
+          <p className="text-sm font-medium text-fg">{t("emptyTitle")}</p>
+          <p className="text-sm text-fg-muted">{t("emptyDesc")}</p>
         </div>
         <Link
           href="/servers/new"
           className="mt-2 inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-strong"
         >
-          添加服务器
+          {t("add")}
         </Link>
       </Card>
     );
@@ -50,7 +47,7 @@ export async function ServerList() {
   return (
     <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {result.data.map((server) => {
-        const meta = SERVER_STATUS_META[server.status];
+        const tone = SERVER_STATUS_TONE[server.status];
         return (
           <li key={server.id}>
             <Link href={`/servers/${server.id}`} className="block h-full">
@@ -64,12 +61,12 @@ export async function ServerList() {
                       {server.host}:{server.gamePort}
                     </p>
                   </div>
-                  <Badge tone={meta.tone}>
+                  <Badge tone={tone}>
                     <StatusDot
-                      tone={meta.tone}
+                      tone={tone}
                       pulse={server.status === "running"}
                     />
-                    {meta.label}
+                    {t(`status.${server.status}`)}
                   </Badge>
                 </div>
 
@@ -86,7 +83,7 @@ export async function ServerList() {
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <Users className="size-3.5 text-fg-subtle" />
-                    {server.maxPlayers} 人
+                    {t("players", { count: server.maxPlayers })}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <Radio className="size-3.5 text-fg-subtle" />
