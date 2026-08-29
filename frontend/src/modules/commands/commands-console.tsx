@@ -14,6 +14,7 @@ import {
   type CommandTarget,
   type CustomCommand,
 } from "@/modules/commands/types";
+import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -86,7 +87,7 @@ export function CommandsConsole({
   }
 
   async function remove(commandId: number) {
-    if (!window.confirm(t("confirmDelete"))) return;
+    if (!(await confirm(t("confirmDelete")))) return;
     setPending(`delete-${commandId}`);
     const next = await deleteCommandAction(serverId, commandId);
     setPending(null);

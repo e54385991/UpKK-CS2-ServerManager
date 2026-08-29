@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { CircleStop, LoaderCircle } from "lucide-react";
 import { clearDeploymentLockAction } from "@/modules/servers/actions";
+import { confirm, notify } from "@/shared/feedback";
 import { Button } from "@/shared/ui/button";
 
 export function ForceStopButton({
@@ -19,12 +20,12 @@ export function ForceStopButton({
   const [pending, setPending] = useState(false);
 
   async function onForceStop() {
-    if (!window.confirm(t("confirm.forceStop"))) return;
+    if (!(await confirm(t("confirm.forceStop")))) return;
     setPending(true);
     const result = await clearDeploymentLockAction(serverId);
     setPending(false);
     if (!result.ok) {
-      window.alert(result.error || t("forceStopFail"));
+      notify.error(result.error || t("forceStopFail"));
       return;
     }
     if (onDone) await onDone();

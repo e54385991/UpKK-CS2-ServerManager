@@ -19,6 +19,7 @@ import type {
   PluginUpdates,
   RegisterMarketOption,
 } from "@/modules/updates/types";
+import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -334,7 +335,7 @@ function PluginExcludeEditor({
   }
 
   async function unregister() {
-    if (!window.confirm(t("unregisterConfirm", { name: plugin.displayName }))) {
+    if (!(await confirm(t("unregisterConfirm", { name: plugin.displayName })))) {
       return;
     }
     onPending(`unregister-${plugin.id}`);

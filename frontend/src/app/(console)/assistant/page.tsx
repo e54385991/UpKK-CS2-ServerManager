@@ -12,18 +12,23 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function AssistantPage({
   searchParams,
 }: {
-  searchParams: Promise<{ conversation?: string }>;
+  searchParams: Promise<{ conversation?: string; prompt?: string }>;
 }) {
-  const [{ conversation }, t] = await Promise.all([
+  const [{ conversation, prompt }, t] = await Promise.all([
     searchParams,
     getTranslations("assistant"),
   ]);
+  const initialDraft =
+    prompt === "crashIsolation" ? t("crashIsolationPrompt") : undefined;
 
   return (
     <>
       <PageHeader title={t("title")} description={t("description")} />
       <Suspense fallback={<AssistantPanelSkeleton />}>
-        <AssistantPanel conversationId={conversation} />
+        <AssistantPanel
+          conversationId={conversation}
+          initialDraft={initialDraft}
+        />
       </Suspense>
     </>
   );

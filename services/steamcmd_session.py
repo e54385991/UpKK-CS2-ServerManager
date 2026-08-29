@@ -24,18 +24,49 @@ def wrap_steamcmd_payload(command: str, exit_path: str) -> str:
     return f"bash -lc {shlex.quote(script)}"
 
 
+def latest_console_heartbeat(text: str) -> str | None:
+    """Return the latest visible pane line, including CR-only progress.
+
+    SteamCMD often redraws one line with ``\\r`` and never appends ``\\n``.
+    Callers still need a heartbeat so the UI is not stuck empty.
+    """
+    if not text:
+        return None
+    visible = _visible_lines(text)
+    if visible:
+        return visible[-1]
+    if "\r" in text:
+        last = text.replace("\n", "\r").split("\r")[-1].strip()
+        if last:
+            return last
+        return None
+    stripped = text.strip()
+    return stripped or None
+
+
 def incremental_console_lines(previous: str, current: str) -> list[str]:
     """Turn a full pane snapshot into newly visible SteamCMD lines.
 
     SteamCMD often redraws a single progress line with ``\\r``. When the
     snapshot is replaced rather than appended, emit the latest non-empty line.
+    CR-only changes that strip to no ``\\n`` lines still emit a heartbeat.
     """
-    if not current or current == previous:
+    if not current:
+        return []
+    if current == previous:
         return []
     if previous and current.startswith(previous):
         suffix = current[len(previous) :]
-        return _visible_lines(suffix)
-    return _visible_lines(current)[-3:]
+        lines = _visible_lines(suffix)
+        if lines:
+            return lines
+        heartbeat = latest_console_heartbeat(current)
+        return [heartbeat] if heartbeat else []
+    visible = _visible_lines(current)
+    if visible:
+        return visible[-3:]
+    heartbeat = latest_console_heartbeat(current)
+    return [heartbeat] if heartbeat else []
 
 
 def parse_steamcmd_exit_code(stdout: str) -> int | None:
@@ -56,6 +87,7 @@ def _visible_lines(text: str) -> list[str]:
 __all__ = [
     "STEAMCMD_EXIT_FILENAME",
     "incremental_console_lines",
+    "latest_console_heartbeat",
     "parse_steamcmd_exit_code",
     "steamcmd_exit_path",
     "steamcmd_session_name",

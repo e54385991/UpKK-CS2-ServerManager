@@ -18,6 +18,7 @@ import {
   ServerDiskRefreshButton,
 } from "@/modules/servers/disk-space-refresh";
 import { SshHealthBlock } from "@/modules/servers/ssh-health-block";
+import { confirm } from "@/shared/feedback";
 import {
   BATCH_PLUGINS,
   SERVER_STATUS_TONE,
@@ -121,9 +122,9 @@ export function ServerFleet({
   async function runAction(action: BatchAction) {
     if (selected.length === 0) return;
     if (
-      !window.confirm(
+      !(await confirm(
         t("bulk.confirmAction", { action, count: selected.length }),
-      )
+      ))
     ) {
       return;
     }

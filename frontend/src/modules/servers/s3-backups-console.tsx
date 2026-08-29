@@ -11,6 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { listS3BackupsAction } from "@/modules/servers/actions";
+import { confirm } from "@/shared/feedback";
 import { OperationLiveLog } from "@/modules/servers/operation-live-log";
 import { useOperationRunner } from "@/modules/servers/use-operation-runner";
 import type {
@@ -94,7 +95,7 @@ export function S3BackupsConsole({
 
   async function onRestore(item: S3BackupItem) {
     if (restoring) return;
-    if (!window.confirm(t("confirmRestore", { name: item.filename }))) {
+    if (!(await confirm(t("confirmRestore", { name: item.filename })))) {
       return;
     }
     await runS3Restore(item.key);

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { getDiagnosticRecommendation } from "@/modules/servers/diagnostics-api";
+import { PluginDiagnosticsPanel } from "@/modules/servers/diagnostics-panel";
 import { getServer } from "@/modules/servers/api";
 import { ServerMonitoringForm } from "@/modules/servers/monitoring-form";
 import { parseServerId } from "@/modules/servers/workspace";
@@ -20,9 +22,10 @@ export default async function ServerMonitoringPage({
   const serverId = parseServerId(id);
   if (serverId == null) notFound();
 
-  const [t, result] = await Promise.all([
+  const [t, result, recommendation] = await Promise.all([
     getTranslations("serverDetail"),
     getServer(serverId),
+    getDiagnosticRecommendation(serverId),
   ]);
   if (!result.ok && result.status === 404) notFound();
   if (!result.ok) {
@@ -33,5 +36,13 @@ export default async function ServerMonitoringPage({
     );
   }
 
-  return <ServerMonitoringForm server={result.data} />;
+  return (
+    <div className="space-y-6">
+      <PluginDiagnosticsPanel
+        serverId={serverId}
+        recommendation={recommendation.ok ? recommendation.data : null}
+      />
+      <ServerMonitoringForm server={result.data} />
+    </div>
+  );
 }

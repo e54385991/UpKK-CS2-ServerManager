@@ -201,6 +201,35 @@ test("server workspace two-row nav reaches named surfaces", async ({ page }) => 
   ).toBeVisible();
 });
 
+test("console workspace offers independent ssh, game, and deploy popups", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/servers/1/console");
+  const ssh = page.getByTestId("open-live-ssh").first();
+  const game = page.getByTestId("open-live-game").first();
+  const deploy = page.getByTestId("open-live-deploy").first();
+  await expect(ssh).toBeVisible();
+  await expect(game).toBeVisible();
+  await expect(deploy).toBeVisible();
+  await expect(ssh).toHaveText(/打开 SSH 终端|Open SSH console/);
+  await expect(game).toHaveText(/打开游戏控制台|Open game console/);
+  await expect(deploy).toHaveText(/打开部署进度|Open deploy progress/);
+
+  const views = [
+    { button: ssh, view: "ssh" },
+    { button: game, view: "game" },
+    { button: deploy, view: "deploy" },
+  ] as const;
+  for (const item of views) {
+    const popupPromise = context.waitForEvent("page");
+    await item.button.click();
+    const popup = await popupPromise;
+    await expect(popup).toHaveURL(new RegExp(`/live-console/1\\?view=${item.view}`));
+    await popup.close();
+  }
+});
+
 test("operations center is read-only and does not start SteamCMD", async ({
   page,
 }) => {
@@ -314,13 +343,11 @@ test("plugin catalog dialog opens without importing", async ({ page }) => {
   await page.goto("/plugins");
   await expect(page.getByRole("heading", { name: /插件中心|Plugins/ })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: /从 GitHub 安装插件|Install plugin from GitHub/ }),
+    page.getByRole("button", { name: /从 GitHub 安装|Install from GitHub/ }),
   ).toBeVisible();
   await expect(
-    page.getByLabel(/GitHub 仓库地址|GitHub repository URL/),
-  ).toBeVisible();
-  await expect(page.getByTestId("github-exclude-toggles")).toBeVisible();
-  await expect(page.getByTestId("github-file-mapping")).toBeVisible();
+    page.getByRole("heading", { name: /从 GitHub 安装插件|Install plugin from GitHub/ }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: TRANSFER_OPEN }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
@@ -332,6 +359,21 @@ test("plugin catalog dialog opens without importing", async ({ page }) => {
   await expect(
     dialog.getByText(/导出目录|Export catalog|市场为空|market is empty|暂时无法|Unable to load/),
   ).toBeVisible();
+  await closeDialog(page);
+
+  await page.getByRole("button", { name: /从 GitHub 安装|Install from GitHub/ }).click();
+  const github = page.getByRole("dialog");
+  await expect(github).toBeVisible();
+  await expect(
+    github.getByRole("heading", {
+      name: /从 GitHub 安装插件|Install plugin from GitHub/,
+    }),
+  ).toBeVisible();
+  await expect(
+    github.getByLabel(/GitHub 仓库地址|GitHub repository URL/),
+  ).toBeVisible();
+  await expect(github.getByTestId("github-exclude-toggles")).toBeVisible();
+  await expect(github.getByTestId("github-file-mapping")).toBeVisible();
   await closeDialog(page);
 });
 
@@ -352,6 +394,39 @@ test("settings and profile render parity fields", async ({ page }) => {
   // S3 is rendered when GET /api/v1/profile/s3 succeeds; stale live APIs omit it.
 });
 
+test("host auto-setup wizard is visible and is not submitted", async ({
+  page,
+}) => {
+  await page.goto("/servers");
+  await expect(page.getByRole("link", { name: /主机初始化|Initialize host/ })).toBeVisible();
+  await page.goto("/servers/new?tab=setup");
+  await expect(page.getByTestId("setup-wizard")).toBeVisible();
+  await expect(page.getByTestId("new-server-tabs")).toBeVisible();
+  await expect(page.getByTestId("setup-mode-auto")).toBeVisible();
+  await expect(page.getByTestId("setup-mode-manual")).toBeVisible();
+  await expect(page.getByLabel(/名称|Name/).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /开始自动设置|Start automatic setup/ }),
+  ).toBeVisible();
+  await page.getByTestId("setup-mode-manual").click();
+  await expect(page.getByTestId("setup-manual-script")).toBeVisible();
+  await expect(page.getByText(/setup_cs2\.sh/)).toBeVisible();
+});
+
+test("monitoring shows plugin diagnostics without executing", async ({
+  page,
+}) => {
+  await page.goto("/servers/1/monitoring");
+  await expect(page.getByTestId("plugin-diagnostics")).toBeVisible();
+  await expect(
+    page.getByTestId("plugin-diagnostics-idle").or(page.getByTestId("open-diagnostic-assistant")),
+  ).toBeVisible();
+  await expect(page.getByTestId("diagnostic-plan")).toBeVisible();
+  await expect(page.getByTestId("diagnostic-execute")).toBeVisible();
+  await expect(page.getByTestId("diagnostic-restore")).toBeVisible();
+  // Do not click plan/execute/restore — plan talks to SSH.
+});
+
 test("profile steamcmd retries can be saved and restored", async ({ page }) => {
   await page.goto("/settings/profile");
   const retries = page.getByLabel(/最大自动恢复次数|Maximum recovery attempts/);
@@ -369,4 +444,28 @@ test("profile steamcmd retries can be saved and restored", async ({ page }) => {
   await form.getByRole("button", { name: /^保存$|^Save$/ }).click();
   await expect(form.getByRole("status")).toContainText(/已保存|Saved/);
   await expect(retries).toHaveValue(original);
+});
+
+test("destructive actions use in-app confirm instead of window dialogs", async ({
+  page,
+}) => {
+  const nativeDialogs: string[] = [];
+  page.on("dialog", (dialog) => {
+    nativeDialogs.push(dialog.type());
+    void dialog.dismiss();
+  });
+
+  await page.goto("/servers/1/operations");
+  await page.getByRole("button", { name: /^停止$|^Stop$/ }).click();
+  const confirm = page.getByTestId("app-confirm");
+  await expect(confirm).toBeVisible();
+  await expect(
+    confirm.getByRole("heading", { name: /请确认|Please confirm/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: /Notifications/i }),
+  ).toBeAttached();
+  await confirm.getByRole("button", { name: /取消|Cancel/ }).click();
+  await expect(confirm).toHaveCount(0);
+  expect(nativeDialogs).toEqual([]);
 });

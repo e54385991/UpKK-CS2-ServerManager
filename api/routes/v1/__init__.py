@@ -26,6 +26,7 @@ from . import (
     overview,
     plugin_catalog,
     plugin_configs,
+    plugin_diagnostics,
     plugin_updates,
     plugins,
     profile,
@@ -34,6 +35,7 @@ from . import (
     server_configs,
     servers,
     settings,
+    setup,
     ssh_pool,
 )
 
@@ -64,6 +66,8 @@ router.include_router(discord.router)
 router.include_router(discord_servers.router)
 router.include_router(schedule.router)
 router.include_router(plugin_updates.router)
+router.include_router(plugin_diagnostics.router)
+router.include_router(setup.router)
 router.include_router(game_updates.router)
 router.include_router(ssh_pool.router)
 

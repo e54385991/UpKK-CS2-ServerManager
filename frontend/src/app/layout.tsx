@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
+import { FeedbackHost } from "@/shared/feedback/feedback-host";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -48,6 +49,7 @@ export default async function RootLayout({
     <html lang={locale} suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <NextIntlClientProvider locale={locale} messages={messages}>
+          <FeedbackHost />
           {children}
         </NextIntlClientProvider>
       </body>

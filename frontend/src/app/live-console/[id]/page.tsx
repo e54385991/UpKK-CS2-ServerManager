@@ -27,12 +27,11 @@ export async function generateMetadata({
     searchParams,
     getTranslations("console"),
   ]);
-  return {
-    title:
-      parseLiveConsoleView(view) === "deploy"
-        ? t("liveDeployTitle")
-        : t("liveTitle"),
-  };
+  const parsed = parseLiveConsoleView(view);
+  if (parsed === "deploy") return { title: t("liveDeployTitle") };
+  if (parsed === "ssh") return { title: t("liveSshTitle") };
+  if (parsed === "game") return { title: t("liveGameTitle") };
+  return { title: t("liveTitle") };
 }
 
 export default async function LiveConsolePage({
@@ -75,7 +74,10 @@ export default async function LiveConsolePage({
 
   return (
     <Suspense fallback={<ConsolePanelSkeleton />}>
-      <ConsolePanel serverId={serverId} />
+      <ConsolePanel
+        serverId={serverId}
+        focus={mode === "ssh" || mode === "game" ? mode : undefined}
+      />
     </Suspense>
   );
 }

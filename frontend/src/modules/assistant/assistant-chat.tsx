@@ -30,15 +30,17 @@ import { cn } from "@/shared/lib/cn";
 export function AssistantChat({
   initial,
   initialDetail,
+  initialDraft = "",
 }: {
   initial: AssistantWorkspace;
   initialDetail: AssistantConversationDetail | null;
+  initialDraft?: string;
 }) {
   const t = useTranslations("assistant");
   const router = useRouter();
   const [workspace, setWorkspace] = useState(initial);
   const [detail, setDetail] = useState(initialDetail);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft);
   const [pending, setPending] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

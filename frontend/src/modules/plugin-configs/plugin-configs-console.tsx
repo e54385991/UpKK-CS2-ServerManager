@@ -37,6 +37,7 @@ import {
   type PluginConfigSource,
   type PluginConfigWorkspace,
 } from "@/modules/plugin-configs/types";
+import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -173,8 +174,12 @@ export function PluginConfigsConsole({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
-  function confirmDiscard(): boolean {
-    return !dirty || window.confirm(t("discardConfirm"));
+  async function confirmDiscard(): Promise<boolean> {
+    if (!dirty) return true;
+    return confirm({
+      description: t("discardConfirm"),
+      tone: "default",
+    });
   }
 
   function clearEditor() {
@@ -221,7 +226,7 @@ export function PluginConfigsConsole({
   }
 
   async function refreshSources() {
-    if (pending || !confirmDiscard()) return;
+    if (pending || !(await confirmDiscard())) return;
     setPending("refresh");
     setBanner(null);
     try {
@@ -232,14 +237,15 @@ export function PluginConfigsConsole({
     }
   }
 
-  function selectSource(source: PluginConfigSource) {
-    if (source.id == null || source.id === activeSourceId || !confirmDiscard()) return;
+  async function selectSource(source: PluginConfigSource) {
+    if (source.id == null || source.id === activeSourceId) return;
+    if (!(await confirmDiscard())) return;
     setActiveSourceId(source.id);
     clearEditor();
   }
 
   async function loadSource(source: PluginConfigSource) {
-    if (source.id == null || !confirmDiscard()) return;
+    if (source.id == null || !(await confirmDiscard())) return;
     const sourceId = source.id;
     setActiveSourceId(sourceId);
     clearEditor();
@@ -349,8 +355,8 @@ export function PluginConfigsConsole({
 
   async function removeSource(source: PluginConfigSource) {
     if (source.id == null) return;
-    if (source.id === activeSourceId && !confirmDiscard()) return;
-    if (!window.confirm(t("removeConfirm"))) return;
+    if (source.id === activeSourceId && !(await confirmDiscard())) return;
+    if (!(await confirm(t("removeConfirm")))) return;
     setPending(`remove-${source.id}`);
     setBanner(null);
     try {
@@ -422,7 +428,7 @@ export function PluginConfigsConsole({
 
   async function loadFile(file: PluginConfigScannedFile, force = false) {
     if (file.tooLarge || activeSource?.id == null) return;
-    if (!force && !confirmDiscard()) return;
+    if (!force && !(await confirmDiscard())) return;
     setSelectedFile(file);
     setPending("load-file");
     setFileData(null);
@@ -440,16 +446,24 @@ export function PluginConfigsConsole({
     }
   }
 
-  function switchMode(mode: PluginConfigEditMode) {
+  async function switchMode(mode: PluginConfigEditMode) {
     if (mode === editMode || (mode === "visual" && !fileData?.visualSupported)) return;
-    if (dirty && !window.confirm(t("modeDiscardConfirm"))) return;
+    if (
+      dirty &&
+      !(await confirm({
+        description: t("modeDiscardConfirm"),
+        tone: "default",
+      }))
+    ) {
+      return;
+    }
     if (mode === "raw") setRawContent(originalRawContent);
     else setFieldValues(structuredClone(originalFieldValues));
     setEditMode(mode);
   }
 
   async function reloadFile() {
-    if (!selectedFile || !confirmDiscard()) return;
+    if (!selectedFile || !(await confirmDiscard())) return;
     await loadFile(selectedFile, true);
   }
 
@@ -665,7 +679,7 @@ export function PluginConfigsConsole({
                     <button
                       type="button"
                       className="w-full text-left"
-                      onClick={() => selectSource(source)}
+                      onClick={() => void selectSource(source)}
                     >
                       <div className="flex items-start gap-2">
                         {source.type === "directory" ? (
@@ -819,7 +833,7 @@ export function PluginConfigsConsole({
                   size="sm"
                   variant={editMode === "visual" ? "primary" : "outline"}
                   disabled={!fileData.visualSupported}
-                  onClick={() => switchMode("visual")}
+                  onClick={() => void switchMode("visual")}
                 >
                   {t("visual")}
                 </Button>
@@ -827,7 +841,7 @@ export function PluginConfigsConsole({
                   type="button"
                   size="sm"
                   variant={editMode === "raw" ? "primary" : "outline"}
-                  onClick={() => switchMode("raw")}
+                  onClick={() => void switchMode("raw")}
                 >
                   {t("raw")}
                 </Button>

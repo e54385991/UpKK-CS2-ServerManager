@@ -16,6 +16,7 @@ import type {
   GitHubRelease,
 } from "@/modules/plugins/types";
 import { serverProxyMode } from "@/modules/servers/types";
+import { confirm } from "@/shared/feedback";
 import {
   mergeOperationEvents,
   parseOperationEvent,
@@ -69,9 +70,11 @@ function toggleValue(values: readonly string[], item: string): string[] {
 export function GitHubInstallForm({
   servers,
   defaultServerId,
+  variant = "card",
 }: {
   servers: readonly ServerOption[];
   defaultServerId: number | null;
+  variant?: "card" | "plain";
 }) {
   const t = useTranslations("plugins");
   const [serverId, setServerId] = useState<number | null>(
@@ -233,7 +236,14 @@ export function GitHubInstallForm({
           (item) => `#${item.ruleId}: ${item.reason}`,
         ),
       ].join("\n");
-      if (!window.confirm(`${t("confirmWarnings")}\n\n${details}`)) return;
+      if (
+        !(await confirm({
+          title: t("confirmWarnings"),
+          description: details,
+        }))
+      ) {
+        return;
+      }
     }
     setPending(true);
     setError(null);
@@ -258,7 +268,7 @@ export function GitHubInstallForm({
 
   async function uninstall() {
     if (serverId == null || deleteFiles.length === 0) return;
-    if (!window.confirm(t("github.uninstallConfirm", { count: deleteFiles.length }))) {
+    if (!(await confirm(t("github.uninstallConfirm", { count: deleteFiles.length })))) {
       return;
     }
     setPending(true);
@@ -276,28 +286,23 @@ export function GitHubInstallForm({
   }
 
   if (servers.length === 0) {
+    const empty = <p className="text-sm text-fg-muted">{t("noServers")}</p>;
+    if (variant === "plain") return empty;
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{t("github.title")}</CardTitle>
-          <CardDescription>{t("github.help")}</CardDescription>
+          <div>
+            <CardTitle>{t("github.title")}</CardTitle>
+            <CardDescription>{t("github.help")}</CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-fg-muted">{t("noServers")}</p>
-        </CardContent>
+        <CardContent>{empty}</CardContent>
       </Card>
     );
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>{t("github.title")}</CardTitle>
-          <CardDescription>{t("github.help")}</CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+  const body = (
+    <div className="space-y-4">
         {error ? (
           <div className="flex items-start gap-2 rounded-md border border-danger/30 bg-danger-muted/50 px-3 py-2 text-sm text-danger">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" />
@@ -737,7 +742,22 @@ export function GitHubInstallForm({
             </pre>
           </div>
         ) : null}
-      </CardContent>
+    </div>
+  );
+
+  if (variant === "plain") {
+    return body;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>{t("github.title")}</CardTitle>
+          <CardDescription>{t("github.help")}</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent>{body}</CardContent>
     </Card>
   );
 }

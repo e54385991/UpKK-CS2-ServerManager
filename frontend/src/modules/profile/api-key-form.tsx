@@ -9,6 +9,7 @@ import {
   revokeApiKeyAction,
 } from "@/modules/profile/actions";
 import type { ProfileSettings } from "@/modules/profile/types";
+import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -61,7 +62,7 @@ export function ApiKeyForm({ initial }: { initial: ProfileSettings }) {
   }
 
   async function revoke() {
-    if (!window.confirm(t("apiKeyRevokeConfirm"))) return;
+    if (!(await confirm(t("apiKeyRevokeConfirm")))) return;
     setPending("revoke");
     setBanner(null);
     const result = await revokeApiKeyAction();

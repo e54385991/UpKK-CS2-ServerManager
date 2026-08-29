@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { removeDiscordAction, saveDiscordAction, testDiscordAction } from "@/modules/discord/actions";
 import type { DiscordBot } from "@/modules/discord/types";
+import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -53,7 +54,7 @@ export function DiscordForm({ initial }: { initial: DiscordBot }) {
   }
 
   async function remove() {
-    if (!window.confirm(t("removeConfirm"))) return;
+    if (!(await confirm(t("removeConfirm")))) return;
     setPending("remove");
     const result = await removeDiscordAction();
     setPending(null);

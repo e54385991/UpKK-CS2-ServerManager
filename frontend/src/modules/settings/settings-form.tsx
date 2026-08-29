@@ -25,6 +25,7 @@ import type {
   ProxyMode,
   SystemSettings,
 } from "@/modules/settings/types";
+import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -178,7 +179,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
   }
 
   async function onRevokeGmail() {
-    if (!window.confirm(t("gmail.revokeConfirm"))) return;
+    if (!(await confirm(t("gmail.revokeConfirm")))) return;
     setGmailBusy("revoke");
     setBanner(null);
     const result = await revokeGmailAction();

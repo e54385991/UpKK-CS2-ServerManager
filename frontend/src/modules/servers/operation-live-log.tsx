@@ -112,7 +112,7 @@ export function OperationLiveLog({
           {showOpenLiveTerminal ? (
             <OpenLiveTerminalButton
               serverId={serverId}
-              view={isActiveOperation(operation) ? "deploy" : undefined}
+              view="deploy"
             />
           ) : null}
           {canForceStop ? (

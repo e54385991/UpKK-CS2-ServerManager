@@ -39,6 +39,7 @@ import {
   type FilesWorkspace,
   type FileTask,
 } from "@/modules/files/types";
+import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -398,21 +399,29 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                             disabled={!canMutate}
                             aria-label={t("remove")}
                             onClick={() => {
-                              if (!window.confirm(t("removeConfirm", { name: entry.name }))) {
-                                return;
-                              }
-                              void run(`delete:${entry.path}`, async () => {
-                                const result = await deleteFileAction(serverId, entry.path);
-                                if (!result.ok) {
-                                  setBanner({
-                                    tone: "danger",
-                                    text: result.error || t("failed"),
-                                  });
-                                  return false;
+                              void (async () => {
+                                if (!(await confirm(t("removeConfirm", { name: entry.name })))) {
+                                  return;
                                 }
-                                setBanner({ tone: "ok", text: result.data.message });
-                                return true;
-                              });
+                                void run(`delete:${entry.path}`, async () => {
+                                  const result = await deleteFileAction(
+                                    serverId,
+                                    entry.path,
+                                  );
+                                  if (!result.ok) {
+                                    setBanner({
+                                      tone: "danger",
+                                      text: result.error || t("failed"),
+                                    });
+                                    return false;
+                                  }
+                                  setBanner({
+                                    tone: "ok",
+                                    text: result.data.message,
+                                  });
+                                  return true;
+                                });
+                              })();
                             }}
                           >
                             <Trash2 />

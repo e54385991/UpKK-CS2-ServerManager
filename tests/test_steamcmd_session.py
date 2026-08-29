@@ -9,6 +9,7 @@ from services.game_session import (
 )
 from services.steamcmd_session import (
     incremental_console_lines,
+    latest_console_heartbeat,
     parse_steamcmd_exit_code,
     steamcmd_exit_path,
     wrap_steamcmd_payload,
@@ -48,6 +49,14 @@ def test_incremental_console_emits_latest_progress_on_redraw():
         "Update state (0x61) downloading, progress: 2.07",
         "Update state (0x61) downloading, progress: 2.20",
     ) == ["Update state (0x61) downloading, progress: 2.20"]
+
+
+def test_latest_console_heartbeat_keeps_cr_only_progress():
+    snapshot = "Update state (0x61) downloading, progress: 9.10\r"
+    assert latest_console_heartbeat(snapshot) == ("Update state (0x61) downloading, progress: 9.10")
+    assert incremental_console_lines("", snapshot) == [
+        "Update state (0x61) downloading, progress: 9.10"
+    ]
 
 
 def test_parse_steamcmd_exit_code():

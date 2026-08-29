@@ -5,7 +5,13 @@ import { AssistantChat } from "@/modules/assistant/assistant-chat";
 import { Card } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
 
-export async function AssistantPanel({ conversationId }: { conversationId?: string }) {
+export async function AssistantPanel({
+  conversationId,
+  initialDraft,
+}: {
+  conversationId?: string;
+  initialDraft?: string;
+}) {
   const t = await getTranslations("assistant");
   const workspace = await getAssistantWorkspace();
   if (!workspace.ok) {
@@ -21,6 +27,7 @@ export async function AssistantPanel({ conversationId }: { conversationId?: stri
     <AssistantChat
       initial={workspace.data}
       initialDetail={detail && detail.ok ? detail.data : null}
+      initialDraft={initialDraft}
     />
   );
 }

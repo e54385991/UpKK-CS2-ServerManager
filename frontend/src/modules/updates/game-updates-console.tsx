@@ -1,10 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { liveConsoleHref } from "@/modules/console/live-console";
+import { openLiveTerminal } from "@/modules/console/open-live-terminal";
 import { refreshCurrentOperationAction } from "@/modules/servers/actions";
 import {
   isActiveOperation,
@@ -16,6 +14,7 @@ import {
   startGameUpdateAction,
 } from "@/modules/updates/actions";
 import type { GameUpdateAction, GameUpdates } from "@/modules/updates/types";
+import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -71,7 +70,6 @@ export function GameUpdatesConsole({
 }) {
   const t = useTranslations("gameUpdates");
   const tActions = useTranslations("serverDetail.actions");
-  const router = useRouter();
   const [workspace, setWorkspace] = useState(initial);
   const [enabled, setEnabled] = useState(initial.enableAutoUpdate);
   const [intervalHours, setIntervalHours] = useState(
@@ -140,7 +138,7 @@ export function GameUpdatesConsole({
       return;
     }
     const confirmKey = action === "update" ? "confirmUpdate" : "confirmValidate";
-    if (!window.confirm(t(confirmKey))) return;
+    if (!(await confirm(t(confirmKey)))) return;
     setPending(action);
     setBanner(null);
     const result = await startGameUpdateAction(serverId, action);
@@ -151,7 +149,7 @@ export function GameUpdatesConsole({
     }
     setStartedOp(result.data);
     setBanner(t("started", { action: tActions(action) }));
-    router.push(liveConsoleHref(serverId, "deploy"));
+    openLiveTerminal(serverId, "deploy");
   }
 
   return (
@@ -277,8 +275,13 @@ export function GameUpdatesConsole({
             {pending === "validate" ? t("validating") : t("validate")}
           </Button>
           {startedOp ? (
-            <Button asChild variant="ghost">
-              <Link href={liveConsoleHref(serverId, "deploy")}>{t("watchLive")}</Link>
+            <Button
+              type="button"
+              variant="ghost"
+              data-testid="open-live-deploy"
+              onClick={() => openLiveTerminal(serverId, "deploy")}
+            >
+              {t("watchLive")}
             </Button>
           ) : null}
         </div>

@@ -86,6 +86,7 @@ export type FileArchiveInspectViewDto = Schemas["FileArchiveInspectView"];
 export type FileExtractRequestDto = Schemas["FileExtractRequest"];
 export type FileTaskViewDto = Schemas["FileTaskView"];
 export type ConsoleWorkspaceViewDto = Schemas["ConsoleWorkspaceView"];
+export type ConsolePaneViewDto = Schemas["ConsolePaneView"];
 export type AssistantWorkspaceViewDto = Schemas["AssistantWorkspaceView"];
 export type AssistantConversationViewDto = Schemas["AssistantConversationView"];
 export type AssistantConversationDetailViewDto = Schemas["AssistantConversationDetailView"];

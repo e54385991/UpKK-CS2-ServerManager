@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { requireSession } from "@/modules/auth/session";
 import { PluginCatalogButton } from "@/modules/plugins/catalog-button";
-import { GitHubInstallForm } from "@/modules/plugins/github-install-form";
+import { GitHubInstallButton } from "@/modules/plugins/github-install-button";
 import { MarketFilters } from "@/modules/plugins/market-filters";
 import {
   MarketCatalog,
@@ -54,26 +54,24 @@ export default async function PluginsPage({
         description={t("description")}
         actions={
           <>
+            <GitHubInstallButton
+              servers={
+                serversResult.ok
+                  ? serversResult.data.map((server) => ({
+                      id: server.id,
+                      name: server.name,
+                      usePanelProxy: server.usePanelProxy,
+                      githubProxy: server.githubProxy,
+                    }))
+                  : []
+              }
+              defaultServerId={Number.isInteger(serverId) ? serverId : null}
+            />
             <PluginCatalogButton canImport={session.isAdmin} />
             <MarketFilters />
           </>
         }
       />
-      <div className="mb-6">
-        <GitHubInstallForm
-          servers={
-            serversResult.ok
-              ? serversResult.data.map((server) => ({
-                  id: server.id,
-                  name: server.name,
-                  usePanelProxy: server.usePanelProxy,
-                  githubProxy: server.githubProxy,
-                }))
-              : []
-          }
-          defaultServerId={Number.isInteger(serverId) ? serverId : null}
-        />
-      </div>
       <Suspense key={key} fallback={<MarketCatalogSkeleton />}>
         <MarketCatalog
           query={query}

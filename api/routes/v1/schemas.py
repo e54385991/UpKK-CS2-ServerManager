@@ -1458,6 +1458,21 @@ class ConsoleWorkspaceView(BaseModel):
     ssh_ok: bool
     ssh_error: str | None = None
     game_running: bool = False
+    steamcmd_running: bool = False
+    message: str | None = None
+
+
+class ConsolePaneView(BaseModel):
+    """Live tmux/screen pane snapshot. GET stays 200 when SSH or the session is down."""
+
+    server_id: int
+    kind: Literal["game", "steamcmd"]
+    session_name: str
+    session_manager: Literal["screen", "tmux"] | None = None
+    ssh_ok: bool
+    running: bool = False
+    text: str = ""
+    heartbeat: str | None = None
     message: str | None = None
 
 
@@ -1956,3 +1971,109 @@ class CleanupDeleteView(BaseModel):
     deleted_count: int = 0
     freed_bytes_estimate: int = 0
     failed_items: list[CleanupFailedItemView] = Field(default_factory=list)
+
+
+class InitializedHostView(BaseModel):
+    """Saved auto-setup host. Credentials are never included on the list."""
+
+    key: str
+    name: str
+    host: str
+    ssh_port: int
+    ssh_user: str
+    game_directory: str
+    created_at: float
+
+
+class InitializedHostCredentialsView(BaseModel):
+    """Owner-only one-time reveal of a saved auto-setup host (Redis, 24h)."""
+
+    key: str
+    name: str
+    host: str
+    ssh_port: int
+    ssh_user: str
+    ssh_password: str
+    game_directory: str
+    created_at: float
+
+
+class AutoSetupRequest(BaseModel):
+    """Create the dedicated CS2 Linux user and install host packages over SSH."""
+
+    name: str = Field(min_length=1, max_length=255)
+    host: str = Field(min_length=1, max_length=255)
+    ssh_port: int = Field(default=22, ge=1, le=65535)
+    ssh_user: str = Field(min_length=1, max_length=64)
+    ssh_password: str = Field(min_length=1, max_length=255)
+    sudo_password: str | None = None
+    cs2_username: str = Field(default="cs2server", pattern=r"^[a-z_][a-z0-9_-]*$")
+    cs2_password: str | None = None
+    captcha_token: str = Field(min_length=1)
+    captcha_code: str = Field(min_length=4, max_length=4)
+    save_config: bool = True
+    open_game_ports: bool = True
+    session_id: str | None = None
+
+
+class AutoSetupResultView(BaseModel):
+    """Completed auto-setup. ``cs2_password`` is returned once so the operator can add the server."""
+
+    success: bool
+    message: str
+    cs2_username: str
+    cs2_password: str
+    game_directory: str
+    logs: list[str] = Field(default_factory=list)
+    initialized_server_id: str | None = None
+
+
+class ManualSetupScriptView(BaseModel):
+    cs2_username: str
+    password: str
+    script: str
+
+
+class PluginDiagnosticRecommendationView(BaseModel):
+    recommended: bool
+    reason: str | None = None
+    recently_updated: bool = False
+    last_update_time: datetime | None = None
+    restart_count: int = 0
+    max_restarts: int = 0
+    window_minutes: int = 30
+
+
+class PluginDiagnosticPlanBody(BaseModel):
+    scope: Literal["metamod", "counterstrikesharp", "both"] = "both"
+
+
+class PluginDiagnosticExecuteBody(PluginDiagnosticPlanBody):
+    expected_plan_hash: str = Field(min_length=64, max_length=64)
+
+
+class PluginDiagnosticPlanView(BaseModel):
+    server_id: int
+    scope: str
+    plan_hash: str
+    candidates: list[dict] = Field(default_factory=list)
+    candidate_groups: list[dict] = Field(default_factory=list)
+    estimated_max_starts: int = 0
+    health_policy: dict = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class PluginDiagnosticRunView(BaseModel):
+    id: str
+    server_id: int
+    requested_by: int
+    scope: str
+    status: str
+    plan_hash: str
+    culprit_keys: list[str] = Field(default_factory=list)
+    start_attempts: int = 0
+    error: str | None = None
+    steps: list[dict] = Field(default_factory=list)
+    quarantine: list[dict] = Field(default_factory=list)
+    created_at: datetime | None = None
+    completed_at: datetime | None = None

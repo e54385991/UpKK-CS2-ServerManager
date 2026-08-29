@@ -3152,6 +3152,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servers/{server_id}/console/pane": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Console Pane
+         * @description Snapshot the live game or SteamCMD tmux/screen pane.
+         */
+        get: operations["get_console_pane_api_v1_servers__server_id__console_pane_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers/{server_id}/custom-commands": {
         parameters: {
             query?: never;
@@ -3871,6 +3891,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servers/{server_id}/plugin-diagnostics/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plan Diagnostic */
+        post: operations["plan_diagnostic_api_v1_servers__server_id__plugin_diagnostics_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-diagnostics/recommendation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Recommendation */
+        get: operations["read_recommendation_api_v1_servers__server_id__plugin_diagnostics_recommendation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-diagnostics/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute Diagnostic */
+        post: operations["execute_diagnostic_api_v1_servers__server_id__plugin_diagnostics_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Diagnostic Run */
+        get: operations["read_diagnostic_run_api_v1_servers__server_id__plugin_diagnostics_runs__diagnostic_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Diagnostic */
+        post: operations["restore_diagnostic_api_v1_servers__server_id__plugin_diagnostics_runs__diagnostic_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Diagnostic */
+        post: operations["resume_diagnostic_api_v1_servers__server_id__plugin_diagnostics_runs__diagnostic_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers/{server_id}/plugin-updates": {
         parameters: {
             query?: never;
@@ -4402,6 +4524,94 @@ export interface paths {
          * @description Send a test message using the currently saved email configuration.
          */
         post: operations["send_test_email_api_v1_settings_test_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/auto-setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Auto Setup
+         * @description Same Linux-user + apt path as Jinja ``/api/setup/auto-setup``.
+         */
+        post: operations["run_auto_setup_api_v1_setup_auto_setup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/initialized-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Initialized Hosts */
+        get: operations["list_initialized_hosts_api_v1_setup_initialized_servers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/initialized-servers/{server_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Initialized Host */
+        delete: operations["delete_initialized_host_api_v1_setup_initialized_servers__server_key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/initialized-servers/{server_key}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Initialized Host Credentials */
+        get: operations["read_initialized_host_credentials_api_v1_setup_initialized_servers__server_key__credentials_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/manual-script": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Manual Setup Script */
+        get: operations["read_manual_setup_script_api_v1_setup_manual_script_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7245,6 +7455,70 @@ export interface components {
          */
         AuthType: "password" | "key_file";
         /**
+         * AutoSetupRequest
+         * @description Create the dedicated CS2 Linux user and install host packages over SSH.
+         */
+        AutoSetupRequest: {
+            /** Captcha Code */
+            captcha_code: string;
+            /** Captcha Token */
+            captcha_token: string;
+            /** Cs2 Password */
+            cs2_password?: string | null;
+            /**
+             * Cs2 Username
+             * @default cs2server
+             */
+            cs2_username: string;
+            /** Host */
+            host: string;
+            /** Name */
+            name: string;
+            /**
+             * Open Game Ports
+             * @default true
+             */
+            open_game_ports: boolean;
+            /**
+             * Save Config
+             * @default true
+             */
+            save_config: boolean;
+            /** Session Id */
+            session_id?: string | null;
+            /** Ssh Password */
+            ssh_password: string;
+            /**
+             * Ssh Port
+             * @default 22
+             */
+            ssh_port: number;
+            /** Ssh User */
+            ssh_user: string;
+            /** Sudo Password */
+            sudo_password?: string | null;
+        };
+        /**
+         * AutoSetupResultView
+         * @description Completed auto-setup. ``cs2_password`` is returned once so the operator can add the server.
+         */
+        AutoSetupResultView: {
+            /** Cs2 Password */
+            cs2_password: string;
+            /** Cs2 Username */
+            cs2_username: string;
+            /** Game Directory */
+            game_directory: string;
+            /** Initialized Server Id */
+            initialized_server_id?: string | null;
+            /** Logs */
+            logs?: string[];
+            /** Message */
+            message: string;
+            /** Success */
+            success: boolean;
+        };
+        /**
          * BatchActionResponse
          * @description Schema for batch action response
          */
@@ -7573,6 +7847,39 @@ export interface components {
             success: boolean;
         };
         /**
+         * ConsolePaneView
+         * @description Live tmux/screen pane snapshot. GET stays 200 when SSH or the session is down.
+         */
+        ConsolePaneView: {
+            /** Heartbeat */
+            heartbeat?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "game" | "steamcmd";
+            /** Message */
+            message?: string | null;
+            /**
+             * Running
+             * @default false
+             */
+            running: boolean;
+            /** Server Id */
+            server_id: number;
+            /** Session Manager */
+            session_manager?: ("screen" | "tmux") | null;
+            /** Session Name */
+            session_name: string;
+            /** Ssh Ok */
+            ssh_ok: boolean;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /**
          * ConsoleWorkspaceView
          * @description Game and SSH console status. GET stays 200 when SSH is down.
          */
@@ -7598,6 +7905,11 @@ export interface components {
             ssh_error?: string | null;
             /** Ssh Ok */
             ssh_ok: boolean;
+            /**
+             * Steamcmd Running
+             * @default false
+             */
+            steamcmd_running: boolean;
         };
         /**
          * CreateDirectoryRequest
@@ -9461,6 +9773,48 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * InitializedHostCredentialsView
+         * @description Owner-only one-time reveal of a saved auto-setup host (Redis, 24h).
+         */
+        InitializedHostCredentialsView: {
+            /** Created At */
+            created_at: number;
+            /** Game Directory */
+            game_directory: string;
+            /** Host */
+            host: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Ssh Password */
+            ssh_password: string;
+            /** Ssh Port */
+            ssh_port: number;
+            /** Ssh User */
+            ssh_user: string;
+        };
+        /**
+         * InitializedHostView
+         * @description Saved auto-setup host. Credentials are never included on the list.
+         */
+        InitializedHostView: {
+            /** Created At */
+            created_at: number;
+            /** Game Directory */
+            game_directory: string;
+            /** Host */
+            host: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Ssh Port */
+            ssh_port: number;
+            /** Ssh User */
+            ssh_user: string;
+        };
+        /**
          * InspectArchiveRequest
          * @description Inspect folders contained in a remote archive.
          */
@@ -9776,6 +10130,15 @@ export interface components {
             source_key: string;
             /** Source Type */
             source_type: string;
+        };
+        /** ManualSetupScriptView */
+        ManualSetupScriptView: {
+            /** Cs2 Username */
+            cs2_username: string;
+            /** Password */
+            password: string;
+            /** Script */
+            script: string;
         };
         /** MapAddRequest */
         MapAddRequest: {
@@ -10789,10 +11152,30 @@ export interface components {
             /** Severity */
             severity: string;
         };
+        /** PluginDiagnosticExecuteBody */
+        PluginDiagnosticExecuteBody: {
+            /** Expected Plan Hash */
+            expected_plan_hash: string;
+            /**
+             * Scope
+             * @default both
+             * @enum {string}
+             */
+            scope: "metamod" | "counterstrikesharp" | "both";
+        };
         /** PluginDiagnosticExecuteRequest */
         PluginDiagnosticExecuteRequest: {
             /** Expected Plan Hash */
             expected_plan_hash: string;
+            /**
+             * Scope
+             * @default both
+             * @enum {string}
+             */
+            scope: "metamod" | "counterstrikesharp" | "both";
+        };
+        /** PluginDiagnosticPlanBody */
+        PluginDiagnosticPlanBody: {
             /**
              * Scope
              * @default both
@@ -10834,8 +11217,101 @@ export interface components {
             /** Warnings */
             warnings?: string[];
         };
+        /** PluginDiagnosticPlanView */
+        PluginDiagnosticPlanView: {
+            /** Candidate Groups */
+            candidate_groups?: {
+                [key: string]: unknown;
+            }[];
+            /** Candidates */
+            candidates?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Estimated Max Starts
+             * @default 0
+             */
+            estimated_max_starts: number;
+            /** Health Policy */
+            health_policy?: {
+                [key: string]: unknown;
+            };
+            /** Plan Hash */
+            plan_hash: string;
+            /** Scope */
+            scope: string;
+            /** Server Id */
+            server_id: number;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** PluginDiagnosticRecommendationView */
+        PluginDiagnosticRecommendationView: {
+            /** Last Update Time */
+            last_update_time?: string | null;
+            /**
+             * Max Restarts
+             * @default 0
+             */
+            max_restarts: number;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Recently Updated
+             * @default false
+             */
+            recently_updated: boolean;
+            /** Recommended */
+            recommended: boolean;
+            /**
+             * Restart Count
+             * @default 0
+             */
+            restart_count: number;
+            /**
+             * Window Minutes
+             * @default 30
+             */
+            window_minutes: number;
+        };
         /** PluginDiagnosticRunResponse */
         PluginDiagnosticRunResponse: {
+            /** Completed At */
+            completed_at?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Culprit Keys */
+            culprit_keys?: string[];
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Plan Hash */
+            plan_hash: string;
+            /** Quarantine */
+            quarantine?: {
+                [key: string]: unknown;
+            }[];
+            /** Requested By */
+            requested_by: number;
+            /** Scope */
+            scope: string;
+            /** Server Id */
+            server_id: number;
+            /**
+             * Start Attempts
+             * @default 0
+             */
+            start_attempts: number;
+            /** Status */
+            status: string;
+            /** Steps */
+            steps?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** PluginDiagnosticRunView */
+        PluginDiagnosticRunView: {
             /** Completed At */
             completed_at?: string | null;
             /** Created At */
@@ -19484,6 +19960,39 @@ export interface operations {
             };
         };
     };
+    get_console_pane_api_v1_servers__server_id__console_pane_get: {
+        parameters: {
+            query?: {
+                kind?: "game" | "steamcmd";
+            };
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsolePaneView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_custom_commands_api_v1_servers__server_id__custom_commands_get: {
         parameters: {
             query?: never;
@@ -21242,6 +21751,207 @@ export interface operations {
             };
         };
     };
+    plan_diagnostic_api_v1_servers__server_id__plugin_diagnostics_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginDiagnosticPlanBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginDiagnosticPlanView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_recommendation_api_v1_servers__server_id__plugin_diagnostics_recommendation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginDiagnosticRecommendationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_diagnostic_api_v1_servers__server_id__plugin_diagnostics_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginDiagnosticExecuteBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginDiagnosticRunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_diagnostic_run_api_v1_servers__server_id__plugin_diagnostics_runs__diagnostic_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                diagnostic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginDiagnosticRunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_diagnostic_api_v1_servers__server_id__plugin_diagnostics_runs__diagnostic_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                diagnostic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginDiagnosticRunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_diagnostic_api_v1_servers__server_id__plugin_diagnostics_runs__diagnostic_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                diagnostic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginDiagnosticExecuteBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginDiagnosticRunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_plugin_updates_api_v1_servers__server_id__plugin_updates_get: {
         parameters: {
             query?: never;
@@ -22336,6 +23046,154 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmailTestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_auto_setup_api_v1_setup_auto_setup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoSetupRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutoSetupResultView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_initialized_hosts_api_v1_setup_initialized_servers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitializedHostView"][];
+                };
+            };
+        };
+    };
+    delete_initialized_host_api_v1_setup_initialized_servers__server_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_initialized_host_credentials_api_v1_setup_initialized_servers__server_key__credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitializedHostCredentialsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_manual_setup_script_api_v1_setup_manual_script_get: {
+        parameters: {
+            query?: {
+                cs2_username?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualSetupScriptView"];
                 };
             };
             /** @description Validation Error */

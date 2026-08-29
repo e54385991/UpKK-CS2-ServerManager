@@ -180,12 +180,16 @@ async def test_deployment_preflight_requires_a_connected_server():
 
 
 def test_manual_setup_script_contains_retry_architecture_and_runtime_guards():
+    from services.server_setup_script import build_manual_setup_script
+
+    script = build_manual_setup_script(cs2_username="cs2server", password="Pw1!secret")
+
+    assert "DPkg::Lock::Timeout=120" in script
+    assert "Acquire::Retries=3" in script
+    assert "amd64|x86_64) ;;" in script
+    assert "libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1" in script
+    assert "必需依赖验证失败" in script
     template = (
         Path(__file__).resolve().parents[1] / "templates" / "server_setup_wizard.html"
     ).read_text()
-
     assert "DPkg::Lock::Timeout=120" in template
-    assert "Acquire::Retries=3" in template
-    assert "amd64|x86_64) ;;" in template
-    assert "libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1" in template
-    assert "必需依赖验证失败" in template

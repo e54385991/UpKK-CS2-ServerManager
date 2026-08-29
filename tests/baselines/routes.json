@@ -2608,6 +2608,14 @@
     "path": "/api/v1/servers/{server_id}/console"
   },
   {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_console_pane",
+    "path": "/api/v1/servers/{server_id}/console/pane"
+  },
+  {
     "kind": "APIWebSocketRoute",
     "methods": [],
     "name": "ssh_console_websocket",
@@ -2922,6 +2930,94 @@
     ],
     "name": "get_plugin_update_status",
     "path": "/api/v1/servers/{server_id}/plugin-updates/status"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "read_recommendation",
+    "path": "/api/v1/servers/{server_id}/plugin-diagnostics/recommendation"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "plan_diagnostic",
+    "path": "/api/v1/servers/{server_id}/plugin-diagnostics/plan"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "execute_diagnostic",
+    "path": "/api/v1/servers/{server_id}/plugin-diagnostics/runs"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "read_diagnostic_run",
+    "path": "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "restore_diagnostic",
+    "path": "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/restore"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "resume_diagnostic",
+    "path": "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/resume"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "list_initialized_hosts",
+    "path": "/api/v1/setup/initialized-servers"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "read_initialized_host_credentials",
+    "path": "/api/v1/setup/initialized-servers/{server_key:path}/credentials"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "DELETE"
+    ],
+    "name": "delete_initialized_host",
+    "path": "/api/v1/setup/initialized-servers/{server_key:path}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "read_manual_setup_script",
+    "path": "/api/v1/setup/manual-script"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "run_auto_setup",
+    "path": "/api/v1/setup/auto-setup"
   },
   {
     "kind": "APIRoute",

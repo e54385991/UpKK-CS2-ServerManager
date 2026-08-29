@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { deleteCleanupAction, scanCleanupAction } from "@/modules/cleanup/actions";
 import type { CleanupItem, CleanupScan } from "@/modules/cleanup/types";
+import { confirm } from "@/shared/feedback";
 import { Button } from "@/shared/ui/button";
 import {
   Card,
@@ -62,7 +63,7 @@ export function CleanupConsole({ serverId }: { serverId: number }) {
   }
 
   async function removeSafe() {
-    if (!window.confirm(t("confirmSafe"))) return;
+    if (!(await confirm(t("confirmSafe")))) return;
     setPending("safe");
     const result = await deleteCleanupAction(serverId, { mode: "safe" });
     setPending(null);
@@ -76,7 +77,7 @@ export function CleanupConsole({ serverId }: { serverId: number }) {
 
   async function removeArchives() {
     if (selected.length === 0) return;
-    if (!window.confirm(t("confirmArchives"))) return;
+    if (!(await confirm(t("confirmArchives")))) return;
     setPending("archives");
     const result = await deleteCleanupAction(serverId, {
       mode: "archives",
@@ -93,7 +94,7 @@ export function CleanupConsole({ serverId }: { serverId: number }) {
   }
 
   async function removeWorkshop() {
-    if (!window.confirm(t("confirmWorkshop"))) return;
+    if (!(await confirm(t("confirmWorkshop")))) return;
     setPending("workshop");
     const result = await deleteCleanupAction(serverId, {
       mode: "workshop",

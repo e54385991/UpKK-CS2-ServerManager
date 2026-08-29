@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { TriangleAlert } from "lucide-react";
+import { getConsolePane } from "@/modules/console/api";
 import {
   getCurrentServerOperation,
   getDeploymentLock,
@@ -20,10 +21,11 @@ export async function LiveDeployPanel({
   aptMirror: string | null;
 }) {
   const t = await getTranslations("serverDetail");
-  const [current, logs, lock] = await Promise.all([
+  const [current, logs, lock, pane] = await Promise.all([
     getCurrentServerOperation(serverId),
     listOperationLogs(serverId),
     getDeploymentLock(serverId),
+    getConsolePane(serverId, "steamcmd"),
   ]);
 
   if (!current.ok && !logs.ok && !lock.ok) {
@@ -47,6 +49,7 @@ export async function LiveDeployPanel({
       initialLogs={logs.ok ? logs.data : []}
       initialLock={lock.ok ? lock.data : { lockActive: false, serverStatus }}
       aptMirror={aptMirror}
+      initialPane={pane.ok ? pane.data : null}
     />
   );
 }

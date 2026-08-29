@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { SquareTerminal } from "lucide-react";
-import { liveConsoleHref } from "@/modules/console/live-console";
+import { LiveConsolePopups } from "@/modules/console/open-live-terminal";
+import { SessionPane } from "@/modules/console/session-pane";
+import { useConsolePane } from "@/modules/console/use-console-pane";
+import type { ConsolePane } from "@/modules/console/types";
+import { paneDisplayText } from "@/modules/console/pane-client";
 import { OperationLiveLog } from "@/modules/servers/operation-live-log";
 import { useOperationRunner } from "@/modules/servers/use-operation-runner";
 import {
@@ -14,7 +16,6 @@ import {
   type ServerOperation,
   type ServerStatus,
 } from "@/modules/servers/types";
-import { Button } from "@/shared/ui/button";
 
 export function LiveDeployWorkspace({
   serverId,
@@ -23,6 +24,7 @@ export function LiveDeployWorkspace({
   initialLogs,
   initialLock,
   aptMirror,
+  initialPane = null,
 }: {
   serverId: number;
   serverStatus: ServerStatus;
@@ -30,10 +32,10 @@ export function LiveDeployWorkspace({
   initialLogs: DeploymentLogEntry[];
   initialLock: DeploymentLock;
   aptMirror: string | null;
+  initialPane?: ConsolePane | null;
 }) {
   const t = useTranslations("console");
   const tDetail = useTranslations("serverDetail");
-  const router = useRouter();
   const {
     operation,
     events,
@@ -50,13 +52,20 @@ export function LiveDeployWorkspace({
     aptMirror,
   });
 
-  const emptyHint = useMemo(() => tDetail("streamEmpty"), [tDetail]);
+  const pane = useConsolePane({
+    serverId,
+    kind: "steamcmd",
+    initial: initialPane,
+    enabled: true,
+  });
+  const paneText = paneDisplayText(pane);
+  const paneReady = Boolean(pane?.running || paneText);
+  const emptyHint = useMemo(
+    () => (paneReady ? t("paneAlive") : tDetail("streamEmpty")),
+    [paneReady, t, tDetail],
+  );
   const streaming = isActiveOperation(operation);
-  const watching = streaming || (!operation && canForceStop);
-
-  function openConsole() {
-    router.replace(liveConsoleHref(serverId, "console"));
-  }
+  const watching = streaming || (!operation && canForceStop) || Boolean(pane?.running);
 
   return (
     <div className="space-y-3">
@@ -74,13 +83,14 @@ export function LiveDeployWorkspace({
               ? t("deployFinished")
               : tDetail("streamIdle")}
         </p>
-        {streaming ? null : (
-          <Button type="button" size="sm" onClick={openConsole}>
-            <SquareTerminal />
-            {t("openConsole")}
-          </Button>
-        )}
+        {streaming ? null : <LiveConsolePopups serverId={serverId} />}
       </div>
+
+      <SessionPane
+        pane={pane}
+        emptyText={pane?.running ? t("paneAlive") : t("paneIdle")}
+        className="min-h-[calc(100dvh-22rem)]"
+      />
 
       <OperationLiveLog
         serverId={serverId}
@@ -91,8 +101,8 @@ export function LiveDeployWorkspace({
         canForceStop={canForceStop}
         emptyHint={emptyHint}
         showOpenLiveTerminal={false}
-        className="min-h-[calc(100dvh-9rem)]"
-        logClassName="max-h-[calc(100dvh-15rem)]"
+        className="min-h-64"
+        logClassName="max-h-64"
         onForceStopDone={refreshAfterForceStop}
       />
     </div>

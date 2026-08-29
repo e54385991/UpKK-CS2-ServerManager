@@ -3315,6 +3315,164 @@
         "title": "AuthType",
         "type": "string"
       },
+      "AutoSetupRequest": {
+        "description": "Create the dedicated CS2 Linux user and install host packages over SSH.",
+        "properties": {
+          "captcha_code": {
+            "maxLength": 4,
+            "minLength": 4,
+            "title": "Captcha Code",
+            "type": "string"
+          },
+          "captcha_token": {
+            "minLength": 1,
+            "title": "Captcha Token",
+            "type": "string"
+          },
+          "cs2_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cs2 Password"
+          },
+          "cs2_username": {
+            "default": "cs2server",
+            "pattern": "^[a-z_][a-z0-9_-]*$",
+            "title": "Cs2 Username",
+            "type": "string"
+          },
+          "host": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "open_game_ports": {
+            "default": true,
+            "title": "Open Game Ports",
+            "type": "boolean"
+          },
+          "save_config": {
+            "default": true,
+            "title": "Save Config",
+            "type": "boolean"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "ssh_password": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Ssh Password",
+            "type": "string"
+          },
+          "ssh_port": {
+            "default": 22,
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Ssh Port",
+            "type": "integer"
+          },
+          "ssh_user": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Ssh User",
+            "type": "string"
+          },
+          "sudo_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sudo Password"
+          }
+        },
+        "required": [
+          "name",
+          "host",
+          "ssh_user",
+          "ssh_password",
+          "captcha_token",
+          "captcha_code"
+        ],
+        "title": "AutoSetupRequest",
+        "type": "object"
+      },
+      "AutoSetupResultView": {
+        "description": "Completed auto-setup. ``cs2_password`` is returned once so the operator can add the server.",
+        "properties": {
+          "cs2_password": {
+            "title": "Cs2 Password",
+            "type": "string"
+          },
+          "cs2_username": {
+            "title": "Cs2 Username",
+            "type": "string"
+          },
+          "game_directory": {
+            "title": "Game Directory",
+            "type": "string"
+          },
+          "initialized_server_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initialized Server Id"
+          },
+          "logs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Logs",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "cs2_username",
+          "cs2_password",
+          "game_directory"
+        ],
+        "title": "AutoSetupResultView",
+        "type": "object"
+      },
       "BatchActionResponse": {
         "description": "Schema for batch action response",
         "properties": {
@@ -4041,6 +4199,86 @@
         "title": "ConfirmDeploymentView",
         "type": "object"
       },
+      "ConsolePaneView": {
+        "description": "Live tmux/screen pane snapshot. GET stays 200 when SSH or the session is down.",
+        "properties": {
+          "heartbeat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heartbeat"
+          },
+          "kind": {
+            "enum": [
+              "game",
+              "steamcmd"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "running": {
+            "default": false,
+            "title": "Running",
+            "type": "boolean"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "session_manager": {
+            "anyOf": [
+              {
+                "enum": [
+                  "screen",
+                  "tmux"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Manager"
+          },
+          "session_name": {
+            "title": "Session Name",
+            "type": "string"
+          },
+          "ssh_ok": {
+            "title": "Ssh Ok",
+            "type": "boolean"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_id",
+          "kind",
+          "session_name",
+          "ssh_ok"
+        ],
+        "title": "ConsolePaneView",
+        "type": "object"
+      },
       "ConsoleWorkspaceView": {
         "description": "Game and SSH console status. GET stays 200 when SSH is down.",
         "properties": {
@@ -4090,6 +4328,11 @@
           },
           "ssh_ok": {
             "title": "Ssh Ok",
+            "type": "boolean"
+          },
+          "steamcmd_running": {
+            "default": false,
+            "title": "Steamcmd Running",
             "type": "boolean"
           }
         },
@@ -8907,6 +9150,99 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "InitializedHostCredentialsView": {
+        "description": "Owner-only one-time reveal of a saved auto-setup host (Redis, 24h).",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "number"
+          },
+          "game_directory": {
+            "title": "Game Directory",
+            "type": "string"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ssh_password": {
+            "title": "Ssh Password",
+            "type": "string"
+          },
+          "ssh_port": {
+            "title": "Ssh Port",
+            "type": "integer"
+          },
+          "ssh_user": {
+            "title": "Ssh User",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "host",
+          "ssh_port",
+          "ssh_user",
+          "ssh_password",
+          "game_directory",
+          "created_at"
+        ],
+        "title": "InitializedHostCredentialsView",
+        "type": "object"
+      },
+      "InitializedHostView": {
+        "description": "Saved auto-setup host. Credentials are never included on the list.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "number"
+          },
+          "game_directory": {
+            "title": "Game Directory",
+            "type": "string"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ssh_port": {
+            "title": "Ssh Port",
+            "type": "integer"
+          },
+          "ssh_user": {
+            "title": "Ssh User",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "host",
+          "ssh_port",
+          "ssh_user",
+          "game_directory",
+          "created_at"
+        ],
+        "title": "InitializedHostView",
+        "type": "object"
+      },
       "InspectArchiveRequest": {
         "description": "Inspect folders contained in a remote archive.",
         "properties": {
@@ -9966,6 +10302,29 @@
           "auto_update_enabled"
         ],
         "title": "ManagedPluginView",
+        "type": "object"
+      },
+      "ManualSetupScriptView": {
+        "properties": {
+          "cs2_username": {
+            "title": "Cs2 Username",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "script": {
+            "title": "Script",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cs2_username",
+          "password",
+          "script"
+        ],
+        "title": "ManualSetupScriptView",
         "type": "object"
       },
       "MapAddRequest": {
@@ -12509,6 +12868,31 @@
         "title": "PluginConflictView",
         "type": "object"
       },
+      "PluginDiagnosticExecuteBody": {
+        "properties": {
+          "expected_plan_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Expected Plan Hash",
+            "type": "string"
+          },
+          "scope": {
+            "default": "both",
+            "enum": [
+              "metamod",
+              "counterstrikesharp",
+              "both"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_plan_hash"
+        ],
+        "title": "PluginDiagnosticExecuteBody",
+        "type": "object"
+      },
       "PluginDiagnosticExecuteRequest": {
         "properties": {
           "expected_plan_hash": {
@@ -12532,6 +12916,22 @@
           "expected_plan_hash"
         ],
         "title": "PluginDiagnosticExecuteRequest",
+        "type": "object"
+      },
+      "PluginDiagnosticPlanBody": {
+        "properties": {
+          "scope": {
+            "default": "both",
+            "enum": [
+              "metamod",
+              "counterstrikesharp",
+              "both"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "PluginDiagnosticPlanBody",
         "type": "object"
       },
       "PluginDiagnosticPlanRequest": {
@@ -12604,6 +13004,118 @@
           "estimated_max_starts"
         ],
         "title": "PluginDiagnosticPlanResponse",
+        "type": "object"
+      },
+      "PluginDiagnosticPlanView": {
+        "properties": {
+          "candidate_groups": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Candidate Groups",
+            "type": "array"
+          },
+          "candidates": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "estimated_max_starts": {
+            "default": 0,
+            "title": "Estimated Max Starts",
+            "type": "integer"
+          },
+          "health_policy": {
+            "additionalProperties": true,
+            "title": "Health Policy",
+            "type": "object"
+          },
+          "plan_hash": {
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "server_id",
+          "scope",
+          "plan_hash"
+        ],
+        "title": "PluginDiagnosticPlanView",
+        "type": "object"
+      },
+      "PluginDiagnosticRecommendationView": {
+        "properties": {
+          "last_update_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Update Time"
+          },
+          "max_restarts": {
+            "default": 0,
+            "title": "Max Restarts",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "recently_updated": {
+            "default": false,
+            "title": "Recently Updated",
+            "type": "boolean"
+          },
+          "recommended": {
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "restart_count": {
+            "default": 0,
+            "title": "Restart Count",
+            "type": "integer"
+          },
+          "window_minutes": {
+            "default": 30,
+            "title": "Window Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recommended"
+        ],
+        "title": "PluginDiagnosticRecommendationView",
         "type": "object"
       },
       "PluginDiagnosticRunResponse": {
@@ -12705,6 +13217,107 @@
           "plan_hash"
         ],
         "title": "PluginDiagnosticRunResponse",
+        "type": "object"
+      },
+      "PluginDiagnosticRunView": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "culprit_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Culprit Keys",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "plan_hash": {
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "quarantine": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Quarantine",
+            "type": "array"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "integer"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "start_attempts": {
+            "default": 0,
+            "title": "Start Attempts",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "server_id",
+          "requested_by",
+          "scope",
+          "status",
+          "plan_hash"
+        ],
+        "title": "PluginDiagnosticRunView",
         "type": "object"
       },
       "PluginInstallPlanView": {
@@ -29482,6 +30095,68 @@
         ]
       }
     },
+    "/api/v1/servers/{server_id}/console/pane": {
+      "get": {
+        "description": "Snapshot the live game or SteamCMD tmux/screen pane.",
+        "operationId": "get_console_pane_api_v1_servers__server_id__console_pane_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "game",
+              "enum": [
+                "game",
+                "steamcmd"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsolePaneView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Console Pane",
+        "tags": [
+          "v1-console"
+        ]
+      }
+    },
     "/api/v1/servers/{server_id}/custom-commands": {
       "get": {
         "operationId": "list_custom_commands_api_v1_servers__server_id__custom_commands_get",
@@ -32470,6 +33145,345 @@
         ]
       }
     },
+    "/api/v1/servers/{server_id}/plugin-diagnostics/plan": {
+      "post": {
+        "operationId": "plan_diagnostic_api_v1_servers__server_id__plugin_diagnostics_plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginDiagnosticPlanBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticPlanView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Plan Diagnostic",
+        "tags": [
+          "v1-plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/plugin-diagnostics/recommendation": {
+      "get": {
+        "operationId": "read_recommendation_api_v1_servers__server_id__plugin_diagnostics_recommendation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRecommendationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Recommendation",
+        "tags": [
+          "v1-plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/plugin-diagnostics/runs": {
+      "post": {
+        "operationId": "execute_diagnostic_api_v1_servers__server_id__plugin_diagnostics_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginDiagnosticExecuteBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Execute Diagnostic",
+        "tags": [
+          "v1-plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}": {
+      "get": {
+        "operationId": "read_diagnostic_run_api_v1_servers__server_id__plugin_diagnostics_runs__diagnostic_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "diagnostic_id",
+            "required": true,
+            "schema": {
+              "title": "Diagnostic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Diagnostic Run",
+        "tags": [
+          "v1-plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/restore": {
+      "post": {
+        "operationId": "restore_diagnostic_api_v1_servers__server_id__plugin_diagnostics_runs__diagnostic_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "diagnostic_id",
+            "required": true,
+            "schema": {
+              "title": "Diagnostic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Restore Diagnostic",
+        "tags": [
+          "v1-plugin-diagnostics"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}/resume": {
+      "post": {
+        "operationId": "resume_diagnostic_api_v1_servers__server_id__plugin_diagnostics_runs__diagnostic_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "diagnostic_id",
+            "required": true,
+            "schema": {
+              "title": "Diagnostic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginDiagnosticExecuteBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Resume Diagnostic",
+        "tags": [
+          "v1-plugin-diagnostics"
+        ]
+      }
+    },
     "/api/v1/servers/{server_id}/plugin-updates": {
       "get": {
         "operationId": "get_plugin_updates_api_v1_servers__server_id__plugin_updates_get",
@@ -34244,6 +35258,227 @@
         "summary": "Send Test Email",
         "tags": [
           "v1-settings"
+        ]
+      }
+    },
+    "/api/v1/setup/auto-setup": {
+      "post": {
+        "description": "Same Linux-user + apt path as Jinja ``/api/setup/auto-setup``.",
+        "operationId": "run_auto_setup_api_v1_setup_auto_setup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoSetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoSetupResultView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Run Auto Setup",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/initialized-servers": {
+      "get": {
+        "operationId": "list_initialized_hosts_api_v1_setup_initialized_servers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InitializedHostView"
+                  },
+                  "title": "Response List Initialized Hosts Api V1 Setup Initialized Servers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Initialized Hosts",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/initialized-servers/{server_key}": {
+      "delete": {
+        "operationId": "delete_initialized_host_api_v1_setup_initialized_servers__server_key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_key",
+            "required": true,
+            "schema": {
+              "title": "Server Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Initialized Host Api V1 Setup Initialized Servers  Server Key  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Initialized Host",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/initialized-servers/{server_key}/credentials": {
+      "get": {
+        "operationId": "read_initialized_host_credentials_api_v1_setup_initialized_servers__server_key__credentials_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_key",
+            "required": true,
+            "schema": {
+              "title": "Server Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitializedHostCredentialsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Initialized Host Credentials",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/manual-script": {
+      "get": {
+        "operationId": "read_manual_setup_script_api_v1_setup_manual_script_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cs2_username",
+            "required": false,
+            "schema": {
+              "default": "cs2server",
+              "title": "Cs2 Username",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualSetupScriptView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Manual Setup Script",
+        "tags": [
+          "v1-setup"
         ]
       }
     },

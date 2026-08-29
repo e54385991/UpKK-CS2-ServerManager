@@ -52,6 +52,9 @@ export default async function ServersPage({
             >
               <ServerTransferHeader />
             </Suspense>
+            <LinkButton href="/servers/new?tab=setup" variant="outline">
+              {t("setupHost")}
+            </LinkButton>
             <LinkButton href="/servers/new">
               <Plus className="size-4" />
               {t("add")}

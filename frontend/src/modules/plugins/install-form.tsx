@@ -11,6 +11,7 @@ import {
   uninstallMarketPluginAction,
 } from "@/modules/plugins/actions";
 import type { PluginInstallPlan } from "@/modules/plugins/types";
+import { confirm } from "@/shared/feedback";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
@@ -63,7 +64,14 @@ export function InstallForm({
       const details = plan.warnings
         .map((item) => `#${item.ruleId}: ${item.reason}`)
         .join("\n");
-      if (!window.confirm(`${t("confirmWarnings")}\n\n${details}`)) return;
+      if (
+        !(await confirm({
+          title: t("confirmWarnings"),
+          description: details,
+        }))
+      ) {
+        return;
+      }
     }
     setPending(true);
     setError(null);
@@ -87,7 +95,7 @@ export function InstallForm({
       .map((item) => item.trim())
       .filter(Boolean);
     if (files.length === 0) return;
-    if (!window.confirm(t("github.uninstallConfirm", { count: files.length }))) {
+    if (!(await confirm(t("github.uninstallConfirm", { count: files.length })))) {
       return;
     }
     setPending(true);

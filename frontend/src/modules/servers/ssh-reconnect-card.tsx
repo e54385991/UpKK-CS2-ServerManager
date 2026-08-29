@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import { reconnectServerSshAction } from "@/modules/servers/actions";
-import { OpenLiveTerminalButton } from "@/modules/console/open-live-terminal";
+import { LiveConsolePopups } from "@/modules/console/open-live-terminal";
 import { ForceStopButton } from "@/modules/servers/force-stop-button";
 import { SshHealthBlock, type SshHealthFields } from "@/modules/servers/ssh-health-block";
 import { Badge, StatusDot } from "@/shared/ui/badge";
@@ -101,10 +101,7 @@ export function SshReconnectCard({
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <OpenLiveTerminalButton
-            serverId={serverId}
-            view={canForceStop ? "deploy" : undefined}
-          />
+          <LiveConsolePopups serverId={serverId} />
           {canForceStop ? <ForceStopButton serverId={serverId} /> : null}
           <Button
             type="button"

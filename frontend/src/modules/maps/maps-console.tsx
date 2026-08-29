@@ -22,6 +22,7 @@ import {
   updateMapSyncAction,
 } from "@/modules/maps/actions";
 import { MAP_PRESETS, type MapEntry, type MapsWorkspace } from "@/modules/maps/types";
+import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -122,10 +123,12 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
             variant="outline"
             disabled={!workspace.mapchooserInstalled || Boolean(pending)}
             onClick={() => {
-              if (!window.confirm(t("uninstallConfirm"))) return;
-              void run("uninstall-mapchooser", () =>
-                uninstallMapChooserAction(serverId, "UNINSTALL MAPCHOOSER"),
-              );
+              void (async () => {
+                if (!(await confirm(t("uninstallConfirm")))) return;
+                void run("uninstall-mapchooser", () =>
+                  uninstallMapChooserAction(serverId, "UNINSTALL MAPCHOOSER"),
+                );
+              })();
             }}
           >
             <Trash2 className="size-4" />
@@ -198,12 +201,14 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
                       disabled={!canMutate}
                       aria-label={t("remove")}
                       onClick={() => {
-                        if (!window.confirm(t("removeConfirm", { name: entry.name }))) {
-                          return;
-                        }
-                        void run(`delete:${entry.name}`, () =>
-                          deleteMapAction(serverId, identity(entry)),
-                        );
+                        void (async () => {
+                          if (!(await confirm(t("removeConfirm", { name: entry.name })))) {
+                            return;
+                          }
+                          void run(`delete:${entry.name}`, () =>
+                            deleteMapAction(serverId, identity(entry)),
+                          );
+                        })();
                       }}
                     >
                       <Trash2 />
@@ -306,15 +311,17 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
                 variant={preset === "official" ? "primary" : "outline"}
                 disabled={!canMutate}
                 onClick={() => {
-                  if (!window.confirm(t(`presetConfirm.${preset}`))) return;
-                  void run(`preset:${preset}`, () =>
-                    applyMapPresetAction(serverId, {
-                      preset,
-                      expectedRevision: workspace.revision ?? "",
-                      pluginConfigExpectedRevision:
-                        workspace.pluginConfig?.revision || undefined,
-                    }),
-                  );
+                  void (async () => {
+                    if (!(await confirm(t(`presetConfirm.${preset}`)))) return;
+                    void run(`preset:${preset}`, () =>
+                      applyMapPresetAction(serverId, {
+                        preset,
+                        expectedRevision: workspace.revision ?? "",
+                        pluginConfigExpectedRevision:
+                          workspace.pluginConfig?.revision || undefined,
+                      }),
+                    );
+                  })();
                 }}
               >
                 {t(`presets.${preset}`)}
@@ -383,10 +390,12 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
               variant="outline"
               disabled={!canMutate || !workspace.customSync.url}
               onClick={() => {
-                if (!window.confirm(t("runSyncConfirm"))) return;
-                void run("sync-run", () =>
-                  runMapSyncAction(serverId, workspace.revision ?? ""),
-                );
+                void (async () => {
+                  if (!(await confirm(t("runSyncConfirm")))) return;
+                  void run("sync-run", () =>
+                    runMapSyncAction(serverId, workspace.revision ?? ""),
+                  );
+                })();
               }}
             >
               <RefreshCw />

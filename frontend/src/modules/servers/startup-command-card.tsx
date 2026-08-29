@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { confirmDeploymentAction } from "@/modules/servers/actions";
+import { confirm as confirmDialog } from "@/shared/feedback";
 import { Button } from "@/shared/ui/button";
 import {
   Card,
@@ -38,7 +39,7 @@ export function StartupCommandCard({
   }
 
   async function confirm() {
-    if (!window.confirm(t("confirmPrompt"))) return;
+    if (!(await confirmDialog(t("confirmPrompt")))) return;
     setPending(true);
     setBanner(null);
     const result = await confirmDeploymentAction(serverId);

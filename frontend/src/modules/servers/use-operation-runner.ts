@@ -14,6 +14,7 @@ import {
   startServerOperationAction,
 } from "@/modules/servers/actions";
 import { toAptMirror, type AptMirrorId } from "@/modules/servers/apt-mirrors";
+import { confirm } from "@/shared/feedback";
 import {
   CONFIRM_ACTIONS,
   type DeploymentLock,
@@ -229,7 +230,7 @@ export function useOperationRunner({
 
   async function runAction(action: ServerOperationAction) {
     if (running) return;
-    if (CONFIRM_ACTIONS.has(action) && !window.confirm(t(`confirm.${action}`))) {
+    if (CONFIRM_ACTIONS.has(action) && !(await confirm(t(`confirm.${action}`)))) {
       return;
     }
     setError(null);
