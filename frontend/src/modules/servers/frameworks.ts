@@ -94,6 +94,15 @@ function matchesFramework(hint: string, id: FrameworkId): boolean {
   return value.includes("swiftly");
 }
 
+export function frameworkIdForAction(
+  action: ServerOperationAction,
+): FrameworkId | null {
+  for (const spec of FRAMEWORK_CATALOG) {
+    if (spec.install === action || spec.update === action) return spec.id;
+  }
+  return null;
+}
+
 export function detectInstalledFrameworkKeys(
   plugins: readonly FrameworkHint[],
 ): FrameworkId[] {

@@ -92,9 +92,7 @@ export async function applyAptMirrorAction(
   serverId: number,
   mirror: string,
 ): Promise<ApiResult<ServerOperation>> {
-  const result = await applyAptMirror(serverId, mirror);
-  if (result.ok) revalidateServer(serverId);
-  return result;
+  return applyAptMirror(serverId, mirror);
 }
 
 export async function listS3BackupsAction(
@@ -107,9 +105,7 @@ export async function restoreS3BackupAction(
   serverId: number,
   objectKey: string,
 ): Promise<ApiResult<ServerOperation>> {
-  const result = await restoreS3Backup(serverId, objectKey);
-  if (result.ok) revalidateServer(serverId);
-  return result;
+  return restoreS3Backup(serverId, objectKey);
 }
 
 export async function refreshOperationInboxAction(): Promise<
@@ -134,9 +130,7 @@ export async function startServerOperationAction(
   serverId: number,
   action: ServerOperationAction,
 ): Promise<ApiResult<ServerOperation>> {
-  const result = await startServerOperation(serverId, action);
-  if (result.ok) revalidateServer(serverId);
-  return result;
+  return startServerOperation(serverId, action);
 }
 
 export async function refreshServerAction(

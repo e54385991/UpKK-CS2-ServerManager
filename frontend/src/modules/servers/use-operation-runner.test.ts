@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   OPERATION_EVENT_LIMIT,
+  lastEventSequence,
   mergeOperationEvents,
+  nextReconnectDelayMs,
+  operationEventsUrl,
 } from "./operation-events.ts";
 import type { OperationStreamEvent } from "./types.ts";
 
@@ -16,6 +19,31 @@ function event(sequence: number, message: string): OperationStreamEvent {
     timestamp: "2026-08-29T00:00:00.000Z",
   };
 }
+
+test("lastEventSequence skips seed and empty ids", () => {
+  assert.equal(lastEventSequence([]), "0");
+  assert.equal(
+    lastEventSequence([
+      { sequence: "seed" },
+      { sequence: "12" },
+      { sequence: "" },
+    ]),
+    "12",
+  );
+});
+
+test("operationEventsUrl carries the last sequence", () => {
+  assert.equal(
+    operationEventsUrl(35, "op-1", "12"),
+    "/ops-stream/servers/35/operations/op-1?after=12",
+  );
+});
+
+test("nextReconnectDelayMs backs off then caps", () => {
+  assert.equal(nextReconnectDelayMs(0), 400);
+  assert.equal(nextReconnectDelayMs(4), 6400);
+  assert.equal(nextReconnectDelayMs(8), 6400);
+});
 
 test("mergeOperationEvents keeps only the latest 300 lines", () => {
   assert.equal(OPERATION_EVENT_LIMIT, 300);

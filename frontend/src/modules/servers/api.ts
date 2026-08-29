@@ -868,6 +868,7 @@ export async function startServerOperation(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action }),
+      timeoutMs: 20_000,
     },
   );
   if (!result.ok) return result;
@@ -956,7 +957,7 @@ export async function clearDeploymentLock(
 ): Promise<ApiResult<ActionResultDto>> {
   return apiFetch<ActionResultDto>(
     `/api/v1/servers/${serverId}/operations/lock`,
-    { method: "DELETE" },
+    { method: "DELETE", timeoutMs: 60_000 },
   );
 }
 

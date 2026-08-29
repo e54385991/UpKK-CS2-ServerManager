@@ -1,23 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
-  refreshCurrentOperationAction,
-  refreshDeploymentLockAction,
-  refreshOperationJournalAction,
-  refreshOperationLogsAction,
-  refreshServerAction,
-  applyAptMirrorAction,
-  restoreS3BackupAction,
-  startServerOperationAction,
-} from "@/modules/servers/actions";
+  applyAptMirrorFromBrowser,
+  loadCurrentOperationFromBrowser,
+  loadOperationJournalFromBrowser,
+  loadOperationSnapshotFromBrowser,
+  restoreS3BackupFromBrowser,
+  startServerOperationFromBrowser,
+} from "@/modules/servers/operation-client";
 import { toAptMirror, type AptMirrorId } from "@/modules/servers/apt-mirrors";
 import { trackQueuedOperation } from "@/modules/servers/activity-store";
 import { confirm } from "@/shared/feedback";
 import {
+  lastEventSequence,
   mergeOperationEvents,
+  nextReconnectDelayMs,
+  operationEventsUrl,
   parseOperationEvent,
 } from "@/modules/servers/operation-events";
 import {
@@ -34,17 +34,11 @@ import {
 export {
   OPERATION_EVENT_LIMIT,
   mergeOperationEvents,
+  operationEventsUrl,
   parseOperationEvent,
 } from "@/modules/servers/operation-events";
 
 export { isActiveOperation };
-
-export function operationEventsUrl(
-  serverId: number,
-  operationId: string,
-): string {
-  return `/ops-stream/servers/${serverId}/operations/${operationId}?after=0`;
-}
 
 export function useOperationRunner({
   serverId,
@@ -64,7 +58,6 @@ export function useOperationRunner({
   onSettled?: () => void | Promise<void>;
 }) {
   const t = useTranslations("serverDetail");
-  const router = useRouter();
   const logRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState(serverStatus);
   const [operation, setOperation] = useState(initialOperation);
@@ -80,12 +73,16 @@ export function useOperationRunner({
   const [streamFailed, setStreamFailed] = useState(false);
   const onSettledRef = useRef(onSettled);
   const operationRef = useRef(operation);
+  const eventsRef = useRef(events);
   useEffect(() => {
     onSettledRef.current = onSettled;
   }, [onSettled]);
   useEffect(() => {
     operationRef.current = operation;
   }, [operation]);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
 
   const running =
     isActiveOperation(operation) || busyAction !== null || busyMirror !== null;
@@ -93,19 +90,20 @@ export function useOperationRunner({
   const canForceStop =
     isActiveOperation(operation) || lock.lockActive || status === "deploying";
 
-  const refreshAfterTerminal = useCallback(async () => {
-    const serverResult = await refreshServerAction(serverId);
-    const logsResult = await refreshOperationLogsAction(serverId);
-    const lockResult = await refreshDeploymentLockAction(serverId);
-    if (serverResult.ok) {
-      setStatus(serverResult.data.status);
-      setCurrentMirror(toAptMirror(serverResult.data.aptMirror));
+  const applySnapshot = useCallback(async () => {
+    const snapshot = await loadOperationSnapshotFromBrowser(serverId);
+    if (snapshot.ok) {
+      setStatus(snapshot.data.server.status);
+      setCurrentMirror(toAptMirror(snapshot.data.server.aptMirror));
+      setLogs([...snapshot.data.logs]);
+      setLock(snapshot.data.lock);
     }
-    if (logsResult.ok) setLogs(logsResult.data);
-    if (lockResult.ok) setLock(lockResult.data);
-    router.refresh();
     await onSettledRef.current?.();
-  }, [router, serverId]);
+  }, [serverId]);
+
+  const refreshAfterTerminal = useCallback(async () => {
+    await applySnapshot();
+  }, [applySnapshot]);
 
   useEffect(() => {
     const node = logRef.current;
@@ -116,7 +114,7 @@ export function useOperationRunner({
     if (!operationId) return;
     let cancelled = false;
     const pull = async () => {
-      const result = await refreshOperationJournalAction(serverId, operationId);
+      const result = await loadOperationJournalFromBrowser(serverId, operationId);
       if (cancelled || !result.ok) return;
       if (result.data.operation.operationId !== operationId) return;
       setOperation(result.data.operation);
@@ -124,7 +122,15 @@ export function useOperationRunner({
       if (result.data.events.length > 0) setStreamFailed(false);
     };
     void pull();
-    const id = window.setInterval(() => void pull(), 2000);
+    if (!isActiveOperation(operationRef.current)) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    const id = window.setInterval(() => {
+      if (!isActiveOperation(operationRef.current)) return;
+      void pull();
+    }, 5000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -133,58 +139,89 @@ export function useOperationRunner({
 
   useEffect(() => {
     if (!operationId) return;
-    const alreadyTerminal = !isActiveOperation(operationRef.current);
-    const source = new EventSource(operationEventsUrl(serverId, operationId));
-    source.onopen = () => {
-      setStreamFailed(false);
-    };
-    const seen = new Set<string>();
+    let cancelled = false;
+    let source: EventSource | null = null;
+    let timer: number | null = null;
+    let attempt = 0;
     let received = false;
+    let finished = !isActiveOperation(operationRef.current);
+    const seen = new Set<string>();
+    const after = { current: lastEventSequence(eventsRef.current) };
+
     const ingest = (raw: string) => {
       const event = parseOperationEvent(raw);
       if (!event || (event.sequence && seen.has(event.sequence))) return null;
       if (event.sequence) seen.add(event.sequence);
       received = true;
+      if (event.sequence && event.sequence !== "seed") {
+        after.current = event.sequence;
+      }
       setEvents((current) => mergeOperationEvents(current, [event]));
       return event;
     };
-    source.onmessage = (message) => {
-      ingest(message.data);
+
+    const attach = () => {
+      if (cancelled) return;
+      source = new EventSource(
+        operationEventsUrl(serverId, operationId, after.current),
+      );
+      source.onopen = () => {
+        attempt = 0;
+        setStreamFailed(false);
+      };
+      source.onmessage = (message) => {
+        ingest(message.data);
+      };
+      const onNamed = (message: MessageEvent<string>) => {
+        const event = ingest(message.data);
+        if (
+          event &&
+          (event.type === "operation_completed" ||
+            event.type === "operation_failed")
+        ) {
+          const wasActive = !finished;
+          finished = true;
+          setOperation((current) =>
+            current
+              ? {
+                  ...current,
+                  status:
+                    event.type === "operation_completed" ? "completed" : "failed",
+                  success: event.type === "operation_completed",
+                  message: event.message,
+                  completedAt: event.timestamp,
+                  serverStatus: event.serverStatus
+                    ? (event.serverStatus as ServerStatus)
+                    : current.serverStatus,
+                }
+              : current,
+          );
+          if (wasActive) void refreshAfterTerminal();
+        }
+      };
+      source.addEventListener("progress", onNamed);
+      source.addEventListener("operation_completed", onNamed);
+      source.addEventListener("operation_failed", onNamed);
+      source.onerror = () => {
+        source?.close();
+        source = null;
+        if (cancelled) return;
+        if (finished) {
+          if (!received) setStreamFailed(true);
+          return;
+        }
+        const delay = nextReconnectDelayMs(attempt);
+        attempt += 1;
+        timer = window.setTimeout(attach, delay);
+      };
     };
-    const onNamed = (message: MessageEvent<string>) => {
-      const event = ingest(message.data);
-      if (
-        event &&
-        (event.type === "operation_completed" ||
-          event.type === "operation_failed")
-      ) {
-        setOperation((current) =>
-          current
-            ? {
-                ...current,
-                status:
-                  event.type === "operation_completed" ? "completed" : "failed",
-                success: event.type === "operation_completed",
-                message: event.message,
-                completedAt: event.timestamp,
-                serverStatus: event.serverStatus
-                  ? (event.serverStatus as ServerStatus)
-                  : current.serverStatus,
-              }
-            : current,
-        );
-        if (!alreadyTerminal) void refreshAfterTerminal();
-      }
+
+    attach();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+      source?.close();
     };
-    source.addEventListener("progress", onNamed);
-    source.addEventListener("operation_completed", onNamed);
-    source.addEventListener("operation_failed", onNamed);
-    source.onerror = () => {
-      if (!alreadyTerminal) return;
-      source.close();
-      if (!received) setStreamFailed(true);
-    };
-    return () => source.close();
   }, [operationId, refreshAfterTerminal, serverId]);
 
   useEffect(() => {
@@ -192,7 +229,7 @@ export function useOperationRunner({
     if (status !== "deploying" && !lock.lockActive) return;
     let cancelled = false;
     const tick = async () => {
-      const result = await refreshCurrentOperationAction(serverId);
+      const result = await loadCurrentOperationFromBrowser(serverId);
       if (cancelled || !result.ok || !result.data) return;
       setOperation(result.data);
     };
@@ -212,7 +249,7 @@ export function useOperationRunner({
     setError(null);
     setStreamFailed(false);
     setBusyAction(action);
-    const result = await startServerOperationAction(serverId, action);
+    const result = await startServerOperationFromBrowser(serverId, action);
     setBusyAction(null);
     if (!result.ok) {
       setError(result.error);
@@ -228,7 +265,7 @@ export function useOperationRunner({
     setError(null);
     setStreamFailed(false);
     setBusyAction("s3_restore");
-    const result = await restoreS3BackupAction(serverId, objectKey);
+    const result = await restoreS3BackupFromBrowser(serverId, objectKey);
     setBusyAction(null);
     if (!result.ok) {
       setError(result.error);
@@ -244,7 +281,7 @@ export function useOperationRunner({
     setError(null);
     setStreamFailed(false);
     setBusyMirror(mirror);
-    const result = await applyAptMirrorAction(serverId, mirror);
+    const result = await applyAptMirrorFromBrowser(serverId, mirror);
     setBusyMirror(null);
     if (!result.ok) {
       setError(result.error);
@@ -257,17 +294,9 @@ export function useOperationRunner({
   }
 
   async function refreshAfterForceStop() {
-    const [current, lockResult, logsResult, serverResult] = await Promise.all([
-      refreshCurrentOperationAction(serverId),
-      refreshDeploymentLockAction(serverId),
-      refreshOperationLogsAction(serverId),
-      refreshServerAction(serverId),
-    ]);
+    const current = await loadCurrentOperationFromBrowser(serverId);
     if (current.ok) setOperation(current.data);
-    if (lockResult.ok) setLock(lockResult.data);
-    if (logsResult.ok) setLogs(logsResult.data);
-    if (serverResult.ok) setStatus(serverResult.data.status);
-    await onSettledRef.current?.();
+    await applySnapshot();
   }
 
   return {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
@@ -16,11 +16,11 @@ import {
   useActivityTray,
 } from "@/modules/servers/activity-store";
 import {
-  clearFailedOperationsAction,
-  dismissFailedOperationAction,
-  refreshOperationInboxAction,
-  refreshOperationJournalAction,
-} from "@/modules/servers/actions";
+  clearFailedOperationsFromBrowser,
+  dismissFailedOperationFromBrowser,
+  loadOperationInboxFromBrowser,
+  loadOperationJournalFromBrowser,
+} from "@/modules/servers/operation-client";
 import {
   OPERATION_STATUS_TONE,
   isActiveOperation,
@@ -33,10 +33,12 @@ import {
   parseOperationInboxPayload,
 } from "@/modules/servers/operation-inbox";
 import {
+  lastEventSequence,
   mergeOperationEvents,
+  nextReconnectDelayMs,
   operationEventsUrl,
   parseOperationEvent,
-} from "@/modules/servers/use-operation-runner";
+} from "@/modules/servers/operation-events";
 import { confirm } from "@/shared/feedback";
 import { Badge, StatusDot } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -59,22 +61,29 @@ function mergeById(
 function ActivityConsole({ item }: { item: OperationInboxItem }) {
   const t = useTranslations("shell");
   const [events, setEvents] = useState<OperationStreamEvent[]>([]);
+  const itemRef = useRef(item);
+  itemRef.current = item;
 
   useEffect(() => {
     let cancelled = false;
-    void refreshOperationJournalAction(item.serverId, item.operationId).then(
+    let source: EventSource | null = null;
+    let timer: number | null = null;
+    let attempt = 0;
+    const after = { current: "0" };
+    void loadOperationJournalFromBrowser(item.serverId, item.operationId).then(
       (result) => {
         if (!cancelled && result.ok) {
           setEvents(mergeOperationEvents([], result.data.events));
+          after.current = lastEventSequence(result.data.events);
         }
       },
-    );
-    const source = new EventSource(
-      operationEventsUrl(item.serverId, item.operationId),
     );
     const ingest = (raw: string) => {
       const event = parseOperationEvent(raw);
       if (!event) return;
+      if (event.sequence && event.sequence !== "seed") {
+        after.current = event.sequence;
+      }
       setEvents((current) => mergeOperationEvents(current, [event]));
       if (event.type === "operation_failed") {
         markActivityTerminal(item.operationId, "failed", event.message);
@@ -82,19 +91,41 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
         markActivityTerminal(item.operationId, "completed", event.message);
       }
     };
-    source.onmessage = (message) => ingest(message.data);
-    source.addEventListener("progress", (message: MessageEvent<string>) =>
-      ingest(message.data),
-    );
-    source.addEventListener("operation_completed", (message: MessageEvent<string>) =>
-      ingest(message.data),
-    );
-    source.addEventListener("operation_failed", (message: MessageEvent<string>) =>
-      ingest(message.data),
-    );
+    const attach = () => {
+      if (cancelled) return;
+      source = new EventSource(
+        operationEventsUrl(item.serverId, item.operationId, after.current),
+      );
+      source.onopen = () => {
+        attempt = 0;
+      };
+      source.onmessage = (message) => ingest(message.data);
+      source.addEventListener("progress", (message: MessageEvent<string>) =>
+        ingest(message.data),
+      );
+      source.addEventListener(
+        "operation_completed",
+        (message: MessageEvent<string>) => ingest(message.data),
+      );
+      source.addEventListener(
+        "operation_failed",
+        (message: MessageEvent<string>) => ingest(message.data),
+      );
+      source.onerror = () => {
+        source?.close();
+        source = null;
+        if (cancelled) return;
+        if (!isActiveOperation(itemRef.current)) return;
+        const delay = nextReconnectDelayMs(attempt);
+        attempt += 1;
+        timer = window.setTimeout(attach, delay);
+      };
+    };
+    attach();
     return () => {
       cancelled = true;
-      source.close();
+      if (timer != null) window.clearTimeout(timer);
+      source?.close();
     };
   }, [item.operationId, item.serverId]);
 
@@ -161,7 +192,7 @@ export function ActivityTray() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const result = await refreshOperationInboxAction();
+      const result = await loadOperationInboxFromBrowser();
       if (!cancelled && result.ok) setInbox(result.data);
     }
     void load();
@@ -180,7 +211,7 @@ export function ActivityTray() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      void refreshOperationInboxAction().then((result) => {
+      void loadOperationInboxFromBrowser().then((result) => {
         if (result.ok) setInbox(result.data);
       });
     }, remaining > 0 ? 8000 : 20000);
@@ -206,18 +237,18 @@ export function ActivityTray() {
     ) {
       return;
     }
-    const result = await clearFailedOperationsAction();
+    const result = await clearFailedOperationsFromBrowser();
     if (!result.ok) return;
     dismissActivityOperations(failed.map((item) => item.operationId));
-    const inboxResult = await refreshOperationInboxAction();
+    const inboxResult = await loadOperationInboxFromBrowser();
     if (inboxResult.ok) setInbox(inboxResult.data);
   }
 
   async function dismissOne(operationId: string) {
-    const result = await dismissFailedOperationAction(operationId);
+    const result = await dismissFailedOperationFromBrowser(operationId);
     if (!result.ok) return;
     dismissActivityOperations([operationId]);
-    const inboxResult = await refreshOperationInboxAction();
+    const inboxResult = await loadOperationInboxFromBrowser();
     if (inboxResult.ok) setInbox(inboxResult.data);
   }
 

@@ -22,7 +22,7 @@ import {
   mergeOperationEvents,
   operationEventsUrl,
   parseOperationEvent,
-} from "@/modules/servers/use-operation-runner";
+} from "@/modules/servers/operation-events";
 import type {
   OperationStreamEvent,
   ServerOperation,

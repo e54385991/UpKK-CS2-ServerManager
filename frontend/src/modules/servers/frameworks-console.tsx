@@ -5,7 +5,11 @@ import { useTranslations } from "next-intl";
 import { FrameworksPanel } from "@/modules/servers/frameworks-panel";
 import { OperationLiveLog } from "@/modules/servers/operation-live-log";
 import { useOperationRunner } from "@/modules/servers/use-operation-runner";
-import type { FrameworkId } from "@/modules/servers/frameworks";
+import {
+  FRAMEWORK_IDS,
+  frameworkIdForAction,
+  type FrameworkId,
+} from "@/modules/servers/frameworks";
 import type {
   DeploymentLock,
   DeploymentLogEntry,
@@ -48,13 +52,21 @@ export function FrameworksConsole({
     initialLock,
   });
   const emptyHint = useMemo(() => t("frameworks.streamEmpty"), [t]);
+  const installedKeys = useMemo(() => {
+    const keys = new Set(installedFrameworkKeys);
+    if (operation?.status === "completed") {
+      const id = frameworkIdForAction(operation.action);
+      if (id) keys.add(id);
+    }
+    return FRAMEWORK_IDS.filter((id) => keys.has(id));
+  }, [installedFrameworkKeys, operation]);
 
   return (
     <div className="space-y-6">
       <FrameworksPanel
         running={running}
         busyAction={busyAction}
-        installedKeys={installedFrameworkKeys}
+        installedKeys={installedKeys}
         onRun={runAction}
       />
       {error ? (

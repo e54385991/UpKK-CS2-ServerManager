@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { openLiveTerminal } from "@/modules/console/open-live-terminal";
-import { refreshCurrentOperationAction } from "@/modules/servers/actions";
+import { loadCurrentOperationFromBrowser } from "@/modules/servers/operation-client";
 import {
   isActiveOperation,
   type ServerOperation,
@@ -132,7 +132,7 @@ export function GameUpdatesConsole({
   }
 
   async function start(action: GameUpdateAction) {
-    const current = await refreshCurrentOperationAction(serverId);
+    const current = await loadCurrentOperationFromBrowser(serverId);
     const active = current.ok ? current.data : null;
     if (isActiveOperation(active) && active) {
       setBanner(t("busy", { action: active.action }));
