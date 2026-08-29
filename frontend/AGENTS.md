@@ -74,6 +74,27 @@ experimental flags required:
 
 Do not reintroduce blocking, all-or-nothing server waits at the layout level.
 
+### Caching & navigation: why `cacheComponents` is off
+
+`cacheComponents` and `partialPrefetching` are intentionally disabled in
+`next.config.ts`. Evidence-based decision:
+
+- Every console route is authenticated and locale is read from the `locale`
+  cookie in the root layout, so the shell is inherently per-session dynamic.
+  Enabling `cacheComponents` fails the production build during prerender
+  ("uncached or runtime data during prerendering" for the layout's `cookies()`
+  reads), and would require wrapping the session/i18n reads in Suspense or
+  `use cache` app-wide for little benefit on a fully-dynamic console.
+- The agreed plan gates `cacheComponents` behind an upstream memory-growth
+  report (a hard memory stress-test gate) that is unmet.
+
+Non-blocking, instant navigation is already delivered without these flags via
+the shared App Shell (persistent sidebar/topbar), per-route `loading.tsx`
+skeletons, `<Suspense>`-streamed server data, and `<Link>` prefetch. Verified
+with Lighthouse: Performance 100 and CLS 0 on `/login` and `/overview`. Revisit
+`cacheComponents` once it is stable for cookie-driven apps and the memory gate
+is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-partial-prefetching.md`.
+
 ## Backend contract & auth
 
 - **All** browser→backend traffic is proxied by Next `rewrites` in

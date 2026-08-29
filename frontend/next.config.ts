@@ -18,6 +18,13 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   typedRoutes: true,
+  // cacheComponents / partialPrefetching are intentionally OFF. See
+  // frontend/AGENTS.md ("Caching & navigation"): every route is authenticated
+  // and locale-cookie driven, so the shell is inherently dynamic and gains
+  // little from a prerendered App Shell; enabling the flags fails prerender for
+  // the cookie reads, and the upstream cacheComponents memory-growth gate from
+  // the plan is unmet. Non-blocking navigation is delivered via the shared App
+  // Shell + per-route loading.tsx + Suspense + <Link> prefetch.
   // This app lives in a monorepo alongside the FastAPI backend; pin the
   // Turbopack root to this package so Next does not infer the repository root.
   turbopack: {

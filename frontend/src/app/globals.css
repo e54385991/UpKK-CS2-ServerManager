@@ -22,10 +22,11 @@
   --color-line: #232936;
   --color-line-strong: #303747;
 
-  /* Text ramp. */
+  /* Text ramp. `fg-subtle` is tuned to clear WCAG AA (4.5:1) for small text on
+     the graphite surfaces. */
   --color-fg: #e6e9ef;
-  --color-fg-muted: #9aa3b2;
-  --color-fg-subtle: #6b7484;
+  --color-fg-muted: #a3abba;
+  --color-fg-subtle: #8b94a6;
 
   /* Cool cyan primary. */
   --color-primary: #22d3ee;

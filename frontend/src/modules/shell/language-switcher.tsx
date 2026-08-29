@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Languages, Check } from "lucide-react";
 import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, type Locale } from "@/i18n/config";
 import { setCookie } from "@/shared/lib/cookie";
@@ -16,6 +16,7 @@ import { cn } from "@/shared/lib/cn";
 export function LanguageSwitcher() {
   const active = useLocale();
   const router = useRouter();
+  const t = useTranslations("shell");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -42,6 +43,8 @@ export function LanguageSwitcher() {
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={t("language")}
+        title={t("language")}
         className="flex size-9 items-center justify-center rounded-md border border-line bg-surface text-fg-muted transition-colors hover:bg-surface-overlay hover:text-fg"
       >
         <Languages className="size-4" />
