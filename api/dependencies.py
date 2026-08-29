@@ -17,6 +17,7 @@ from modules import (
     get_db,
 )
 from modules.auth import WEB_SESSION_COOKIE, _get_active_user_for_token, optional_oauth2_scheme
+from modules.database import async_session_maker
 from services.container import ServiceContainer
 from services.maintenance_lock import maintenance_lock_service
 from services.ssh_manager import SSHManager
@@ -32,30 +33,46 @@ WebAdmin = Annotated[User, Depends(get_current_web_admin)]
 async def get_bearer_or_cookie_user(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(optional_oauth2_scheme)],
-    db: DatabaseSession,
 ) -> User:
     """Authenticate EventSource/SSE with Bearer or the first-party session cookie.
 
     ``EventSource`` cannot set an ``Authorization`` header. The Next.js rewrite
     forwards the HttpOnly session cookie, so GET streams accept either.
     Mutations still require Bearer via ``ActiveUser``.
+
+    The user lookup uses a short-lived session and does **not** depend on
+    ``get_db``. FastAPI keeps yield-dependencies open until a
+    ``StreamingResponse`` finishes; a request-scoped session here would pin a
+    pool connection for the whole CounterStrikeSharp install (or inbox stream)
+    and make the rest of the console look down.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if credentials is not None:
-        user = await _get_active_user_for_token(credentials.credentials, db)
+    token = credentials.credentials if credentials is not None else request.cookies.get(
+        WEB_SESSION_COOKIE
+    )
+    if not token:
+        raise credentials_exception
+    async with async_session_maker() as db:
+        user = await _get_active_user_for_token(token, db)
         if user is None:
             raise credentials_exception
+        db.expunge(user)
         return user
 
-    token = request.cookies.get(WEB_SESSION_COOKIE)
-    user = await _get_active_user_for_token(token, db) if token else None
-    if user is None:
-        raise credentials_exception
-    return user
+
+async def close_request_session(db: AsyncSession | None) -> None:
+    """Return a request-scoped session to the pool before a long-lived stream."""
+    if db is None:
+        return
+    try:
+        if db.is_active:
+            await db.commit()
+    finally:
+        await db.close()
 
 
 StreamUser = Annotated[User, Depends(get_bearer_or_cookie_user)]

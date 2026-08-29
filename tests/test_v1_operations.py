@@ -86,6 +86,10 @@ def _client(*, monkeypatch, admin: bool = False):
         "api.routes.v1.operations.require_server_access",
         AsyncMock(return_value=server),
     )
+    monkeypatch.setattr(
+        "api.routes.v1.operations._authorize_stream_server",
+        AsyncMock(return_value=None),
+    )
     return TestClient(app), server, user
 
 

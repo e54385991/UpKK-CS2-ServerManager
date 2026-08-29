@@ -20,7 +20,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import ActiveUser, AdminUser, DatabaseSession
+from api.dependencies import ActiveUser, AdminUser, DatabaseSession, close_request_session
 from modules import (
     AIConversation,
     AIConversationCreate,
@@ -895,6 +895,7 @@ async def ai_run_event_stream(
     current_user: ActiveUser = None,
 ) -> StreamingResponse:
     await _run_for_user(db, current_user, run_id)
+    await close_request_session(db)
 
     async def event_source():
         queue = await ai_event_hub.subscribe_queue(run_id)

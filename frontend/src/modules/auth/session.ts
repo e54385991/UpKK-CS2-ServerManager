@@ -29,7 +29,7 @@ export async function getSession(): Promise<SessionUser | null> {
     const response = await fetch(`${internalApiUrl()}/api/v1/auth/me`, {
       headers: { authorization: `Bearer ${token}` },
       cache: "no-store",
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return null;
     const data = (await response.json()) as SessionUserDto;

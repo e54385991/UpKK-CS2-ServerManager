@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from api.dependencies import ActiveUser, DatabaseSession, StreamUser, require_server_access
 from api.routes.actions.deployment import cancel_deployment
 from modules import DeploymentLog
+from modules.database import async_session_maker
 from services.ai_security import redact_sensitive_text
 from services.maintenance_lock import maintenance_lock_service
 from services.redis_manager import redis_manager
@@ -70,6 +71,12 @@ def _encode_sse_event(event: dict[str, Any]) -> str:
     event_type = event.get("type") or "progress"
     data = json.dumps(event, ensure_ascii=False, separators=(",", ":"), default=str)
     return f"id: {sequence}\nevent: {event_type}\ndata: {data}\n\n"
+
+
+async def _authorize_stream_server(server_id: int, user) -> None:
+    """Check access with a short-lived session, then drop it before SSE starts."""
+    async with async_session_maker() as db:
+        await require_server_access(db, server_id, user)
 
 
 def _to_journal_event(event: dict[str, Any]) -> OperationJournalEvent:
@@ -232,11 +239,10 @@ async def stream_server_operation_events(
     server_id: int,
     operation_id: UUID,
     request: Request,
-    db: DatabaseSession,
     current_user: StreamUser,
     after: int = Query(default=0, ge=0),
 ) -> StreamingResponse:
-    await require_server_access(db, server_id, current_user)
+    await _authorize_stream_server(server_id, current_user)
     op_id = str(operation_id)
     record = await server_operation_hub.get(op_id)
     if record is None or int(record["server_id"]) != server_id:

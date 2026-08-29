@@ -12,6 +12,7 @@ from sqlmodel import select
 
 from api.dependencies import ActiveUser, DatabaseSession, StreamUser
 from modules import Server
+from modules.database import async_session_maker
 from services.server_operation_hub import (
     ACTIVE_STATUSES,
     FAILED_RETENTION_SECONDS,
@@ -22,6 +23,12 @@ from .operations import to_view
 from .schemas import ActionResult, OperationInboxItem, OperationInboxView
 
 router = APIRouter(prefix="/api/v1/operations", tags=["v1-operations"])
+
+
+async def _list_inbox_servers(current_user) -> list[tuple[int, str]]:
+    """Resolve visible servers, then release the session before SSE starts."""
+    async with async_session_maker() as db:
+        return await _accessible_servers(db, current_user)
 
 
 async def _accessible_servers(db, current_user) -> list[tuple[int, str]]:
@@ -98,11 +105,10 @@ async def list_operation_inbox(
 @router.get("/inbox/events")
 async def stream_operation_inbox(
     request: Request,
-    db: DatabaseSession,
     current_user: StreamUser,
 ) -> StreamingResponse:
     """Live inbox snapshots for the top-right tray. SSE, not a second WebSocket."""
-    servers = await _accessible_servers(db, current_user)
+    servers = await _list_inbox_servers(current_user)
 
     async def event_source():
         yield ": connected\n\n"
