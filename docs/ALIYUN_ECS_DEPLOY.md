@@ -4,15 +4,15 @@
 
 1. 选择 Ubuntu 24.04，系统盘建议 100 GiB 以上。
 
-![步骤 1](../images/aliyun-deploy/1.png)
+![步骤 1](../images/aliyun-deploy/1.webp)
 
 2. 登录凭证选自定义密码，登录名选 root。
 
-![步骤 2](../images/aliyun-deploy/2.png)
+![步骤 2](../images/aliyun-deploy/2.webp)
 
 3. 安全组放行 UDP（至少 27015），来源 0.0.0.0/0。
 
-![步骤 3](../images/aliyun-deploy/3.png)
+![步骤 3](../images/aliyun-deploy/3.webp)
 
 4. 在面板打开「服务器 → 主机初始化」。
 

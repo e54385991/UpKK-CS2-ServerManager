@@ -54,7 +54,9 @@ const nextConfig: NextConfig = {
         // browser only ever sees the Next origin (first-party cookies, no CORS).
         { source: "/api/:path*", destination: `${INTERNAL_API_URL}/api/:path*` },
         { source: "/health", destination: `${INTERNAL_API_URL}/health` },
-        // Tutorial / help screenshots still live on FastAPI `/static`.
+        // Help / legacy assets on FastAPI `/static`. Tutorial screenshots
+        // ship from `frontend/public/tutorial/` so the console image is
+        // self-contained and does not depend on the API static tree.
         { source: "/static/:path*", destination: `${INTERNAL_API_URL}/static/:path*` },
       ],
       afterFiles: [],

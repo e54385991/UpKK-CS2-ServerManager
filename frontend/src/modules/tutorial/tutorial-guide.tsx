@@ -5,7 +5,8 @@ import { PageHeader } from "@/shared/ui/page-header";
 import { Card, CardContent } from "@/shared/ui/card";
 import { cn } from "@/shared/lib/cn";
 
-const TUTORIAL_IMAGE_VERSION = "20260831";
+const TUTORIAL_IMAGE_VERSION = "20260831b";
+const TUTORIAL_IMAGE_BASE = "/tutorial/deploy";
 
 const TUTORIAL_STEPS = [
   { step: 1, title: "step1Title", body: "step1Body" },
@@ -57,7 +58,7 @@ export async function TutorialGuide({ signedIn }: { signedIn: boolean }) {
             <Card>
               <CardContent className="p-3 sm:p-4">
                 <Image
-                  src={`/static/images/aliyun-deploy/${step}.webp?v=${TUTORIAL_IMAGE_VERSION}`}
+                  src={`${TUTORIAL_IMAGE_BASE}/${step}.webp?v=${TUTORIAL_IMAGE_VERSION}`}
                   alt={t("stepAlt", { step })}
                   width={1280}
                   height={720}

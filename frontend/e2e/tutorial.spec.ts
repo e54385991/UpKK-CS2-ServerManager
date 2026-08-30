@@ -12,7 +12,7 @@ test("deployment tutorial is public and shows the illustrated steps", async ({
     }),
   ).toBeVisible();
   await expect(
-    page.locator('img[src*="/static/images/aliyun-deploy/1.webp"]'),
+    page.locator('img[src*="/tutorial/deploy/1.webp"]'),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: /返回登录|Back to sign in/ })).toBeVisible();
 

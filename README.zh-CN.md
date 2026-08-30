@@ -24,7 +24,7 @@ CS2 Server Manager 是一个现代化的 **Counter-Strike 2 多服务器 Web 管
 
 ### 控制台
 
-![总览](images/console/overview.webp)
+![总览](images/console/zh-CN/overview.webp)
 
 总览页展示服务器规模、运行状态、需要关注的告警、SSH 连接池，以及部署教程入口。
 在页面之间切换时，左侧导航会保持可见。
@@ -47,31 +47,31 @@ CS2 Server Manager 是一个现代化的 **Counter-Strike 2 多服务器 Web 管
 
 ### 服务器与操作中心
 
-![服务器列表](images/console/servers.webp)
+![服务器列表](images/console/zh-CN/servers.webp)
 
 服务器列表展示状态、A2S 信息、磁盘占用和 SSH 健康度。可以按状态筛选、批量安装
 插件或发送命令，再进入单台主机的工作区。
 
-![操作中心](images/console/operations.webp)
+![操作中心](images/console/zh-CN/operations.webp)
 
 操作中心负责启动、停止、部署和更新。长任务进入投递队列，进度在实时日志或右上角
 活动托盘里查看，不必停在表单等待 SteamCMD。
 
-![活动托盘](images/console/activity-tray.webp)
+![活动托盘](images/console/zh-CN/activity-tray.webp)
 
 ### 插件与文件
 
-![插件中心](images/console/plugins.webp)
+![插件中心](images/console/zh-CN/plugins.webp)
 
 浏览插件市场，从卡片或 GitHub 仓库安装，安装过程同样出现在活动托盘。
 
-![文件管理](images/console/files.webp)
+![文件管理](images/console/zh-CN/files.webp)
 
 文件管理通过 SSH 浏览游戏目录，支持快捷目录、上传、整夹上传、解压、复制粘贴和搜索。
 
 ### AI 助手
 
-![AI 助手](images/console/assistant.webp)
+![AI 助手](images/console/zh-CN/assistant.webp)
 
 助手可以针对已选服务器做排查和建议。写操作需要先确认。模型在系统设置或个人设置中配置。
 

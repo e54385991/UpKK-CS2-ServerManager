@@ -28,7 +28,7 @@ services from competing with the game process.
 
 ### Console
 
-![Overview](images/console/overview.webp)
+![Overview](images/console/en-US/overview.webp)
 
 The overview shows fleet size, running state, items that need attention, SSH
 pool usage, and a link to the illustrated deployment tutorial. The left
@@ -56,35 +56,35 @@ navigation stays visible while you move between pages.
 
 ### Servers and operations
 
-![Servers](images/console/servers.webp)
+![Servers](images/console/en-US/servers.webp)
 
 The servers list shows status, A2S info, disk usage, and SSH health. You can
 filter the fleet, run bulk plugin installs or commands, then open a host
 workspace.
 
-![Operations center](images/console/operations.webp)
+![Operations center](images/console/en-US/operations.webp)
 
 The operations center starts, stops, deploys, and updates a host. Long jobs
 go into the delivery queue. Watch progress in the live log or the top-right
 activity tray—you do not wait on the form while SteamCMD runs.
 
-![Activity tray](images/console/activity-tray.webp)
+![Activity tray](images/console/en-US/activity-tray.webp)
 
 ### Plugins and files
 
-![Plugin marketplace](images/console/plugins.webp)
+![Plugin marketplace](images/console/en-US/plugins.webp)
 
 Browse the plugin market, install from a card or a GitHub repository, and
 follow the same replayable log in the activity tray.
 
-![File manager](images/console/files.webp)
+![File manager](images/console/en-US/files.webp)
 
 The file manager browses the game directory over SSH, with shortcuts, upload,
 folder upload, extract, copy/paste, and search.
 
 ### AI assistant
 
-![AI assistant](images/console/assistant.webp)
+![AI assistant](images/console/en-US/assistant.webp)
 
 The assistant can inspect a selected server and propose operational steps.
 Write actions require approval. Configure the model in system or personal
