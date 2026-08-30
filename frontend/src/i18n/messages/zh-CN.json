@@ -1149,6 +1149,9 @@
     "a2sLogs": "A2S 检查日志",
     "noA2sLogs": "还没有 A2S 检查日志。",
     "refreshLogs": "刷新日志",
+    "logPageInfo": "最近 {from}–{to} / 共 {total} 条",
+    "logPrev": "上一页",
+    "logNext": "下一页",
     "diagnosticBannerTitle": "建议做插件隔离诊断",
     "diagnosticIdle": "当前没有推荐的崩溃隔离。需要时可以先生成计划，再执行或恢复。",
     "diagnosticTitle": "插件诊断",
@@ -1277,6 +1280,7 @@
     "failed": "地图操作失败。",
     "statusTitle": "MapChooser 状态",
     "statusHelp": "管理地图池需要 SSH、CounterStrikeSharp 和 MapChooser。SSH 断开时页面仍可打开。",
+    "pageHelp": "管理 CS2-Upkk-PanelPLG-Mapchooser 地图池，并快速添加 Steam 创意工坊地图。",
     "sshOk": "SSH 正常",
     "sshDown": "SSH 断开",
     "sshDownHelp": "现在连不上这台主机。请先用上方的「手动重连」。地图池改动需要 SSH，远程同步地址仍可先保存。",
@@ -1329,6 +1333,11 @@
       "kz": "KZ",
       "ze": "ZE"
     },
+    "presetNotes": {
+      "official": "扫描 cs2/game/csgo/maps/*.vpk，自动生成配置，无需填写工坊 ID 或 VPK 名称。",
+      "kz": "在线拉取维护中的 KZ 地图池，并应用所需的时间限制设置。",
+      "ze": "在线拉取维护中的僵尸逃跑地图池。"
+    },
     "presetConfirm": {
       "official": "扫描游戏目录里的官方 VPK，并整表替换当前地图池？",
       "kz": "下载 KZ 公共地图池，并改写部分 MapChooser 设置？",
@@ -1345,6 +1354,10 @@
     "syncStatus": "上次：{status}（{count} 次）",
     "pluginTitle": "MapChooser 配置",
     "pluginHelp": "这些字段写入 config.json。未知字段会保留。",
+    "pluginConfigPath": "插件配置：",
+    "pluginConfigWillCreate": "尚未生成 config.json，保存时将根据插件默认值创建。",
+    "unsupportedFields": "以下复杂配置会保持原样，暂不支持在此编辑：",
+    "pluginReloadHint": "保存后请重新加载插件或重启服务器，以确保全部设置生效。",
     "savePlugin": "保存插件配置",
     "fields": {
       "workshopId": "创意工坊 ID / 链接",
@@ -1364,6 +1377,92 @@
       "mapChange": "切图",
       "display": "显示",
       "other": "其他"
+    },
+    "pluginFields": {
+      "VoteStartTime": {
+        "label": "投票开始提前量（分钟）",
+        "description": "在地图时间结束前多少分钟开始选图投票。"
+      },
+      "AllowExtend": {
+        "label": "允许延长当前地图",
+        "description": "允许玩家在投票中选择延长当前地图。"
+      },
+      "ExtendTimeStep": {
+        "label": "每次延长时间（分钟）",
+        "description": "每次延长当前地图时增加的时间。"
+      },
+      "ExtendLimit": {
+        "label": "最多延长次数",
+        "description": "单张地图允许被延长的最大次数。"
+      },
+      "ExcludeMaps": {
+        "label": "排除最近地图数",
+        "description": "从候选项中排除最近游玩过的地图数量。"
+      },
+      "IncludeMaps": {
+        "label": "投票候选地图数",
+        "description": "一次选图投票中包含的地图数量。"
+      },
+      "IncludeCurrent": {
+        "label": "候选项包含当前地图",
+        "description": "允许当前地图出现在投票候选项中。"
+      },
+      "DontChangeRTV": {
+        "label": "RTV 后不立即换图",
+        "description": "RTV 投票完成后保留插件的延后换图流程。"
+      },
+      "VoteDuration": {
+        "label": "投票持续时间（秒）",
+        "description": "选图投票保持开放的时间，最大 60 秒。"
+      },
+      "IgnoreSpec": {
+        "label": "忽略观战玩家",
+        "description": "计算投票人数时不计入观战玩家。"
+      },
+      "AllowRtv": {
+        "label": "允许 RTV",
+        "description": "允许玩家请求提前进行换图投票。"
+      },
+      "UseGameTimeLimit": {
+        "label": "使用游戏时间限制",
+        "description": "使用游戏自身的地图时间限制来触发换图。"
+      },
+      "RTVPercent": {
+        "label": "RTV 通过比例",
+        "description": "RTV 所需玩家比例，取值范围为 0 到 1。"
+      },
+      "RTVDelay": {
+        "label": "RTV 开放延迟（分钟）",
+        "description": "地图开始后等待多少分钟才允许 RTV。"
+      },
+      "EnforceTimeLimit": {
+        "label": "强制执行时间限制",
+        "description": "到达时间限制时由插件执行换图流程。"
+      },
+      "ChangeMapUse_host_workshop_map": {
+        "label": "使用 host_workshop_map 换图",
+        "description": "切换创意工坊地图时使用 host_workshop_map 命令。"
+      },
+      "DisplayHudTimeleftRemaining": {
+        "label": "HUD 倒计时显示阈值（秒）",
+        "description": "剩余时间低于该秒数时显示 HUD 倒计时；0 表示关闭。"
+      },
+      "RunOfFVote": {
+        "label": "启用决选投票",
+        "description": "首轮结果未达到要求时发起决选投票。"
+      },
+      "VotePercent": {
+        "label": "投票通过比例",
+        "description": "选项获胜所需比例，取值范围为 0 到 1。"
+      },
+      "AutoDownload": {
+        "label": "自动下载地图",
+        "description": "自动处理地图下载。"
+      },
+      "VoteStartSound": {
+        "label": "投票开始音效",
+        "description": "投票开始时播放的声音资源路径。"
+      }
     }
   },
   "s3Backups": {
@@ -1628,7 +1727,7 @@
     "create": "添加任务",
     "creating": "添加中…",
     "created": "任务已添加。",
-    "toggle": "开关",
+    "enabled": "启用任务",
     "delete": "删除",
     "failed": "计划任务操作失败。",
     "actions": {

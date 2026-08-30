@@ -139,6 +139,7 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
       ) : null}
 
       <StatusBar workspace={workspace} />
+      <p className="text-sm text-fg-muted">{t("pageHelp")}</p>
 
       <form
         onSubmit={(event) => {
@@ -213,32 +214,36 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
               </Button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-fg-subtle">{t("presetsTitle")}</span>
-              {MAP_PRESETS.map((preset) => (
-                <Button
-                  key={preset}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={!canMutate}
-                  onClick={() => {
-                    void (async () => {
-                      if (!(await confirm(t(`presetConfirm.${preset}`)))) return;
-                      void run(`preset:${preset}`, () =>
-                        applyMapPresetAction(serverId, {
-                          preset,
-                          expectedRevision: workspace.revision ?? "",
-                          pluginConfigExpectedRevision:
-                            workspace.pluginConfig?.revision || undefined,
-                        }),
-                      );
-                    })();
-                  }}
-                >
-                  {t(`presets.${preset}`)}
-                </Button>
-              ))}
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-fg-subtle">{t("presetsTitle")}</span>
+                {MAP_PRESETS.map((preset) => (
+                  <Button
+                    key={preset}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!canMutate}
+                    title={t(`presetNotes.${preset}`)}
+                    onClick={() => {
+                      void (async () => {
+                        if (!(await confirm(t(`presetConfirm.${preset}`)))) return;
+                        void run(`preset:${preset}`, () =>
+                          applyMapPresetAction(serverId, {
+                            preset,
+                            expectedRevision: workspace.revision ?? "",
+                            pluginConfigExpectedRevision:
+                              workspace.pluginConfig?.revision || undefined,
+                          }),
+                        );
+                      })();
+                    }}
+                  >
+                    {t(`presets.${preset}`)}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-fg-subtle">{t("presetsHelp")}</p>
             </div>
 
             <details className="rounded-md border border-line px-3 py-2">
@@ -291,32 +296,25 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
             ) : visibleMaps.length === 0 ? (
               <p className="text-sm text-fg-muted">{t("noMatch")}</p>
             ) : (
-              <ul className="max-h-[28rem] divide-y divide-line overflow-y-auto rounded-md border border-line">
+              <ul
+                className="grid max-h-[36rem] grid-cols-[repeat(auto-fill,minmax(12.5rem,1fr))] gap-2 overflow-y-auto"
+                data-testid="map-pool"
+              >
                 {visibleMaps.map((entry) => (
-                  <li
-                    key={`${entry.name}:${entry.workshopId}`}
-                    className="flex items-center gap-3 px-3 py-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-fg">{entry.name}</p>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-fg-subtle">
-                        {entry.workshopId ? (
-                          <Badge tone="info">ID {entry.workshopId}</Badge>
-                        ) : (
-                          <Badge tone="neutral">{t("official")}</Badge>
-                        )}
-                        {entry.minPlayers ? (
-                          <span>{t("minPlayers", { count: entry.minPlayers })}</span>
-                        ) : null}
-                        {entry.onlyNominate ? <span>{t("nominateOnly")}</span> : null}
-                      </div>
-                    </div>
-                    <Switch
-                      id={`map-enabled-${entry.name}-${entry.workshopId || "official"}`}
-                      checked={entry.enabled}
-                      disabled={!canMutate}
-                      label={t("enabled")}
-                      onCheckedChange={(enabled) => {
+                  <li key={`${entry.name}:${entry.workshopId}`}>
+                    <MapTile
+                      entry={entry}
+                      canMutate={canMutate}
+                      enabledLabel={t("enabled")}
+                      officialLabel={t("official")}
+                      nominateOnlyLabel={t("nominateOnly")}
+                      minPlayersLabel={
+                        entry.minPlayers
+                          ? t("minPlayers", { count: entry.minPlayers })
+                          : null
+                      }
+                      removeLabel={t("remove")}
+                      onToggle={(enabled) => {
                         void run(`toggle:${entry.name}`, () =>
                           updateMapEnabledAction(serverId, {
                             ...identity(entry),
@@ -324,16 +322,13 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
                           }),
                         );
                       }}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      disabled={!canMutate}
-                      aria-label={t("remove")}
-                      onClick={() => {
+                      onRemove={() => {
                         void (async () => {
-                          if (!(await confirm(t("removeConfirm", { name: entry.name })))) {
+                          if (
+                            !(await confirm(
+                              t("removeConfirm", { name: entry.name }),
+                            ))
+                          ) {
                             return;
                           }
                           void run(`delete:${entry.name}`, () =>
@@ -341,9 +336,7 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
                           );
                         })();
                       }}
-                    >
-                      <Trash2 />
-                    </Button>
+                    />
                   </li>
                 ))}
               </ul>
@@ -477,6 +470,23 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
                 }}
               >
                 <p className="text-sm text-fg-muted">{t("pluginHelp")}</p>
+                {workspace.pluginConfigPath ? (
+                  <p className="text-xs text-fg-subtle">
+                    {t("pluginConfigPath")}{" "}
+                    <code className="break-all">{workspace.pluginConfigPath}</code>
+                  </p>
+                ) : null}
+                {!workspace.pluginConfig.fileExists ? (
+                  <p className="text-sm text-fg-muted">{t("pluginConfigWillCreate")}</p>
+                ) : null}
+                {workspace.pluginConfig.unsupportedFields.length > 0 ? (
+                  <p className="text-sm text-warn">
+                    {t("unsupportedFields")}{" "}
+                    <code className="break-all">
+                      {workspace.pluginConfig.unsupportedFields.join(", ")}
+                    </code>
+                  </p>
+                ) : null}
                 {workspace.pluginConfig.configError ? (
                   <p className="text-sm text-warn">{workspace.pluginConfig.configError}</p>
                 ) : null}
@@ -494,22 +504,27 @@ export function MapsConsole({ initial }: { initial: MapsWorkspace }) {
                     </summary>
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       {fields.map((field) => (
-                        <PluginFieldInput
+                        <div
                           key={field.key}
-                          field={field}
-                          value={pluginValues[field.key]}
-                          disabled={!canMutate}
-                          onChange={(next) =>
-                            setPluginValues((current) => ({
-                              ...current,
-                              [field.key]: next,
-                            }))
-                          }
-                        />
+                          className={field.kind === "boolean" ? "md:col-span-2" : undefined}
+                        >
+                          <PluginFieldInput
+                            field={field}
+                            value={pluginValues[field.key]}
+                            disabled={!canMutate}
+                            onChange={(next) =>
+                              setPluginValues((current) => ({
+                                ...current,
+                                [field.key]: next,
+                              }))
+                            }
+                          />
+                        </div>
                       ))}
                     </div>
                   </details>
                 ))}
+                <p className="text-xs text-fg-subtle">{t("pluginReloadHint")}</p>
                 <Button type="submit" size="sm" disabled={!canMutate}>
                   {pending === "plugin-config" ? t("saving") : t("savePlugin")}
                 </Button>
@@ -562,6 +577,38 @@ const PLUGIN_GROUPS = [
   "other",
 ] as const;
 
+const PLUGIN_FIELD_KEYS = [
+  "VoteStartTime",
+  "AllowExtend",
+  "ExtendTimeStep",
+  "ExtendLimit",
+  "ExcludeMaps",
+  "IncludeMaps",
+  "IncludeCurrent",
+  "DontChangeRTV",
+  "VoteDuration",
+  "IgnoreSpec",
+  "AllowRtv",
+  "UseGameTimeLimit",
+  "RTVPercent",
+  "RTVDelay",
+  "EnforceTimeLimit",
+  "ChangeMapUse_host_workshop_map",
+  "DisplayHudTimeleftRemaining",
+  "RunOfFVote",
+  "VotePercent",
+  "AutoDownload",
+  "VoteStartSound",
+] as const;
+
+type PluginFieldKey = (typeof PLUGIN_FIELD_KEYS)[number];
+
+function pluginFieldKey(key: string): PluginFieldKey | null {
+  return (PLUGIN_FIELD_KEYS as readonly string[]).includes(key)
+    ? (key as PluginFieldKey)
+    : null;
+}
+
 function pluginGroupLabel(
   t: (key: `groups.${(typeof PLUGIN_GROUPS)[number]}`) => string,
   group: string,
@@ -596,6 +643,78 @@ function valuesFromWorkspace(workspace: MapsWorkspace) {
   );
 }
 
+function MapTile({
+  entry,
+  canMutate,
+  enabledLabel,
+  officialLabel,
+  nominateOnlyLabel,
+  minPlayersLabel,
+  removeLabel,
+  onToggle,
+  onRemove,
+}: {
+  entry: MapEntry;
+  canMutate: boolean;
+  enabledLabel: string;
+  officialLabel: string;
+  nominateOnlyLabel: string;
+  minPlayersLabel: string | null;
+  removeLabel: string;
+  onToggle: (enabled: boolean) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex h-full flex-col gap-1.5 rounded-md border border-line bg-surface-raised px-2.5 py-2",
+        !entry.enabled && "opacity-70",
+      )}
+    >
+      <p className="truncate text-sm font-medium text-fg" title={entry.name}>
+        {entry.name}
+      </p>
+      <div className="mt-auto flex items-center gap-1">
+        <div className="min-w-0 flex-1 truncate text-[11px] text-fg-subtle">
+          {entry.workshopId ? (
+            <Badge tone="info" className="px-1.5 py-0">
+              ID {entry.workshopId}
+            </Badge>
+          ) : (
+            <Badge tone="neutral" className="px-1.5 py-0">
+              {officialLabel}
+            </Badge>
+          )}
+          {minPlayersLabel ? (
+            <span className="ml-1">{minPlayersLabel}</span>
+          ) : null}
+          {entry.onlyNominate ? (
+            <span className="ml-1">{nominateOnlyLabel}</span>
+          ) : null}
+        </div>
+        <Switch
+          id={`map-enabled-${entry.name}-${entry.workshopId || "official"}`}
+          checked={entry.enabled}
+          disabled={!canMutate}
+          label={enabledLabel}
+          onCheckedChange={onToggle}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          disabled={!canMutate}
+          aria-label={removeLabel}
+          onClick={onRemove}
+        >
+          <Trash2 />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Field({
   label,
   children,
@@ -624,26 +743,52 @@ function PluginFieldInput({
   disabled: boolean;
   onChange: (next: boolean | number | string) => void;
 }) {
+  const t = useTranslations("maps");
+  const copyKey = pluginFieldKey(field.key);
+  const label = copyKey ? t(`pluginFields.${copyKey}.label`) : field.key;
+  const description = copyKey ? t(`pluginFields.${copyKey}.description`) : "";
+  const inputId = `plugin-${field.key}`;
+
   if (field.kind === "boolean") {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2">
-        <Label htmlFor={`plugin-${field.key}`} className="mb-0">
-          {field.key}
-        </Label>
-        <Switch
-          id={`plugin-${field.key}`}
-          checked={Boolean(value)}
-          disabled={disabled}
-          label={field.key}
-          onCheckedChange={onChange}
-        />
+      <div className="rounded-md border border-line px-3 py-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <Label htmlFor={inputId} className="mb-0">
+              {label}
+              {copyKey ? (
+                <code className="ml-1.5 text-[11px] font-normal text-fg-subtle">
+                  {field.key}
+                </code>
+              ) : null}
+            </Label>
+            {description ? (
+              <p className="mt-1 text-xs text-fg-subtle">{description}</p>
+            ) : null}
+          </div>
+          <Switch
+            id={inputId}
+            checked={Boolean(value)}
+            disabled={disabled}
+            label={label}
+            onCheckedChange={onChange}
+          />
+        </div>
       </div>
     );
   }
   return (
-    <Field label={field.key}>
+    <div>
+      <Label htmlFor={inputId}>
+        {label}
+        {copyKey ? (
+          <code className="ml-1.5 text-[11px] font-normal text-fg-subtle">
+            {field.key}
+          </code>
+        ) : null}
+      </Label>
       <Input
-        id={`plugin-${field.key}`}
+        id={inputId}
         type={field.kind === "string" ? "text" : "number"}
         step={field.kind === "integer" ? 1 : "any"}
         disabled={disabled}
@@ -659,7 +804,10 @@ function PluginFieldInput({
           );
         }}
       />
-    </Field>
+      {description ? (
+        <p className="mt-1 text-xs text-fg-subtle">{description}</p>
+      ) : null}
+    </div>
   );
 }
 

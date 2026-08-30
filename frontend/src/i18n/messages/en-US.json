@@ -1149,6 +1149,9 @@
     "a2sLogs": "A2S check logs",
     "noA2sLogs": "No A2S check logs yet.",
     "refreshLogs": "Refresh logs",
+    "logPageInfo": "Latest {from}–{to} of {total}",
+    "logPrev": "Previous",
+    "logNext": "Next",
     "diagnosticBannerTitle": "Plugin isolation is recommended",
     "diagnosticIdle": "No crash isolation is recommended right now. You can still build a plan, then execute or restore it.",
     "diagnosticTitle": "Plugin diagnostics",
@@ -1277,6 +1280,7 @@
     "failed": "Map operation failed.",
     "statusTitle": "MapChooser status",
     "statusHelp": "The pool needs SSH, CounterStrikeSharp, and MapChooser. The page still opens when SSH is down.",
+    "pageHelp": "Manage the CS2-Upkk-PanelPLG-Mapchooser map pool and quickly add Steam Workshop maps.",
     "sshOk": "SSH reachable",
     "sshDown": "SSH down",
     "sshDownHelp": "This host is unreachable. Use Reconnect above first. Pool edits need SSH; you can still save a remote sync URL.",
@@ -1329,6 +1333,11 @@
       "kz": "KZ",
       "ze": "ZE"
     },
+    "presetNotes": {
+      "official": "Scan cs2/game/csgo/maps/*.vpk and generate the pool without Workshop IDs or VPK names.",
+      "kz": "Download the maintained KZ pool and apply the required time-limit settings.",
+      "ze": "Download the maintained Zombie Escape map pool."
+    },
     "presetConfirm": {
       "official": "Scan official VPK files and replace the current map pool?",
       "kz": "Download the public KZ pool and update some MapChooser settings?",
@@ -1345,6 +1354,10 @@
     "syncStatus": "Last: {status} ({count} runs)",
     "pluginTitle": "MapChooser config",
     "pluginHelp": "These fields write config.json. Unknown keys are preserved.",
+    "pluginConfigPath": "Configuration:",
+    "pluginConfigWillCreate": "config.json does not exist yet. Saving will create it from the plugin defaults.",
+    "unsupportedFields": "Complex settings are kept unchanged and are not editable here:",
+    "pluginReloadHint": "Reload the plugin or restart the server after saving for all changes to take effect.",
     "savePlugin": "Save plugin config",
     "fields": {
       "workshopId": "Workshop ID / URL",
@@ -1364,6 +1377,92 @@
       "mapChange": "Map change",
       "display": "Display",
       "other": "Other"
+    },
+    "pluginFields": {
+      "VoteStartTime": {
+        "label": "Vote lead time (minutes)",
+        "description": "Start the map vote this many minutes before the map time ends."
+      },
+      "AllowExtend": {
+        "label": "Allow map extension",
+        "description": "Let players vote to extend the current map."
+      },
+      "ExtendTimeStep": {
+        "label": "Extension time (minutes)",
+        "description": "Time added whenever the current map is extended."
+      },
+      "ExtendLimit": {
+        "label": "Maximum extensions",
+        "description": "Maximum number of times one map may be extended."
+      },
+      "ExcludeMaps": {
+        "label": "Recently played maps to exclude",
+        "description": "Number of recently played maps excluded from candidates."
+      },
+      "IncludeMaps": {
+        "label": "Vote candidate count",
+        "description": "Number of maps included in a map vote."
+      },
+      "IncludeCurrent": {
+        "label": "Include current map",
+        "description": "Allow the current map to appear among vote candidates."
+      },
+      "DontChangeRTV": {
+        "label": "Do not change immediately after RTV",
+        "description": "Keep the plugin's delayed map-change flow after an RTV vote."
+      },
+      "VoteDuration": {
+        "label": "Vote duration (seconds)",
+        "description": "How long the map vote remains open, up to 60 seconds."
+      },
+      "IgnoreSpec": {
+        "label": "Ignore spectators",
+        "description": "Exclude spectators when calculating vote participation."
+      },
+      "AllowRtv": {
+        "label": "Allow RTV",
+        "description": "Allow players to request an early map vote."
+      },
+      "UseGameTimeLimit": {
+        "label": "Use game time limit",
+        "description": "Use the game's map time limit to trigger the map change."
+      },
+      "RTVPercent": {
+        "label": "RTV required ratio",
+        "description": "Player ratio required for RTV, from 0 to 1."
+      },
+      "RTVDelay": {
+        "label": "RTV delay (minutes)",
+        "description": "Wait this many minutes after map start before allowing RTV."
+      },
+      "EnforceTimeLimit": {
+        "label": "Enforce time limit",
+        "description": "Have the plugin enforce its map-change flow at the time limit."
+      },
+      "ChangeMapUse_host_workshop_map": {
+        "label": "Use host_workshop_map",
+        "description": "Use the host_workshop_map command when changing to Workshop maps."
+      },
+      "DisplayHudTimeleftRemaining": {
+        "label": "HUD countdown threshold (seconds)",
+        "description": "Show the HUD countdown below this remaining time; 0 disables it."
+      },
+      "RunOfFVote": {
+        "label": "Enable runoff vote",
+        "description": "Start a runoff vote when the first result does not meet the requirement."
+      },
+      "VotePercent": {
+        "label": "Vote required ratio",
+        "description": "Ratio required for a winning option, from 0 to 1."
+      },
+      "AutoDownload": {
+        "label": "Automatically download maps",
+        "description": "Automatically handle map downloads."
+      },
+      "VoteStartSound": {
+        "label": "Vote start sound",
+        "description": "Sound resource path played when voting starts."
+      }
     }
   },
   "s3Backups": {
@@ -1628,7 +1727,7 @@
     "create": "Add task",
     "creating": "Adding…",
     "created": "Task added.",
-    "toggle": "Toggle",
+    "enabled": "Enable task",
     "delete": "Delete",
     "failed": "Scheduled-task operation failed.",
     "actions": {

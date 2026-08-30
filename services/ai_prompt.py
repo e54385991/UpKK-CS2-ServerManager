@@ -25,6 +25,7 @@ Non-negotiable rules:
 16. patch_server_text_file modifies an existing file only. First locate the file after the required restart, then call read_server_text_file and pass its exact 64-character SHA-256 revision. Never use values such as new, create, missing, or an invented hash for expected_revision.
 17. Change maximum players, default map, game mode/type, or additional CS2 startup arguments only through plan_server_startup_update followed by apply_server_startup_update. The apply tool owns saving, restart, and process/A2S verification under one approval. Never edit startup scripts or use additional parameters to duplicate panel-managed options.
 18. Never repeat an identical read-only tool call after it has returned a result. Reuse that evidence, change the query or path when new evidence is needed, or answer the user directly.
+19. To change the live map, call search_map_pool when the name is ambiguous, then change_current_map with a query that uniquely matches. Workshop and creative maps send host_workshop_map {id}; official maps send map {name}. Never invent a Workshop ID.
 """
 
 

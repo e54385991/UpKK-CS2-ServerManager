@@ -14,7 +14,6 @@ import {
   type ScheduledTask,
   type ScheduleType,
 } from "@/modules/schedule/types";
-import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
   Card,
@@ -25,6 +24,8 @@ import {
 } from "@/shared/ui/card";
 import { Input, Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
+import { Switch } from "@/shared/ui/switch";
+import { cn } from "@/shared/lib/cn";
 
 export function ScheduleConsole({
   serverId,
@@ -63,13 +64,26 @@ export function ScheduleConsole({
 
   async function toggle(taskId: number) {
     setPending(`toggle-${taskId}`);
+    setBanner(null);
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === taskId ? { ...item, enabled: !item.enabled } : item,
+      ),
+    );
     const result = await toggleScheduleAction(serverId, taskId);
     setPending(null);
     if (!result.ok) {
+      setTasks((current) =>
+        current.map((item) =>
+          item.id === taskId ? { ...item, enabled: !item.enabled } : item,
+        ),
+      );
       setBanner(result.error || t("failed"));
       return;
     }
-    setTasks((current) => current.map((item) => (item.id === taskId ? result.data : item)));
+    setTasks((current) =>
+      current.map((item) => (item.id === taskId ? result.data : item)),
+    );
   }
 
   async function remove(taskId: number) {
@@ -147,7 +161,10 @@ export function ScheduleConsole({
           {tasks.map((task) => (
             <li
               key={task.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3"
+              className={cn(
+                "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3",
+                !task.enabled && "opacity-70",
+              )}
             >
               <div className="space-y-1">
                 <p className="font-medium">{task.name}</p>
@@ -161,18 +178,15 @@ export function ScheduleConsole({
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
-                <Badge tone={task.enabled ? "ok" : "neutral"}>
-                  {task.enabled ? t("toggle") : t("toggle")}
-                </Badge>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
+                <Switch
+                  id={`schedule-enabled-${task.id}`}
+                  checked={task.enabled}
                   disabled={pending === `toggle-${task.id}`}
-                  onClick={() => void toggle(task.id)}
-                >
-                  {t("toggle")}
-                </Button>
+                  label={t("enabled")}
+                  onCheckedChange={() => {
+                    void toggle(task.id);
+                  }}
+                />
                 <Button
                   type="button"
                   size="sm"

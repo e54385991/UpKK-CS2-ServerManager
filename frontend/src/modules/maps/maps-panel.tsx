@@ -31,7 +31,12 @@ export function MapsPanelSkeleton() {
           <Skeleton className="h-4 w-24" />
         </div>
         <Skeleton className="mb-2 h-10 w-full" />
-        <Skeleton className="h-40 w-full" />
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(12.5rem,1fr))] gap-2">
+          <Skeleton className="h-[4.25rem] w-full" />
+          <Skeleton className="h-[4.25rem] w-full" />
+          <Skeleton className="h-[4.25rem] w-full" />
+          <Skeleton className="h-[4.25rem] w-full" />
+        </div>
       </div>
     </div>
   );

@@ -69,6 +69,7 @@ const DISCORD_GLOBAL_CAPABILITIES = [
     ['plugin_install', 'capPluginInstall', 'Market install'],
     ['plugin_upgrade', 'capPluginUpgrade', 'Managed upgrade'],
     ['game_console', 'gameConsole', 'Game console input'],
+    ['change_map', 'capChangeMap', 'Change map'],
     ['agent_ask', 'capAgentAsk', 'AI Agent']
 ];
 

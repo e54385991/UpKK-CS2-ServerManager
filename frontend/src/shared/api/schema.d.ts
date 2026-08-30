@@ -7083,7 +7083,7 @@ export interface components {
          * AgentCapability
          * @enum {string}
          */
-        AgentCapability: "inspect_status" | "read_logs_files" | "browse_plan_plugins" | "start" | "stop" | "restart" | "deploy" | "update" | "validate" | "manage_frameworks" | "install_market_plugins" | "install_or_upgrade_github_plugins" | "upgrade_managed_plugins" | "write_configuration" | "manage_workshop_maps" | "run_plugin_diagnostics" | "send_game_console_commands" | "execute_saved_host_commands";
+        AgentCapability: "inspect_status" | "read_logs_files" | "browse_plan_plugins" | "start" | "stop" | "restart" | "deploy" | "update" | "validate" | "manage_frameworks" | "install_market_plugins" | "install_or_upgrade_github_plugins" | "upgrade_managed_plugins" | "write_configuration" | "manage_workshop_maps" | "run_plugin_diagnostics" | "send_game_console_commands" | "change_current_map" | "execute_saved_host_commands";
         /** AgentPolicyResponse */
         AgentPolicyResponse: {
             /** Capabilities */
@@ -8629,7 +8629,7 @@ export interface components {
          * DiscordCapability
          * @enum {string}
          */
-        DiscordCapability: "status" | "start" | "stop" | "restart" | "update" | "validate" | "plugin_browse" | "plugin_install" | "plugin_upgrade" | "game_console" | "agent_ask";
+        DiscordCapability: "status" | "start" | "stop" | "restart" | "update" | "validate" | "plugin_browse" | "plugin_install" | "plugin_upgrade" | "game_console" | "change_map" | "agent_ask";
         /** DiscordChannelOption */
         DiscordChannelOption: {
             /** Guild Id */

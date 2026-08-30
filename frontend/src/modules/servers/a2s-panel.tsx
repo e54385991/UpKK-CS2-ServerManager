@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { RefreshCw, Save, Search, TriangleAlert } from "lucide-react";
-import { formatA2SDuration } from "@/modules/servers/a2s";
+import { ChevronLeft, ChevronRight, RefreshCw, Save, Search, TriangleAlert } from "lucide-react";
+import { formatA2SDuration, paginateA2SLogs } from "@/modules/servers/a2s";
 import {
   listMonitoringLogsAction,
   queryServerA2SAction,
@@ -42,11 +42,16 @@ export function ServerA2SPanel({
   );
   const [snapshot, setSnapshot] = useState<A2SQuery | null>(initialQuery);
   const [logs, setLogs] = useState<readonly MonitoringLog[]>(initialLogs);
+  const [logPage, setLogPage] = useState(0);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const lastCheckAt = snapshot?.lastUpdated || snapshot?.timestamp;
+  const logPageView = useMemo(
+    () => paginateA2SLogs(logs, logPage),
+    [logPage, logs],
+  );
 
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -92,6 +97,7 @@ export function ServerA2SPanel({
       return;
     }
     setLogs(result.data);
+    setLogPage(0);
   }
 
   return (
@@ -378,19 +384,54 @@ export function ServerA2SPanel({
             {logs.length === 0 ? (
               <p className="text-sm text-fg-muted">{t("noA2sLogs")}</p>
             ) : (
-              <ul className="space-y-3">
-                {logs.map((log) => (
-                  <li key={log.id} className="text-sm">
-                    <p className="text-fg">{log.message}</p>
-                    <p className="text-xs text-fg-subtle">
-                      {log.status}
-                      {log.createdAt
-                        ? ` · ${new Date(log.createdAt).toLocaleString()}`
-                        : ""}
-                    </p>
-                  </li>
-                ))}
-              </ul>
+              <div data-testid="a2s-logs">
+                <ul className="space-y-3">
+                  {logPageView.items.map((log) => (
+                    <li key={log.id} className="text-sm">
+                      <p className="text-fg">{log.message}</p>
+                      <p className="text-xs text-fg-subtle">
+                        {log.status}
+                        {log.createdAt
+                          ? ` · ${new Date(log.createdAt).toLocaleString()}`
+                          : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3 text-xs text-fg-muted">
+                  <span className="tabular-nums" data-testid="a2s-logs-page-info">
+                    {t("logPageInfo", {
+                      from: logPageView.from,
+                      to: logPageView.to,
+                      total: logPageView.total,
+                    })}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      data-testid="a2s-logs-prev"
+                      disabled={!logPageView.hasPrev}
+                      aria-label={t("logPrev")}
+                      onClick={() => setLogPage(logPageView.page - 1)}
+                    >
+                      <ChevronLeft className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      data-testid="a2s-logs-next"
+                      disabled={!logPageView.hasNext}
+                      aria-label={t("logNext")}
+                      onClick={() => setLogPage(logPageView.page + 1)}
+                    >
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

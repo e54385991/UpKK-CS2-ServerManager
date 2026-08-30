@@ -187,6 +187,25 @@ class GameConsoleCommandInput(ToolInput):
         return value
 
 
+class MapPoolSearchInput(ToolInput):
+    query: str = Field(
+        min_length=1,
+        max_length=128,
+        description="Map name fragment or Workshop ID from the server MapChooser pool.",
+    )
+
+
+class ChangeCurrentMapInput(ToolInput):
+    query: str = Field(
+        min_length=1,
+        max_length=128,
+        description=(
+            "Map name fragment or Workshop ID. The query must uniquely match one pool entry "
+            "or be a valid Workshop ID. Workshop maps send host_workshop_map {id}."
+        ),
+    )
+
+
 class ServerStartupPlanInput(ToolInput):
     default_map: str | None = Field(
         default=None,
@@ -1226,6 +1245,49 @@ async def send_game_console_command(
     return sanitize_tool_result(result)
 
 
+async def search_map_pool(ctx: ToolContext, data: MapPoolSearchInput) -> dict[str, Any]:
+    """Search the selected server MapChooser pool by name fragment or Workshop ID."""
+    server = await _require_current_server(ctx)
+    from services.change_map_service import load_map_matches, workshop_id_fallback
+
+    matches = await load_map_matches(server, data.query)
+    if not matches:
+        fallback = workshop_id_fallback(data.query)
+        matches = [fallback] if fallback is not None else []
+    return {
+        "query": data.query.strip(),
+        "count": len(matches),
+        "unique": len(matches) == 1,
+        "matches": [item.to_public_dict() for item in matches[:25]],
+    }
+
+
+async def change_current_map(ctx: ToolContext, data: ChangeCurrentMapInput) -> dict[str, Any]:
+    """Resolve one map and send host_workshop_map or map to the running game console."""
+    server = await _require_current_server(ctx)
+    if ctx.enforce_agent_policy:
+        from services.agent_policy_service import AgentCapabilityDenied, get_effective_agent_policy
+
+        policy = await get_effective_agent_policy(ctx.db, server.id)
+        allowed = set(policy.capabilities)
+        if (
+            AgentCapability.CHANGE_CURRENT_MAP not in allowed
+            and AgentCapability.SEND_GAME_CONSOLE_COMMANDS not in allowed
+        ):
+            raise AgentCapabilityDenied("AI capability is disabled: change_current_map")
+    from services.change_map_service import load_map_pool, resolve_unique_map
+
+    candidate = resolve_unique_map(await load_map_pool(server), data.query)
+    result = await send_game_console_command(
+        ctx, GameConsoleCommandInput(command=candidate.command)
+    )
+    return {
+        **result,
+        "map": candidate.to_public_dict(),
+        "command": candidate.command,
+    }
+
+
 async def apply_server_startup_update(
     ctx: ToolContext, data: ApplyServerStartupPlanInput
 ) -> dict[str, Any]:
@@ -1492,6 +1554,13 @@ _RAW_TOOL_SPECS = (
         plan_workshop_map,
     ),
     ToolSpec(
+        "search_map_pool",
+        "Search the selected server MapChooser pool by map name fragment or Workshop ID. Partial names match.",
+        "read",
+        MapPoolSearchInput,
+        search_map_pool,
+    ),
+    ToolSpec(
         "plan_server_startup_update",
         "Plan a revision-bound change to the selected server's default map, player slots, game mode/type, or validated additional CS2 startup parameters.",
         "read",
@@ -1562,6 +1631,13 @@ _RAW_TOOL_SPECS = (
         "write",
         GameConsoleCommandInput,
         send_game_console_command,
+    ),
+    ToolSpec(
+        "change_current_map",
+        "Change the live map after resolving a unique MapChooser name or Workshop ID. Workshop maps send host_workshop_map {id}. Requires user approval.",
+        "write",
+        ChangeCurrentMapInput,
+        change_current_map,
     ),
     ToolSpec(
         "apply_server_startup_update",
@@ -1664,6 +1740,12 @@ _TOOL_CAPABILITY_OPTIONS: dict[str, tuple[frozenset[AgentCapability], ...]] = {
     "list_installed_plugins": (frozenset({AgentCapability.BROWSE_PLAN_PLUGINS}),),
     "plan_plugin_install": (frozenset({AgentCapability.BROWSE_PLAN_PLUGINS}),),
     "plan_workshop_map": (frozenset({AgentCapability.MANAGE_WORKSHOP_MAPS}),),
+    "search_map_pool": (
+        frozenset({AgentCapability.CHANGE_CURRENT_MAP}),
+        frozenset({AgentCapability.SEND_GAME_CONSOLE_COMMANDS}),
+        frozenset({AgentCapability.MANAGE_WORKSHOP_MAPS}),
+        frozenset({AgentCapability.INSPECT_STATUS}),
+    ),
     "plan_server_startup_update": (frozenset({AgentCapability.WRITE_CONFIGURATION}),),
     "plan_plugin_crash_isolation": (frozenset({AgentCapability.RUN_PLUGIN_DIAGNOSTICS}),),
     "get_plugin_crash_isolation": (frozenset({AgentCapability.RUN_PLUGIN_DIAGNOSTICS}),),
@@ -1683,6 +1765,10 @@ _TOOL_CAPABILITY_OPTIONS: dict[str, tuple[frozenset[AgentCapability], ...]] = {
         for item in (AgentCapability.START, AgentCapability.STOP, AgentCapability.RESTART)
     ),
     "send_game_console_command": (frozenset({AgentCapability.SEND_GAME_CONSOLE_COMMANDS}),),
+    "change_current_map": (
+        frozenset({AgentCapability.CHANGE_CURRENT_MAP}),
+        frozenset({AgentCapability.SEND_GAME_CONSOLE_COMMANDS}),
+    ),
     "apply_server_startup_update": (
         frozenset({AgentCapability.WRITE_CONFIGURATION, AgentCapability.RESTART}),
     ),
@@ -2000,6 +2086,25 @@ async def build_approval_summary(
                 "The command is delivered once to the running game process and newly observed "
                 "console output is returned; it is not interpreted as host Shell output"
             ),
+        }
+    if name == "change_current_map":
+        data = ChangeCurrentMapInput.model_validate(arguments)
+        from services.change_map_service import load_map_pool, resolve_unique_map
+
+        candidate = resolve_unique_map(await load_map_pool(server), data.query)
+        command = candidate.command
+        return {
+            **base,
+            "target": "Running CS2 game-process console (not host Shell)",
+            "map": candidate.to_public_dict(),
+            "command": redact_sensitive_text(command, limit=500),
+            "command_hash": hashlib.sha256(command.encode()).hexdigest(),
+            "steps": [
+                "resolve one map from the MapChooser pool by name or Workshop ID",
+                "acquire the server maintenance lock",
+                "send host_workshop_map {id} for Workshop maps, or map {name} for official maps",
+            ],
+            "expected_result": "The running CS2 process changes to the resolved map",
         }
     if name == "apply_server_startup_update":
         data = ApplyServerStartupPlanInput.model_validate(arguments)

@@ -65,7 +65,7 @@ def discord_operation_details(
         "discord_action": item.action,
         "required_capabilities": list(item.required_capabilities or []),
     }
-    if item.action == "game_console":
+    if item.action in {"game_console", "change_map"}:
         details["command_present"] = bool((item.arguments or {}).get("command_encrypted"))
     else:
         details["arguments"] = {

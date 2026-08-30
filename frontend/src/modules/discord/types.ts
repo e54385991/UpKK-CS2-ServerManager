@@ -19,6 +19,7 @@ export const DISCORD_CAPABILITIES = [
   "plugin_install",
   "plugin_upgrade",
   "game_console",
+  "change_map",
   "agent_ask",
 ] as const;
 
@@ -40,6 +41,7 @@ export const AGENT_CAPABILITIES = [
   "manage_workshop_maps",
   "run_plugin_diagnostics",
   "send_game_console_commands",
+  "change_current_map",
   "execute_saved_host_commands",
 ] as const;
 

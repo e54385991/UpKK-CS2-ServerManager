@@ -189,8 +189,10 @@ def test_tool_visibility_and_parameter_resolvers_follow_capabilities():
     assert "inspect_server" in names
     assert "read_server_text_file" in names
     assert "read_game_console" in names
+    assert "search_map_pool" in names
     assert "plan_plugin_install" in names
     assert "control_server" not in names
+    assert "change_current_map" not in names
     assert "execute_saved_host_command" not in names
 
     control = TOOLS_BY_NAME["control_server"]
@@ -208,6 +210,12 @@ def test_tool_visibility_and_parameter_resolvers_follow_capabilities():
     assert TOOLS_BY_NAME["read_game_console"].required_capabilities({"lines": 120}) == frozenset(
         {AgentCapability.READ_LOGS_FILES}
     )
+    change_map = TOOLS_BY_NAME["change_current_map"]
+    assert change_map.required_capabilities({"query": "saw"}) == frozenset()
+    assert change_map.is_exposed(readonly) is False
+    assert change_map.is_exposed(frozenset({AgentCapability.CHANGE_CURRENT_MAP})) is True
+    assert change_map.is_exposed(frozenset({AgentCapability.SEND_GAME_CONSOLE_COMMANDS})) is True
+    assert TOOLS_BY_NAME["search_map_pool"].is_exposed(frozenset({AgentCapability.INSPECT_STATUS}))
 
 
 def test_game_console_input_is_single_command_and_redacts_console_secrets():
@@ -602,6 +610,7 @@ def test_gateway_uses_guild_messages_and_conditionally_privileged_content_intent
         "restart",
         "update",
         "validate",
+        "map",
         "plugin",
         "console",
         "agent",
@@ -673,6 +682,7 @@ def test_profile_guide_exposes_trigger_mode_and_bilingual_intent_warning():
         assert messages["discordBot"]["globalSyncWarning"]
         assert messages["discordBot"]["allowChannelManagers"]
         assert messages["discordBot"]["capStatus"]
+        assert messages["discordBot"]["capChangeMap"]
         assert messages["discordBot"]["whitelistRule"]
 
 
@@ -716,6 +726,20 @@ def test_components_v2_menu_filters_actions_and_paginates_servers():
         "agent_reset",
     }
     assert "stop" not in {item["value"] for item in action_select["options"]}
+    assert "change_map" not in {item["value"] for item in action_select["options"]}
+
+    map_control = control_view(
+        "zh-CN",
+        server_id=10,
+        server_name="测试服",
+        capabilities=["change_map"],
+        issued_at=123,
+        requester_user_id=400,
+    ).to_components()
+    map_options = {
+        item["value"] for item in map_control[0]["components"][3]["components"][0]["options"]
+    }
+    assert map_options == {"change_map"}
 
     servers = [
         {"id": index, "name": f"Server {index}", "capability_count": 2} for index in range(1, 46)

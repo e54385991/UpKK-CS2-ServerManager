@@ -133,6 +133,17 @@ def test_discord_game_console_details_omit_ciphertext():
     assert "[REDACTED]" in details["error"]
 
 
+def test_discord_change_map_details_omit_ciphertext():
+    item = _operation(
+        action="change_map",
+        arguments={"command_encrypted": "cipher", "command_hash": "abc", "name": "ze_saw_p"},
+    )
+    details = discord_operation_details(item)
+    assert details["command_present"] is True
+    assert "command_encrypted" not in details
+    assert "arguments" not in details
+
+
 @pytest.mark.asyncio
 async def test_retention_expires_pending_operations_and_records_audit(monkeypatch):
     item = _operation()
