@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, urlparse
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -37,8 +37,61 @@ def legacy_html_mode() -> str:
     return mode if mode in LEGACY_HTML_MODES else "redirect"
 
 
-def console_public_url(path: str, query: str = "") -> str:
-    base = (settings.CONSOLE_PUBLIC_URL or "http://127.0.0.1:3000").rstrip("/")
+def _hostname_is_loopback(hostname: str | None) -> bool:
+    host = (hostname or "").strip().lower().rstrip(".")
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+def configured_console_origin() -> str:
+    return (settings.CONSOLE_PUBLIC_URL or "http://127.0.0.1:3000").rstrip("/")
+
+
+def console_origin_for_request(request: Request | None = None) -> str:
+    """Return the Next origin for redirects.
+
+    An explicit non-loopback ``CONSOLE_PUBLIC_URL`` wins. When the configured
+    origin is localhost / 127.0.0.1, use the Host the browser actually sent so
+    LAN users are never bounced to 127.0.0.1. Hitting the API port rewrites to
+    the console port from ``CONSOLE_PUBLIC_URL`` (default 3000).
+    """
+    configured = configured_console_origin()
+    parsed = urlparse(configured)
+    if request is None or not _hostname_is_loopback(parsed.hostname):
+        return configured
+
+    forwarded = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    host = forwarded or (request.headers.get("host") or "").strip()
+    if not host:
+        return configured
+
+    incoming = urlparse(f"//{host}")
+    if _hostname_is_loopback(incoming.hostname):
+        return configured
+
+    proto = (
+        (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+        or request.url.scheme
+        or parsed.scheme
+        or "http"
+    )
+    api_port = str(getattr(settings, "API_PORT", 8000) or 8000)
+    incoming_port = str(incoming.port) if incoming.port is not None else ""
+    console_port = str(parsed.port) if parsed.port is not None else ""
+    incoming_host = incoming.hostname or host
+    if incoming_port == api_port:
+        netloc = f"{incoming_host}:{console_port}" if console_port else incoming_host
+        return f"{proto}://{netloc}"
+    return f"{proto}://{host}"
+
+
+def console_public_url(
+    path: str,
+    query: str = "",
+    request: Request | None = None,
+) -> str:
+    base = console_origin_for_request(request)
     if not path.startswith("/"):
         path = f"/{path}"
     target = f"{base}{path}"
@@ -111,7 +164,7 @@ def legacy_html_response(request: Request) -> Response | None:
     if not separator:
         query = request.url.query
     return RedirectResponse(
-        console_public_url(path, query),
+        console_public_url(path, query, request),
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
 

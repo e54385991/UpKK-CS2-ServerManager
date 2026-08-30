@@ -6,7 +6,10 @@ set -Eeuo pipefail
 # starts the published images without requiring any other repository files.
 
 readonly IMAGE_REPOSITORY="e54385991/upkk-cs2-server-manager"
+readonly FRONTEND_REPOSITORY="e54385991/upkk-cs2-server-manager-web"
 readonly DEFAULT_VERSION="main"
+readonly DEFAULT_USER="admin"
+readonly DEFAULT_PASSWORD="admin123"
 INSTALL_DIR="${CS2_MANAGER_DIR:-${HOME}/cs2-manager}"
 VERSION="${CS2_MANAGER_VERSION:-${DEFAULT_VERSION}}"
 RAW_BASE_URL="${CS2_MANAGER_RAW_BASE_URL:-https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/${VERSION}}"
@@ -30,6 +33,86 @@ random_hex() {
     else
         od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
     fi
+}
+
+detect_host_ip() {
+    local ip
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    if [ -n "${ip:-}" ]; then
+        printf '%s\n' "$ip"
+        return
+    fi
+    ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+    if [ -n "${ip:-}" ]; then
+        printf '%s\n' "$ip"
+        return
+    fi
+    printf 'localhost\n'
+}
+
+read_env_value() {
+    local key="$1"
+    local env_file="${2:-.env}"
+    [ -f "$env_file" ] || return 0
+    awk -F= -v key="$key" '$1 == key { print $2 }' "$env_file" | tail -1 | tr -d '[:space:]'
+}
+
+ensure_env_line() {
+    local env_file="$1"
+    local key="$2"
+    local value="$3"
+    if grep -q "^${key}=" "$env_file"; then
+        return
+    fi
+    printf '%s=%s\n' "$key" "$value" >>"$env_file"
+}
+
+print_ready() {
+    local url="$1"
+    printf '\n'
+    log "部署完成"
+    log "URL   ${url}"
+    log "用户  ${DEFAULT_USER}"
+    log "密码  ${DEFAULT_PASSWORD}"
+    printf '\n'
+}
+
+is_loopback_url() {
+    case "${1:-}" in
+        http://localhost|http://localhost:*|http://127.0.0.1|http://127.0.0.1:*|https://localhost|https://localhost:*|https://127.0.0.1|https://127.0.0.1:*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+replace_or_add_env() {
+    local env_file="$1"
+    local key="$2"
+    local value="$3"
+    if grep -q "^${key}=" "$env_file"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+    else
+        printf '%s=%s\n' "$key" "$value" >>"$env_file"
+    fi
+}
+
+sync_public_urls() {
+    local env_file="$INSTALL_DIR/.env"
+    local port ip public_url current key
+    [ -f "$env_file" ] || return
+    port="$(read_env_value HTTP_PORT "$env_file")"
+    port="${port:-3000}"
+    ip="$(detect_host_ip)"
+    public_url="http://${ip}:${port}"
+    for key in CONSOLE_PUBLIC_URL BACKEND_URL; do
+        current="$(read_env_value "$key" "$env_file")"
+        if [ -z "${current:-}" ] || is_loopback_url "$current"; then
+            replace_or_add_env "$env_file" "$key" "$public_url"
+        fi
+    done
 }
 
 install_docker() {
@@ -57,8 +140,15 @@ docker_cmd() {
 
 prepare_env() {
     local env_file="$INSTALL_DIR/.env"
+    local api_image="docker.io/${IMAGE_REPOSITORY}:${VERSION}"
+    local web_image="docker.io/${FRONTEND_REPOSITORY}:${VERSION}"
+
     if [ -f "$env_file" ]; then
         log "保留已有 .env（不会覆盖现有密钥）"
+        ensure_env_line "$env_file" HTTP_PORT 3000
+        ensure_env_line "$env_file" CS2_MANAGER_IMAGE "$api_image"
+        ensure_env_line "$env_file" CS2_FRONTEND_IMAGE "$web_image"
+        chmod 600 "$env_file"
         return
     fi
 
@@ -74,6 +164,8 @@ POSTGRES_PASSWORD=$postgres_password
 REDIS_PASSWORD=$redis_password
 REDIS_DB=0
 HTTP_PORT=3000
+CS2_MANAGER_IMAGE=$api_image
+CS2_FRONTEND_IMAGE=$web_image
 DEBUG=False
 LOG_LEVEL=INFO
 EOF
@@ -105,21 +197,19 @@ main() {
     command -v curl >/dev/null 2>&1 || fail "缺少 curl，无法下载 Compose 配置"
     curl -fsSL "$RAW_BASE_URL/docker-compose.yml" -o "$INSTALL_DIR/docker-compose.yml"
     prepare_env
+    sync_public_urls
     cd "$INSTALL_DIR"
+    docker_cmd compose pull
     docker_cmd compose up -d
 
     public_port="${HTTP_PORT:-3000}"
-    if [ -f .env ]; then
-        parsed_port="$(awk -F= '/^HTTP_PORT=/{print $2}' .env | tail -1 | tr -d '[:space:]')"
-        if [ -n "$parsed_port" ]; then
-            public_port="$parsed_port"
-        fi
+    parsed_port="$(read_env_value HTTP_PORT .env)"
+    if [ -n "${parsed_port:-}" ]; then
+        public_port="$parsed_port"
     fi
     if wait_for_console "$public_port"; then
-        log "部署完成：http://$(hostname -I 2>/dev/null | awk '{print $1}' || printf 'localhost'):${public_port}"
-        log "浏览器只访问 Next 控制台；FastAPI / PostgreSQL / Redis 留在容器网内"
-        log "首次登录：admin / admin123（登录后请立即修改密码）"
         docker_cmd compose ps
+        print_ready "http://$(detect_host_ip):${public_port}"
         exit 0
     fi
     docker_cmd compose ps

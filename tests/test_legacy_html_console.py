@@ -97,6 +97,42 @@ def test_google_callback_stays_on_fastapi(monkeypatch):
     assert "text/html" in response.headers["content-type"]
 
 
+def test_loopback_console_url_follows_lan_host(monkeypatch):
+    monkeypatch.setattr(settings, "LEGACY_HTML_CONSOLE", "redirect")
+    monkeypatch.setattr(settings, "CONSOLE_PUBLIC_URL", "http://localhost:3000")
+    monkeypatch.setattr(settings, "API_PORT", 8000)
+    client = _client()
+
+    from_api = client.get(
+        "/",
+        follow_redirects=False,
+        headers={"host": "192.168.50.143:8000"},
+    )
+    assert from_api.status_code == 307
+    assert from_api.headers["location"] == "http://192.168.50.143:3000/overview"
+    assert "127.0.0.1" not in from_api.headers["location"]
+    assert "localhost" not in from_api.headers["location"]
+
+    from_console = client.get(
+        "/login",
+        follow_redirects=False,
+        headers={"host": "192.168.50.143:3000"},
+    )
+    assert from_console.headers["location"] == "http://192.168.50.143:3000/login"
+
+
+def test_explicit_console_url_still_wins(monkeypatch):
+    monkeypatch.setattr(settings, "LEGACY_HTML_CONSOLE", "redirect")
+    monkeypatch.setattr(settings, "CONSOLE_PUBLIC_URL", "http://console.test")
+    client = _client()
+    response = client.get(
+        "/",
+        follow_redirects=False,
+        headers={"host": "192.168.50.143:8000"},
+    )
+    assert response.headers["location"] == "http://console.test/overview"
+
+
 def test_api_and_health_are_not_redirected(monkeypatch):
     monkeypatch.setattr(settings, "LEGACY_HTML_CONSOLE", "redirect")
     monkeypatch.setattr(settings, "CONSOLE_PUBLIC_URL", "http://console.test")

@@ -33,6 +33,17 @@ def test_quickstart_installs_console_on_port_3000() -> None:
     assert "/login" in QUICKSTART
     assert "/health" in QUICKSTART
     assert "docker-compose.yml" in QUICKSTART
+    assert "upkk-cs2-server-manager-web" in QUICKSTART
+    assert "compose pull" in QUICKSTART
+    assert "部署完成" in QUICKSTART
+    assert 'DEFAULT_USER="admin"' in QUICKSTART
+    assert 'DEFAULT_PASSWORD="admin123"' in QUICKSTART
+    assert "URL   ${url}" in QUICKSTART
+    assert "用户  ${DEFAULT_USER}" in QUICKSTART
+    assert "密码  ${DEFAULT_PASSWORD}" in QUICKSTART
+    assert "CONSOLE_PUBLIC_URL" in QUICKSTART
+    assert "BACKEND_URL" in QUICKSTART
+    assert "is_loopback_url" in QUICKSTART
 
 
 def test_readme_sends_operators_to_port_3000() -> None:
