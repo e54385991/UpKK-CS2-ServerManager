@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { getSession } from "@/modules/auth/session";
 import { TutorialGuide } from "@/modules/tutorial/tutorial-guide";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -8,5 +9,6 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function DeploymentTutorialPage() {
-  return <TutorialGuide />;
+  const session = await getSession();
+  return <TutorialGuide signedIn={session !== null} />;
 }

@@ -1,6 +1,5 @@
 import { requireSession } from "@/modules/auth/session";
-import { Sidebar } from "@/modules/shell/sidebar";
-import { Topbar } from "@/modules/shell/topbar";
+import { ConsoleShell } from "@/modules/shell/console-shell";
 
 /**
  * Console App Shell. The sidebar and top bar are rendered here and stay mounted
@@ -14,16 +13,5 @@ export default async function ConsoleLayout({
   children: React.ReactNode;
 }) {
   const user = await requireSession();
-
-  return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
-      <Sidebar isAdmin={user.isAdmin} />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <Topbar user={user} />
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mx-auto w-full max-w-7xl">{children}</div>
-        </main>
-      </div>
-    </div>
-  );
+  return <ConsoleShell user={user}>{children}</ConsoleShell>;
 }

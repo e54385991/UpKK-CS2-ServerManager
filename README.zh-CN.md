@@ -15,30 +15,75 @@
 ## 项目说明
 
 CS2 Server Manager 是一个现代化的 **Counter-Strike 2 多服务器 Web 管理面板**。
-管理面板通过 SSH 连接一台或多台游戏服务器，让部署、启动、停止、更新、监控和插件管理
-都可以在浏览器中完成。
+当前控制台是 **Next.js** 应用，后端为 FastAPI。面板通过 SSH 连接一台或多台
+游戏主机，部署、启动、停止、更新、监控和插件管理都可以在浏览器中完成。
 
-管理面板与游戏服务器可以部署在同一台主机，也可以分开部署。推荐将管理面板放在独立主机
-上，通过 SSH 管理游戏服务器；这样更容易维护，也不会让管理服务与游戏进程互相影响。
+管理面板与游戏服务器可以部署在同一台主机，也可以分开部署。推荐将管理面板放在
+独立主机上，通过 SSH 管理游戏服务器；这样更容易维护，也不会让管理服务与游戏
+进程互相影响。
+
+### 控制台
+
+![总览](images/console/overview.webp)
+
+总览页展示服务器规模、运行状态、需要关注的告警、SSH 连接池，以及部署教程入口。
+在页面之间切换时，左侧导航会保持可见。
 
 ### 主要功能
 
-- 一键部署、启动、停止、重启和更新 CS2 服务器；
-- 集中管理多台服务器，实时查看状态、日志和部署进度；
-- 提供 Web 控制台、文件管理和常用服务器配置；
-- 一键安装和更新 Metamod:Source、CounterStrikeSharp 及相关插件；
-- 支持自动重启保护、自动更新和计划任务；
-- 支持密码或 SSH 密钥认证，并提供用户权限和 API Key；
-- 支持 S3 兼容存储备份以及备份保留策略；
-- 支持面板中转和 GitHub URL 代理，方便受限网络环境下载插件；
-- 管理面板基于 FastAPI、PostgreSQL 和 Redis，Docker 部署会自动准备全部依赖并执行数据库迁移。
+- 一键部署、启动、停止、重启和更新 CS2 服务器
+- 集中管理多台主机，实时查看状态、日志和任务进度
+- 主机初始化向导：创建 `cs2server` 用户、安装依赖，并可复用已保存的 SSH 账户
+- Web 文件管理、SSH / 游戏实时控制台，以及常用游戏与主机配置
+- 插件市场，并支持从 GitHub 安装 Metamod:Source、CounterStrikeSharp 及相关插件
+- 长任务走投递队列（部署、插件安装）：提交后即可离开，同一台游戏主机一次只跑一个任务
+- 右上角活动托盘查看排队、进行中和失败任务（失败记录保留 7 天）
+- 自动重启保护、自动更新和计划任务
+- 密码或 SSH 密钥认证，并提供用户权限和 API Key
+- S3 兼容存储备份以及备份保留策略
+- 面板中转和 GitHub URL 代理，方便受限网络环境下载
+- 控制台中英双语（zh-CN / en-US）
+- 管理面板基于 FastAPI、PostgreSQL 和 Redis，Docker 部署会自动准备全部依赖并执行数据库迁移
+
+### 服务器与操作中心
+
+![服务器列表](images/console/servers.webp)
+
+服务器列表展示状态、A2S 信息、磁盘占用和 SSH 健康度。可以按状态筛选、批量安装
+插件或发送命令，再进入单台主机的工作区。
+
+![操作中心](images/console/operations.webp)
+
+操作中心负责启动、停止、部署和更新。长任务进入投递队列，进度在实时日志或右上角
+活动托盘里查看，不必停在表单等待 SteamCMD。
+
+![活动托盘](images/console/activity-tray.webp)
+
+### 插件与文件
+
+![插件中心](images/console/plugins.webp)
+
+浏览插件市场，从卡片或 GitHub 仓库安装，安装过程同样出现在活动托盘。
+
+![文件管理](images/console/files.webp)
+
+文件管理通过 SSH 浏览游戏目录，支持快捷目录、上传、整夹上传、解压、复制粘贴和搜索。
+
+### AI 助手
+
+![AI 助手](images/console/assistant.webp)
+
+助手可以针对已选服务器做排查和建议。写操作需要先确认。模型在系统设置或个人设置中配置。
 
 ### 使用流程
 
-1. 使用下方命令部署管理面板；
-2. 登录面板并立即修改默认密码；
-3. 添加游戏服务器的 SSH 连接信息；
-4. 在网页中点击部署，随后即可完成日常管理。
+1. 使用下方命令部署管理面板
+2. 登录面板并立即修改默认密码
+3. 先做主机初始化，再添加 SSH 连接信息
+4. 在操作中心点击部署，随后在活动托盘跟踪进度
+
+控制台内的图文教程在 `/deployment-tutorial`（总览页也有入口），文档版见
+[docs/ALIYUN_ECS_DEPLOY.md](docs/ALIYUN_ECS_DEPLOY.md)。
 
 ## 先更新下软件包 和 确保 CURL存在
 
@@ -57,10 +102,10 @@ curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/ma
 
 脚本会自动：
 
-- 安装 Docker Engine 和 Docker Compose 插件；
-- 生成随机数据库密码；
-- 下载自包含 Compose 并从 Docker Hub 拉起 Next、FastAPI、PostgreSQL 和 Redis；
-- 自动完成数据库迁移，并等待控制台与 `/health` 代理就绪。
+- 安装 Docker Engine 和 Docker Compose 插件
+- 生成随机数据库密码
+- 下载自包含 Compose 并从 Docker Hub 拉起 Next、FastAPI、PostgreSQL 和 Redis
+- 自动完成数据库迁移，并等待控制台与 `/health` 代理就绪
 
 部署完成后访问：
 

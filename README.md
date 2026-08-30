@@ -16,40 +16,90 @@
 ## Overview
 
 CS2 Server Manager is a modern, web-based **multi-server management panel for
-Counter-Strike 2**. It connects to one or more game servers over SSH, allowing
-you to deploy, start, stop, update, monitor, and manage plugins entirely from
-your browser.
+Counter-Strike 2**. The current console is a **Next.js** app that talks to a
+FastAPI backend. It connects to one or more game hosts over SSH so you can
+deploy, start, stop, update, monitor, and manage plugins entirely from the
+browser.
 
-The management panel and game servers can run on the same host or on separate
-hosts. We recommend running the panel on a dedicated host and managing game
-servers over SSH. This setup is easier to maintain and prevents the management
-services and game processes from interfering with each other.
+The management panel and game servers can run on the same machine or on
+separate hosts. We recommend running the panel on a dedicated host and managing
+game servers over SSH. That setup is easier to maintain and keeps management
+services from competing with the game process.
+
+### Console
+
+![Overview](images/console/overview.webp)
+
+The overview shows fleet size, running state, items that need attention, SSH
+pool usage, and a link to the illustrated deployment tutorial. The left
+navigation stays visible while you move between pages.
 
 ### Key features
 
-- Deploy, start, stop, restart, and update CS2 servers with one click;
-- Centrally manage multiple servers and monitor their status, logs, and
-  deployment progress in real time;
-- Use a web console, file manager, and common server configuration tools;
-- Install and update Metamod:Source, CounterStrikeSharp, and related plugins
-  with one click;
-- Configure automatic restart protection, automatic updates, and scheduled
-  tasks;
-- Authenticate with a password or SSH key, with support for user permissions
-  and API keys;
-- Back up data to S3-compatible storage with configurable retention policies;
-- Relay downloads through the panel or a GitHub URL proxy in restricted
-  network environments;
-- Run on FastAPI, PostgreSQL, and Redis, with Docker automatically preparing
-  all dependencies and applying database migrations.
+- Deploy, start, stop, restart, and update CS2 servers with one click
+- Manage many hosts from one console and watch status, logs, and job progress
+- Host initialization wizard: create the `cs2server` user, install packages,
+  and reuse saved SSH accounts
+- Web file manager, live SSH/game consoles, and common game/host settings
+- Plugin marketplace plus GitHub installs for Metamod:Source,
+  CounterStrikeSharp, and related plugins
+- Delivery queue for long jobs (deploy, plugin install): POST and leave; one
+  worker runs at a time per game server
+- Activity tray for queued, running, and failed jobs (failures kept 7 days)
+- Automatic restart protection, automatic updates, and scheduled tasks
+- Password or SSH-key auth, user permissions, and API keys
+- S3-compatible backups with retention policies
+- Panel download relay and GitHub URL proxy for restricted networks
+- Bilingual console (zh-CN / en-US)
+- FastAPI + PostgreSQL + Redis; Docker prepares dependencies and applies
+  database migrations
+
+### Servers and operations
+
+![Servers](images/console/servers.webp)
+
+The servers list shows status, A2S info, disk usage, and SSH health. You can
+filter the fleet, run bulk plugin installs or commands, then open a host
+workspace.
+
+![Operations center](images/console/operations.webp)
+
+The operations center starts, stops, deploys, and updates a host. Long jobs
+go into the delivery queue. Watch progress in the live log or the top-right
+activity tray—you do not wait on the form while SteamCMD runs.
+
+![Activity tray](images/console/activity-tray.webp)
+
+### Plugins and files
+
+![Plugin marketplace](images/console/plugins.webp)
+
+Browse the plugin market, install from a card or a GitHub repository, and
+follow the same replayable log in the activity tray.
+
+![File manager](images/console/files.webp)
+
+The file manager browses the game directory over SSH, with shortcuts, upload,
+folder upload, extract, copy/paste, and search.
+
+### AI assistant
+
+![AI assistant](images/console/assistant.webp)
+
+The assistant can inspect a selected server and propose operational steps.
+Write actions require approval. Configure the model in system or personal
+settings.
 
 ### How it works
 
-1. Deploy the management panel with the command below;
-2. Sign in and change the default password immediately;
-3. Add the SSH connection details for your game servers;
-4. Click **Deploy** in the web interface, then manage your servers from the
-   panel.
+1. Deploy the management panel with the command below
+2. Sign in and change the default password immediately
+3. Initialize the game host, then add its SSH details
+4. Click **Deploy** in the operations center and follow the activity tray
+
+An illustrated walkthrough is available in the console at
+`/deployment-tutorial` (also linked from Overview) and in
+[docs/ALIYUN_ECS_DEPLOY.md](docs/ALIYUN_ECS_DEPLOY.md).
 
 ## Install prerequisites
 
@@ -70,12 +120,12 @@ curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/ma
 
 The script automatically:
 
-- Installs Docker Engine and the Docker Compose plugin;
-- Generates a random database password;
+- Installs Docker Engine and the Docker Compose plugin
+- Generates a random database password
 - Downloads the self-contained Compose file and starts Next, FastAPI,
-  PostgreSQL, and Redis from Docker Hub;
+  PostgreSQL, and Redis from Docker Hub
 - Applies database migrations and waits until the console and `/health`
-  proxy respond.
+  proxy respond
 
 When deployment is complete, open:
 

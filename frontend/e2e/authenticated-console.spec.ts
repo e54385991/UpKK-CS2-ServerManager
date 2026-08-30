@@ -33,6 +33,27 @@ test("overview greets the admin and shows fleet stats", async ({ page }) => {
   await expect(page.getByTestId("activity-tray-toggle")).toBeVisible();
 });
 
+test("overview tutorial keeps the sidebar and can scroll to the last step", async ({
+  page,
+}) => {
+  await page.goto("/overview");
+  await page
+    .getByRole("link", { name: /打开部署教程|Open the deployment tutorial/ })
+    .click();
+  await expect(page).toHaveURL(/\/deployment-tutorial$/);
+  await expect(page.getByTestId("tutorial-guide")).toBeVisible();
+  await expect(
+    page.getByRole("navigation").getByText(/总览|Overview/).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /返回总览|Back to overview/ }),
+  ).toBeVisible();
+
+  const lastStep = page.getByTestId("tutorial-step-10");
+  await lastStep.scrollIntoViewIfNeeded();
+  await expect(lastStep).toBeInViewport();
+});
+
 test("activity tray shows queue and failed tabs", async ({ page }) => {
   await page.goto("/overview");
   const toggle = page.getByTestId("activity-tray-toggle");
