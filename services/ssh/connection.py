@@ -2,7 +2,11 @@
 
 # ruff: noqa: F403,F405
 
+import time
+
 from services.bounded_output import BoundedLineBuffer
+from services.ssh.stream_progress import iter_ssh_progress_lines
+from services.ssh.text import decode_remote_text
 
 from .common import *
 
@@ -12,22 +16,47 @@ class ConnectionMixin:
 
     STREAMING_OUTPUT_MAX_BYTES = 2 * 1024 * 1024
 
+    SUPPORTED_ARCHIVE_FORMATS_LABEL = (
+        ".zip, .7z, .rar, .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .tbz, "
+        ".tar.xz, .txz, .tar.zst, .tzst, .tar.lzma, .tlz, .gz, .bz2, .xz, "
+        ".zst, .zstd, .lzma"
+    )
+
+    TAR_ARCHIVE_TYPES = frozenset({"tar", "tar.gz", "tar.bz2", "tar.xz", "tar.zst", "tar.lzma"})
+
+    SEVEN_ZIP_ARCHIVE_TYPES = frozenset({"7z", "rar"})
+
+    SINGLE_FILE_ARCHIVE_TYPES = frozenset({"gz", "bz2", "xz", "zst", "lzma"})
+
+    ARCHIVE_TYPES_ALLOW_BACKSLASH = TAR_ARCHIVE_TYPES | SEVEN_ZIP_ARCHIVE_TYPES
+
     @staticmethod
     def archive_type_from_path(path: str) -> Optional[str]:
         """Return a normalized archive type from a local or remote filename."""
         lower_path = path.lower()
         for suffix, archive_type in (
-            (".tar.gz", "tar.gz"),
+            (".tar.zstd", "tar.zst"),
+            (".tar.lzma", "tar.lzma"),
+            (".tar.zst", "tar.zst"),
             (".tar.bz2", "tar.bz2"),
+            (".tar.gz", "tar.gz"),
             (".tar.xz", "tar.xz"),
-            (".tgz", "tar.gz"),
+            (".tzst", "tar.zst"),
             (".tbz2", "tar.bz2"),
+            (".tgz", "tar.gz"),
             (".txz", "tar.xz"),
+            (".tlz", "tar.lzma"),
+            (".tbz", "tar.bz2"),
             (".zip", "zip"),
             (".7z", "7z"),
+            (".rar", "rar"),
             (".tar", "tar"),
+            (".zstd", "zst"),
+            (".lzma", "lzma"),
+            (".zst", "zst"),
             (".gz", "gz"),
             (".bz2", "bz2"),
+            (".xz", "xz"),
         ):
             if lower_path.endswith(suffix):
                 return archive_type
@@ -607,10 +636,13 @@ class ConnectionMixin:
             return False, "", "Not connected"
 
         async def _do_execute():
-            result = await asyncio.wait_for(self.conn.run(command, check=False), timeout=timeout)
+            result = await asyncio.wait_for(
+                self.conn.run(command, check=False, encoding=None),
+                timeout=timeout,
+            )
 
-            stdout_text = result.stdout
-            stderr_text = result.stderr
+            stdout_text = decode_remote_text(result.stdout)
+            stderr_text = decode_remote_text(result.stderr)
             exit_status = result.exit_status
 
             return exit_status == 0, stdout_text, stderr_text
@@ -650,6 +682,20 @@ class ConnectionMixin:
         except Exception as e:
             return False, "", str(e)
 
+    async def create_interactive_process(self, command: str | None = None):
+        """Open a PTY as raw bytes so game/tmux output cannot raise UnicodeDecodeError."""
+        if not self.conn:
+            raise RuntimeError("Not connected")
+        kwargs = {"term_type": "xterm-256color", "encoding": None}
+        try:
+            if command:
+                return await self.conn.create_process(command, **kwargs)
+            return await self.conn.create_process(**kwargs)
+        except TypeError:
+            if command:
+                return await self.conn.create_process(command, term_type="xterm-256color")
+            return await self.conn.create_process(term_type="xterm-256color")
+
     async def execute_command_streaming(
         self, command: str, output_callback=None, timeout: int = 1800
     ) -> Tuple[bool, str, str]:
@@ -670,8 +716,15 @@ class ConnectionMixin:
         stderr_lines = BoundedLineBuffer(self.STREAMING_OUTPUT_MAX_BYTES)
 
         async def _execute():
-            # Create the process
-            process = await self.conn.create_process(command)
+            # PTY makes SteamCMD flush \\r progress instead of buffering a
+            # whole download with no newlines.
+            try:
+                process = await self.conn.create_process(command, term_type="xterm", encoding=None)
+            except TypeError:
+                try:
+                    process = await self.conn.create_process(command, encoding=None)
+                except TypeError:
+                    process = await self.conn.create_process(command)
 
             # Helper to send output via callback
             async def send_output(line: str):
@@ -683,13 +736,16 @@ class ConnectionMixin:
 
             # Read stdout and stderr concurrently
             async def read_stream(stream, lines_list, prefix=""):
-                """Read from a stream and collect lines"""
+                """Read from a stream and collect lines, including CR progress."""
+                last_line = ""
+                last_emit_at = 0.0
                 try:
-                    async for line in stream:
-                        line = line.rstrip("\n\r")
-                        if line:  # Only process non-empty lines
-                            lines_list.append(line)
-                            # Send to callback with prefix
+                    async for line in iter_ssh_progress_lines(stream):
+                        lines_list.append(line)
+                        now = time.monotonic()
+                        if line != last_line or now - last_emit_at >= 2.0:
+                            last_line = line
+                            last_emit_at = now
                             await send_output(f"{prefix}{line}" if prefix else line)
                 except Exception as e:
                     await send_output(f"Stream read error: {str(e)}")
@@ -773,11 +829,12 @@ class ConnectionMixin:
                 )
 
             result = await asyncio.wait_for(
-                self.conn.run(sudo_command, check=False), timeout=timeout
+                self.conn.run(sudo_command, check=False, encoding=None),
+                timeout=timeout,
             )
 
-            stdout_text = result.stdout
-            stderr_text = result.stderr
+            stdout_text = decode_remote_text(result.stdout)
+            stderr_text = decode_remote_text(result.stderr)
             exit_status = result.exit_status
 
             return exit_status == 0, stdout_text, stderr_text

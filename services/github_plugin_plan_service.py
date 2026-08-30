@@ -576,6 +576,35 @@ def _detect_mapping(
     return None, [], True
 
 
+def _apply_user_mapping(
+    entries: list[dict[str, Any]],
+    source_prefix: str | None,
+    target_prefix: str | None,
+) -> tuple[str | None, list[dict[str, str]]]:
+    """Resolve an operator-chosen archive prefix onto addons/ or cfg/."""
+    source = (source_prefix or "").replace("\\", "/").strip().strip("/")
+    target = (target_prefix or "").replace("\\", "/").strip().strip("/")
+    if not target:
+        raise GitHubPlanError("target_prefix is required when mapping an archive")
+    if (
+        source.startswith("/")
+        or target.startswith("/")
+        or ".." in source.split("/")
+        or ".." in target.split("/")
+        or any(ord(character) < 32 for character in f"{source}{target}")
+    ):
+        raise GitHubPlanError("Archive mapping prefixes are unsafe")
+    root = target.split("/", 1)[0]
+    if root not in {"addons", "cfg"}:
+        raise GitHubPlanError("target_prefix must start with addons or cfg")
+    paths = [str(item.get("path") or "").replace("\\", "/").strip("/") for item in entries]
+    if source:
+        exists = any(path == source or path.startswith(f"{source}/") for path in paths)
+        if not exists:
+            raise GitHubPlanError("source_prefix was not found in the archive")
+    return source or None, [{"source": source or ".", "target": target}]
+
+
 def _infer_plugin_metadata(
     entries: list[dict[str, Any]], documentation: dict[str, Any]
 ) -> dict[str, Any]:
@@ -812,6 +841,11 @@ async def build_github_install_plan(
         mapping = [{"source": recipe.source_prefix or ".", "target": recipe.target_prefix}]
         mapping_required = False
         recipe_revision = recipe.revision
+    elif request.source_prefix is not None or request.target_prefix is not None:
+        source_prefix, mapping = _apply_user_mapping(
+            entries, request.source_prefix, request.target_prefix
+        )
+        mapping_required = False
     mapped_files = _mapped_files(entries, mapping) if not mapping_required else []
     target_revisions = await _target_revisions(server, mapped_files) if mapped_files else {}
     for item in mapped_files:
@@ -860,6 +894,8 @@ async def build_github_install_plan(
         "recipe_id": recipe.id if recipe else None,
         "recipe_revision": recipe_revision,
         "mapping_required": mapping_required,
+        "exclude_dirs": list(request.exclude_dirs or []),
+        "exclude_files": list(request.exclude_files or []),
         "plugin_metadata": plugin_metadata,
         "market_plugin_id": market_plugin.id if market_plugin else None,
         "dependencies": market_plan["dependencies"] if market_plan else [],
@@ -1006,9 +1042,12 @@ async def _execute_github_install_plan_locked(
             for item in plan["files"]
             if item["file_role"] == "config" and item["target_revision"] != "missing"
         ]
+    user_exclude_dirs = list(plan.get("exclude_dirs") or request.exclude_dirs or [])
+    user_exclude_files = list(plan.get("exclude_files") or request.exclude_files or [])
     install_request = GitHubPluginInstallRequest(
         download_url=plan["asset"]["url"],
-        exclude_files=config_exclusions,
+        exclude_dirs=user_exclude_dirs,
+        exclude_files=config_exclusions + user_exclude_files + user_exclude_dirs,
         custom_install_path=custom_target,
         repo_url=plan["repo_url"],
         release_id=plan["release_id"],

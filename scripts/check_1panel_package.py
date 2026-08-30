@@ -28,8 +28,48 @@ LOCALES = {
     "tr",
 }
 VARIABLE_PATTERN = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
-IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+@sha256:[0-9a-f]{64}$")
+IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+(?:@sha256:[0-9a-f]{64})?$")
+SIMPLE_VARIABLE_PATTERN = re.compile(r"^\$\{([A-Z][A-Z0-9_]*)\}$")
 KNOWN_1PANEL_VARIABLES = {"CONTAINER_NAME"}
+REQUIRED_SERVICES = {"app", "frontend", "caddy"}
+DEFAULT_INTERNAL_API_URL = "http://app:8000"
+DEFAULT_APP_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager:latest"
+DEFAULT_WEB_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager-web:latest"
+
+
+def form_field_default(fields: list[Any], env_key: str) -> str:
+    field = next((item for item in fields if item.get("envKey") == env_key), None)
+    if not isinstance(field, dict):
+        return ""
+    value = field.get("default")
+    return value if isinstance(value, str) else ""
+
+
+def compose_image_ref(raw: object, fields: list[Any]) -> str:
+    if not isinstance(raw, str):
+        return ""
+    # 1Panel pulls `image:` before Compose interpolation. `${VAR:-default}` is
+    # treated as a literal ref and fails with "invalid reference format".
+    if ":-" in raw:
+        fail("1Panel image refs must be ${VAR} or a literal; ${VAR:-default} cannot be pulled")
+    match = SIMPLE_VARIABLE_PATTERN.fullmatch(raw)
+    if match:
+        return form_field_default(fields, match.group(1))
+    return raw
+
+
+def require_1panel_service(name: str, service: dict[str, Any]) -> None:
+    if service.get("restart") != "always":
+        fail(f"{name} must use restart: always")
+    labels = service.get("labels")
+    if not isinstance(labels, dict) or labels.get("createdBy") != "Apps":
+        fail(f"{name} must have labels.createdBy: Apps")
+    if "1panel-network" not in service.get("networks", []):
+        fail(f"{name} must join 1panel-network")
+    for volume in service.get("volumes", []):
+        source = str(volume).split(":", 1)[0]
+        if source.startswith("/") or "docker.sock" in source:
+            fail(f"dangerous host volume is not allowed: {volume}")
 
 
 def fail(message: str) -> None:
@@ -109,6 +149,7 @@ def main() -> None:
         PACKAGE_ROOT / "data.yml",
         VERSION_ROOT / "data.yml",
         VERSION_ROOT / "docker-compose.yml",
+        VERSION_ROOT / "Caddyfile",
         VERSION_ROOT / "data/.gitkeep",
         VERSION_ROOT / "scripts/init.sh",
     )
@@ -149,35 +190,80 @@ def main() -> None:
 
     compose = load_yaml(VERSION_ROOT / "docker-compose.yml")
     services = compose.get("services")
-    if not isinstance(services, dict) or set(services) != {"app"}:
-        fail("the package must contain only the app service")
+    if not isinstance(services, dict) or set(services) != REQUIRED_SERVICES:
+        fail("the package must contain app, frontend, and caddy services")
     app = services["app"]
+    frontend = services["frontend"]
+    caddy = services["caddy"]
     if not isinstance(app, dict):
         fail("app service must be a mapping")
+    if not isinstance(frontend, dict):
+        fail("frontend service must be a mapping")
+    if not isinstance(caddy, dict):
+        fail("caddy service must be a mapping")
+    require_1panel_service("app", app)
+    require_1panel_service("frontend", frontend)
+    require_1panel_service("caddy", caddy)
     if app.get("container_name") != "${CONTAINER_NAME}":
         fail("app must use container_name: ${CONTAINER_NAME}")
-    if app.get("restart") != "always":
-        fail("app must use restart: always")
-    if app.get("labels", {}).get("createdBy") != "Apps":
-        fail("app must have labels.createdBy: Apps")
+    if frontend.get("container_name") != "${CONTAINER_NAME}-web":
+        fail("frontend must use container_name: ${CONTAINER_NAME}-web")
+    if caddy.get("container_name") != "${CONTAINER_NAME}-edge":
+        fail("caddy must use container_name: ${CONTAINER_NAME}-edge")
     networks = compose.get("networks", {})
     if networks.get("1panel-network", {}).get("external") is not True:
         fail("1panel-network must be external")
-    if "1panel-network" not in app.get("networks", []):
-        fail("app must join 1panel-network")
     if "./data:/app/data" not in app.get("volumes", []):
         fail("app must persist ./data:/app/data")
-    image = app.get("image")
-    if not isinstance(image, str) or IMAGE_PATTERN.fullmatch(image) is None:
-        fail("app image must use a tag and immutable sha256 digest")
-    variables = set(VARIABLE_PATTERN.findall((VERSION_ROOT / "docker-compose.yml").read_text()))
+    if app.get("ports"):
+        fail("app must not publish a host port; Caddy is the public root")
+    if "8000" not in [str(item) for item in app.get("expose", [])]:
+        fail("app must expose the private API port 8000")
+    image = compose_image_ref(app.get("image"), version_fields)
+    if IMAGE_PATTERN.fullmatch(image) is None:
+        fail("app image must use a tagged Docker Hub image")
+    frontend_image = compose_image_ref(frontend.get("image"), version_fields)
+    if IMAGE_PATTERN.fullmatch(frontend_image) is None:
+        fail("frontend image must use a tagged Next.js console image")
+    if form_field_default(version_fields, "CS2_MANAGER_IMAGE") != DEFAULT_APP_IMAGE:
+        fail("CS2_MANAGER_IMAGE must default to the pinned backend image")
+    if form_field_default(version_fields, "CS2_FRONTEND_IMAGE") != DEFAULT_WEB_IMAGE:
+        fail("CS2_FRONTEND_IMAGE must default to the published frontend image")
+    frontend_env = frontend.get("environment")
+    if not isinstance(frontend_env, dict):
+        fail("frontend environment is required")
+    internal_api = frontend_env.get("INTERNAL_API_URL")
+    if internal_api not in {
+        DEFAULT_INTERNAL_API_URL,
+        "${FRONTEND_INTERNAL_API_URL}",
+        f"${{FRONTEND_INTERNAL_API_URL:-{DEFAULT_INTERNAL_API_URL}}}",
+    }:
+        fail("frontend must proxy API calls to the private app:8000 listener")
+    if frontend_env.get("PUBLIC_APP_URL"):
+        fail("frontend must not pin PUBLIC_APP_URL; derive the browser origin from Host")
+    if frontend.get("extra_hosts"):
+        fail(
+            "1Panel compose must not set extra_hosts; host-gateway fails on "
+            "some 1Panel Docker engines and app:8000 is already on 1panel-network"
+        )
+    app_env = app.get("environment")
+    if not isinstance(app_env, dict) or app_env.get("CONSOLE_PUBLIC_URL") != "${BACKEND_URL}":
+        fail("app must set CONSOLE_PUBLIC_URL from BACKEND_URL")
+    caddy_image = caddy.get("image")
+    if not isinstance(caddy_image, str) or IMAGE_PATTERN.fullmatch(caddy_image) is None:
+        fail("caddy image must use a tag and immutable sha256 digest")
+    caddyfile = (VERSION_ROOT / "Caddyfile").read_text(encoding="utf-8")
+    if "reverse_proxy frontend:3000" not in caddyfile:
+        fail("1Panel Caddyfile must reverse-proxy the public root to Next :3000")
+    if "reverse_proxy app:8000" in caddyfile:
+        fail("1Panel Caddyfile must not expose FastAPI as the public root")
+    if "./Caddyfile:/etc/caddy/Caddyfile:ro" not in caddy.get("volumes", []):
+        fail("caddy must mount the package Caddyfile read-only")
+    compose_text = (VERSION_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    variables = set(VARIABLE_PATTERN.findall(compose_text))
     undeclared = variables - declared_variables - KNOWN_1PANEL_VARIABLES
     if undeclared:
         fail(f"compose variables are missing from formFields: {sorted(undeclared)}")
-    for volume in app.get("volumes", []):
-        source = str(volume).split(":", 1)[0]
-        if source.startswith("/") or "docker.sock" in source:
-            fail(f"dangerous host volume is not allowed: {volume}")
     if not (VERSION_ROOT / "scripts/init.sh").stat().st_mode & 0o111:
         fail("scripts/init.sh must be executable")
     redis_field = next(
@@ -194,8 +280,19 @@ def main() -> None:
     )
     if not isinstance(backend_field, dict) or backend_field.get("rule") != "paramExtUrl":
         fail("BACKEND_URL must use the 1Panel URL validator")
-    if backend_field.get("default") != "http://0.0.0.0:8000":
-        fail("BACKEND_URL must default to http://0.0.0.0:8000")
+    if backend_field.get("default") != "http://localhost:3000":
+        fail("BACKEND_URL must default to the browser origin http://localhost:3000")
+    if "0.0.0.0" in str(backend_field.get("default")):
+        fail("BACKEND_URL must not default to a bind address")
+    internal_api_field = next(
+        (field for field in version_fields if field.get("envKey") == "FRONTEND_INTERNAL_API_URL"),
+        None,
+    )
+    if (
+        not isinstance(internal_api_field, dict)
+        or internal_api_field.get("default") != DEFAULT_INTERNAL_API_URL
+    ):
+        fail("FRONTEND_INTERNAL_API_URL must default to http://app:8000")
     port_field = next(
         (field for field in version_fields if field.get("envKey") == "PANEL_APP_PORT_HTTP"), None
     )
@@ -204,12 +301,13 @@ def main() -> None:
         or port_field.get("type") != "number"
         or port_field.get("rule") != "paramPort"
         or port_field.get("edit") is not True
+        or port_field.get("default") != 3000
     ):
-        fail("PANEL_APP_PORT_HTTP must be an editable external port field")
-    if "${PANEL_APP_PORT_HTTP}:8000" not in (VERSION_ROOT / "docker-compose.yml").read_text(
-        encoding="utf-8"
-    ):
-        fail("compose must map PANEL_APP_PORT_HTTP to the container port 8000")
+        fail("PANEL_APP_PORT_HTTP must be an editable console port defaulting to 3000")
+    if "${PANEL_APP_PORT_HTTP}:80" not in compose_text:
+        fail("compose must map PANEL_APP_PORT_HTTP to Caddy port 80")
+    if "${PANEL_APP_PORT_HTTP}:8000" in compose_text:
+        fail("compose must not map the public HTTP port onto FastAPI :8000")
     for secret_key in ("SECRET_KEY", "JWT_SECRET_KEY"):
         secret_field = next(
             (field for field in version_fields if field.get("envKey") == secret_key), None
@@ -241,6 +339,9 @@ def main() -> None:
             "PANEL_REDIS_DB": "0",
             "PANEL_APP_PORT_HTTP": "18000",
             "BACKEND_URL": "http://localhost:18000",
+            "FRONTEND_INTERNAL_API_URL": "http://app:8000",
+            "CS2_MANAGER_IMAGE": DEFAULT_APP_IMAGE,
+            "CS2_FRONTEND_IMAGE": DEFAULT_WEB_IMAGE,
             "SECRET_KEY": "test-secret-key",
             "JWT_SECRET_KEY": "test-jwt-secret-key",
             "GOOGLE_CLIENT_ID": "",

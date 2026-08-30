@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from services.ssh.text import decode_remote_text, encode_console_input
+
 from .common import *
 
 router = APIRouter(tags=["actions"])
@@ -36,9 +38,7 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
         try:
             # Create interactive process with PTY for interactive shell
             # Request a PTY to enable interactive terminal features
-            process = await ssh_manager.conn.create_process(
-                term_type="xterm-256color", encoding="utf-8", errors="replace"
-            )
+            process = await ssh_manager.create_interactive_process()
 
             async def read_output():
                 """Read output from SSH and send to WebSocket"""
@@ -46,7 +46,9 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
                     while True:
                         output = await process.stdout.read(1024)
                         if output:
-                            await websocket.send_json({"type": "output", "data": output})
+                            await websocket.send_json(
+                                {"type": "output", "data": decode_remote_text(output)}
+                            )
                         else:
                             break
                 except Exception:
@@ -63,7 +65,7 @@ async def ssh_console_websocket(websocket: WebSocket, server_id: int):
                 if message.get("type") == "input":
                     # Send input to SSH
                     input_data = message.get("data", "")
-                    process.stdin.write(input_data)
+                    process.stdin.write(encode_console_input(str(input_data)))
                     await process.stdin.drain()
                 elif message.get("type") == "resize":
                     # Handle terminal resize
@@ -146,11 +148,8 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
         process = None
         output_task = None
         try:
-            process = await ssh_manager.conn.create_process(
-                attach_command(active_manager, name),
-                term_type="xterm-256color",
-                encoding="utf-8",
-                errors="replace",
+            process = await ssh_manager.create_interactive_process(
+                attach_command(active_manager, name)
             )
 
             async def read_output():
@@ -159,7 +158,9 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                     while True:
                         output = await process.stdout.read(1024)
                         if output:
-                            await websocket.send_json({"type": "output", "data": output})
+                            await websocket.send_json(
+                                {"type": "output", "data": decode_remote_text(output)}
+                            )
                         else:
                             break
                 except Exception:
@@ -176,7 +177,7 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
                 if message.get("type") == "input":
                     # Send input directly to the attached session via stdin.
                     input_data = message.get("data", "")
-                    process.stdin.write(input_data)
+                    process.stdin.write(encode_console_input(str(input_data)))
                     await process.stdin.drain()
                 elif message.get("type") == "resize":
                     # Handle terminal resize

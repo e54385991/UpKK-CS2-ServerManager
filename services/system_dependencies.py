@@ -79,3 +79,26 @@ def installed_packages_verification_command(packages: Iterable[str]) -> str:
         "printf 'Missing required packages:%s\\n' \"$missing\" >&2; exit 1; "
         "fi"
     )
+
+
+MISSING_PACKAGES_MARKER = "Missing required packages:"
+
+
+def parse_missing_packages(*chunks: str) -> list[str]:
+    """Extract package names emitted by ``installed_packages_verification_command``."""
+    names: list[str] = []
+    for chunk in chunks:
+        if not chunk:
+            continue
+        for line in chunk.splitlines():
+            if MISSING_PACKAGES_MARKER not in line:
+                continue
+            _, _, rest = line.partition(MISSING_PACKAGES_MARKER)
+            names.extend(part for part in rest.split() if part)
+    return list(dict.fromkeys(names))
+
+
+def manual_install_command(packages: Iterable[str] | None = None) -> str:
+    """Exact apt command the operator can paste if automatic install fails."""
+    selected = tuple(packages) if packages else STEAMCMD_REQUIRED_PACKAGES
+    return "sudo apt-get install -y " + " ".join(selected)

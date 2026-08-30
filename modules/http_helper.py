@@ -67,6 +67,7 @@ class HTTPHelper:
         timeout: int = 10,
         proxy: Optional[str] = None,
         github_token: Optional[str] = None,
+        retries: Optional[int] = None,
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
         Make an HTTP request with error handling, retry logic, and connection pooling
@@ -81,6 +82,7 @@ class HTTPHelper:
             timeout: Request timeout in seconds (default: 10)
             proxy: Optional proxy URL to use for this request
             github_token: Optional GitHub personal access token for authentication
+            retries: Attempt count. Defaults to MAX_RETRIES. Use 1 on interactive paths.
 
         Returns:
             Tuple[bool, Optional[Dict], Optional[str]]:
@@ -89,14 +91,13 @@ class HTTPHelper:
                 - error_message: Error message if failed
         """
         last_error = None
+        attempts = MAX_RETRIES if retries is None else max(1, int(retries))
 
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(attempts):
             try:
                 if attempt > 0:
                     delay = RETRY_DELAY * (2 ** (attempt - 1))  # Exponential backoff
-                    logger.info(
-                        f"Retry attempt {attempt + 1}/{MAX_RETRIES} after {delay}s delay..."
-                    )
+                    logger.info(f"Retry attempt {attempt + 1}/{attempts} after {delay}s delay...")
                     await asyncio.sleep(delay)
 
                 # Add GitHub token to headers if provided and URL is a GitHub API request
@@ -122,7 +123,7 @@ class HTTPHelper:
                         )
 
                 logger.debug(
-                    f"Making {method} request to {request_url} (attempt {attempt + 1}/{MAX_RETRIES})"
+                    f"Making {method} request to {request_url} (attempt {attempt + 1}/{attempts})"
                 )
 
                 client = await self._get_client()
@@ -179,7 +180,7 @@ class HTTPHelper:
                 continue
 
         # All retries failed
-        final_error = f"Request failed after {MAX_RETRIES} attempts. Last error: {last_error}"
+        final_error = f"Request failed after {attempts} attempts. Last error: {last_error}"
         logger.error(final_error)
         return False, None, final_error
 
@@ -191,6 +192,7 @@ class HTTPHelper:
         timeout: int = 10,
         proxy: Optional[str] = None,
         github_token: Optional[str] = None,
+        retries: Optional[int] = None,
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
         Make a GET request
@@ -202,6 +204,7 @@ class HTTPHelper:
             timeout: Request timeout in seconds
             proxy: Optional proxy URL to use for this request
             github_token: Optional GitHub personal access token for authentication
+            retries: Attempt count. Defaults to MAX_RETRIES.
 
         Returns:
             Tuple[bool, Optional[Dict], Optional[str]]: (success, response_data, error_message)
@@ -214,6 +217,7 @@ class HTTPHelper:
             timeout=timeout,
             proxy=proxy,
             github_token=github_token,
+            retries=retries,
         )
 
     async def post(

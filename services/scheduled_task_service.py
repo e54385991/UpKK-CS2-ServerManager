@@ -379,6 +379,10 @@ class ScheduledTaskService:
                 except RemoteMapPoolError as exc:
                     return False, str(exc)
                 return True, f"Synchronized {map_count} maps from the custom remote map pool"
+            elif action == "log_cleanup":
+                from services.system_cleanup_service import system_cleanup_service
+
+                return await system_cleanup_service.run_scheduled(ssh_manager, server)
             else:
                 return False, f"Unknown action: {action}"
 

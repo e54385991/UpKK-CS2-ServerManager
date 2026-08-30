@@ -71,15 +71,16 @@ curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/ma
 The script automatically:
 
 - Installs Docker Engine and the Docker Compose plugin;
-- Generates a random database password and secure application keys;
-- Downloads the Compose configuration and starts the management panel,
-  PostgreSQL, and Redis;
-- Applies database migrations and waits for the services to become healthy.
+- Generates a random database password;
+- Downloads the self-contained Compose file and starts Next, FastAPI,
+  PostgreSQL, and Redis from Docker Hub;
+- Applies database migrations and waits until the console and `/health`
+  proxy respond.
 
 When deployment is complete, open:
 
 ```text
-http://YOUR_SERVER_IP:8000
+http://YOUR_SERVER_IP:3000
 ```
 
 Default credentials for the first sign-in:
@@ -90,9 +91,12 @@ Password: admin123
 ```
 
 > ⚠️ **Change the default password immediately after your first sign-in.** If
-> the page is unreachable, make sure TCP port `8000` is allowed by both your
+> the page is unreachable, make sure TCP port `3000` is allowed by both your
 > cloud security group and system firewall. For a public production service,
 > configure a domain name and HTTPS.
+
+On 1Panel, paste the root `docker-compose.yml` into **Containers → Compose**.
+Do not deploy the frontend and backend as two separate runtimes.
 
 The management panel is now ready; you do not need to clone the repository or
 configure the database manually. For upgrades, backups, logs, port changes,

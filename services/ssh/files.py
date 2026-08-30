@@ -3,6 +3,7 @@
 # ruff: noqa: F403,F405
 
 from .common import *
+from .connection import ConnectionMixin
 
 DOWNLOAD_CHUNK_SIZE = 262144
 
@@ -393,7 +394,7 @@ class RemoteFileMixin:
                 (f"Archive contains too many entries (maximum {cls.ARCHIVE_MAX_ENTRIES})"),
             )
 
-        normalize_backslashes = archive_type in ("tar", "tar.gz", "tar.bz2", "tar.xz")
+        normalize_backslashes = archive_type in ConnectionMixin.ARCHIVE_TYPES_ALLOW_BACKSLASH
         has_backslash_separators = False
         member_types: Dict[str, bool] = {}
         members: List[Dict[str, Any]] = []
@@ -447,19 +448,51 @@ class RemoteFileMixin:
         )
 
     @staticmethod
+    def _tar_compress_program(archive_type: str) -> Optional[str]:
+        return {"tar.zst": "zstd", "tar.lzma": "lzma"}.get(archive_type)
+
+    @classmethod
+    def _tar_list_command(
+        cls,
+        tool: str,
+        archive_type: str,
+        archive_path: str,
+        compress_program: Optional[str] = None,
+    ) -> str:
+        list_flag = {
+            "tar": "-tvf",
+            "tar.gz": "-tvzf",
+            "tar.bz2": "-tvjf",
+            "tar.xz": "-tvJf",
+            "tar.zst": "-tvf",
+            "tar.lzma": "-tvf",
+        }[archive_type]
+        program = compress_program or cls._tar_compress_program(archive_type)
+        compress_option = f"-I {shlex.quote(program)} " if program else ""
+        return (
+            f"LC_ALL=C TAR_OPTIONS= {shlex.quote(tool)} {compress_option}{list_flag} "
+            f"{shlex.quote(archive_path)} --numeric-owner --full-time --utc --quoting-style=c"
+        )
+
+    @staticmethod
     def _tar_extract_command(
         tool: str,
         archive_type: str,
         archive_path: str,
         stage_path: str,
         normalize_backslashes: bool,
+        compress_program: Optional[str] = None,
     ) -> str:
         extract_flag = {
             "tar": "-xf",
             "tar.gz": "-xzf",
             "tar.bz2": "-xjf",
             "tar.xz": "-xJf",
+            "tar.zst": "-xf",
+            "tar.lzma": "-xf",
         }[archive_type]
+        program = compress_program or RemoteFileMixin._tar_compress_program(archive_type)
+        compress_option = f"-I {shlex.quote(program)} " if program else ""
         transform_option = ""
         if normalize_backslashes:
             # Limit the transform to member names. Uppercase S/H explicitly
@@ -468,10 +501,46 @@ class RemoteFileMixin:
             transform_expression = shlex.quote(r"flags=rSH;s|\\|/|g")
             transform_option = f" --transform={transform_expression}"
         return (
-            f"LC_ALL=C TAR_OPTIONS= {shlex.quote(tool)} {extract_flag} {shlex.quote(archive_path)} "
+            f"LC_ALL=C TAR_OPTIONS= {shlex.quote(tool)} {compress_option}{extract_flag} "
+            f"{shlex.quote(archive_path)} "
             f"-C {shlex.quote(stage_path)} --no-same-owner --no-same-permissions"
             f"{transform_option}"
         )
+
+    @staticmethod
+    def _single_file_output_name(archive_path: str, archive_type: str) -> str:
+        name = posixpath.basename(archive_path)
+        lower = name.lower()
+        suffixes = {
+            "gz": (".gz",),
+            "bz2": (".bz2",),
+            "xz": (".xz",),
+            "zst": (".zstd", ".zst"),
+            "lzma": (".lzma",),
+        }[archive_type]
+        for suffix in suffixes:
+            if lower.endswith(suffix):
+                stripped = name[: -len(suffix)]
+                return stripped or name
+        return name
+
+    @staticmethod
+    def _single_file_tool_candidates(archive_type: str) -> Tuple[str, ...]:
+        return {
+            "gz": ("gzip",),
+            "bz2": ("bzip2",),
+            "xz": ("xz",),
+            "zst": ("zstd",),
+            "lzma": ("lzma", "xz"),
+        }[archive_type]
+
+    @staticmethod
+    def _single_file_command(tool: str, archive_type: str, archive_path: str, mode: str) -> str:
+        flag = "-t" if mode == "t" else "-dc"
+        tool_name = posixpath.basename(tool).lower()
+        if archive_type == "lzma" and tool_name in {"xz", "xz.exe"}:
+            return f"{shlex.quote(tool)} --format=lzma {flag} {shlex.quote(archive_path)}"
+        return f"{shlex.quote(tool)} {flag} {shlex.quote(archive_path)}"
 
     @staticmethod
     def _parse_7z_listing(output: str) -> Tuple[Optional[List[Tuple[str, bool]]], Optional[str]]:
@@ -562,17 +631,20 @@ class RemoteFileMixin:
                 ):
                     return False, {}, "Archive contains a link or special ZIP member"
 
-        elif archive_type in ("tar", "tar.gz", "tar.bz2", "tar.xz"):
+        elif archive_type in ConnectionMixin.TAR_ARCHIVE_TYPES:
             tar_tool = await self._find_remote_tool(("tar",))
             if not tar_tool:
                 return False, {}, "Required archive tool is missing: install tar"
-            safe_tool = shlex.quote(tar_tool)
-            verbose_flag = {
-                "tar": "-tvf",
-                "tar.gz": "-tvzf",
-                "tar.bz2": "-tvjf",
-                "tar.xz": "-tvJf",
-            }[archive_type]
+            compress_name = self._tar_compress_program(archive_type)
+            compress_program = None
+            if compress_name:
+                compress_program = await self._find_remote_tool((compress_name,))
+                if not compress_program:
+                    return (
+                        False,
+                        {},
+                        f"Required archive tool is missing: install {compress_name}",
+                    )
             raw_members: List[Tuple[str, bool]] = []
 
             def handle_tar_line(line: str) -> Optional[str]:
@@ -584,14 +656,18 @@ class RemoteFileMixin:
                 return None
 
             list_success, list_error = await self._stream_archive_listing(
-                f"LC_ALL=C TAR_OPTIONS= {safe_tool} {verbose_flag} {safe_archive} "
-                "--numeric-owner --full-time --utc --quoting-style=c",
+                self._tar_list_command(
+                    tar_tool,
+                    archive_type,
+                    archive_path,
+                    compress_program,
+                ),
                 handle_tar_line,
             )
             if not list_success:
                 return False, {}, f"Invalid TAR archive: {list_error}"
 
-        elif archive_type == "7z":
+        elif archive_type in ConnectionMixin.SEVEN_ZIP_ARCHIVE_TYPES:
             seven_zip_tool = await self._find_remote_tool(("7zz", "7z", "7za"))
             if not seven_zip_tool:
                 return False, {}, "Required archive tool is missing: install 7zz, 7z, or 7za"
@@ -600,19 +676,28 @@ class RemoteFileMixin:
                 timeout=self.ARCHIVE_INSPECT_TIMEOUT,
             )
             if not success:
-                return False, {}, f"Invalid 7z archive: {self._short_command_error(stdout, stderr)}"
+                label = "RAR" if archive_type == "rar" else "7z"
+                return (
+                    False,
+                    {},
+                    f"Invalid {label} archive: {self._short_command_error(stdout, stderr)}",
+                )
             parsed_members, parse_error = self._parse_7z_listing(stdout)
             if parse_error:
                 return False, {}, parse_error
             raw_members = parsed_members or []
 
-        elif archive_type in ("gz", "bz2"):
-            tool_name = "gzip" if archive_type == "gz" else "bzip2"
-            tool = await self._find_remote_tool((tool_name,))
+        elif archive_type in ConnectionMixin.SINGLE_FILE_ARCHIVE_TYPES:
+            candidates = self._single_file_tool_candidates(archive_type)
+            tool = await self._find_remote_tool(candidates)
             if not tool:
-                return False, {}, f"Required archive tool is missing: install {tool_name}"
+                return (
+                    False,
+                    {},
+                    f"Required archive tool is missing: install {' or '.join(candidates)}",
+                )
             success, stdout, stderr = await self.execute_command(
-                f"{shlex.quote(tool)} -t {safe_archive}",
+                self._single_file_command(tool, archive_type, archive_path, "t"),
                 timeout=self.ARCHIVE_INSPECT_TIMEOUT,
             )
             if not success:
@@ -623,8 +708,7 @@ class RemoteFileMixin:
                         f"Invalid {archive_type} archive: {self._short_command_error(stdout, stderr)}"
                     ),
                 )
-            suffix_length = 3 if archive_type == "gz" else 4
-            raw_members = [(posixpath.basename(archive_path)[:-suffix_length], False)]
+            raw_members = [(self._single_file_output_name(archive_path, archive_type), False)]
         else:
             return False, {}, "Unsupported archive format"
 
@@ -642,8 +726,8 @@ class RemoteFileMixin:
                 False,
                 {},
                 (
-                    "Unsupported archive format. Supported formats: .zip, .7z, .tar, .tar.gz, "
-                    ".tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .gz, .bz2"
+                    "Unsupported archive format. Supported formats: "
+                    f"{ConnectionMixin.SUPPORTED_ARCHIVE_FORMATS_LABEL}"
                 ),
             )
         valid, validation_error = await self.validate_path_within_base(
@@ -870,6 +954,78 @@ class RemoteFileMixin:
             return False, f"SFTP error: {str(e)}"
         except Exception as e:
             return False, f"Error creating directory: {str(e)}"
+
+    async def _remote_exists(self, path: str) -> bool:
+        if not self.conn:
+            return False
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                await sftp.lstat(path)
+            return True
+        except asyncssh.SFTPNoSuchFile, asyncssh.SFTPNoSuchPath:
+            return False
+        except asyncssh.SFTPError:
+            return False
+
+    @staticmethod
+    def copy_collision_name(basename: str, index: int) -> str:
+        if index <= 0:
+            return basename
+        stem, ext = posixpath.splitext(basename)
+        suffix = " copy" if index == 1 else f" copy {index}"
+        return f"{stem}{suffix}{ext}"
+
+    async def copy_into_directory(
+        self, source: str, dest_dir: str, server: Server
+    ) -> Tuple[bool, str, str]:
+        """Copy a remote file or directory into ``dest_dir``. Returns the new path."""
+
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, "", f"Connection failed: {msg}"
+
+        source_n = posixpath.normpath(source)
+        dest_n = posixpath.normpath(dest_dir)
+        basename = posixpath.basename(source_n)
+        if not basename or basename in {".", ".."}:
+            return False, "", "Invalid source path"
+        if dest_n == source_n or dest_n.startswith(source_n.rstrip("/") + "/"):
+            return False, "", "Cannot copy a folder into itself"
+
+        valid_source, source_error = await self.validate_path_within_base(
+            server.game_directory, source_n, server
+        )
+        if not valid_source:
+            return False, "", source_error
+        valid_dest, dest_error = await self.validate_path_within_base(
+            server.game_directory, dest_n, server
+        )
+        if not valid_dest:
+            return False, "", dest_error
+
+        candidate = posixpath.join(dest_n, basename)
+        for index in range(0, 100):
+            name = self.copy_collision_name(basename, index)
+            candidate = posixpath.join(dest_n, name)
+            if not await self._remote_exists(candidate):
+                break
+        else:
+            return False, "", "Too many name collisions at the destination"
+
+        valid_target, target_error = await self.validate_path_within_base(
+            server.game_directory, candidate, server, allow_missing=True
+        )
+        if not valid_target:
+            return False, "", target_error
+
+        success, stdout, stderr = await self.execute_command(
+            f"cp -a -- {shlex.quote(source_n)} {shlex.quote(candidate)}",
+            timeout=120,
+        )
+        if not success:
+            return False, "", self._short_command_error(stdout, stderr)
+        return True, candidate, ""
 
     async def rename_path(self, old_path: str, new_path: str, server: Server) -> Tuple[bool, str]:
         """
@@ -1156,8 +1312,8 @@ class RemoteFileMixin:
         archive_type = self.archive_type_from_path(archive_path)
         if archive_type is None:
             return False, (
-                "Unsupported archive format. Supported formats: .zip, .7z, .tar, .tar.gz, "
-                ".tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .gz, .bz2"
+                "Unsupported archive format. Supported formats: "
+                f"{ConnectionMixin.SUPPORTED_ARCHIVE_FORMATS_LABEL}"
             )
 
         archive_valid, archive_error = await self.validate_path_within_base(
@@ -1189,7 +1345,8 @@ class RemoteFileMixin:
         if source_folder:
             normalized_source, source_error = self._normalize_archive_member(
                 source_folder.rstrip("/"),
-                allow_backslash_separators=archive_type in ("tar", "tar.gz", "tar.bz2", "tar.xz"),
+                allow_backslash_separators=archive_type
+                in ConnectionMixin.ARCHIVE_TYPES_ALLOW_BACKSLASH,
             )
             if source_error or normalized_source is None:
                 return False, source_error or "Invalid source_folder"
@@ -1304,18 +1461,25 @@ class RemoteFileMixin:
                 extract_command = (
                     f"LC_ALL=C {shlex.quote(tool)} -qq -o {safe_archive} -d {safe_stage}"
                 )
-            elif archive_type in ("tar", "tar.gz", "tar.bz2", "tar.xz"):
+            elif archive_type in ConnectionMixin.TAR_ARCHIVE_TYPES:
                 tool = await self._find_remote_tool(("tar",))
                 if not tool:
                     return False, "Required archive tool is missing: install tar"
+                compress_name = self._tar_compress_program(archive_type)
+                compress_program = None
+                if compress_name:
+                    compress_program = await self._find_remote_tool((compress_name,))
+                    if not compress_program:
+                        return False, f"Required archive tool is missing: install {compress_name}"
                 extract_command = self._tar_extract_command(
                     tool,
                     archive_type,
                     archive_path,
                     stage_path,
                     archive_info["has_backslash_separators"],
+                    compress_program,
                 )
-            elif archive_type == "7z":
+            elif archive_type in ConnectionMixin.SEVEN_ZIP_ARCHIVE_TYPES:
                 tool = await self._find_remote_tool(("7zz", "7z", "7za"))
                 if not tool:
                     return False, "Required archive tool is missing: install 7zz, 7z, or 7za"
@@ -1324,15 +1488,20 @@ class RemoteFileMixin:
                     f"LC_ALL=C {shlex.quote(tool)} x -y -aoa -bd -bso0 -bsp0 "
                     f"{output_argument} -- {safe_archive}"
                 )
-            elif archive_type in ("gz", "bz2"):
-                tool_name = "gzip" if archive_type == "gz" else "bzip2"
-                tool = await self._find_remote_tool((tool_name,))
+            elif archive_type in ConnectionMixin.SINGLE_FILE_ARCHIVE_TYPES:
+                candidates = self._single_file_tool_candidates(archive_type)
+                tool = await self._find_remote_tool(candidates)
                 if not tool:
-                    return False, f"Required archive tool is missing: install {tool_name}"
-                suffix_length = 3 if archive_type == "gz" else 4
-                output_name = posixpath.basename(archive_path)[:-suffix_length]
+                    return (
+                        False,
+                        f"Required archive tool is missing: install {' or '.join(candidates)}",
+                    )
+                output_name = self._single_file_output_name(archive_path, archive_type)
                 safe_output = shlex.quote(posixpath.join(stage_path, output_name))
-                extract_command = f"{shlex.quote(tool)} -dc {safe_archive} > {safe_output}"
+                extract_command = (
+                    f"{self._single_file_command(tool, archive_type, archive_path, 'dc')} "
+                    f"> {safe_output}"
+                )
             else:
                 return False, "Unsupported archive format"
 
@@ -1442,6 +1611,26 @@ class RemoteFileMixin:
                     f"rmdir -- {safe_temp_root} 2>/dev/null || true", timeout=10
                 )
 
+    async def _ensure_remote_parent(self, remote_path: str, sftp) -> Tuple[bool, str]:
+        """Create every missing parent of ``remote_path`` before a put/open."""
+        parent_dir = posixpath.dirname(remote_path)
+        if not parent_dir or parent_dir in (".", "/"):
+            return True, ""
+        try:
+            await sftp.makedirs(parent_dir, exist_ok=True)
+            return True, ""
+        except asyncssh.SFTPError, OSError:
+            success, stdout, stderr = await self.execute_command(
+                f"mkdir -p -- {shlex.quote(parent_dir)}",
+                timeout=30,
+            )
+            if success:
+                return True, ""
+            return (
+                False,
+                f"Failed to create upload directory: {self._short_command_error(stdout, stderr)}",
+            )
+
     async def upload_file(
         self, local_path: str, remote_path: str, server: Server
     ) -> Tuple[bool, str]:
@@ -1463,13 +1652,9 @@ class RemoteFileMixin:
 
         try:
             async with self.conn.start_sftp_client() as sftp:
-                # Ensure parent directory exists
-                parent_dir = posixpath.dirname(remote_path)
-                if parent_dir:
-                    try:
-                        await sftp.stat(parent_dir)
-                    except asyncssh.SFTPNoSuchFile:
-                        await sftp.makedirs(parent_dir)
+                created, create_error = await self._ensure_remote_parent(remote_path, sftp)
+                if not created:
+                    return False, create_error
 
                 # Upload file
                 await sftp.put(local_path, remote_path)
@@ -1594,13 +1779,9 @@ class RemoteFileMixin:
             bytes_uploaded = 0
 
             async with self.conn.start_sftp_client() as sftp:
-                # Ensure parent directory exists
-                parent_dir = posixpath.dirname(remote_path)
-                if parent_dir:
-                    try:
-                        await sftp.stat(parent_dir)
-                    except asyncssh.SFTPNoSuchFile:
-                        await sftp.makedirs(parent_dir)
+                created, create_error = await self._ensure_remote_parent(remote_path, sftp)
+                if not created:
+                    return False, create_error
 
                 # Upload file with progress tracking
                 # Read file in chunks and upload

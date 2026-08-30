@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from fastapi import WebSocket
 
 from modules.utils import get_current_time
 from services.redis_manager import redis_manager
+
+logger = logging.getLogger(__name__)
 
 
 class DeploymentWebSocket:
@@ -76,3 +79,12 @@ async def send_deployment_update(
         message,
         timestamp,
     )
+    try:
+        from services.server_operation_hub import server_operation_hub
+
+        await server_operation_hub.forward_progress(server_id, msg_type, message, timestamp)
+    except Exception:
+        logger.debug(
+            "Unable to forward deployment progress to the operation hub",
+            exc_info=True,
+        )

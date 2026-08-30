@@ -167,43 +167,97 @@ additionalProperties:
       required: true
       rule: integerNumberWith0
       type: number
-    - default: 8000
+    - default: 3000
       edit: true
       envKey: PANEL_APP_PORT_HTTP
-      labelEn: External HTTP Port
-      labelZh: 外部 HTTP 端口
+      labelEn: Console HTTP Port
+      labelZh: 控制台 HTTP 端口
       label:
-        en: External HTTP Port
-        es-es: Puerto HTTP externo
-        ja: 外部 HTTP ポート
-        ms: Port HTTP luaran
-        pt-br: Porta HTTP externa
-        ru: Внешний HTTP-порт
-        ko: 외부 HTTP 포트
-        zh-Hant: 外部 HTTP 連接埠
-        zh: 外部 HTTP 端口
-        tr: Harici HTTP bağlantı noktası
+        en: Console HTTP Port
+        es-es: Puerto HTTP de la consola
+        ja: コンソール HTTP ポート
+        ms: Port HTTP konsol
+        pt-br: Porta HTTP do console
+        ru: HTTP-порт консоли
+        ko: 콘솔 HTTP 포트
+        zh-Hant: 控制台 HTTP 連接埠
+        zh: 控制台 HTTP 端口
+        tr: Konsol HTTP bağlantı noktası
       required: true
       rule: paramPort
       type: number
-    - default: http://0.0.0.0:8000
+    - default: http://localhost:3000
       edit: true
       envKey: BACKEND_URL
-      labelEn: Public URL
-      labelZh: 公网访问地址
+      labelEn: Browser origin URL
+      labelZh: 浏览器访问地址
       label:
-        en: Public URL
-        es-es: URL pública
-        ja: 公開 URL
-        ms: URL awam
-        pt-br: URL pública
-        ru: Публичный URL
-        ko: 공개 URL
-        zh-Hant: 公開 URL
-        zh: 公网访问地址
-        tr: Genel URL
+        en: Browser origin URL
+        es-es: URL de origen del navegador
+        ja: ブラウザから開く URL
+        ms: URL asal pelayar
+        pt-br: URL de origem do navegador
+        ru: URL, который открывает браузер
+        ko: 브라우저 접속 주소
+        zh-Hant: 瀏覽器造訪位址
+        zh: 浏览器访问地址
+        tr: Tarayıcı erişim adresi
       required: true
       rule: paramExtUrl
+      type: text
+    - default: http://app:8000
+      edit: true
+      envKey: FRONTEND_INTERNAL_API_URL
+      labelEn: Internal API URL (keep http://app:8000)
+      labelZh: 后端内部地址（保持 http://app:8000）
+      label:
+        en: Internal API URL (keep http://app:8000)
+        es-es: URL interna de la API (dejar http://app:8000)
+        ja: 内部 API URL（http://app:8000 のまま）
+        ms: URL API dalaman (kekalkan http://app:8000)
+        pt-br: URL interna da API (manter http://app:8000)
+        ru: Внутренний URL API (оставьте http://app:8000)
+        ko: 내부 API 주소 (http://app:8000 유지)
+        zh-Hant: 後端內部位址（保持 http://app:8000）
+        zh: 后端内部地址（保持 http://app:8000）
+        tr: Dahili API URL (http://app:8000 olarak bırakın)
+      required: true
+      type: text
+    - default: docker.io/e54385991/upkk-cs2-server-manager:latest
+      edit: true
+      envKey: CS2_MANAGER_IMAGE
+      labelEn: Backend image
+      labelZh: 后端镜像（一般不用改）
+      label:
+        en: Backend image
+        es-es: Imagen del backend
+        ja: バックエンドイメージ
+        ms: Imej backend
+        pt-br: Imagem do backend
+        ru: Образ backend
+        ko: 백엔드 이미지
+        zh-Hant: 後端映像（通常不用改）
+        zh: 后端镜像（一般不用改）
+        tr: Backend imajı
+      required: true
+      type: text
+    - default: docker.io/e54385991/upkk-cs2-server-manager-web:latest
+      edit: true
+      envKey: CS2_FRONTEND_IMAGE
+      labelEn: Frontend image
+      labelZh: 前端镜像（一般不用改）
+      label:
+        en: Frontend image
+        es-es: Imagen del frontend
+        ja: フロントエンドイメージ
+        ms: Imej frontend
+        pt-br: Imagem do frontend
+        ru: Образ frontend
+        ko: 프론트엔드 이미지
+        zh-Hant: 前端映像（通常不用改）
+        zh: 前端镜像（一般不用改）
+        tr: Frontend imajı
+      required: true
       type: text
     - default: ""
       edit: true

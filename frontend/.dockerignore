@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+coverage
+playwright-report
+test-results
+e2e
+*.md
+.env
+.env.*

@@ -58,14 +58,14 @@ curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/ma
 脚本会自动：
 
 - 安装 Docker Engine 和 Docker Compose 插件；
-- 生成随机数据库密码和安全密钥；
-- 下载 Compose 配置并启动管理面板、PostgreSQL 和 Redis；
-- 自动完成数据库迁移并等待服务健康检查通过。
+- 生成随机数据库密码；
+- 下载自包含 Compose 并从 Docker Hub 拉起 Next、FastAPI、PostgreSQL 和 Redis；
+- 自动完成数据库迁移，并等待控制台与 `/health` 代理就绪。
 
 部署完成后访问：
 
 ```text
-http://你的服务器IP:8000
+http://你的服务器IP:3000
 ```
 
 首次登录凭据：
@@ -76,7 +76,10 @@ http://你的服务器IP:8000
 ```
 
 > ⚠️ **首次登录后请立即修改默认密码。** 如果无法打开页面，请确认云服务器安全组和
-> 系统防火墙已放行 TCP `8000` 端口。正式对公网提供服务时建议配置域名和 HTTPS。
+> 系统防火墙已放行 TCP `3000` 端口。正式对公网提供服务时建议配置域名和 HTTPS。
+
+1Panel 请用 **应用商店本地应用** 或 **容器 → Compose** 安装这一整套，
+不要把前后端拆成两个运行环境。
 
 至此管理面板已经部署完成，无需克隆源码或手动配置数据库。升级、备份、日志查看、
 端口修改和故障排查请查看 [Docker 快速部署文档](docs/DOCKER_QUICKSTART.md)。

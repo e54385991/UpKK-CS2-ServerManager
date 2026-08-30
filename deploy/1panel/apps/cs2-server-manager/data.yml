@@ -8,8 +8,8 @@ additionalProperties:
   name: CS2 Server Manager
   tags:
     - Game
-  shortDescZh: 通过 Web 界面远程管理多个 CS2 服务器
-  shortDescEn: Manage multiple CS2 servers remotely from a web panel
+  shortDescZh: 一套应用部署 Next 控制台和 FastAPI，通过 Web 远程管理多个 CS2 服务器
+  shortDescEn: One-stack Next + FastAPI panel to manage multiple CS2 servers remotely
   description:
     en: Manage multiple Counter-Strike 2 servers remotely from a web panel.
     es-es: Administra varios servidores de Counter-Strike 2 desde un panel web.

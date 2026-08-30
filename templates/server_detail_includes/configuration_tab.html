@@ -920,7 +920,7 @@
                                     <i class="bi bi-exclamation-triangle"></i> <span data-i18n="discordBot.writeWarning">Maintenance capabilities change remote server state. Every use still requires a public, requester-only confirmation.</span>
                                 </div>
                                 <div class="row g-2 mb-3">
-                                    <template x-for="cap in ['status','start','stop','restart','update','validate','plugin_browse','plugin_install','plugin_upgrade','game_console','agent_ask']" :key="cap + '-' + localeTick">
+                                    <template x-for="cap in ['status','start','stop','restart','update','validate','plugin_browse','plugin_install','plugin_upgrade','game_console','change_map','agent_ask']" :key="cap + '-' + localeTick">
                                         <div class="col-md-4">
                                             <label class="form-check">
                                                 <input class="form-check-input" type="checkbox" :value="cap" x-model="discordBotForm.capabilities">
@@ -963,6 +963,7 @@
                                         ['upgrade_managed_plugins','Managed plugin upgrade',true],['write_configuration','Configuration writes',true],['manage_workshop_maps','Workshop maps',true],
                                         ['run_plugin_diagnostics','Plugin isolation/recovery',true],
                                         ['send_game_console_commands', window.i18n?.t('agentPolicy.gameConsole') || 'Send game console commands',true],
+                                        ['change_current_map', window.i18n?.t('agentPolicy.changeCurrentMap') || 'Change current map',true],
                                         ['execute_saved_host_commands','Execute saved host commands',true]
                                     ]" :key="cap[0]">
                                         <div class="col-md-6">

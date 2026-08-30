@@ -39,6 +39,14 @@ from services.ai_tools import (
     ToolContext,
 )
 from services.audit_log_service import record_discord_operation_event
+from services.change_map_service import (
+    ChangeMapAmbiguousError,
+    ChangeMapError,
+    MapCandidate,
+    candidate_from_map,
+    load_map_pool,
+    resolve_change_map,
+)
 from services.discord.commands import register_commands
 from services.discord_ai_service import (
     approve_discord_tool,
@@ -61,7 +69,7 @@ from services.discord_menu_ui import (
     control_view,
     is_exact_wake_word,
     launcher_is_expired,
-    leading_bot_mention_content,
+    mention_trigger_content,
     menu_is_expired,
     menu_issued_at,
     no_access_view,
@@ -249,6 +257,16 @@ def _is_channel_manager(source: discord.Interaction | discord.Message) -> bool:
     return _actor_privileges(source)[1]
 
 
+def _message_mentions_bot(message: object, bot_user_id: int) -> bool:
+    """Prefer the Gateway ``mentions`` array; ``raw_mentions`` needs message content."""
+
+    if bot_user_id in set(getattr(message, "raw_mentions", []) or []):
+        return True
+    return any(
+        getattr(user, "id", None) == bot_user_id for user in getattr(message, "mentions", []) or []
+    )
+
+
 def format_panel_update_age(timestamp: object | None) -> str | None:
     """Mirror the panel overview `formatTimestamp` relative age."""
 
@@ -430,6 +448,36 @@ def _operation_game_console_command(item: DiscordOperationRun) -> str:
     return GameConsoleCommandInput(command=command).command
 
 
+def _change_map_plan(server: Server, candidate: MapCandidate) -> dict:
+    command = candidate.command
+    return {
+        "server_id": server.id,
+        "server_name": server.name,
+        "action": "change_map",
+        "map_name": candidate.name,
+        "workshop_id": candidate.workshop_id or None,
+        "command": redact_sensitive_text(command, limit=500),
+        "command_hash": hashlib.sha256(command.encode()).hexdigest(),
+        "steps": [
+            "acquire maintenance lock",
+            "locate the exact screen/tmux game session",
+            "send the resolved change-map command followed by Enter",
+        ],
+    }
+
+
+def _operation_change_map_candidate(item: DiscordOperationRun) -> MapCandidate:
+    command = _operation_game_console_command(item)
+    candidate = MapCandidate(
+        name=str(item.arguments.get("name") or ""),
+        workshop_id=str(item.arguments.get("workshop_id") or ""),
+        filename=str(item.arguments.get("filename") or ""),
+    )
+    if candidate.command != command:
+        raise DiscordOperationDenied("Change-map command changed after planning")
+    return candidate
+
+
 class _ConfirmView(discord.ui.View):
     def __init__(self, operation_id: str, *, warnings: bool = False) -> None:
         super().__init__(timeout=None)
@@ -504,14 +552,23 @@ class ManagedDiscordClient(discord.Client):
                 )
             )
             bindings = list(result.scalars().all())
+            bot = await db.get(UserDiscordBot, self.owner_user_id)
         bound_ids = {int(item.guild_id) for item in bindings if item.guild_id}
+        if (
+            bot is not None
+            and bot.global_binding_configured is True
+            and bot.global_binding_enabled is True
+            and bot.global_guild_id
+        ):
+            bound_ids.add(int(bot.global_guild_id))
         guild_ids = {guild.id for guild in self.guilds}
         for guild_id in guild_ids:
             guild = discord.Object(id=guild_id)
             try:
                 self.tree.clear_commands(guild=guild)
-                if guild_id in bound_ids:
-                    self.tree.copy_global_to(guild=guild)
+                # Slash / @-app commands are visible in every guild the Bot has
+                # joined. Runtime authorization still fail-closes per binding.
+                self.tree.copy_global_to(guild=guild)
                 await self.tree.sync(guild=guild)
             except Exception as exc:
                 logger.warning(
@@ -893,9 +950,11 @@ class DiscordBotManager:
             or client.user is None
         ):
             return
-        mentioned = client.user.id in set(getattr(message, "raw_mentions", []))
-        mention_content = (
-            leading_bot_mention_content(message.content, client.user.id) if mentioned else None
+        mentioned = _message_mentions_bot(message, client.user.id)
+        mention_content = mention_trigger_content(
+            getattr(message, "content", None) or "",
+            client.user.id,
+            mentioned=mentioned,
         )
         exact_wake_word = is_exact_wake_word(message.content, client.user.id)
         mention_trigger = mention_content is not None
@@ -1220,7 +1279,7 @@ class DiscordBotManager:
             await self._respond_error(interaction, exc)
             return
         await interaction.response.send_message(
-            "`/cs2 status|start|stop|restart|update|validate`\n"
+            "`/cs2 status|start|stop|restart|update|validate|map`\n"
             "`/cs2 menu`\n"
             "`/cs2 plugin search|list|install|upgrade`\n"
             "`/cs2 console send`\n"
@@ -1428,6 +1487,22 @@ class DiscordBotManager:
                 },
                 _game_console_plan(server, data.command),
             )
+        except Exception as exc:
+            await self._respond_error(interaction, exc)
+
+    async def command_change_map(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        query: str,
+        server_value: str | None,
+    ) -> None:
+        try:
+            server = await self._resolve_server(
+                client, interaction, DiscordCapability.CHANGE_MAP, server_value
+            )
+            await interaction.response.defer(ephemeral=False)
+            await self._start_change_map(interaction, server, query, publish="slash")
         except Exception as exc:
             await self._respond_error(interaction, exc)
 
@@ -1898,6 +1973,161 @@ class DiscordBotManager:
             _game_console_plan(server, data.command),
         )
 
+    async def _change_map_arguments(self, candidate: MapCandidate) -> dict:
+        command = candidate.command
+        return {
+            "name": candidate.name,
+            "workshop_id": candidate.workshop_id,
+            "filename": candidate.filename,
+            "command_encrypted": encrypt_credential(command),
+            "command_hash": hashlib.sha256(command.encode()).hexdigest(),
+        }
+
+    async def _confirm_change_map(
+        self,
+        interaction: discord.Interaction,
+        server: Server,
+        candidate: MapCandidate,
+        *,
+        publish: str,
+    ) -> None:
+        arguments = await self._change_map_arguments(candidate)
+        plan = _change_map_plan(server, candidate)
+        if publish == "menu":
+            await self._publish_menu_confirmation(
+                interaction,
+                server,
+                "change_map",
+                DiscordCapability.CHANGE_MAP,
+                arguments,
+                plan,
+            )
+            return
+        await self._send_confirmation(
+            interaction,
+            server,
+            "change_map",
+            DiscordCapability.CHANGE_MAP,
+            arguments,
+            plan,
+        )
+
+    async def _start_change_map(
+        self,
+        interaction: discord.Interaction,
+        server: Server,
+        query: str,
+        *,
+        publish: str,
+        issued_at: int | None = None,
+    ) -> None:
+        unique, matches = resolve_change_map(await load_map_pool(server), query)
+        if unique is not None:
+            await self._confirm_change_map(interaction, server, unique, publish=publish)
+            return
+        if not matches:
+            raise ChangeMapError(f"No map matched {query!r}")
+        if publish == "slash":
+            raise ChangeMapAmbiguousError(matches)
+        if issued_at is None:
+            raise DiscordAuthorizationDenied("Map picker is unavailable")
+        nonce = uuid.uuid4().hex[:12]
+        saved = await redis_manager.set(
+            self._map_state_key(interaction, nonce),
+            {
+                "query": query.strip(),
+                "server_id": server.id,
+                "matches": [
+                    {
+                        "name": item.name,
+                        "workshop_id": item.workshop_id,
+                        "enabled": item.enabled,
+                        "filename": item.filename,
+                        "updated_name": item.updated_name,
+                    }
+                    for item in matches
+                ],
+            },
+            MENU_LIFETIME_SECONDS,
+        )
+        if not saved:
+            raise DiscordAuthorizationDenied("Map search state is temporarily unavailable")
+        view = await self._map_picker_view(
+            interaction,
+            issued_at=issued_at,
+            server_id=server.id,
+            nonce=nonce,
+            page=0,
+        )
+        await _edit_interaction_message(interaction, content=None, view=view)
+
+    @staticmethod
+    def _map_state_key(interaction: discord.Interaction, nonce: str) -> str:
+        return f"discord_menu_map:{interaction.user.id}:{nonce}"
+
+    async def _map_picker_view(
+        self,
+        interaction: discord.Interaction,
+        *,
+        issued_at: int,
+        server_id: int,
+        nonce: str,
+        page: int,
+    ) -> discord.ui.LayoutView:
+        state = await redis_manager.get(self._map_state_key(interaction, nonce))
+        if not isinstance(state, dict) or state.get("server_id") != server_id:
+            raise DiscordAuthorizationDenied("Map search expired; open a new menu")
+        matches = [
+            candidate_from_map(item)
+            for item in state.get("matches") or []
+            if isinstance(item, dict)
+        ]
+        pages = max(1, math.ceil(len(matches) / PLUGIN_PAGE_SIZE))
+        page = min(max(page, 0), pages - 1)
+        visible = matches[page * PLUGIN_PAGE_SIZE : (page + 1) * PLUGIN_PAGE_SIZE]
+        locale = self._locale(interaction)
+        options = [
+            discord.SelectOption(
+                label=item.name[:100],
+                value=item.identity_key[:100],
+                description=item.display_label()[:100],
+                emoji="🗺️",
+            )
+            for item in visible
+        ]
+        return plugin_picker_view(
+            locale,
+            title=menu_text(
+                locale, "change_map_results", query=_safe_text(state.get("query") or "", 100)
+            ),
+            hint=menu_text(locale, "change_map_hint"),
+            options=options,
+            custom_id=(f"cs2:menu:maps_pick:{issued_at}:{interaction.user.id}:{server_id}:{nonce}"),
+            issued_at=issued_at,
+            requester_user_id=interaction.user.id,
+            server_id=server_id,
+            page=page,
+            pages=pages,
+            page_kind=f"maps_{nonce}",
+        )
+
+    async def _menu_map_submit(
+        self,
+        client: ManagedDiscordClient,
+        interaction: discord.Interaction,
+        *,
+        issued_at: int,
+        server_id: int,
+        query: str,
+    ) -> None:
+        server = await self._resolve_menu_server(
+            client, interaction, server_id, DiscordCapability.CHANGE_MAP
+        )
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        await self._start_change_map(
+            interaction, server, query, publish="menu", issued_at=issued_at
+        )
+
     async def _menu_agent_submit(
         self,
         client: ManagedDiscordClient,
@@ -1991,6 +2221,24 @@ class DiscordBotManager:
                     client, modal_interaction, server_id=server.id, command=value
                 ),
                 max_length=500,
+            )
+            await interaction.response.send_modal(modal)
+            return
+        if action == "change_map":
+            modal = MenuInputModal(
+                locale=locale,
+                title_key="change_map_title",
+                label_key="change_map_label",
+                placeholder_key="change_map_placeholder",
+                custom_id=(f"cs2:menu:map_modal:{issued_at}:{interaction.user.id}:{server.id}"),
+                callback=lambda modal_interaction, value: self._menu_map_submit(
+                    client,
+                    modal_interaction,
+                    issued_at=issued_at,
+                    server_id=server.id,
+                    query=value,
+                ),
+                max_length=128,
             )
             await interaction.response.send_modal(modal)
             return
@@ -2178,6 +2426,42 @@ class DiscordBotManager:
                 plan,
             )
             return
+        if kind.startswith("maps_") and kind != "maps_pick":
+            nonce = kind.removeprefix("maps_")
+            server_id = int(parts[5])
+            page = int(parts[6])
+            view = await self._map_picker_view(
+                interaction,
+                issued_at=issued_at,
+                server_id=server_id,
+                nonce=nonce,
+                page=page,
+            )
+            await interaction.response.edit_message(view=view)
+            return
+        if kind == "maps_pick":
+            server_id = int(parts[5])
+            nonce = parts[6]
+            state = await redis_manager.get(self._map_state_key(interaction, nonce))
+            if not isinstance(state, dict) or state.get("server_id") != server_id:
+                raise DiscordAuthorizationDenied("Map search state does not match this menu")
+            values = (interaction.data or {}).get("values") or []
+            identity = str(values[0]) if values else ""
+            matches = [
+                candidate_from_map(item)
+                for item in state.get("matches") or []
+                if isinstance(item, dict)
+            ]
+            chosen = next((item for item in matches if item.identity_key == identity), None)
+            if chosen is None:
+                raise DiscordAuthorizationDenied("Selected map is unavailable")
+            server = await self._resolve_menu_server(
+                client, interaction, server_id, DiscordCapability.CHANGE_MAP
+            )
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            await self._confirm_change_map(interaction, server, chosen, publish="menu")
+            await redis_manager.delete(self._map_state_key(interaction, nonce))
+            return
         if kind.startswith("search_"):
             nonce = kind.removeprefix("search_")
             server_id = int(parts[5])
@@ -2328,6 +2612,8 @@ class DiscordBotManager:
             )
         if item.action == "game_console":
             return _game_console_plan(server, _operation_game_console_command(item))
+        if item.action == "change_map":
+            return _change_map_plan(server, _operation_change_map_candidate(item))
         return _simple_plan(server, item.action)
 
     async def _confirm_and_execute(
@@ -2442,7 +2728,7 @@ class DiscordBotManager:
                 spec = TOOLS_BY_NAME["apply_plugin_plan"]
                 data = ApplyPluginPlanInput.model_validate(item.arguments)
                 return await spec.handler(context, data)
-            if item.action == "game_console":
+            if item.action in {"game_console", "change_map"}:
                 spec = TOOLS_BY_NAME["send_game_console_command"]
                 data = GameConsoleCommandInput(command=_operation_game_console_command(item))
                 return await spec.handler(context, data)

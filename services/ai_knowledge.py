@@ -48,7 +48,9 @@ KNOWLEDGE_TOPICS = {
         "A Workshop map must resolve to a published Steam item for consumer App ID 730. "
         "MapChooser stores the map name and Workshop ID in maps.txt. When configured, "
         "ChangeMapUse_host_workshop_map makes the actual map change use host_workshop_map; "
-        "adding a pool entry does not itself pre-download the map."
+        "adding a pool entry does not itself pre-download the map. A live change from Discord "
+        "or the AI resolves the MapChooser pool by name fragment or Workshop ID, then sends "
+        "host_workshop_map {id} for workshop maps and map {name} for official maps."
     ),
 }
 

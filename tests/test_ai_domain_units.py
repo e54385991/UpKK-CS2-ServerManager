@@ -58,6 +58,7 @@ async def test_discord_command_handlers_delegate_and_register():
         "command_plugin_install",
         "command_plugin_upgrade",
         "command_game_console",
+        "command_change_map",
         "command_agent_ask",
         "command_agent_reset",
     ):
@@ -87,6 +88,8 @@ async def test_discord_command_handlers_delegate_and_register():
     await plugin["plugin_install"](interaction, 7, "1")
     await plugin["plugin_upgrade"](interaction, 7, "1")
     extended = _extended_handlers(client)
+    await core["map_command"](interaction, "saw", "1")
+    manager.command_change_map.assert_awaited_once()
     await extended["console_send"](interaction, "status", "1")
     await extended["agent_ask"](interaction, "hello", "1")
     await extended["agent_reset"](interaction, "1")
@@ -108,4 +111,5 @@ async def test_discord_command_handlers_delegate_and_register():
         "plugin",
         "console",
         "agent",
+        "map",
     }

@@ -47,6 +47,11 @@ def session_name(server_id: int) -> str:
     return f"cs2server_{int(server_id)}"
 
 
+def steamcmd_session_name(server_id: int) -> str:
+    """Detached session for deploy/update/validate — not the running CS2 game."""
+    return f"cs2steamcmd_{int(server_id)}"
+
+
 def _safe_session_name(name: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
         raise ValueError("Invalid session name")

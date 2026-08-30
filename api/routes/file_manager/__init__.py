@@ -19,6 +19,7 @@ from .downloads import (
     get_download_url_status,
 )
 from .files import (
+    copy_paths,
     create_directory,
     create_download_ticket,
     delete_path,
@@ -42,6 +43,7 @@ ENDPOINT_ORDER = (
     "create_directory",
     "delete_path",
     "rename_file_or_directory",
+    "copy_paths",
     "inspect_archive",
     "extract_archive",
     "get_extraction_status",

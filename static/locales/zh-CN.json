@@ -1969,6 +1969,7 @@
     "capPluginBrowse": "浏览插件",
     "capPluginInstall": "安装市场插件",
     "capPluginUpgrade": "升级托管插件",
+    "capChangeMap": "更换地图",
     "capAgentAsk": "AI Agent",
     "serverTitle": "Discord Bot 命令",
     "webhookSeparate": "此 Gateway Bot 与现有 Discord Webhook 通知完全独立。",
@@ -2011,6 +2012,7 @@
     "sshBoundary": "AI 永远不会获得任意 Shell。它只能列出已保存的 host 快捷命令，并在专用能力和逐次确认均满足时按 ID 执行。",
     "gameConsole": "允许向游戏服务器窗口输入命令",
     "gameConsoleBoundary": "游戏控制台命令只会作为字面输入发送到正在运行的 CS2 screen/tmux 会话，不会作为 host Shell 执行，并且每次都需要单独确认。",
+    "changeCurrentMap": "从地图池按名称或工坊 ID 更换当前地图",
     "save": "保存 AI 权限"
   }
 }

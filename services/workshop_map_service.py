@@ -20,6 +20,7 @@ from services.map_management_service import (
     DEFAULT_PLUGIN_CONFIG_CONTENT,
     MAX_MAPS_CONFIG_BYTES,
     MAX_PLUGIN_CONFIG_BYTES,
+    MapConfigError,
     append_map_to_config,
     content_revision,
     normalize_workshop_id,
@@ -148,6 +149,24 @@ async def _read_configs(
         if not success:
             raise WorkshopPlanError(f"Unable to read MapChooser config: {error}")
     return maps, config
+
+
+async def read_map_pool(server: Server) -> list[dict[str, object]]:
+    """Read the server MapChooser pool used to resolve live change-map queries."""
+    manager = await _connect(server)
+    try:
+        state = await _inspect(manager, server)
+        if not state.get("css") or not state.get("mapchooser"):
+            raise WorkshopPlanError(
+                "Install CounterStrikeSharp and MapChooser before changing maps from the pool"
+            )
+        maps_content, _config = await _read_configs(manager, server, state)
+    finally:
+        await manager.disconnect()
+    try:
+        return parse_maps_config(maps_content).maps
+    except MapConfigError as exc:
+        raise WorkshopPlanError(f"Invalid maps.txt: {exc}") from exc
 
 
 def _plan_hash(plan: dict[str, Any]) -> str:

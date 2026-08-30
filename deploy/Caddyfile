@@ -1,0 +1,19 @@
+# Three-service edge: Caddy → Next → FastAPI.
+# The browser only talks to Caddy. Next keeps first-party cookies and rewrites
+# /api/* and /health to the private FastAPI listener. WebSocket upgrades for
+# /api/v1/servers/*/console/* follow the same Next rewrite.
+#
+# Public HTTP is this file (root compose and 1Panel). FastAPI :8000 is private.
+# /google-callback is a Next public page (Google OAuth popup). Do not send it
+# to FastAPI :8000 — the browser only talks to Caddy → frontend.
+{
+	admin off
+}
+
+:80 {
+	encode gzip
+
+	reverse_proxy frontend:3000 {
+		flush_interval -1
+	}
+}

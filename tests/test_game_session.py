@@ -24,6 +24,7 @@ from services.game_session import (
     session_manager_order,
     session_name,
     start_session_command,
+    steamcmd_session_name,
     stop_session_command,
 )
 
@@ -165,6 +166,11 @@ async def test_startup_preview_uses_selected_manager_and_masks_secrets(
     assert result["startup_command"].index(command_marker) < result["startup_command"].index(
         "taskset"
     )
+    assert "cd " in result["cs2_command"]
+    assert "./cs2" in result["cs2_command"]
+    assert "taskset -c 0-3" in result["cs2_command"]
+    assert "tmux" not in result["cs2_command"]
+    assert "screen" not in result["cs2_command"]
     for secret in (
         server.api_key,
         server.server_password,
@@ -172,6 +178,7 @@ async def test_startup_preview_uses_selected_manager_and_masks_secrets(
         server.steam_account_token,
     ):
         assert secret not in result["startup_command"]
+        assert secret not in result["cs2_command"]
 
 
 @pytest.mark.parametrize(
@@ -207,6 +214,11 @@ def test_screen_and_tmux_lifecycle_commands(manager, expected):
     assert start_session_command(manager, name, "bash /srv/run-server.sh") == expected["start"]
     assert stop_session_command(manager, name) == expected["stop"]
     assert attach_command(manager, name) == expected["attach"]
+
+
+def test_steamcmd_session_is_not_the_game_console_session():
+    assert steamcmd_session_name(7) == "cs2steamcmd_7"
+    assert steamcmd_session_name(7) != session_name(7)
 
 
 def test_session_exists_commands_match_the_complete_session_name():

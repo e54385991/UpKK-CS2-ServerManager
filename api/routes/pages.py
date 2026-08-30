@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from api.dependencies import DatabaseSession, WebAdmin, WebUser
+from api.legacy_html import maybe_redirect_legacy_html
 from api.routes import servers
 from api.templating import templates
 from modules import (
@@ -16,24 +17,36 @@ router = APIRouter()
 @router.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Root endpoint - serve home page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "home.html")
 
 
 @router.get("/deployment-tutorial", response_class=HTMLResponse)
 async def deployment_tutorial_page(request: Request):
     """Deployment tutorial page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "deployment_tutorial.html")
 
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Login page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "login.html")
 
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     """Registration page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "register.html")
 
 
@@ -46,6 +59,9 @@ async def google_callback_page(request: Request):
 @router.get("/servers-ui", response_class=HTMLResponse)
 async def servers_ui(request: Request):
     """Servers management UI"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "servers.html")
 
 
@@ -57,6 +73,9 @@ async def server_detail_ui(
     current_user: WebUser,
 ):
     """Server detail UI with real-time monitoring"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     server = await servers.get_server_with_permission(server_id, current_user, db)
     server_data = ServerResponse.model_validate(server)
 
@@ -82,6 +101,9 @@ async def console_popup(
     current_user: WebUser,
 ):
     """Console popup window"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     if console_type.lower() not in {"ssh", "game"}:
         raise HTTPException(status_code=404, detail="Unsupported console type")
     await servers.get_server_with_permission(server_id, current_user, db)
@@ -102,6 +124,9 @@ async def plugin_market_page(
     _: WebUser,
 ):
     """Plugin market page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "plugin_market.html")
 
 
@@ -113,6 +138,9 @@ async def ssh_console(
     current_user: WebUser,
 ):
     """Independent SSH console page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     await servers.get_server_with_permission(server_id, current_user, db)
     return templates.TemplateResponse(
         request,
@@ -129,6 +157,9 @@ async def game_console(
     current_user: WebUser,
 ):
     """Independent game console page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     await servers.get_server_with_permission(server_id, current_user, db)
     return templates.TemplateResponse(
         request,
@@ -147,6 +178,9 @@ async def file_editor_popup(
     current_user: WebUser,
 ):
     """File editor popup window"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     server = await servers.get_server_with_permission(server_id, current_user, db)
 
     from services.ssh_manager import SSHManager
@@ -202,6 +236,9 @@ async def setup_wizard(
     _: WebUser,
 ):
     """Server setup wizard UI - authentication checked client-side"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "server_setup_wizard.html")
 
 
@@ -211,6 +248,9 @@ async def profile_page(
     _: WebUser,
 ):
     """User profile page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "profile.html")
 
 
@@ -220,6 +260,9 @@ async def system_settings_page(
     _: WebAdmin,
 ):
     """System settings page (admin only - auth checked client-side)"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "system_settings.html")
 
 
@@ -229,16 +272,25 @@ async def audit_logs_page(
     _: WebAdmin,
 ):
     """Administrator audit log viewer for the last 30 days."""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "audit_logs.html")
 
 
 @router.get("/forgot-password", response_class=HTMLResponse)
 async def forgot_password_page(request: Request):
     """Forgot password page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "forgot_password.html")
 
 
 @router.get("/reset-password", response_class=HTMLResponse)
 async def reset_password_page(request: Request):
     """Reset password page"""
+    redirected = maybe_redirect_legacy_html(request)
+    if redirected is not None:
+        return redirected
     return templates.TemplateResponse(request, "reset_password.html")

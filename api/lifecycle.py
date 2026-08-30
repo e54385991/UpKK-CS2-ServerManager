@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from modules import database as database_module
-from modules.database import init_db, migrate_db
+from modules.database import async_session_maker, init_db, migrate_db
 from modules.models import Server
 from services.container import ServiceContainer, build_service_container
 from services.task_registry import shutdown_background_tasks
@@ -105,6 +105,20 @@ class ApplicationLifecycle:
 
             await migrate_db()
             await init_db()
+
+            from services.plugin_catalog import ensure_default_plugin_catalog
+
+            try:
+                async with async_session_maker() as session:
+                    summary = await ensure_default_plugin_catalog(session)
+                if summary is not None:
+                    logger.info(
+                        "Seeded default plugin catalog (%s imported, %s failed)",
+                        summary.imported,
+                        summary.failed,
+                    )
+            except Exception:
+                logger.exception("Failed to seed default plugin catalog")
 
             await resources.ssh_pool.start_cleanup()
 

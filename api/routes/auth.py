@@ -12,6 +12,7 @@ from google.oauth2 import id_token
 from sqlmodel import select
 
 from api.dependencies import ActiveUser, DatabaseSession
+from api.registration import register_user
 from modules import (
     ApiKeyGenerate,
     ApiKeyResponse,
@@ -72,47 +73,15 @@ async def get_google_config():
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, request: Request, db: DatabaseSession):
     """Register a new user"""
-    await enforce_rate_limit(request, "register", limit=5, window=3600, identity=user_data.username)
-    # Validate CAPTCHA first
-    is_valid = await captcha_service.validate_captcha(
-        user_data.captcha_token, user_data.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
-
-    # Check if username already exists
-    existing_user = await User.get_by_username(db, user_data.username)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Username already registered"
-        )
-
-    # Check if email already exists
-    existing_email = await User.get_by_email(db, user_data.email)
-    if existing_email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
-        )
-
-    await db.commit()
-    # Create new user
-    hashed_password = await get_password_hash_async(user_data.password)
-    user = User(username=user_data.username, email=user_data.email, hashed_password=hashed_password)
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    await record_audit_event(
-        category="auth",
-        action="register",
-        status="success",
-        user=user,
+    return await register_user(
+        username=user_data.username,
+        email=user_data.email,
+        password=user_data.password,
+        captcha_token=user_data.captcha_token,
+        captcha_code=user_data.captcha_code,
         request=request,
-        details={"username": user.username},
+        db=db,
     )
-
-    return user
 
 
 @router.post("/login", response_model=Token)
@@ -578,71 +547,15 @@ async def forgot_password(
     reset_request: ForgotPasswordRequest, request: Request, db: DatabaseSession
 ):
     """Request password reset email"""
-    from datetime import timedelta
+    from api.password_reset import request_password_reset
 
-    from modules import PasswordResetToken, generate_api_key, get_current_time, settings
-    from services.email_service import email_service
-
-    await enforce_rate_limit(
-        request, "forgot_password", limit=5, window=3600, identity=reset_request.email
-    )
-
-    # Validate CAPTCHA
-    is_valid = await captcha_service.validate_captcha(
-        reset_request.captcha_token, reset_request.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
-
-    await record_audit_event(
-        category="auth",
-        action="password_reset.request",
-        status="success",
+    return await request_password_reset(
+        email=reset_request.email,
+        captcha_token=reset_request.captcha_token,
+        captcha_code=reset_request.captcha_code,
         request=request,
-        details={"email": reset_request.email},
+        db=db,
     )
-
-    # Find user by email
-    user = await User.get_by_email(db, reset_request.email)
-
-    # Always return success to prevent email enumeration
-    # Even if user doesn't exist, return success message
-    if not user:
-        return {
-            "success": True,
-            "message": "If an account with this email exists, a password reset link has been sent.",
-        }
-
-    # Generate reset token
-    reset_token = generate_api_key()  # Reuse this function for token generation
-    expires_at = get_current_time() + timedelta(hours=1)
-
-    # Save token to database
-    await PasswordResetToken.create_token(db, user.id, reset_token, expires_at)
-
-    # Generate reset link
-    reset_link = f"{settings.BACKEND_URL}/reset-password?token={reset_token}"
-
-    # Send email
-    html_content, text_content = email_service.get_password_reset_template(
-        reset_link, user.username
-    )
-    email_sent = await email_service.send_email(
-        db, user.email, "Password Reset Request - CS2 Server Manager", html_content, text_content
-    )
-
-    if not email_sent:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send password reset email. Please contact administrator.",
-        )
-
-    return {
-        "success": True,
-        "message": "If an account with this email exists, a password reset link has been sent.",
-    }
 
 
 @router.post("/reset-password-with-token")
@@ -650,49 +563,14 @@ async def reset_password_with_token(
     reset_request: ResetPasswordRequest, request: Request, db: DatabaseSession
 ):
     """Reset password using reset token"""
-    from modules import PasswordResetToken
+    from api.password_reset import complete_password_reset
 
-    await enforce_rate_limit(request, "reset_password", limit=10, window=3600)
-
-    # Find token
-    token = await PasswordResetToken.get_by_token(db, reset_request.token)
-
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token"
-        )
-
-    if not token.is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token"
-        )
-
-    # Get user
-    user = await db.get(User, token.user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    # Update password
-    user.hashed_password = await get_password_hash_async(reset_request.new_password)
-
-    # Mark token as used
-    token.used = True
-
-    db.add(user)
-    db.add(token)
-    await db.commit()
-    await record_audit_event(
-        category="auth",
-        action="password_reset.complete",
-        status="success",
-        user=user,
+    return await complete_password_reset(
+        token=reset_request.token,
+        new_password=reset_request.new_password,
         request=request,
+        db=db,
     )
-
-    return {
-        "success": True,
-        "message": "Password reset successfully. You can now log in with your new password.",
-    }
 
 
 @router.post("/google-oauth", response_model=Token)

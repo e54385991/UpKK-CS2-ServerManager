@@ -18,6 +18,13 @@ from .ssh import plugins as _plugins
 from .ssh.common import *
 from .ssh.runtime import SSHRuntimeState
 from .steam_inf_service import configure_ssh_manager_factory
+from .steamcmd_retry import (
+    STEAMCMD_DEFAULT_MAX_RETRIES,
+    STEAMCMD_RETRY_DELAY_SECONDS,
+)
+from .steamcmd_retry import (
+    STEAMCMD_RETRYABLE_ERRORS as STEAMCMD_RETRYABLE_ERROR_TOKENS,
+)
 
 if TYPE_CHECKING:
 
@@ -94,11 +101,9 @@ class SSHManager(_SSHCapabilities):
 
     REMOTE_DOWNLOAD_REDIRECT_CODES = frozenset((301, 302, 303, 307, 308))
 
-    STEAMCMD_MAX_RETRIES = 5  # Maximum number of retry attempts (not counting the initial attempt)
+    STEAMCMD_MAX_RETRIES = STEAMCMD_DEFAULT_MAX_RETRIES
 
-    STEAMCMD_RETRY_DELAY = (
-        5  # Initial delay in seconds between retries (will use exponential backoff)
-    )
+    STEAMCMD_RETRY_DELAY = STEAMCMD_RETRY_DELAY_SECONDS
 
     CS2_EXECUTABLE_RELATIVE_PATH = "cs2/game/bin/linuxsteamrt64/cs2"
 
@@ -113,20 +118,7 @@ class SSHManager(_SSHCapabilities):
         r"2\.0\.0\.[0-9]+/mmsource-2\.0\.0-git[0-9]+-linux\.tar\.gz"
     )
 
-    STEAMCMD_RETRYABLE_ERRORS = [
-        "timeout",
-        "timed out",
-        "connection",
-        "network",
-        "failed to download",
-        "download failed",
-        "corrupt",
-        "error downloading",
-        "unable to download",
-        "http error",
-        "failed to install",
-        "no connection",
-    ]
+    STEAMCMD_RETRYABLE_ERRORS = list(STEAMCMD_RETRYABLE_ERROR_TOKENS)
 
     def __init__(self, use_pool: bool = True, runtime: Optional[SSHRuntimeState] = None):
         """

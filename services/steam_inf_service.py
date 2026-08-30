@@ -16,6 +16,34 @@ from services.redis_manager import redis_manager
 
 logger = logging.getLogger(__name__)
 
+_PATCH_VERSION_RE = re.compile(r"PatchVersion=(\d+\.\d+\.\d+\.\d+)")
+_SERVER_VERSION_RE = re.compile(r"ServerVersion=(\d+)")
+_CLIENT_VERSION_RE = re.compile(r"ClientVersion=(\d+)")
+
+
+def _optional_text(value: object) -> Optional[str]:
+    """Normalize Redis/JSON values so numeric build ids stay strings."""
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    text = str(value).strip()
+    return text or None
+
+
+def parse_steam_inf_fields(output: str) -> Tuple[Optional[str], Optional[str]]:
+    """Extract PatchVersion and ServerVersion/ClientVersion from steam.inf text."""
+    patch = _PATCH_VERSION_RE.search(output or "")
+    server_build = _SERVER_VERSION_RE.search(output or "")
+    client_build = _CLIENT_VERSION_RE.search(output or "")
+    version = patch.group(1) if patch else None
+    build = None
+    if server_build:
+        build = server_build.group(1)
+    elif client_build:
+        build = client_build.group(1)
+    return version, build
+
 
 class SSHSession(Protocol):
     async def connect(self, server: Server) -> tuple[bool, str]: ...
@@ -137,36 +165,47 @@ class SteamInfService:
             Tuple[bool, Optional[str]]: (success, version_string)
             version_string format: "1.41.2.6" or None if failed
         """
-        cache_key = f"steam_inf:version:{server.id}"
+        success, version, _build_id = await self.get_steam_inf_details(
+            server, force_refresh=force_refresh
+        )
+        return success, version
 
-        # Try cache first unless force_refresh
+    async def get_steam_inf_details(
+        self, server: Server, force_refresh: bool = False, *, timeout: float = 30
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Return PatchVersion and optional Steam build id from steam.inf."""
+        cache_key = f"steam_inf:version:{server.id}"
+        build_key = f"steam_inf:build:{server.id}"
+
         if not force_refresh:
-            cached_version = await redis_manager.get(cache_key)
+            cached_version = _optional_text(await redis_manager.get(cache_key))
             if cached_version:
+                cached_build = _optional_text(await redis_manager.get(build_key))
                 logger.debug(
                     f"Using cached steam.inf version for server {server.id}: {cached_version}"
                 )
-                return True, cached_version
-            else:
-                # Cache is missing, proactively refresh it
-                logger.info(f"Cache missing for server {server.id}, proactively refreshing...")
-                force_refresh = True
+                return True, cached_version, cached_build
+            logger.info(f"Cache missing for server {server.id}, proactively refreshing...")
+            force_refresh = True
 
-        # Read from file (either forced or cache was missing)
         if force_refresh:
-            success, version = await self._read_version_from_file(server)
-
+            success, version, build_id = await self._read_version_from_file(server, timeout=timeout)
             if success and version:
-                # Cache the version with 365-day TTL (effectively unlimited)
                 await redis_manager.set(cache_key, version, expire=self.CACHE_TTL_SECONDS)
+                if build_id:
+                    await redis_manager.set(build_key, build_id, expire=self.CACHE_TTL_SECONDS)
+                else:
+                    await redis_manager.delete(build_key)
                 logger.info(
                     f"Cached steam.inf version for server {server.id}: {version} (unlimited TTL, periodic refresh enabled)"
                 )
-                return True, version
+                return True, version, build_id
 
-        return False, None
+        return False, None, None
 
-    async def _read_version_from_file(self, server: Server) -> Tuple[bool, Optional[str]]:
+    async def _read_version_from_file(
+        self, server: Server, *, timeout: float = 30
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Read PatchVersion from steam.inf file via SSH
 
@@ -174,10 +213,11 @@ class SteamInfService:
             server: Server instance
 
         Returns:
-            Tuple[bool, Optional[str]]: (success, version_string)
+            Tuple[bool, Optional[str], Optional[str]]: (success, version, build_id)
         """
         if _ssh_manager_factory is None:
-            raise RuntimeError("Steam.inf SSH manager factory is not configured")
+            logger.error("Steam.inf SSH manager factory is not configured")
+            return False, None, None
         ssh_manager = _ssh_manager_factory()
 
         try:
@@ -190,7 +230,7 @@ class SteamInfService:
                     logger.warning(
                         f"Failed to connect to server {server.id} for steam.inf read: {msg}"
                     )
-                    return False, None
+                    return False, None, None
 
                 # Path to steam.inf file
                 steam_inf_path = f"{server.game_directory}/cs2/game/csgo/steam.inf"
@@ -206,61 +246,48 @@ class SteamInfService:
                     logger.warning(
                         f"steam.inf file not found for server {server.id} at {steam_inf_path}"
                     )
-                    return False, None
+                    return False, None, None
 
-                # Read the file and extract PatchVersion
-                # Use grep to find the line with PatchVersion
-                read_cmd = f"grep 'PatchVersion=' {escaped_path}"
+                read_cmd = f"grep -E '^(PatchVersion|ServerVersion|ClientVersion)=' {escaped_path}"
                 success, stdout, stderr = await ssh_manager.execute_command(read_cmd)
 
                 if not success or not stdout:
                     logger.warning(
                         f"Failed to read PatchVersion from steam.inf for server {server.id}"
                     )
-                    return False, None
+                    return False, None, None
 
-                # Parse the version from output
-                # Expected format: PatchVersion=1.41.2.6
-                version = self._parse_patch_version(stdout)
+                version, build_id = parse_steam_inf_fields(stdout)
 
                 if version:
-                    logger.info(f"Read version from steam.inf for server {server.id}: {version}")
-                    return True, version
-                else:
-                    logger.warning(
-                        f"Could not parse PatchVersion from steam.inf for server {server.id}: {stdout}"
+                    logger.info(
+                        f"Read version from steam.inf for server {server.id}: {version}"
+                        + (f" (build {build_id})" if build_id else "")
                     )
-                    return False, None
+                    return True, version, build_id
+                logger.warning(
+                    f"Could not parse PatchVersion from steam.inf for server {server.id}: {stdout}"
+                )
+                return False, None, None
 
             # Apply timeout to prevent blocking the event loop
-            return await asyncio.wait_for(_do_read(), timeout=30)
+            return await asyncio.wait_for(_do_read(), timeout=timeout)
 
         except asyncio.TimeoutError:
             logger.warning(
-                f"Timeout reading steam.inf for server {server.id} - operation took longer than 30 seconds"
+                f"Timeout reading steam.inf for server {server.id} after {timeout} seconds"
             )
-            return False, None
+            return False, None, None
         except Exception as e:
             logger.error(f"Error reading steam.inf for server {server.id}: {e}")
-            return False, None
+            return False, None, None
         finally:
             await ssh_manager.disconnect()
 
     def _parse_patch_version(self, output: str) -> Optional[str]:
-        """
-        Parse PatchVersion from grep output
-
-        Args:
-            output: Output from grep command
-
-        Returns:
-            Version string (e.g., "1.41.2.6") or None
-        """
-        # Match PatchVersion=X.X.X.X pattern
-        match = re.search(r"PatchVersion=(\d+\.\d+\.\d+\.\d+)", output)
-        if match:
-            return match.group(1)
-        return None
+        """Parse PatchVersion from grep output."""
+        version, _build_id = parse_steam_inf_fields(output)
+        return version
 
     async def refresh_version_cache(self, server: Server) -> Tuple[bool, Optional[str]]:
         """
@@ -307,7 +334,9 @@ class SteamInfService:
             server_id: Server ID
         """
         cache_key = f"steam_inf:version:{server_id}"
+        build_key = f"steam_inf:build:{server_id}"
         await redis_manager.delete(cache_key)
+        await redis_manager.delete(build_key)
         logger.debug(f"Cleared steam.inf version cache for server {server_id}")
 
 

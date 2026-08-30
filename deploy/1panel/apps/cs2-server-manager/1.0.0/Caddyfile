@@ -1,0 +1,15 @@
+# 1Panel public edge: Caddy → Next → FastAPI.
+# PANEL_APP_PORT_HTTP publishes this container's :80.
+# FastAPI stays on the private Docker network at app:8000.
+# /google-callback is a Next public page (Google OAuth popup).
+{
+	admin off
+}
+
+:80 {
+	encode gzip
+
+	reverse_proxy frontend:3000 {
+		flush_interval -1
+	}
+}

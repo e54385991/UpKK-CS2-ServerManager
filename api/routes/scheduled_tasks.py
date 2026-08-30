@@ -20,7 +20,7 @@ from modules import (
 from services.scheduled_task_service import scheduled_task_service
 
 router = APIRouter(prefix="/api/scheduled-tasks", tags=["scheduled-tasks"])
-INTERNAL_TASK_ACTIONS = {"map_pool_sync"}
+INTERNAL_TASK_ACTIONS = {"map_pool_sync", "log_cleanup"}
 
 
 def _require_user_managed_task(task: ScheduledTask) -> ScheduledTask:

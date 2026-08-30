@@ -14,3 +14,9 @@ docs
 data
 logs
 *.log
+frontend
+.dump.rdb
+*.rdb
+.next
+.cursor
+.claude

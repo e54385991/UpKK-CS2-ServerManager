@@ -20,7 +20,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from api.dependencies import ActiveUser, AdminUser, DatabaseSession
+from api.dependencies import ActiveUser, AdminUser, DatabaseSession, close_request_session
 from modules import (
     AIConversation,
     AIConversationCreate,
@@ -195,6 +195,57 @@ def _configuration_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
+def _is_saved_provider_test(
+    request: AIProviderTestRequest,
+    item: AISystemSettings | UserAISettings,
+) -> bool:
+    """Persist probe flags only when the caller is testing the stored provider.
+
+    The Jinja UI posts ``{}``. The Next console used to post null placeholders
+    for URL / model / key; those must still record the saved configuration.
+    An explicit API key or a different URL / model / protocol is a dry-run.
+    """
+    if request.api_key:
+        return False
+    if request.base_url:
+        try:
+            if normalize_base_url(request.base_url) != item.base_url:
+                return False
+        except AIConfigurationError, ValueError:
+            return False
+    posted_model = (request.model or "").strip()
+    if posted_model and posted_model != (item.model or ""):
+        return False
+    if (
+        "api_protocol" in request.model_fields_set
+        and request.api_protocol is not None
+        and request.api_protocol != item.api_protocol
+    ):
+        return False
+    return True
+
+
+def _system_ready_to_enable(item: AISystemSettings) -> bool:
+    return bool(
+        item.base_url
+        and item.model
+        and item.api_key_encrypted
+        and credential_encryption_available()
+    )
+
+
+def _apply_saved_provider_test_flags(
+    item: AISystemSettings | UserAISettings,
+    *,
+    text_ok: bool,
+    tool_ok: bool,
+    streaming_ok: bool,
+) -> None:
+    item.provider_tested = text_ok
+    item.tool_calling_tested = tool_ok
+    item.streaming_tested = streaming_ok
+
+
 @router.get("/api/system/ai-settings", response_model=AISystemSettingsResponse)
 async def get_system_ai_settings(
     db: DatabaseSession,
@@ -251,31 +302,13 @@ async def update_system_ai_settings(
         item.provider_tested = False
         item.tool_calling_tested = False
         item.streaming_tested = False
-        item.enabled = False
     if request.enabled is not None:
-        if request.enabled and changed_provider:
-            # Saving a changed endpoint always disables execution until the
-            # new provider passes both tests. The requested enabled flag is
-            # intentionally ignored for this one update.
-            item.enabled = False
-        elif request.enabled and not (
-            item.base_url
-            and item.model
-            and item.api_key_encrypted
-            and item.provider_tested
-            and item.tool_calling_tested
-            and item.streaming_tested
-            and credential_encryption_available()
-        ):
+        if request.enabled and not _system_ready_to_enable(item):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "Configure encryption, URL, model, and API key, then pass both "
-                    "provider tests before enabling AI"
-                ),
+                detail="Configure encryption, URL, model, and API key before enabling AI",
             )
-        else:
-            item.enabled = request.enabled
+        item.enabled = request.enabled
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -309,13 +342,13 @@ async def test_system_ai_settings(
         text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
     except (AIConfigurationError, ValueError) as exc:
         text_ok, tool_ok, streaming_ok, message = False, False, False, str(exc)
-    saved_configuration = not request.model_fields_set
-    if saved_configuration:
-        item.provider_tested = text_ok
-        item.tool_calling_tested = tool_ok
-        item.streaming_tested = streaming_ok
-        if not (text_ok and tool_ok and streaming_ok):
-            item.enabled = False
+    if _is_saved_provider_test(request, item):
+        _apply_saved_provider_test_flags(
+            item,
+            text_ok=text_ok,
+            tool_ok=tool_ok,
+            streaming_ok=streaming_ok,
+        )
         db.add(item)
         await db.commit()
     return AIProviderTestResponse(
@@ -411,11 +444,13 @@ async def test_user_ai_settings(
         text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
     except (AIConfigurationError, ValueError) as exc:
         text_ok, tool_ok, streaming_ok, message = False, False, False, str(exc)
-    saved_configuration = not request.model_fields_set
-    if saved_configuration:
-        item.provider_tested = text_ok
-        item.tool_calling_tested = tool_ok
-        item.streaming_tested = streaming_ok
+    if _is_saved_provider_test(request, item):
+        _apply_saved_provider_test_flags(
+            item,
+            text_ok=text_ok,
+            tool_ok=tool_ok,
+            streaming_ok=streaming_ok,
+        )
         db.add(item)
         await db.commit()
     return AIProviderTestResponse(
@@ -463,7 +498,7 @@ async def create_ai_conversation(
     if await get_effective_provider(db, current_user) is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No tested AI provider is enabled",
+            detail="No AI provider is enabled",
         )
     if request.server_id is not None:
         await _server_for_user(db, current_user, request.server_id)
@@ -557,7 +592,7 @@ async def send_ai_message(
     if await get_effective_provider(db, current_user) is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No tested AI provider is enabled",
+            detail="No AI provider is enabled",
         )
     if conversation.server_id is not None:
         await _server_for_user(db, current_user, conversation.server_id)
@@ -860,6 +895,7 @@ async def ai_run_event_stream(
     current_user: ActiveUser = None,
 ) -> StreamingResponse:
     await _run_for_user(db, current_user, run_id)
+    await close_request_session(db)
 
     async def event_source():
         queue = await ai_event_hub.subscribe_queue(run_id)

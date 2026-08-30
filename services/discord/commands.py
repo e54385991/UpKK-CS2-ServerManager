@@ -52,6 +52,13 @@ def _core_handlers(client: DiscordCommandClient) -> dict[str, Callable[..., Any]
     async def validate_command(interaction: discord.Interaction, server: str | None = None) -> None:
         await write_command(interaction, "validate", server)
 
+    async def map_command(
+        interaction: discord.Interaction,
+        query: str,
+        server: str | None = None,
+    ) -> None:
+        await client.manager.command_change_map(client, interaction, query, server)
+
     return {
         "help_command": help_command,
         "menu_command": menu_command,
@@ -61,6 +68,7 @@ def _core_handlers(client: DiscordCommandClient) -> dict[str, Callable[..., Any]
         "restart_command": restart_command,
         "update_command": update_command,
         "validate_command": validate_command,
+        "map_command": map_command,
     }
 
 
@@ -149,6 +157,9 @@ def register_commands(client: DiscordCommandClient) -> None:
         ),
         cs2.command(name="validate", description="Plan and confirm CS2 validation")(
             handlers["validate_command"]
+        ),
+        cs2.command(name="map", description="Change the current map after confirmation")(
+            handlers["map_command"]
         ),
         plugin.command(name="search", description="Search the plugin market")(
             handlers["plugin_search"]

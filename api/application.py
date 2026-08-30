@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.types import Lifespan
 
+from api.legacy_html import LegacyHtmlRedirectMiddleware
 from api.lifecycle import application_lifespan
 from api.metadata import APP_DESCRIPTION, APP_TITLE, APP_VERSION
 from api.routes import (
@@ -29,6 +30,7 @@ from api.routes import (
     servers,
     setup,
     system_settings,
+    v1,
 )
 from api.templating import STATIC_DIRECTORY, templates
 from services.container import ContainerFactory, build_service_container
@@ -56,6 +58,7 @@ API_ROUTERS = (
     system_settings.router,
     gmail_oauth.router,
     map_management.router,
+    v1.router,
 )
 
 
@@ -97,6 +100,7 @@ def create_app(
     app.state.services = container_factory()
 
     register_exception_handlers(app)
+    app.add_middleware(LegacyHtmlRedirectMiddleware)
     if STATIC_DIRECTORY.is_dir():
         app.mount(
             "/static",

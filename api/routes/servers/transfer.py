@@ -95,6 +95,26 @@ async def _resolve_export_servers(
     return servers
 
 
+async def collect_export_bundle(
+    db: AsyncSession,
+    current_user: User,
+    server_ids: Optional[list[int]],
+    include_secrets: bool,
+) -> ServerConfigExport:
+    """Build a portable export document for the selected (or all) servers."""
+    servers = await _resolve_export_servers(db, current_user, server_ids)
+    if not servers:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No servers to export")
+
+    return ServerConfigExport(
+        exported_at=get_current_time(),
+        include_secrets=include_secrets,
+        servers=[
+            server_to_config_entry(server, include_secrets=include_secrets) for server in servers
+        ],
+    )
+
+
 @router.get("/export", name="export_server_configs")
 async def export_server_configs(
     server_ids: Optional[list[int]] = Query(default=None, max_length=100),
@@ -106,17 +126,7 @@ async def export_server_configs(
     current_user: ActiveUser = None,
 ):
     """Download one or more portable server configuration entries."""
-    servers = await _resolve_export_servers(db, current_user, server_ids)
-    if not servers:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No servers to export")
-
-    bundle = ServerConfigExport(
-        exported_at=get_current_time(),
-        include_secrets=include_secrets,
-        servers=[
-            server_to_config_entry(server, include_secrets=include_secrets) for server in servers
-        ],
-    )
+    bundle = await collect_export_bundle(db, current_user, server_ids, include_secrets)
     content = json.dumps(bundle.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n"
     timestamp = get_current_time().strftime("%Y%m%d-%H%M%S")
     filename = f"cs2-server-config-{timestamp}.json"

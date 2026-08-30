@@ -281,7 +281,7 @@ class RedisManager:
         return await self.delete(server_key)
 
     # Deployment progress methods
-    MAX_DEPLOYMENT_PROGRESS_ENTRIES = 5000
+    MAX_DEPLOYMENT_PROGRESS_ENTRIES = 300
     MAX_DEPLOYMENT_PROGRESS_MESSAGE_BYTES = 64 * 1024
 
     async def append_deployment_progress(
@@ -441,6 +441,40 @@ class RedisManager:
         except Exception as e:
             print(f"Redis get batch action status error: {e}")
             return {}
+
+    async def set_batch_action_meta(
+        self,
+        batch_id: str,
+        *,
+        actor_user_id: int,
+        action: str,
+        expire: int = 3600,
+    ) -> bool:
+        """Store the actor and action for a batch journal (separate from per-server keys)."""
+        key = f"batch_meta:{batch_id}"
+        try:
+            data = json.dumps(
+                {"actor_user_id": actor_user_id, "action": action, "timestamp": time.time()}
+            )
+            return await self.client.setex(key, expire, data)
+        except Exception as e:
+            print(f"Redis set batch action meta error: {e}")
+            return False
+
+    async def get_batch_action_meta(self, batch_id: str) -> dict | None:
+        """Return actor metadata for a batch, or None when expired/missing."""
+        key = f"batch_meta:{batch_id}"
+        try:
+            value = await self.client.get(key)
+            if not value:
+                return None
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else None
+        except TypeError, json.JSONDecodeError:
+            return None
+        except Exception as e:
+            print(f"Redis get batch action meta error: {e}")
+            return None
 
     # Monitoring log methods - uses Redis list with max 50 entries
     MONITORING_LOG_MAX_ENTRIES = 50

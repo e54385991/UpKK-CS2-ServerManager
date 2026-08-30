@@ -260,6 +260,11 @@ class A2SCacheService:
             except Exception:
                 pass
 
+    async def refresh_cached_info(self, server) -> Optional[Dict]:
+        """Query one server over A2S and replace its Redis cache. Used by explicit refresh."""
+        await self._query_and_cache_server(server)
+        return await self.get_cached_info(int(server.id))
+
     async def get_cached_info(self, server_id: int) -> Optional[Dict]:
         """Get cached A2S info for a server"""
         cache_key = f"a2s:server:{server_id}"

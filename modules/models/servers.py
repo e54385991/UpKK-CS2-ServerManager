@@ -50,6 +50,8 @@ class Server(SQLModel, table=True):
     ssh_password: Optional[str] = Field(default=None, max_length=255)
     ssh_key_path: Optional[str] = Field(default=None, max_length=500)
     sudo_password: Optional[str] = Field(default=None, max_length=255)
+    # Preferred Ubuntu/Debian apt mirror (official / ustc / tuna). Not SteamCMD.
+    apt_mirror: Optional[str] = Field(default=None, max_length=32)
 
     # Server configuration
     game_port: int = Field(default=27015)
@@ -125,6 +127,14 @@ class Server(SQLModel, table=True):
 
     # MapChooser custom remote map-pool synchronization
     map_pool_sync_url: Optional[str] = Field(default=None, max_length=4096)
+
+    # Automatic log / Linux junk cleanup (panel scheduled task + optional sudo)
+    cleanup_auto_enabled: bool = Field(default=False)
+    cleanup_retain_days: int = Field(default=7)
+    cleanup_targets: List[str] = Field(
+        default_factory=lambda: ["game_logs"],
+        sa_column=Column(JSON, nullable=True),
+    )
 
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(default=None, max_length=500)

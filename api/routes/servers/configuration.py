@@ -341,20 +341,29 @@ async def get_startup_command(
 
     params_str = " ".join(params)
 
-    # Build paths
+    # Build paths. Quoting matches start_server() so the preview can be pasted.
     game_bin_dir = f"{server.game_directory}/cs2/game/bin/linuxsteamrt64"
     cs2_executable = "./cs2"
-
-    cs2_start_cmd = (
-        f"cd {game_bin_dir} && "
-        f"export LD_LIBRARY_PATH='{game_bin_dir}:${{LD_LIBRARY_PATH}}' && "
-        f"{cs2_executable} {params_str}"
-    )
+    cs2_launch = f"{cs2_executable} {params_str}"
 
     # CPU affinity is applied to the process inside the detached session.
     cpu_affinity = None
     if server.cpu_affinity and re.match(r"^[\d,\-\s]+$", server.cpu_affinity.strip()):
         cpu_affinity = server.cpu_affinity.strip()
+        cs2_launch = f"taskset -c {shlex.quote(cpu_affinity)} {cs2_launch}"
+
+    cs2_start_cmd = (
+        f"cd {shlex.quote(game_bin_dir)} && "
+        f"export LD_LIBRARY_PATH={shlex.quote(game_bin_dir)}:"
+        f'"${{LD_LIBRARY_PATH:-}}" && '
+        f"{cs2_executable} {params_str}"
+    )
+    foreground_cmd = (
+        f"cd {shlex.quote(game_bin_dir)} && "
+        f"export LD_LIBRARY_PATH={shlex.quote(game_bin_dir)}:"
+        f'"${{LD_LIBRARY_PATH:-}}" && '
+        f"{cs2_launch}"
+    )
 
     # Build full command with the configured session manager.
     autorestart_script_path = f"{server.game_directory}/cs2_autorestart.sh"
@@ -383,7 +392,7 @@ async def get_startup_command(
 
     return {
         "startup_command": start_cmd,
-        "cs2_command": f"{cs2_executable} {params_str}",
+        "cs2_command": foreground_cmd,
         "session_manager": manager,
         "game_mode_resolved": f"{game_mode_str} (game_type: {game_type}, game_mode: {game_mode})",
     }

@@ -6,6 +6,15 @@ from fastapi import Request
 
 from api.dependencies import ActiveUser, DatabaseSession
 from services.audit_log_service import record_audit_event
+from services.maintenance_lock import maintenance_lock_service
+from services.steamcmd_guard import (
+    STEAMCMD_ACTIONS,
+    STEAMCMD_FORCE_TERMINATED,
+    clear_steamcmd_cancel,
+    force_clear_steamcmd_lock,
+    prepare_steamcmd_operation,
+    request_steamcmd_cancel,
+)
 
 from .common import *
 
@@ -102,62 +111,71 @@ async def cancel_deployment(
     current_user: ActiveUser,
 ):
     """
-    Cancel an in-progress or stuck deployment by clearing the deployment lock
-    and forcefully terminating related SteamCMD processes.
-
-    This endpoint allows users to clear a deployment lock that may be stuck
-    due to interruptions, crashes, or other issues. It will also forcefully kill
-    any running SteamCMD processes to ensure a clean slate.
+    Force-stop a deploy/update/validate: cancel the in-flight operation,
+    kill only this server's SteamCMD processes, then release the exclusive lock.
     """
     try:
-        # Verify user owns this server
         server = await get_server_and_verify_ownership(db, server_id, current_user)
+        await request_steamcmd_cancel(server_id)
 
-        deployment_lock_key = f"deployment_lock:{server_id}"
-        lock_exists = await redis_manager.get(deployment_lock_key)
+        from services.server_operation_hub import server_operation_hub
 
-        if not lock_exists:
-            return JSONResponse(
-                content={"success": True, "message": "No deployment lock found for this server"}
-            )
-
-        # Kill any running SteamCMD processes
-        ssh_manager = SSHManager()
+        aborted = False
         killed_processes = False
         try:
-            success, msg = await ssh_manager.connect(server)
-            if success:
-                # Find and kill SteamCMD processes
-                kill_cmd = "pkill -9 steamcmd || true"
-                success_kill, output, error = await ssh_manager.execute_command(kill_cmd)
-                killed_processes = True
-                logger.info(f"Attempted to kill SteamCMD processes for server {server_id}")
-            else:
-                logger.warning(f"Could not connect to server {server_id} to kill SteamCMD: {msg}")
-        except Exception as e:
-            logger.warning(f"Failed to kill SteamCMD processes for server {server_id}: {e}")
-        finally:
+            aborted = bool(
+                await server_operation_hub.abort(server_id, message=STEAMCMD_FORCE_TERMINATED)
+            )
+
+            ssh_manager = SSHManager()
             try:
-                await ssh_manager.disconnect()
+                success, msg = await ssh_manager.connect(server)
+                if success:
+                    await ssh_manager._kill_steamcmd_processes(server)
+                    killed_processes = True
+                    logger.info(
+                        "Force-stopped SteamCMD processes for server %s (game dir scoped)",
+                        server_id,
+                    )
+                else:
+                    logger.warning(
+                        f"Could not connect to server {server_id} to kill SteamCMD: {msg}"
+                    )
             except Exception as e:
-                logger.debug(f"Error disconnecting SSH for server {server_id}: {e}")
+                logger.warning(f"Failed to kill SteamCMD processes for server {server_id}: {e}")
+            finally:
+                try:
+                    await ssh_manager.disconnect()
+                except Exception as e:
+                    logger.debug(f"Error disconnecting SSH for server {server_id}: {e}")
+        finally:
+            await force_clear_steamcmd_lock(server_id)
+            await clear_steamcmd_cancel(server_id)
+            try:
+                await maintenance_lock_service.force_release_server_lock(
+                    server_id, ignore_local=True
+                )
+            except Exception:
+                logger.debug(
+                    "Force-stop could not release maintenance lock for server %s",
+                    server_id,
+                    exc_info=True,
+                )
+            try:
+                await redis_manager.clear_deployment_progress(server_id)
+            except Exception:
+                pass
 
-        # Clear the deployment lock
-        await redis_manager.delete(deployment_lock_key)
-
-        # Also clear deployment progress
-        await redis_manager.clear_deployment_progress(server_id)
-
-        # Update server status if it's stuck in DEPLOYING
         if server.status == ServerStatus.DEPLOYING:
             server.status = ServerStatus.ERROR
             await db.commit()
 
-        message = "Deployment lock cleared successfully"
+        message = "Deployment force-stopped"
+        if aborted:
+            message += "; in-flight operation cancelled"
         if killed_processes:
-            message += " and SteamCMD processes terminated"
-        message += ". You can now start a new operation."
-
+            message += "; this server's SteamCMD processes were terminated"
+        message += ". You can start a new operation."
         return JSONResponse(content={"success": True, "message": message})
     except HTTPException:
         # Re-raise HTTP exceptions (like 403, 404) to be handled by FastAPI
@@ -197,6 +215,9 @@ async def server_action(
             status_code=status.HTTP_409_CONFLICT,
             detail="Server is currently being deployed or has a stuck deployment lock. Please check the console for progress. If the deployment is stuck, you can cancel it from the Actions tab.",
         )
+
+    if action in STEAMCMD_ACTIONS:
+        await prepare_steamcmd_operation(server_id)
 
     # Set deployment lock only for deploy action (with 2 hour expiration in case of crashes)
     if action == "deploy":

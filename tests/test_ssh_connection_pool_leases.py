@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import importlib
 import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -338,3 +339,47 @@ async def test_manual_reconnect_endpoint_releases_returned_lease(monkeypatch):
     assert result == {"success": True, "message": "reconnected"}
     reconnect.assert_awaited_once_with(server)
     release.assert_awaited_once_with(server, connection)
+
+
+@pytest.mark.asyncio
+async def test_open_connection_enables_ssh_keepalive(monkeypatch):
+    pool = isolated_pool()
+    captured = {}
+
+    async def fake_connect(**kwargs):
+        captured.update(kwargs)
+        return FakeSSHConnection(1)
+
+    monkeypatch.setattr(
+        importlib.import_module("services.ssh_connection_pool").asyncssh,
+        "connect",
+        fake_connect,
+    )
+    await pool._open_connection(server_fixture())
+    assert captured["keepalive_interval"] == 30
+    assert captured["keepalive_count_max"] == 3
+    await pool.close_all()
+
+
+@pytest.mark.asyncio
+async def test_pool_stats_include_leases_and_keepalive(monkeypatch):
+    pool = isolated_pool()
+    server = server_fixture()
+    connection = FakeSSHConnection(1)
+    monkeypatch.setattr(pool, "_open_connection", AsyncMock(return_value=connection))
+
+    success, leased, _message = await pool.get_connection(server)
+    assert success is True
+    stats = await pool.get_pool_stats()
+    assert stats["alive_connections"] == 1
+    assert stats["in_use_connections"] == 1
+    assert stats["active_leases"] == 1
+    assert stats["idle_timeout"] == 900
+    assert stats["keepalive_interval"] == 30
+
+    info = await pool.get_connection_info(server)
+    assert info["connected"] is True
+    assert info["active_leases"] == 1
+
+    await pool.release_connection(server, leased)
+    await pool.close_all()

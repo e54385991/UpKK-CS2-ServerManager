@@ -57,7 +57,7 @@ class _Process:
 
 
 class _Connection:
-    async def create_process(self, _command):
+    async def create_process(self, _command, **_kwargs):
         return _Process()
 
 

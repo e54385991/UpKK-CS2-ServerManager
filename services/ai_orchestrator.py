@@ -810,7 +810,7 @@ async def process_ai_run(run_id: str) -> None:
             await _fail_run(db, run, str(exc))
             return
         if provider is None:
-            await _fail_run(db, run, "No tested AI provider is enabled")
+            await _fail_run(db, run, "No AI provider is enabled")
             return
 
         settings = await AISystemSettings.get_or_create(db)
