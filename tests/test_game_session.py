@@ -166,6 +166,11 @@ async def test_startup_preview_uses_selected_manager_and_masks_secrets(
     assert result["startup_command"].index(command_marker) < result["startup_command"].index(
         "taskset"
     )
+    assert "cd " in result["cs2_command"]
+    assert "./cs2" in result["cs2_command"]
+    assert "taskset -c 0-3" in result["cs2_command"]
+    assert "tmux" not in result["cs2_command"]
+    assert "screen" not in result["cs2_command"]
     for secret in (
         server.api_key,
         server.server_password,
@@ -173,6 +178,7 @@ async def test_startup_preview_uses_selected_manager_and_masks_secrets(
         server.steam_account_token,
     ):
         assert secret not in result["startup_command"]
+        assert secret not in result["cs2_command"]
 
 
 @pytest.mark.parametrize(
