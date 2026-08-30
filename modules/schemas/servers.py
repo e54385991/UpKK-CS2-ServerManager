@@ -237,6 +237,9 @@ class ServerConfigEntry(ServerCreate):
     ssh_key_path: Optional[str] = Field(None, max_length=500)
 
     map_pool_sync_url: Optional[str] = Field(None, max_length=4096)
+    cleanup_auto_enabled: bool = False
+    cleanup_retain_days: int = 7
+    cleanup_targets: List[str] = Field(default_factory=lambda: ["game_logs"])
 
     # Discord notification configuration
     discord_notifications_enabled: bool = False

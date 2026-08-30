@@ -93,6 +93,7 @@ export type FileMutation = {
   readonly success: boolean;
   readonly message: string;
   readonly path: string | null;
+  readonly paths: readonly string[];
 };
 
 export type FileDownloadTicket = {
@@ -131,6 +132,16 @@ export function archiveExtensionLabel(name: string): string {
   const lower = name.toLowerCase();
   const match = ARCHIVE_EXTENSIONS.find((ext) => lower.endsWith(ext));
   return match ? match.slice(1) : "archive";
+}
+
+export function archiveStem(name: string): string {
+  const lower = name.toLowerCase();
+  const ext = ARCHIVE_EXTENSIONS.find((item) => lower.endsWith(item));
+  if (!ext) {
+    const dot = name.lastIndexOf(".");
+    return dot > 0 ? name.slice(0, dot) : name;
+  }
+  return name.slice(0, name.length - ext.length) || name;
 }
 
 export function formatFileSize(bytes: number): string {

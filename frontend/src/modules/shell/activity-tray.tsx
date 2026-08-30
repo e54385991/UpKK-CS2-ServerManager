@@ -35,10 +35,13 @@ import {
 import {
   lastEventSequence,
   mergeOperationEvents,
-  nextReconnectDelayMs,
   operationEventsUrl,
   parseOperationEvent,
 } from "@/modules/servers/operation-events";
+import {
+  OPERATION_INBOX_LOCK,
+  subscribeVisibleEventSource,
+} from "@/shared/lib/visible-event-source";
 import { confirm } from "@/shared/feedback";
 import { Badge, StatusDot } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -62,13 +65,13 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
   const t = useTranslations("shell");
   const [events, setEvents] = useState<OperationStreamEvent[]>([]);
   const itemRef = useRef(item);
-  itemRef.current = item;
+
+  useEffect(() => {
+    itemRef.current = item;
+  }, [item]);
 
   useEffect(() => {
     let cancelled = false;
-    let source: EventSource | null = null;
-    let timer: number | null = null;
-    let attempt = 0;
     const after = { current: "0" };
     void loadOperationJournalFromBrowser(item.serverId, item.operationId).then(
       (result) => {
@@ -91,41 +94,15 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
         markActivityTerminal(item.operationId, "completed", event.message);
       }
     };
-    const attach = () => {
-      if (cancelled) return;
-      source = new EventSource(
-        operationEventsUrl(item.serverId, item.operationId, after.current),
-      );
-      source.onopen = () => {
-        attempt = 0;
-      };
-      source.onmessage = (message) => ingest(message.data);
-      source.addEventListener("progress", (message: MessageEvent<string>) =>
-        ingest(message.data),
-      );
-      source.addEventListener(
-        "operation_completed",
-        (message: MessageEvent<string>) => ingest(message.data),
-      );
-      source.addEventListener(
-        "operation_failed",
-        (message: MessageEvent<string>) => ingest(message.data),
-      );
-      source.onerror = () => {
-        source?.close();
-        source = null;
-        if (cancelled) return;
-        if (!isActiveOperation(itemRef.current)) return;
-        const delay = nextReconnectDelayMs(attempt);
-        attempt += 1;
-        timer = window.setTimeout(attach, delay);
-      };
-    };
-    attach();
+    const stop = subscribeVisibleEventSource({
+      url: () => operationEventsUrl(item.serverId, item.operationId, after.current),
+      eventTypes: ["progress", "operation_completed", "operation_failed"],
+      shouldReconnect: () => isActiveOperation(itemRef.current),
+      onData: ingest,
+    });
     return () => {
       cancelled = true;
-      if (timer != null) window.clearTimeout(timer);
-      source?.close();
+      stop();
     };
   }, [item.operationId, item.serverId]);
 
@@ -192,30 +169,42 @@ export function ActivityTray() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      if (document.hidden) return;
       const result = await loadOperationInboxFromBrowser();
       if (!cancelled && result.ok) setInbox(result.data);
     }
     void load();
-    const source = new EventSource(OPERATION_INBOX_EVENTS_URL);
-    const apply = (raw: string) => {
-      const next = parseOperationInboxPayload(raw);
-      if (!cancelled && next) setInbox(next);
-    };
-    source.addEventListener("inbox", (message: MessageEvent<string>) => apply(message.data));
-    source.onmessage = (message) => apply(message.data);
+    const stop = subscribeVisibleEventSource({
+      url: OPERATION_INBOX_EVENTS_URL,
+      eventTypes: ["inbox"],
+      lockName: OPERATION_INBOX_LOCK,
+      onData: (raw) => {
+        const next = parseOperationInboxPayload(raw);
+        if (!cancelled && next) setInbox(next);
+      },
+    });
     return () => {
       cancelled = true;
-      source.close();
+      stop();
     };
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
+    const tick = () => {
+      if (document.hidden) return;
       void loadOperationInboxFromBrowser().then((result) => {
         if (result.ok) setInbox(result.data);
       });
-    }, remaining > 0 ? 8000 : 20000);
-    return () => window.clearInterval(timer);
+    };
+    const timer = window.setInterval(tick, remaining > 0 ? 8000 : 20000);
+    const onVisibility = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [remaining]);
 
   const actionLabel = (action: string) => {

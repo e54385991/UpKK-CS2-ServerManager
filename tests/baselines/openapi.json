@@ -4267,6 +4267,165 @@
         "title": "CleanupItemView",
         "type": "object"
       },
+      "CleanupPolicyBody": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "retain_days": {
+            "default": 7,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Retain Days",
+            "type": "integer"
+          },
+          "schedule_value": {
+            "default": "03:30",
+            "maxLength": 5,
+            "minLength": 4,
+            "title": "Schedule Value",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "CleanupPolicyBody",
+        "type": "object"
+      },
+      "CleanupPolicyView": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "has_sudo_password": {
+            "default": false,
+            "title": "Has Sudo Password",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run"
+          },
+          "last_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Status"
+          },
+          "manual_execute": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Manual Execute",
+            "type": "array"
+          },
+          "manual_setup": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Manual Setup",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "next_run": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run"
+          },
+          "privilege": {
+            "anyOf": [
+              {
+                "enum": [
+                  "root",
+                  "sudo",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privilege"
+          },
+          "retain_days": {
+            "default": 7,
+            "title": "Retain Days",
+            "type": "integer"
+          },
+          "run_count": {
+            "default": 0,
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "schedule_value": {
+            "default": "03:30",
+            "title": "Schedule Value",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "title": "CleanupPolicyView",
+        "type": "object"
+      },
       "CleanupScanResponse": {
         "description": "Schema for game directory cleanup scan response",
         "properties": {
@@ -4301,12 +4460,22 @@
       },
       "CleanupScanView": {
         "properties": {
+          "archive_item_count": {
+            "default": 0,
+            "title": "Archive Item Count",
+            "type": "integer"
+          },
           "archive_items": {
             "items": {
               "$ref": "#/components/schemas/CleanupItemView"
             },
             "title": "Archive Items",
             "type": "array"
+          },
+          "safe_item_count": {
+            "default": 0,
+            "title": "Safe Item Count",
+            "type": "integer"
           },
           "safe_items": {
             "items": {
@@ -4320,6 +4489,11 @@
             "title": "Total Size",
             "type": "integer"
           },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
           "workshop_summary": {
             "$ref": "#/components/schemas/CleanupWorkshopView"
           }
@@ -4328,6 +4502,235 @@
           "workshop_summary"
         ],
         "title": "CleanupScanView",
+        "type": "object"
+      },
+      "CleanupSystemApplyBody": {
+        "properties": {
+          "retain_days": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retain Days"
+          },
+          "targets": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "CleanupSystemApplyBody",
+        "type": "object"
+      },
+      "CleanupSystemApplyView": {
+        "properties": {
+          "applied": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applied",
+            "type": "array"
+          },
+          "deleted_count": {
+            "default": 0,
+            "title": "Deleted Count",
+            "type": "integer"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/CleanupTargetResultView"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "freed_bytes_estimate": {
+            "default": 0,
+            "title": "Freed Bytes Estimate",
+            "type": "integer"
+          },
+          "manual_execute": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Manual Execute",
+            "type": "array"
+          },
+          "manual_setup": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Manual Setup",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "privilege": {
+            "enum": [
+              "root",
+              "sudo",
+              "none"
+            ],
+            "title": "Privilege",
+            "type": "string"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/CleanupTargetResultView"
+            },
+            "title": "Skipped",
+            "type": "array"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "privilege"
+        ],
+        "title": "CleanupSystemApplyView",
+        "type": "object"
+      },
+      "CleanupSystemScanView": {
+        "properties": {
+          "can_apply_privileged": {
+            "default": false,
+            "title": "Can Apply Privileged",
+            "type": "boolean"
+          },
+          "has_sudo_password": {
+            "default": false,
+            "title": "Has Sudo Password",
+            "type": "boolean"
+          },
+          "manual_execute": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Manual Execute",
+            "type": "array"
+          },
+          "manual_setup": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Manual Setup",
+            "type": "array"
+          },
+          "privilege": {
+            "enum": [
+              "root",
+              "sudo",
+              "none"
+            ],
+            "title": "Privilege",
+            "type": "string"
+          },
+          "retain_days": {
+            "title": "Retain Days",
+            "type": "integer"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/CleanupSystemTargetView"
+            },
+            "title": "Targets",
+            "type": "array"
+          },
+          "total_size": {
+            "default": 0,
+            "title": "Total Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "privilege",
+          "retain_days"
+        ],
+        "title": "CleanupSystemScanView",
+        "type": "object"
+      },
+      "CleanupSystemTargetView": {
+        "properties": {
+          "can_apply": {
+            "default": false,
+            "title": "Can Apply",
+            "type": "boolean"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "needs_privilege": {
+            "default": false,
+            "title": "Needs Privilege",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "size": {
+            "default": 0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "reason"
+        ],
+        "title": "CleanupSystemTargetView",
+        "type": "object"
+      },
+      "CleanupTargetResultView": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "error"
+        ],
+        "title": "CleanupTargetResultView",
         "type": "object"
       },
       "CleanupWorkshopSummary": {
@@ -4633,6 +5036,28 @@
           "ssh_ok"
         ],
         "title": "ConsoleWorkspaceView",
+        "type": "object"
+      },
+      "CopyPathsRequest": {
+        "description": "Copy one or more remote paths into a destination directory.",
+        "properties": {
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources",
+          "destination"
+        ],
+        "title": "CopyPathsRequest",
         "type": "object"
       },
       "CreateDirectoryRequest": {
@@ -6953,6 +7378,31 @@
         "title": "FileContentView",
         "type": "object"
       },
+      "FileCopyRequest": {
+        "properties": {
+          "destination": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Destination",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources",
+          "destination"
+        ],
+        "title": "FileCopyRequest",
+        "type": "object"
+      },
       "FileDownloadTicketView": {
         "properties": {
           "expires_in": {
@@ -7147,6 +7597,13 @@
               }
             ],
             "title": "Path"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Paths",
+            "type": "array"
           },
           "success": {
             "default": true,
@@ -16114,6 +16571,23 @@
             ],
             "title": "Captcha Token"
           },
+          "cleanup_auto_enabled": {
+            "default": false,
+            "title": "Cleanup Auto Enabled",
+            "type": "boolean"
+          },
+          "cleanup_retain_days": {
+            "default": 7,
+            "title": "Cleanup Retain Days",
+            "type": "integer"
+          },
+          "cleanup_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cleanup Targets",
+            "type": "array"
+          },
           "client_port": {
             "anyOf": [
               {
@@ -22242,7 +22716,7 @@
   },
   "info": {
     "description": "Manage multiple CS2 servers via FastAPI + Redis + PostgreSQL with WebSocket support",
-    "title": "CS2 Server Manager",
+    "title": "UPKK CS2 Server Manager",
     "version": "1.0.0"
   },
   "openapi": "3.1.0",
@@ -31069,6 +31543,108 @@
         ]
       }
     },
+    "/api/v1/servers/{server_id}/cleanup/policy": {
+      "get": {
+        "operationId": "get_cleanup_policy_api_v1_servers__server_id__cleanup_policy_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupPolicyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Cleanup Policy",
+        "tags": [
+          "v1-cleanup"
+        ]
+      },
+      "put": {
+        "operationId": "update_cleanup_policy_api_v1_servers__server_id__cleanup_policy_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupPolicyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupPolicyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Cleanup Policy",
+        "tags": [
+          "v1-cleanup"
+        ]
+      }
+    },
     "/api/v1/servers/{server_id}/cleanup/scan": {
       "get": {
         "operationId": "scan_server_cleanup_api_v1_servers__server_id__cleanup_scan_get",
@@ -31111,6 +31687,198 @@
           }
         ],
         "summary": "Scan Server Cleanup",
+        "tags": [
+          "v1-cleanup"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/cleanup/scan/events": {
+      "get": {
+        "operationId": "scan_server_cleanup_events_api_v1_servers__server_id__cleanup_scan_events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Scan Server Cleanup Events",
+        "tags": [
+          "v1-cleanup"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/cleanup/system": {
+      "get": {
+        "operationId": "scan_system_cleanup_api_v1_servers__server_id__cleanup_system_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupSystemScanView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Scan System Cleanup",
+        "tags": [
+          "v1-cleanup"
+        ]
+      },
+      "post": {
+        "operationId": "apply_system_cleanup_api_v1_servers__server_id__cleanup_system_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupSystemApplyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupSystemApplyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Apply System Cleanup",
+        "tags": [
+          "v1-cleanup"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/cleanup/system/events": {
+      "get": {
+        "operationId": "scan_system_cleanup_events_api_v1_servers__server_id__cleanup_system_events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Scan System Cleanup Events",
         "tags": [
           "v1-cleanup"
         ]
@@ -32245,6 +33013,63 @@
         ]
       }
     },
+    "/api/v1/servers/{server_id}/files/copy": {
+      "post": {
+        "operationId": "copy_paths_api_v1_servers__server_id__files_copy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileMutationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Copy Paths",
+        "tags": [
+          "v1-files"
+        ]
+      }
+    },
     "/api/v1/servers/{server_id}/files/download": {
       "get": {
         "operationId": "download_file_api_v1_servers__server_id__files_download_get",
@@ -32648,6 +33473,23 @@
             "schema": {
               "title": "Path",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "relative_path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relative Path"
             }
           }
         ],
@@ -39464,6 +40306,62 @@
         ]
       }
     },
+    "/servers/{server_id}/files/copy": {
+      "post": {
+        "description": "Copy files or directories into a destination folder.",
+        "operationId": "copy_paths_servers__server_id__files_copy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyPathsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Copy Paths",
+        "tags": [
+          "file-manager"
+        ]
+      }
+    },
     "/servers/{server_id}/files/download": {
       "get": {
         "description": "Download file from server",
@@ -39975,6 +40873,23 @@
             "schema": {
               "title": "Path",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "relative_path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relative Path"
             }
           }
         ],

@@ -6,6 +6,7 @@ import type {
   FileContentViewDto,
   FileDownloadTicketViewDto,
   FileExtractRequestDto,
+  FileCopyRequestDto,
   FileMkdirRequestDto,
   FileMutationResultDto,
   FileRenameRequestDto,
@@ -52,6 +53,7 @@ function toMutation(raw: FileMutationResultDto): FileMutation {
     success: raw.success,
     message: raw.message,
     path: raw.path ?? null,
+    paths: raw.paths ?? [],
   };
 }
 
@@ -138,6 +140,27 @@ export async function deleteFilePath(
   const result = await apiFetch<FileMutationResultDto>(
     `/api/v1/servers/${serverId}/files?path=${encodeURIComponent(path)}`,
     { method: "DELETE" },
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: toMutation(result.data) };
+}
+
+export async function copyFilePaths(
+  serverId: number,
+  sources: readonly string[],
+  destination: string,
+): Promise<ApiResult<FileMutation>> {
+  const body: FileCopyRequestDto = {
+    sources: [...sources],
+    destination,
+  };
+  const result = await apiFetch<FileMutationResultDto>(
+    `/api/v1/servers/${serverId}/files/copy`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
   );
   if (!result.ok) return result;
   return { ok: true, data: toMutation(result.data) };

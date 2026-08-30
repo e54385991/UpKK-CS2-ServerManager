@@ -82,6 +82,7 @@ export type FileContentViewDto = Schemas["FileContentView"];
 export type FileContentUpdateRequestDto = Schemas["FileContentUpdateRequest"];
 export type FileMkdirRequestDto = Schemas["FileMkdirRequest"];
 export type FileRenameRequestDto = Schemas["FileRenameRequest"];
+export type FileCopyRequestDto = Schemas["FileCopyRequest"];
 export type FileMutationResultDto = Schemas["FileMutationResult"];
 export type FileDownloadTicketViewDto = Schemas["FileDownloadTicketView"];
 export type FileUrlDownloadRequestDto = Schemas["FileUrlDownloadRequest"];

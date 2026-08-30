@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
+  getPluginUpdateStatusAction,
+  refreshPluginUpdatesAction,
   runPluginUpdatesAction,
   savePluginExcludesAction,
   savePluginUpdatesAction,
@@ -12,10 +14,24 @@ import {
   togglePluginRestartAction,
   unregisterManagedPluginAction,
 } from "@/modules/updates/actions";
+import {
+  PLUGIN_UPDATE_INTERVAL_MAX,
+  PLUGIN_UPDATE_INTERVAL_MIN,
+  clampPluginInterval,
+} from "@/modules/updates/intervals";
+import {
+  addPostUpdateCommand,
+  availablePostUpdateCommands,
+  movePostUpdateCommand,
+  removePostUpdateCommand,
+} from "@/modules/updates/post-commands";
 import { PluginRegisterForm } from "@/modules/updates/register-form";
+import { PluginRunStatus } from "@/modules/updates/plugin-run-status";
+import { pluginRunIsBusy } from "@/modules/updates/status";
 import type { CustomCommand } from "@/modules/commands/types";
 import type {
   ManagedUpdatePlugin,
+  PluginUpdateStatus,
   PluginUpdates,
   RegisterMarketOption,
 } from "@/modules/updates/types";
@@ -30,6 +46,7 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 import { Input, Label } from "@/shared/ui/input";
+import { Select } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 import { Textarea } from "@/shared/ui/textarea";
 
@@ -44,6 +61,26 @@ function splitLines(value: string): string[] {
     .filter(Boolean);
 }
 
+function formatWhen(value: string | null, fallback: string): string {
+  if (!value) return fallback;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date.toLocaleString();
+}
+
+function sourceLabel(
+  sourceType: string,
+  t: (key: string) => string,
+): string {
+  if (
+    sourceType === "github" ||
+    sourceType === "market" ||
+    sourceType === "framework"
+  ) {
+    return t(`sourceTypes.${sourceType}`);
+  }
+  return sourceType;
+}
+
 export function UpdatesConsole({
   serverId,
   initial,
@@ -56,13 +93,20 @@ export function UpdatesConsole({
   marketOptions: readonly RegisterMarketOption[];
 }) {
   const t = useTranslations("pluginUpdates");
+  const tCommands = useTranslations("quickCommands");
   const [workspace, setWorkspace] = useState(initial);
   const [enabled, setEnabled] = useState(initial.enableAutoUpdate);
   const [intervalHours, setIntervalHours] = useState(String(initial.intervalHours));
   const [postCommands, setPostCommands] = useState(initial.enablePostCommands);
   const [commandIds, setCommandIds] = useState<number[]>([...initial.commandIds]);
+  const [commandToAdd, setCommandToAdd] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [runStatus, setRunStatus] = useState<PluginUpdateStatus | null>(null);
+  const [statusEpoch, setStatusEpoch] = useState(0);
+  const seenFinishedAt = useRef<string | null | undefined>(undefined);
+  const runBusy = pluginRunIsBusy(runStatus?.state);
+  const availableCommands = availablePostUpdateCommands(savedCommands, commandIds);
 
   function replacePlugin(next: ManagedUpdatePlugin) {
     setWorkspace((current) => ({
@@ -73,13 +117,61 @@ export function UpdatesConsole({
     }));
   }
 
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function tick(keepFast: boolean) {
+      const result = await getPluginUpdateStatusAction(serverId);
+      if (cancelled) return;
+      const running = result.ok && pluginRunIsBusy(result.data.state);
+      if (result.ok) setRunStatus(result.data);
+      timer = setTimeout(
+        () => void tick(false),
+        running || keepFast ? 1500 : 5000,
+      );
+    }
+
+    void tick(statusEpoch > 0);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [serverId, statusEpoch]);
+
+  useEffect(() => {
+    const finishedAt = runStatus?.finishedAt ?? null;
+    const state = runStatus?.state ?? "idle";
+    if (seenFinishedAt.current === undefined) {
+      seenFinishedAt.current = finishedAt;
+      return;
+    }
+    if (
+      finishedAt &&
+      finishedAt !== seenFinishedAt.current &&
+      (state === "completed" || state === "failed")
+    ) {
+      seenFinishedAt.current = finishedAt;
+      void refreshPluginUpdatesAction(serverId).then((result) => {
+        if (!result.ok) return;
+        setWorkspace((current) => ({
+          ...current,
+          lastCheck: result.data.lastCheck,
+          plugins: result.data.plugins,
+        }));
+      });
+      return;
+    }
+    if (finishedAt) seenFinishedAt.current = finishedAt;
+  }, [runStatus?.finishedAt, runStatus?.state, serverId]);
+
   async function save() {
     setPending("save");
     setBanner(null);
     const parsed = Number(intervalHours);
     const result = await savePluginUpdatesAction(serverId, {
       enableAutoUpdate: enabled,
-      intervalHours: Number.isFinite(parsed) ? parsed : workspace.intervalHours,
+      intervalHours: clampPluginInterval(parsed, workspace.intervalHours),
       enablePostCommands: postCommands,
       commandIds,
     });
@@ -89,14 +181,23 @@ export function UpdatesConsole({
       return;
     }
     setWorkspace(result.data);
+    setEnabled(result.data.enableAutoUpdate);
+    setIntervalHours(String(result.data.intervalHours));
+    setPostCommands(result.data.enablePostCommands);
+    setCommandIds([...result.data.commandIds]);
     setBanner(t("saved"));
   }
 
   async function run() {
+    if (runBusy) {
+      setBanner(t("runBusy"));
+      return;
+    }
     setPending("run");
     const result = await runPluginUpdatesAction(serverId);
     setPending(null);
     setBanner(result.ok ? result.data.message : result.error || t("failed"));
+    if (result.ok) setStatusEpoch((current) => current + 1);
   }
 
   async function toggle(pluginId: number, next: boolean) {
@@ -110,6 +211,12 @@ export function UpdatesConsole({
     replacePlugin(result.data);
   }
 
+  function commandLabel(commandId: number): string {
+    const command = savedCommands.find((item) => item.id === commandId);
+    if (!command) return t("missingCommand", { id: commandId });
+    return `${command.name} (${tCommands(`targets.${command.target}`)})`;
+  }
+
   return (
     <div className="space-y-6">
       {banner ? <p className="text-sm text-fg-muted">{banner}</p> : null}
@@ -119,6 +226,10 @@ export function UpdatesConsole({
           <CardDescription>{t("help")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <p className="rounded-md border border-warn/30 bg-warn-muted/40 px-3 py-2 text-xs text-warn">
+            {t("policyWarning")}
+          </p>
+          {runStatus ? <PluginRunStatus status={runStatus} /> : null}
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor="auto-update">{t("enabled")}</Label>
             <Switch
@@ -132,12 +243,23 @@ export function UpdatesConsole({
             <Label htmlFor="interval">{t("interval")}</Label>
             <Input
               id="interval"
+              type="number"
+              min={PLUGIN_UPDATE_INTERVAL_MIN}
+              max={PLUGIN_UPDATE_INTERVAL_MAX}
+              step={0.1}
               value={intervalHours}
               onChange={(event) => setIntervalHours(event.target.value)}
             />
+            <p className="text-xs text-fg-subtle">{t("intervalHelp")}</p>
           </div>
+          <p className="text-xs text-fg-subtle">
+            {t("lastCheck")}: {formatWhen(workspace.lastCheck, t("never"))}
+          </p>
           <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="post-commands">{t("postCommands")}</Label>
+            <div>
+              <Label htmlFor="post-commands">{t("postCommands")}</Label>
+              <p className="text-xs text-fg-subtle">{t("postCommandsHint")}</p>
+            </div>
             <Switch
               id="post-commands"
               label={t("postCommands")}
@@ -146,31 +268,95 @@ export function UpdatesConsole({
             />
           </div>
           <div className="space-y-2">
-            <p className="text-sm font-medium text-fg-muted">{t("commandIds")}</p>
+            <Label htmlFor="post-command-add">{t("addCommand")}</Label>
             {savedCommands.length === 0 ? (
               <p className="text-xs text-fg-subtle">{t("noSavedCommands")}</p>
             ) : (
-              <ul className="space-y-2">
-                {savedCommands.map((command) => (
-                  <li key={command.id} className="flex items-center gap-2">
-                    <input
-                      id={`post-command-${command.id}`}
-                      type="checkbox"
-                      checked={commandIds.includes(command.id)}
-                      onChange={(event) =>
-                        setCommandIds((current) =>
-                          event.target.checked
-                            ? [...current, command.id]
-                            : current.filter((id) => id !== command.id),
-                        )
-                      }
-                    />
-                    <Label htmlFor={`post-command-${command.id}`} className="mb-0">
-                      {command.name}
-                    </Label>
+              <div className="flex flex-wrap items-end gap-2">
+                <Select
+                  id="post-command-add"
+                  className="min-w-56 flex-1"
+                  value={commandToAdd}
+                  onChange={(event) => setCommandToAdd(event.target.value)}
+                >
+                  <option value="">{t("selectCommand")}</option>
+                  {availableCommands.map((command) => (
+                    <option key={command.id} value={String(command.id)}>
+                      {command.name} ({tCommands(`targets.${command.target}`)})
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!commandToAdd}
+                  onClick={() => {
+                    const nextId = Number(commandToAdd);
+                    if (!Number.isFinite(nextId)) return;
+                    setCommandIds((current) => addPostUpdateCommand(current, nextId));
+                    setCommandToAdd("");
+                  }}
+                >
+                  {t("addCommand")}
+                </Button>
+              </div>
+            )}
+            {commandIds.length === 0 ? (
+              <p className="text-xs text-fg-subtle">{t("noPostCommands")}</p>
+            ) : (
+              <ol className="space-y-2">
+                {commandIds.map((commandId, index) => (
+                  <li
+                    key={`${commandId}-${index}`}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface-raised px-3 py-2"
+                  >
+                    <p className="text-sm text-fg">
+                      <span className="mr-2 text-xs text-fg-subtle">{index + 1}</span>
+                      {commandLabel(commandId)}
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={index === 0}
+                        onClick={() =>
+                          setCommandIds((current) =>
+                            movePostUpdateCommand(current, index, -1),
+                          )
+                        }
+                      >
+                        {t("moveUp")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={index === commandIds.length - 1}
+                        onClick={() =>
+                          setCommandIds((current) =>
+                            movePostUpdateCommand(current, index, 1),
+                          )
+                        }
+                      >
+                        {t("moveDown")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setCommandIds((current) =>
+                            removePostUpdateCommand(current, index),
+                          )
+                        }
+                      >
+                        {t("removeCommand")}
+                      </Button>
+                    </div>
                   </li>
                 ))}
-              </ul>
+              </ol>
             )}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -180,7 +366,7 @@ export function UpdatesConsole({
             <Button
               type="button"
               variant="outline"
-              disabled={Boolean(pending)}
+              disabled={Boolean(pending) || runBusy}
               onClick={() => void run()}
             >
               {pending === "run" ? t("running") : t("run")}
@@ -233,9 +419,11 @@ export function UpdatesConsole({
               serverId={serverId}
               plugin={plugin}
               pending={pending}
+              runBusy={runBusy}
               onPending={setPending}
               onBanner={setBanner}
               onSaved={replacePlugin}
+              onKickStatus={() => setStatusEpoch((current) => current + 1)}
               onRemoved={(pluginId) =>
                 setWorkspace((current) => ({
                   ...current,
@@ -268,20 +456,24 @@ function PluginExcludeEditor({
   serverId,
   plugin,
   pending,
+  runBusy,
   onPending,
   onBanner,
   onSaved,
   onRemoved,
   onToggle,
+  onKickStatus,
 }: {
   serverId: number;
   plugin: ManagedUpdatePlugin;
   pending: string | null;
+  runBusy: boolean;
   onPending: (value: string | null) => void;
   onBanner: (value: string | null) => void;
   onSaved: (plugin: ManagedUpdatePlugin) => void;
   onRemoved: (pluginId: number) => void;
   onToggle: (next: boolean) => void;
+  onKickStatus: () => void;
 }) {
   const t = useTranslations("pluginUpdates");
   const [dirs, setDirs] = useState(joinLines(plugin.excludeDirs));
@@ -328,10 +520,15 @@ function PluginExcludeEditor({
   }
 
   async function testUpdate() {
+    if (runBusy) {
+      onBanner(t("runBusy"));
+      return;
+    }
     onPending(`test-${plugin.id}`);
     const result = await testManagedPluginUpdateAction(serverId, plugin.id);
     onPending(null);
     onBanner(result.ok ? result.data.message : result.error || t("failed"));
+    if (result.ok) onKickStatus();
   }
 
   async function unregister() {
@@ -356,8 +553,17 @@ function PluginExcludeEditor({
         <div>
           <p className="font-medium">{plugin.displayName}</p>
           <p className="text-xs text-fg-muted">
-            {t("version")}: {plugin.installedVersion} / {plugin.latestVersion ?? "—"}
+            {plugin.installedVersion} / {plugin.latestVersion ?? "—"}
+            {" · "}
+            {sourceLabel(plugin.sourceType, t)}
+            {plugin.lastStatus ? ` · ${plugin.lastStatus}` : ""}
           </p>
+          <p className="text-xs text-fg-subtle">
+            {t("lastItemCheck")}: {formatWhen(plugin.lastCheckAt, t("never"))}
+          </p>
+          {plugin.lastError ? (
+            <p className="text-xs text-danger">{plugin.lastError}</p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {plugin.lastStatus ? <Badge>{plugin.lastStatus}</Badge> : null}
@@ -365,7 +571,7 @@ function PluginExcludeEditor({
             type="button"
             size="sm"
             variant="outline"
-            disabled={Boolean(pending)}
+            disabled={Boolean(pending) || runBusy}
             onClick={() => void testUpdate()}
           >
             {pending === `test-${plugin.id}` ? t("testing") : t("test")}

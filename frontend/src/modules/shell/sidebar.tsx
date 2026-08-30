@@ -17,13 +17,13 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
   const tSite = useTranslations("site");
 
   return (
-    <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface/60 md:flex">
-      <div className="flex h-14 items-center gap-2.5 border-b border-line px-5">
-        <Link href="/overview" className="flex items-center gap-2.5">
-          <span className="flex size-8 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">
+    <aside className="hidden h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface/60 md:flex">
+      <div className="flex min-h-14 items-center gap-2.5 border-b border-line px-5 py-2">
+        <Link href="/overview" className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">
             <Crosshair className="size-4.5" />
           </span>
-          <span className="text-sm font-semibold tracking-tight text-fg">
+          <span className="min-w-0 text-[12px] font-semibold leading-snug tracking-tight text-fg">
             {tSite("name")}
           </span>
         </Link>
@@ -55,9 +55,6 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
         })}
       </nav>
 
-      <div className="border-t border-line px-5 py-3 text-[0.6875rem] text-fg-subtle">
-        {tSite("fullName")}
-      </div>
     </aside>
   );
 }

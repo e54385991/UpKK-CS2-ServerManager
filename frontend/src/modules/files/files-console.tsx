@@ -1,17 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useTranslations } from "next-intl";
 import {
   ArrowDown,
   ArrowUp,
   Check,
+  ClipboardCopy,
+  ClipboardPaste,
   Copy,
   Download,
   FileArchive,
   FileText,
   Folder,
   FolderPlus,
+  FolderUp,
   Pencil,
   RefreshCw,
   Search,
@@ -21,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  copyFilesAction,
   createDirectoryAction,
   createDownloadTicketAction,
   deleteFileAction,
@@ -32,14 +36,42 @@ import {
   saveFileContentAction,
   startUrlDownloadAction,
 } from "@/modules/files/actions";
+import { useFileClipboard, writeFileClipboard } from "@/modules/files/clipboard";
 import { ExtractDialog } from "@/modules/files/extract-dialog";
+import {
+  extractRevealOpenPath,
+  guessExtractedFolderName,
+  pickRevealedFolder,
+  revealDelayMs,
+  type ExtractRevealHint,
+} from "@/modules/files/extract-reveal";
+import { FileEditorDialog, type EditorFile } from "@/modules/files/file-editor-dialog";
 import { FilesPathBar } from "@/modules/files/path-bar";
-import { filesHref, isAtRoot, parentWithinRoot, replaceFilesUrl } from "@/modules/files/paths";
+import { FilesShortcuts } from "@/modules/files/files-shortcuts";
+import { FilesUploadDock } from "@/modules/files/files-upload-dock";
+import { RenameDialog } from "@/modules/files/rename-dialog";
+import {
+  filesHref,
+  isAtRoot,
+  isMissingPathError,
+  parentWithinRoot,
+  replaceFilesUrl,
+} from "@/modules/files/paths";
+import {
+  MAX_UPLOAD_FILES,
+  toUploadItems,
+  uploadFileWithProgress,
+  uploadsFromDataTransfer,
+  uploadsFromFileList,
+  type LocalUpload,
+  type UploadItem,
+} from "@/modules/files/upload";
 import { notify } from "@/shared/feedback";
 import { copyText } from "@/shared/lib/clipboard";
 import {
   FILE_KIND_FILTERS,
   archiveExtensionLabel,
+  archiveStem,
   filterAndSortEntries,
   formatFileSize,
   highlightName,
@@ -63,7 +95,6 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 import { Input, Label } from "@/shared/ui/input";
-import { Textarea } from "@/shared/ui/textarea";
 import { cn } from "@/shared/lib/cn";
 
 type Banner = { readonly tone: "ok" | "warn" | "danger"; readonly text: string };
@@ -71,16 +102,27 @@ type Banner = { readonly tone: "ok" | "warn" | "danger"; readonly text: string }
 export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const t = useTranslations("files");
   const uploadRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
+  const bindFolderInput = useCallback((node: HTMLInputElement | null) => {
+    folderRef.current = node;
+    if (!node) return;
+    node.multiple = true;
+    node.setAttribute("webkitdirectory", "");
+    node.setAttribute("directory", "");
+    (node as HTMLInputElement & { webkitdirectory?: boolean }).webkitdirectory = true;
+  }, []);
   const listAnchorRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const lastClickedRef = useRef<string | null>(null);
   const [workspace, setWorkspace] = useState(initial);
   const [pending, setPending] = useState<string | null>(null);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [folderName, setFolderName] = useState("");
   const [renameFrom, setRenameFrom] = useState<FileEntry | null>(null);
-  const [renameTo, setRenameTo] = useState("");
-  const [editing, setEditing] = useState<{ path: string; name: string; content: string } | null>(
-    null,
-  );
+  const [editing, setEditing] = useState<EditorFile | null>(null);
+  const editorRequestRef = useRef(0);
   const [urlForm, setUrlForm] = useState({
     url: "",
     filename: "",
@@ -90,14 +132,22 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const [urlTask, setUrlTask] = useState<FileTask | null>(null);
   const [extractEntry, setExtractEntry] = useState<FileEntry | null>(null);
   const [extractTaskId, setExtractTaskId] = useState<string | null>(null);
+  const [extractFinishDest, setExtractFinishDest] = useState<string | null>(null);
+  const [extractReveal, setExtractReveal] = useState<readonly string[]>([]);
+  const [extractListEnter, setExtractListEnter] = useState(false);
+  const extractHintRef = useRef<ExtractRevealHint | null>(null);
   const [copiedEntry, setCopiedEntry] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<FileKindFilter>("all");
   const [sortKey, setSortKey] = useState<FileSortKey>("name");
   const [sortDir, setSortDir] = useState<FileSortDir>("asc");
-  const searchRef = useRef<HTMLInputElement>(null);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const [uploadRate, setUploadRate] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
 
   const serverId = workspace.serverId;
+  const clipboard = useFileClipboard(serverId);
   const canMutate = workspace.sshOk && !pending;
   const listedFiles = useMemo(
     () => filterAndSortEntries(workspace.files, query, kind, sortKey, sortDir),
@@ -108,16 +158,34 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     [workspace.files],
   );
   const filtering = Boolean(query.trim()) || kind !== "all";
+  const selectedVisible = listedFiles.filter((entry) => selected.has(entry.path));
+  const allVisibleSelected =
+    listedFiles.length > 0 && selectedVisible.length === listedFiles.length;
 
   const load = useCallback(
-    async (path: string) => {
+    async (path: string): Promise<FilesWorkspace | null> => {
       const changingDir = path !== workspace.path;
-      if (changingDir) setPending("browse");
+      if (changingDir) {
+        setPending("browse");
+        setSelected(new Set());
+        lastClickedRef.current = null;
+      }
       const result = await listFilesAction(serverId, path);
       if (!result.ok) {
         if (changingDir) setPending(null);
         setBanner({ tone: "danger", text: result.error || t("failed") });
-        return;
+        return null;
+      }
+      if (
+        (!result.data.sshOk && isMissingPathError(result.data.sshError)) ||
+        (result.data.sshOk && result.data.message && result.data.files.length === 0)
+      ) {
+        if (changingDir) setPending(null);
+        setBanner({
+          tone: "danger",
+          text: t("pathMissing"),
+        });
+        return null;
       }
       setWorkspace(result.data);
       setQuery((current) => (result.data.path === workspace.path ? current : ""));
@@ -128,9 +196,20 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
           window.requestAnimationFrame(() => setPending(null));
         });
       }
+      return result.data;
     },
     [serverId, t, workspace.path],
   );
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+
+  useEffect(() => {
+    const node = selectAllRef.current;
+    if (!node) return;
+    node.indeterminate = selectedVisible.length > 0 && !allVisibleSelected;
+  }, [allVisibleSelected, selectedVisible.length]);
 
   useEffect(() => {
     if (!urlTaskId) return;
@@ -169,11 +248,18 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
       if (result.data.status === "completed" || result.data.status === "failed") {
         setExtractTaskId(null);
         setExtractEntry(null);
+        const failed = result.data.status === "failed";
         setBanner({
-          tone: result.data.status === "completed" ? "ok" : "danger",
+          tone: failed ? "danger" : "ok",
           text: result.data.message || result.data.error || t("extractDone"),
         });
-        if (result.data.status === "completed") void load(workspace.path);
+        if (failed) {
+          extractHintRef.current = null;
+          return;
+        }
+        setExtractFinishDest(
+          extractHintRef.current?.destination || result.data.destination || workspace.path,
+        );
       }
     }
     const id = window.setInterval(() => {
@@ -184,10 +270,97 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [extractTaskId, load, serverId, t, workspace.path]);
+  }, [extractTaskId, serverId, t, workspace.path]);
+
+  useEffect(() => {
+    if (!extractFinishDest) return;
+    let cancelled = false;
+    let revealTimer = 0;
+    let clearTimer = 0;
+    void (async () => {
+      const listing = await loadRef.current(extractFinishDest);
+      if (cancelled || !listing) {
+        if (!cancelled) setExtractFinishDest(null);
+        return;
+      }
+      const hint = extractHintRef.current;
+      extractHintRef.current = null;
+      const folder = pickRevealedFolder(
+        listing.files,
+        hint ? guessExtractedFolderName(hint, archiveStem(hint.archiveName)) : null,
+      );
+      const openPath = extractRevealOpenPath(listing.path, folder);
+      setExtractReveal(folder ? [folder.name] : []);
+      const delay = revealDelayMs();
+      if (folder && openPath) {
+        revealTimer = window.setTimeout(() => {
+          if (cancelled) return;
+          setExtractListEnter(true);
+          setBanner({ tone: "ok", text: t("extractOpened", { name: folder.name }) });
+          void loadRef.current(openPath);
+        }, delay);
+        clearTimer = window.setTimeout(() => {
+          if (cancelled) return;
+          setExtractReveal([]);
+          setExtractListEnter(false);
+          setExtractFinishDest(null);
+        }, delay + 1600);
+        return;
+      }
+      clearTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        setExtractReveal([]);
+        setExtractFinishDest(null);
+      }, 1600);
+    })();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(revealTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [extractFinishDest, t]);
+
+  useEffect(() => {
+    if (extractReveal.length === 0) return;
+    const node = listAnchorRef.current?.querySelector("[data-revealed='true']");
+    node?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [extractReveal]);
+
+  const copyItems = useCallback(
+    (paths: readonly string[]) => {
+      if (paths.length === 0) {
+        notify.error(t("clipboardEmpty"));
+        return;
+      }
+      writeFileClipboard(serverId, paths);
+      notify.success(t("copiedItems", { count: paths.length }));
+    },
+    [serverId, t],
+  );
+
+  const pasteItems = useCallback(async () => {
+    if (clipboard.length === 0) {
+      notify.error(t("clipboardEmpty"));
+      return;
+    }
+    setPending("paste");
+    setBanner(null);
+    const result = await copyFilesAction(serverId, clipboard, workspace.path);
+    setPending(null);
+    if (!result.ok) {
+      setBanner({ tone: "danger", text: result.error || t("failed") });
+      return;
+    }
+    setBanner({
+      tone: "ok",
+      text: result.data.message || t("pastedItems", { count: result.data.paths.length || clipboard.length }),
+    });
+    await load(workspace.path);
+  }, [clipboard, load, serverId, t, workspace.path]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
+      if (editing || renameFrom) return;
       const target = event.target;
       const typing =
         target instanceof HTMLElement &&
@@ -200,11 +373,32 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
       if (event.key === "Escape" && document.activeElement === searchRef.current) {
         setQuery("");
         searchRef.current?.blur();
+        return;
+      }
+      if (event.key === "Escape" && !typing) {
+        setSelected(new Set());
+        return;
+      }
+      if (typing) return;
+      const meta = event.metaKey || event.ctrlKey;
+      if (meta && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setSelected(new Set(listedFiles.map((entry) => entry.path)));
+        return;
+      }
+      if (meta && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        if (selected.size > 0) copyItems([...selected]);
+        return;
+      }
+      if (meta && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        if (canMutate) void pasteItems();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [canMutate, copyItems, editing, listedFiles, pasteItems, renameFrom, selected]);
 
   function toggleSort(next: FileSortKey) {
     if (sortKey === next) {
@@ -221,6 +415,29 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     const ok = await work();
     setPending(null);
     if (ok) await load(workspace.path);
+  }
+
+  function toggleSelect(path: string, shiftKey: boolean) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (shiftKey && lastClickedRef.current) {
+        const paths = listedFiles.map((entry) => entry.path);
+        const from = paths.indexOf(lastClickedRef.current);
+        const to = paths.indexOf(path);
+        if (from >= 0 && to >= 0) {
+          const [start, end] = from < to ? [from, to] : [to, from];
+          for (let index = start; index <= end; index += 1) {
+            const item = paths[index];
+            if (item) next.add(item);
+          }
+          return next;
+        }
+      }
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+    lastClickedRef.current = path;
   }
 
   return (
@@ -260,6 +477,14 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
         <CardContent className="space-y-4">
           <FilesPathBar
             key={workspace.path}
+            root={workspace.root}
+            path={workspace.path}
+            disabled={Boolean(pending)}
+            onGo={(next) => void load(next)}
+          />
+
+          <FilesShortcuts
+            serverId={serverId}
             root={workspace.root}
             path={workspace.path}
             disabled={Boolean(pending)}
@@ -382,7 +607,42 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                 onClick={() => uploadRef.current?.click()}
               >
                 <Upload />
-                {pending === "upload" ? t("uploading") : t("upload")}
+                {pending === "upload" ? t("uploading") : t("uploadFiles")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="files-upload-folder"
+                disabled={!canMutate}
+                onClick={() => folderRef.current?.click()}
+              >
+                <FolderUp />
+                {t("uploadFolder")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="files-copy-items"
+                disabled={selected.size === 0}
+                title={t("copyItemsHint")}
+                onClick={() => copyItems([...selected])}
+              >
+                <ClipboardCopy />
+                {t("copyItems")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="files-paste"
+                disabled={!canMutate || clipboard.length === 0}
+                title={t("pasteItemsHint")}
+                onClick={() => void pasteItems()}
+              >
+                <ClipboardPaste />
+                {t("pasteItems")}
               </Button>
               <input
                 ref={uploadRef}
@@ -391,7 +651,42 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                 multiple
                 onChange={(event) => void onUpload(event)}
               />
+              <input
+                ref={bindFolderInput}
+                type="file"
+                className="hidden"
+                multiple
+                onChange={(event) => void onUpload(event)}
+              />
             </div>
+            {selected.size > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface-overlay px-3 py-2 text-sm">
+                <span>{t("selectedCount", { count: selected.size })}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelected(new Set())}
+                >
+                  {t("clearSelection")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="danger"
+                  disabled={!canMutate}
+                  onClick={() => void deleteSelected()}
+                >
+                  <Trash2 />
+                  {t("removeSelected")}
+                </Button>
+              </div>
+            ) : null}
+            <FilesUploadDock
+              items={uploads}
+              rate={uploadRate}
+              onCancel={() => uploadAbortRef.current?.abort()}
+            />
             <div className="flex flex-wrap items-center gap-1">
               {FILE_KIND_FILTERS.map((id) => (
                 <Button
@@ -415,19 +710,58 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
 
           <div
             ref={listAnchorRef}
-            className={cn(pending === "browse" && "pointer-events-none opacity-70")}
+            data-testid="files-dropzone"
+            className={cn(
+              "relative rounded-lg",
+              pending === "browse" && "pointer-events-none opacity-70",
+              dragOver && "ring-2 ring-primary/50",
+            )}
+            onDragEnter={(event) => onDragEnter(event)}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (canMutate) setDragOver(true);
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setDragOver(false);
+              }
+            }}
+            onDrop={(event) => void onDrop(event)}
           >
+          {dragOver ? (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary-muted/70 text-sm font-medium text-primary">
+              {t("dropActive")}
+            </div>
+          ) : null}
           {!workspace.sshOk ? (
             <p className="text-sm text-fg-muted">{t("listLocked")}</p>
           ) : totalFiles === 0 ? (
-            <p className="text-sm text-fg-muted">{t("empty")}</p>
+            <p className="px-1 py-8 text-center text-sm text-fg-muted">{t("dropHint")}</p>
           ) : listedFiles.length === 0 ? (
             <p className="text-sm text-fg-muted">{t("searchEmpty")}</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className={cn("overflow-x-auto", extractListEnter && "motion-safe:animate-file-list-enter")}>
               <table className="w-full text-left text-sm">
                 <thead className="text-xs text-fg-subtle">
                   <tr className="border-b border-line">
+                    <th className="w-10 py-2 pr-2 font-medium">
+                      <input
+                        ref={selectAllRef}
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={allVisibleSelected}
+                        disabled={!workspace.sshOk}
+                        aria-label={t("selectAll")}
+                        data-testid="files-select-all"
+                        onChange={(event) => {
+                          setSelected(
+                            event.target.checked
+                              ? new Set(listedFiles.map((entry) => entry.path))
+                              : new Set(),
+                          );
+                        }}
+                      />
+                    </th>
                     <th className="py-2 pr-3 font-medium">
                       <SortHeader
                         label={t("name")}
@@ -457,15 +791,52 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                 </thead>
                 <tbody className="divide-y divide-line">
                   {listedFiles.map((entry) => (
-                    <tr key={entry.path}>
+                    <tr
+                      key={entry.path}
+                      data-revealed={extractReveal.includes(entry.name) ? "true" : undefined}
+                      data-testid={
+                        extractReveal.includes(entry.name) ? "files-extract-reveal" : undefined
+                      }
+                      className={cn(
+                        selected.has(entry.path) && "bg-primary-muted/35",
+                        extractReveal.includes(entry.name) &&
+                          "motion-safe:animate-file-reveal ring-1 ring-inset ring-primary/40",
+                      )}
+                    >
+                      <td className="py-2 pr-2">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={selected.has(entry.path)}
+                          aria-label={entry.name}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            toggleSelect(entry.path, event.shiftKey);
+                          }}
+                          onChange={() => undefined}
+                        />
+                      </td>
                       <td className="py-2 pr-3">
                         <button
                           type="button"
                           className="inline-flex items-center gap-2 text-left font-medium text-fg hover:text-primary"
-                          onClick={() => {
+                          onClick={(event) => {
                             if (pending) return;
+                            if (event.metaKey || event.ctrlKey) {
+                              toggleSelect(entry.path, event.shiftKey);
+                              return;
+                            }
+                            if (event.shiftKey && selected.size > 0) {
+                              toggleSelect(entry.path, true);
+                              return;
+                            }
                             if (entry.type === "directory") {
                               void load(entry.path);
+                              return;
+                            }
+                            if (isTextFile(entry.name)) {
+                              void openEditor(entry);
                               return;
                             }
                             if (isArchiveFile(entry.name)) void openExtract(entry);
@@ -506,6 +877,15 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                       </td>
                       <td className="py-2">
                         <div className="flex flex-wrap gap-1">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label={t("copyItems")}
+                            onClick={() => copyItems([entry.path])}
+                          >
+                            <ClipboardCopy />
+                          </Button>
                           <Button
                             type="button"
                             size="icon"
@@ -560,10 +940,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                             variant="ghost"
                             disabled={!canMutate}
                             aria-label={t("rename")}
-                            onClick={() => {
-                              setRenameFrom(entry);
-                              setRenameTo(entry.name);
-                            }}
+                            onClick={() => setRenameFrom(entry)}
                           >
                             <FileText />
                           </Button>
@@ -619,7 +996,11 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
           entry={extractEntry}
           destination={workspace.path}
           onClose={() => setExtractEntry(null)}
-          onStarted={(task) => {
+          onStarted={(task, reveal) => {
+            extractHintRef.current = {
+              ...reveal,
+              destination: task.destination || reveal.destination,
+            };
             setExtractEntry(null);
             setExtractTaskId(task.taskId);
             setBanner({ tone: "ok", text: t("extracting") });
@@ -628,93 +1009,48 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
       ) : null}
 
       {renameFrom ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("rename")}</CardTitle>
-            <CardDescription>{renameFrom.path}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-end gap-2">
-            <div className="min-w-48 flex-1">
-              <Label htmlFor="rename-to">{t("newName")}</Label>
-              <Input
-                id="rename-to"
-                value={renameTo}
-                onChange={(event) => setRenameTo(event.target.value)}
-              />
-            </div>
-            <Button
-              type="button"
-              disabled={!canMutate || !renameTo.trim()}
-              onClick={() =>
-                void run("rename", async () => {
-                  const result = await renameFileAction(
-                    serverId,
-                    workspace.path,
-                    renameFrom.name,
-                    renameTo.trim(),
-                  );
-                  if (!result.ok) {
-                    setBanner({ tone: "danger", text: result.error || t("failed") });
-                    return false;
-                  }
-                  setRenameFrom(null);
-                  setBanner({ tone: "ok", text: result.data.message });
-                  return true;
-                })
-              }
-            >
-              {t("saveRename")}
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => setRenameFrom(null)}>
-              {t("cancel")}
-            </Button>
-          </CardContent>
-        </Card>
+        <RenameDialog
+          entry={renameFrom}
+          busy={pending === "rename"}
+          onClose={() => setRenameFrom(null)}
+          onSubmit={async (name) => {
+            setPending("rename");
+            setBanner(null);
+            const result = await renameFileAction(serverId, workspace.path, renameFrom.name, name);
+            setPending(null);
+            if (!result.ok) {
+              setBanner({ tone: "danger", text: result.error || t("failed") });
+              return false;
+            }
+            setBanner({ tone: "ok", text: result.data.message });
+            await load(workspace.path);
+            return true;
+          }}
+        />
       ) : null}
 
       {editing ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("editFile")}</CardTitle>
-            <CardDescription>{editing.path}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Textarea
-              className="min-h-72 font-mono text-xs"
-              value={editing.content}
-              onChange={(event) =>
-                setEditing({ ...editing, content: event.target.value })
-              }
-            />
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                disabled={!canMutate}
-                onClick={() =>
-                  void run("save-edit", async () => {
-                    const result = await saveFileContentAction(
-                      serverId,
-                      editing.path,
-                      editing.content,
-                    );
-                    if (!result.ok) {
-                      setBanner({ tone: "danger", text: result.error || t("failed") });
-                      return false;
-                    }
-                    setEditing(null);
-                    setBanner({ tone: "ok", text: result.data.message });
-                    return true;
-                  })
-                }
-              >
-                {pending === "save-edit" ? t("saving") : t("saveFile")}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setEditing(null)}>
-                {t("cancel")}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <FileEditorDialog
+          file={editing}
+          busy={pending === "save-edit"}
+          onClose={() => {
+            editorRequestRef.current += 1;
+            setEditing(null);
+          }}
+          onSave={async (content) => {
+            setPending("save-edit");
+            setBanner(null);
+            const result = await saveFileContentAction(serverId, editing.path, content);
+            setPending(null);
+            if (!result.ok) {
+              setBanner({ tone: "danger", text: result.error || t("failed") });
+              return false;
+            }
+            setBanner({ tone: "ok", text: result.data.message });
+            await load(workspace.path);
+            return true;
+          }}
+        />
       ) : null}
 
       <Card>
@@ -792,29 +1128,147 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     </div>
   );
 
+  function onDragEnter(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!canMutate) return;
+    if (Array.from(event.dataTransfer.types).includes("Files")) setDragOver(true);
+  }
+
+  async function onDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragOver(false);
+    if (!canMutate) return;
+    try {
+      const files = await uploadsFromDataTransfer(event.dataTransfer);
+      await startUpload(files);
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : t("uploadFolderFailed"));
+    }
+  }
+
   async function onUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = event.target.files;
     if (!files || files.length === 0 || !canMutate) return;
-    setPending("upload");
     try {
-      for (const file of Array.from(files)) {
-        const body = new FormData();
-        body.append("file", file);
-        const response = await fetch(
-          `/files-upload/servers/${serverId}?path=${encodeURIComponent(workspace.path)}`,
-          { method: "POST", body },
+      await startUpload(uploadsFromFileList(files));
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function startUpload(files: LocalUpload[]) {
+    if (files.length === 0) {
+      notify.error(t("uploadEmpty"));
+      return;
+    }
+    if (files.length > MAX_UPLOAD_FILES) {
+      notify.error(t("uploadTooMany", { max: MAX_UPLOAD_FILES }));
+      return;
+    }
+    const items = toUploadItems(files);
+    setUploads(items);
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
+    setPending("upload");
+    const started = performance.now();
+    let completedBytes = 0;
+    let done = 0;
+    let failed = 0;
+    let cancelled = false;
+    try {
+      for (let index = 0; index < files.length; index += 1) {
+        const local = files[index];
+        if (!local) continue;
+        if (controller.signal.aborted) {
+          cancelled = true;
+          setUploads((current) =>
+            current.map((item) =>
+              item.status === "queued" || item.status === "uploading"
+                ? { ...item, status: "cancelled" }
+                : item,
+            ),
+          );
+          break;
+        }
+        setUploads((current) =>
+          current.map((item, itemIndex) =>
+            itemIndex === index ? { ...item, status: "uploading" } : item,
+          ),
         );
-        if (!response.ok) {
-          const text = await response.text();
-          notify.error(text || t("uploadFailed"));
+        try {
+          await uploadFileWithProgress({
+            serverId,
+            destPath: workspace.path,
+            file: local.file,
+            relativePath: local.relativePath,
+            signal: controller.signal,
+            onProgress: (loaded, total) => {
+              const elapsed = (performance.now() - started) / 1000;
+              setUploadRate(elapsed > 0.15 ? (completedBytes + loaded) / elapsed : 0);
+              setUploads((current) =>
+                current.map((item, itemIndex) =>
+                  itemIndex === index
+                    ? { ...item, loaded, size: total > 0 ? total : item.size }
+                    : item,
+                ),
+              );
+            },
+          });
+          completedBytes += local.file.size;
+          done += 1;
+          setUploads((current) =>
+            current.map((item, itemIndex) =>
+              itemIndex === index ? { ...item, status: "done", loaded: item.size } : item,
+            ),
+          );
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            cancelled = true;
+            break;
+          }
+          failed += 1;
+          const message = error instanceof Error ? error.message : t("uploadFailed");
+          setUploads((current) =>
+            current.map((item, itemIndex) =>
+              itemIndex === index ? { ...item, status: "error", error: message } : item,
+            ),
+          );
+        }
+      }
+      if (cancelled) {
+        notify.error(t("uploadCancelled"));
+      } else if (failed > 0) {
+        notify.error(t("uploadPartial", { done, total: files.length, failed }));
+      } else {
+        notify.success(t("uploaded"));
+        setUploads([]);
+      }
+      if (done > 0) await load(workspace.path);
+    } finally {
+      setPending(null);
+      uploadAbortRef.current = null;
+      setUploadRate(0);
+    }
+  }
+
+  async function deleteSelected() {
+    const paths = [...selected];
+    if (paths.length === 0) return;
+    if (!(await confirm(t("removeSelectedConfirm", { count: paths.length })))) return;
+    setPending("delete-selected");
+    try {
+      for (const path of paths) {
+        const result = await deleteFileAction(serverId, path);
+        if (!result.ok) {
+          setBanner({ tone: "danger", text: result.error || t("failed") });
           return;
         }
       }
-      notify.success(t("uploaded"));
+      setSelected(new Set());
+      setBanner({ tone: "ok", text: t("removeSelected") });
       await load(workspace.path);
     } finally {
       setPending(null);
-      event.target.value = "";
     }
   }
 
@@ -834,14 +1288,21 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   }
 
   async function openEditor(entry: FileEntry) {
-    setPending("edit");
+    const request = editorRequestRef.current + 1;
+    editorRequestRef.current = request;
+    setEditing({ path: entry.path, name: entry.name, content: "", loading: true });
     const result = await getFileContentAction(serverId, entry.path);
-    setPending(null);
+    if (request !== editorRequestRef.current) return;
     if (!result.ok) {
+      setEditing(null);
       setBanner({ tone: "danger", text: result.error || t("failed") });
       return;
     }
-    setEditing({ path: entry.path, name: entry.name, content: result.data.content });
+    setEditing({
+      path: result.data.path,
+      name: entry.name,
+      content: result.data.content,
+    });
   }
 
   function openExtract(entry: FileEntry) {

@@ -3223,6 +3223,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servers/{server_id}/cleanup/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Cleanup Policy */
+        get: operations["get_cleanup_policy_api_v1_servers__server_id__cleanup_policy_get"];
+        /** Update Cleanup Policy */
+        put: operations["update_cleanup_policy_api_v1_servers__server_id__cleanup_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers/{server_id}/cleanup/scan": {
         parameters: {
             query?: never;
@@ -3232,6 +3250,58 @@ export interface paths {
         };
         /** Scan Server Cleanup */
         get: operations["scan_server_cleanup_api_v1_servers__server_id__cleanup_scan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/cleanup/scan/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scan Server Cleanup Events */
+        get: operations["scan_server_cleanup_events_api_v1_servers__server_id__cleanup_scan_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/cleanup/system": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scan System Cleanup */
+        get: operations["scan_system_cleanup_api_v1_servers__server_id__cleanup_system_get"];
+        put?: never;
+        /** Apply System Cleanup */
+        post: operations["apply_system_cleanup_api_v1_servers__server_id__cleanup_system_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/cleanup/system/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scan System Cleanup Events */
+        get: operations["scan_system_cleanup_events_api_v1_servers__server_id__cleanup_system_events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3509,6 +3579,23 @@ export interface paths {
         /** Update File Content */
         put: operations["update_file_content_api_v1_servers__server_id__files_content_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/files/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy Paths */
+        post: operations["copy_paths_api_v1_servers__server_id__files_copy_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5925,6 +6012,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/servers/{server_id}/files/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Paths
+         * @description Copy files or directories into a destination folder.
+         */
+        post: operations["copy_paths_servers__server_id__files_copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/servers/{server_id}/files/download": {
         parameters: {
             query?: never;
@@ -7983,6 +8090,69 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** CleanupPolicyBody */
+        CleanupPolicyBody: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Retain Days
+             * @default 7
+             */
+            retain_days: number;
+            /**
+             * Schedule Value
+             * @default 03:30
+             */
+            schedule_value: string;
+            /** Targets */
+            targets?: string[];
+        };
+        /** CleanupPolicyView */
+        CleanupPolicyView: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Has Sudo Password
+             * @default false
+             */
+            has_sudo_password: boolean;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Run */
+            last_run?: string | null;
+            /** Last Status */
+            last_status?: string | null;
+            /** Manual Execute */
+            manual_execute?: string[];
+            /** Manual Setup */
+            manual_setup?: string[];
+            /** Message */
+            message?: string | null;
+            /** Next Run */
+            next_run?: string | null;
+            /** Privilege */
+            privilege?: ("root" | "sudo" | "none") | null;
+            /**
+             * Retain Days
+             * @default 7
+             */
+            retain_days: number;
+            /**
+             * Run Count
+             * @default 0
+             */
+            run_count: number;
+            /**
+             * Schedule Value
+             * @default 03:30
+             */
+            schedule_value: string;
+            /** Targets */
+            targets?: string[];
+        };
         /**
          * CleanupScanResponse
          * @description Schema for game directory cleanup scan response
@@ -8001,8 +8171,18 @@ export interface components {
         };
         /** CleanupScanView */
         CleanupScanView: {
+            /**
+             * Archive Item Count
+             * @default 0
+             */
+            archive_item_count: number;
             /** Archive Items */
             archive_items?: components["schemas"]["CleanupItemView"][];
+            /**
+             * Safe Item Count
+             * @default 0
+             */
+            safe_item_count: number;
             /** Safe Items */
             safe_items?: components["schemas"]["CleanupItemView"][];
             /**
@@ -8010,7 +8190,115 @@ export interface components {
              * @default 0
              */
             total_size: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
             workshop_summary: components["schemas"]["CleanupWorkshopView"];
+        };
+        /** CleanupSystemApplyBody */
+        CleanupSystemApplyBody: {
+            /** Retain Days */
+            retain_days?: number | null;
+            /** Targets */
+            targets: string[];
+        };
+        /** CleanupSystemApplyView */
+        CleanupSystemApplyView: {
+            /** Applied */
+            applied?: string[];
+            /**
+             * Deleted Count
+             * @default 0
+             */
+            deleted_count: number;
+            /** Failed */
+            failed?: components["schemas"]["CleanupTargetResultView"][];
+            /**
+             * Freed Bytes Estimate
+             * @default 0
+             */
+            freed_bytes_estimate: number;
+            /** Manual Execute */
+            manual_execute?: string[];
+            /** Manual Setup */
+            manual_setup?: string[];
+            /** Message */
+            message: string;
+            /**
+             * Privilege
+             * @enum {string}
+             */
+            privilege: "root" | "sudo" | "none";
+            /** Skipped */
+            skipped?: components["schemas"]["CleanupTargetResultView"][];
+            /** Success */
+            success: boolean;
+        };
+        /** CleanupSystemScanView */
+        CleanupSystemScanView: {
+            /**
+             * Can Apply Privileged
+             * @default false
+             */
+            can_apply_privileged: boolean;
+            /**
+             * Has Sudo Password
+             * @default false
+             */
+            has_sudo_password: boolean;
+            /** Manual Execute */
+            manual_execute?: string[];
+            /** Manual Setup */
+            manual_setup?: string[];
+            /**
+             * Privilege
+             * @enum {string}
+             */
+            privilege: "root" | "sudo" | "none";
+            /** Retain Days */
+            retain_days: number;
+            /** Targets */
+            targets?: components["schemas"]["CleanupSystemTargetView"][];
+            /**
+             * Total Size
+             * @default 0
+             */
+            total_size: number;
+        };
+        /** CleanupSystemTargetView */
+        CleanupSystemTargetView: {
+            /**
+             * Can Apply
+             * @default false
+             */
+            can_apply: boolean;
+            /** Command */
+            command?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Needs Privilege
+             * @default false
+             */
+            needs_privilege: boolean;
+            /** Reason */
+            reason: string;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+            /** Title */
+            title: string;
+        };
+        /** CleanupTargetResultView */
+        CleanupTargetResultView: {
+            /** Error */
+            error: string;
+            /** Id */
+            id: string;
         };
         /**
          * CleanupWorkshopSummary
@@ -8145,6 +8433,16 @@ export interface components {
              * @default false
              */
             steamcmd_running: boolean;
+        };
+        /**
+         * CopyPathsRequest
+         * @description Copy one or more remote paths into a destination directory.
+         */
+        CopyPathsRequest: {
+            /** Destination */
+            destination: string;
+            /** Sources */
+            sources: string[];
         };
         /**
          * CreateDirectoryRequest
@@ -9082,6 +9380,13 @@ export interface components {
             /** Path */
             path: string;
         };
+        /** FileCopyRequest */
+        FileCopyRequest: {
+            /** Destination */
+            destination: string;
+            /** Sources */
+            sources: string[];
+        };
         /** FileDownloadTicketView */
         FileDownloadTicketView: {
             /** Expires In */
@@ -9173,6 +9478,8 @@ export interface components {
             message: string;
             /** Path */
             path?: string | null;
+            /** Paths */
+            paths?: string[];
             /**
              * Success
              * @default true
@@ -12547,6 +12854,18 @@ export interface components {
             captcha_code?: string | null;
             /** Captcha Token */
             captcha_token?: string | null;
+            /**
+             * Cleanup Auto Enabled
+             * @default false
+             */
+            cleanup_auto_enabled: boolean;
+            /**
+             * Cleanup Retain Days
+             * @default 7
+             */
+            cleanup_retain_days: number;
+            /** Cleanup Targets */
+            cleanup_targets?: string[];
             /** Client Port */
             client_port?: number | null;
             /**
@@ -20480,6 +20799,72 @@ export interface operations {
             };
         };
     };
+    get_cleanup_policy_api_v1_servers__server_id__cleanup_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CleanupPolicyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_cleanup_policy_api_v1_servers__server_id__cleanup_policy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CleanupPolicyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CleanupPolicyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     scan_server_cleanup_api_v1_servers__server_id__cleanup_scan_get: {
         parameters: {
             query?: never;
@@ -20498,6 +20883,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CleanupScanView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_server_cleanup_events_api_v1_servers__server_id__cleanup_scan_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_system_cleanup_api_v1_servers__server_id__cleanup_system_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CleanupSystemScanView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_system_cleanup_api_v1_servers__server_id__cleanup_system_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CleanupSystemApplyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CleanupSystemApplyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scan_system_cleanup_events_api_v1_servers__server_id__cleanup_system_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -21177,6 +21690,41 @@ export interface operations {
             };
         };
     };
+    copy_paths_api_v1_servers__server_id__files_copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileCopyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_file_api_v1_servers__server_id__files_download_get: {
         parameters: {
             query: {
@@ -21393,6 +21941,7 @@ export interface operations {
         parameters: {
             query: {
                 path: string;
+                relative_path?: string | null;
             };
             header?: never;
             path: {
@@ -25713,6 +26262,41 @@ export interface operations {
             };
         };
     };
+    copy_paths_servers__server_id__files_copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopyPathsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_file_servers__server_id__files_download_get: {
         parameters: {
             query: {
@@ -25996,6 +26580,7 @@ export interface operations {
         parameters: {
             query: {
                 path: string;
+                relative_path?: string | null;
             };
             header?: never;
             path: {

@@ -6,5 +6,7 @@ export default async function LiveConsoleLayout({
   children: React.ReactNode;
 }) {
   await requireSession();
-  return <div className="min-h-dvh bg-canvas p-3">{children}</div>;
+  return (
+    <div className="min-h-0 flex-1 overflow-hidden bg-canvas p-3">{children}</div>
+  );
 }

@@ -107,6 +107,22 @@ def test_v1_discord_options_degrade_without_token(monkeypatch):
     assert "not configured" in (body["message"] or "")
 
 
+def test_v1_discord_menu_options_degrade_when_discord_api_fails(monkeypatch):
+    from fastapi import HTTPException
+
+    client, _user = _client(monkeypatch)
+    monkeypatch.setattr(
+        "api.routes.v1.discord.legacy.get_discord_menu_push_options",
+        AsyncMock(side_effect=HTTPException(status_code=400, detail="Discord API request failed")),
+    )
+    response = client.get("/api/v1/discord/menu/options")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["token_configured"] is True
+    assert body["guilds"] == []
+    assert "Discord API" in (body["message"] or "")
+
+
 def test_v1_server_discord_and_agent_policy(monkeypatch):
     client, _user = _client(monkeypatch)
     monkeypatch.setattr(

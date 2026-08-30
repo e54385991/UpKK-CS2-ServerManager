@@ -10,7 +10,7 @@ export async function PublicAuthFrame({
   const t = await getTranslations("site");
 
   return (
-    <main className="relative flex min-h-dvh items-center justify-center px-4 py-12">
+    <main className="relative flex flex-1 items-center justify-center px-4 py-12">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-64 grid-fade opacity-40" />
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
@@ -24,8 +24,6 @@ export async function PublicAuthFrame({
         </div>
 
         <Card className="p-6">{children}</Card>
-
-        <p className="mt-6 text-center text-xs text-fg-subtle">{t("fullName")}</p>
       </div>
     </main>
   );

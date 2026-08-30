@@ -103,12 +103,14 @@ async def upload_file(
     file: UploadFile = File(...),
     db: DatabaseSession = None,
     current_user: ActiveUser = None,
+    relative_path: Optional[str] = Query(default=None, max_length=1500),
 ):
     """Upload file to server"""
     server = await get_server_for_user(server_id, db, current_user)
 
     # Construct remote path
-    remote_path = remote_join(path, file.filename)
+    remote_name = safe_relative_upload_path(relative_path, file.filename)
+    remote_path = remote_join(path, remote_name)
 
     # Security check
     if not is_path_safe(server.game_directory, remote_path):
@@ -139,7 +141,10 @@ async def upload_file(
 
         # Upload to server using SSH
         ssh_manager = SSHManager()
-        success, error = await ssh_manager.upload_file(temp_path, remote_path, server)
+        try:
+            success, error = await ssh_manager.upload_file(temp_path, remote_path, server)
+        finally:
+            await ssh_manager.disconnect()
 
         if not success:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
@@ -359,6 +364,59 @@ async def rename_file_or_directory(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
 
     return {"success": True, "message": "Renamed successfully", "new_path": new_path}
+
+
+@mutation_router.post("/copy")
+async def copy_paths(
+    server_id: int,
+    request: CopyPathsRequest,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+):
+    """Copy files or directories into a destination folder."""
+    server = await get_server_for_user(server_id, db, current_user)
+    destination = posixpath.normpath((request.destination or "").strip())
+    sources = [
+        posixpath.normpath(item.strip()) for item in request.sources if item and item.strip()
+    ]
+    if not destination or destination == ".":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="destination is required",
+        )
+    if not sources or len(sources) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Provide between 1 and 50 source paths",
+        )
+    if not is_path_safe(server.game_directory, destination):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: destination is outside server directory",
+        )
+    copied: list[str] = []
+    ssh_manager = SSHManager()
+    try:
+        for source_path in sources:
+            if not is_path_safe(server.game_directory, source_path):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: source is outside server directory",
+                )
+            success, new_path, error = await ssh_manager.copy_into_directory(
+                source_path, destination, server
+            )
+            if not success:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+            copied.append(new_path)
+    finally:
+        await ssh_manager.disconnect()
+    return {
+        "success": True,
+        "message": "Copied successfully",
+        "paths": copied,
+        "path": copied[-1] if copied else destination,
+    }
 
 
 router = APIRouter()

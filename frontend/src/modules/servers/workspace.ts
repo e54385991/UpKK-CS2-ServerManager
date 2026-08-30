@@ -67,6 +67,14 @@ export function serversHref(input: {
   return (query ? `/servers?${query}` : "/servers") as Route;
 }
 
+/**
+ * Workspace nav renders ~17 in-viewport links. Default `<Link>` prefetch would
+ * open that many RSC requests at once; files/cleanup also hit SSH. Together
+ * with the always-on inbox EventSource this fills Chrome's 6 HTTP/1.1 sockets
+ * per host, so the tab looks frozen while a fresh incognito window works.
+ */
+export const WORKSPACE_NAV_PREFETCH = false;
+
 export function workspaceHref(
   serverId: number,
   category: ServerWorkspaceCategory,

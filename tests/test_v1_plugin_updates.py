@@ -304,6 +304,52 @@ def test_v1_plugin_updates_non_owner_cannot_unregister(monkeypatch):
     assert response.json()["detail"] == "Server not found"
 
 
+def test_v1_plugin_updates_status_formats_service_logs(monkeypatch):
+    client, _user = _client(monkeypatch)
+    monkeypatch.setattr(
+        "api.routes.v1.plugin_updates.legacy.get_run_status",
+        AsyncMock(
+            return_value={
+                "state": "running",
+                "phase": "checking",
+                "message": "Working",
+                "current": 1,
+                "total": 4,
+                "logs": [
+                    {"time": "2026-08-30T12:00:00+00:00", "message": "started"},
+                    {"message": "no timestamp"},
+                    "plain line",
+                ],
+                "started_at": "2026-08-30T12:00:00+00:00",
+                "finished_at": None,
+            }
+        ),
+    )
+    response = client.get("/api/v1/servers/2/plugin-updates/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "running"
+    assert body["phase"] == "checking"
+    assert body["current"] == 1
+    assert body["total"] == 4
+    assert body["logs"] == [
+        "2026-08-30T12:00:00+00:00 started",
+        "no timestamp",
+        "plain line",
+    ]
+
+
+def test_status_log_line_keeps_webpage_time_and_message():
+    from api.routes.v1.plugin_updates import _status_log_line
+
+    assert (
+        _status_log_line({"time": "2026-08-30T12:00:00", "message": "checking"})
+        == "2026-08-30T12:00:00 checking"
+    )
+    assert _status_log_line({"message": "only"}) == "only"
+    assert _status_log_line("plain") == "plain"
+
+
 def test_v1_plugin_updates_register_rejects_traversal(monkeypatch):
     client, _user = _client(monkeypatch)
     response = client.post(

@@ -23,10 +23,13 @@ export type ManagedPluginSourceType = "github" | "market" | "framework";
 export type ManagedUpdatePlugin = {
   readonly id: number;
   readonly displayName: string;
+  readonly sourceType: string;
   readonly installedVersion: string;
   readonly latestVersion: string | null;
   readonly autoUpdateEnabled: boolean;
   readonly lastStatus: string | null;
+  readonly lastError: string | null;
+  readonly lastCheckAt: string | null;
   readonly excludeDirs: readonly string[];
   readonly excludeFiles: readonly string[];
   readonly backupBeforeUpdate: boolean;
@@ -36,9 +39,21 @@ export type ManagedUpdatePlugin = {
 export type PluginUpdates = {
   readonly enableAutoUpdate: boolean;
   readonly intervalHours: number;
+  readonly lastCheck: string | null;
   readonly enablePostCommands: boolean;
   readonly commandIds: readonly number[];
   readonly plugins: readonly ManagedUpdatePlugin[];
+};
+
+export type PluginUpdateStatus = {
+  readonly state: string;
+  readonly phase: string;
+  readonly message: string | null;
+  readonly current: number;
+  readonly total: number;
+  readonly logs: readonly { time: string | null; message: string }[];
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
 };
 
 export type RegisterMarketOption = {

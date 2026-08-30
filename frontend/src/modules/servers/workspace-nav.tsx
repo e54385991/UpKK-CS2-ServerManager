@@ -25,6 +25,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import {
   SERVER_WORKSPACE_NAV_ROWS,
+  WORKSPACE_NAV_PREFETCH,
   isWorkspaceCategoryActive,
   workspaceHref,
   type ServerWorkspaceCategory,
@@ -84,6 +85,7 @@ export function ServerWorkspaceNav({ serverId }: { serverId: number }) {
                 <li key={category}>
                   <Link
                     href={href}
+                    prefetch={WORKSPACE_NAV_PREFETCH}
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium transition-colors",

@@ -5,6 +5,7 @@ import type {
   GameUpdatesViewDto,
   ManagedPluginUpdateViewDto,
   MarketPluginPageDto,
+  PluginUpdateStatusViewDto,
   PluginUpdatesViewDto,
   ServerOperationViewDto,
 } from "@/shared/api/types";
@@ -20,10 +21,13 @@ import type {
   InstalledVersionSource,
   ManagedPluginRegisterInput,
   ManagedUpdatePlugin,
+  PluginUpdateStatus,
   PluginUpdates,
   RegisterMarketOption,
   RegisterRelease,
 } from "@/modules/updates/types";
+import { parsePluginStatusLog } from "@/modules/updates/status";
+
 
 const KNOWN_SOURCES: readonly InstalledVersionSource[] = [
   "steam.inf",
@@ -150,10 +154,13 @@ function toPlugin(raw: ManagedPluginUpdateViewDto): ManagedUpdatePlugin {
   return {
     id: raw.id,
     displayName: raw.display_name,
+    sourceType: raw.source_type,
     installedVersion: raw.installed_version,
     latestVersion: raw.latest_version ?? null,
     autoUpdateEnabled: raw.auto_update_enabled,
     lastStatus: raw.last_status ?? null,
+    lastError: raw.last_error ?? null,
+    lastCheckAt: raw.last_check_at ?? null,
     excludeDirs: raw.exclude_dirs ?? [],
     excludeFiles: raw.exclude_files ?? [],
     backupBeforeUpdate: raw.backup_before_update ?? false,
@@ -165,9 +172,23 @@ function toWorkspace(raw: PluginUpdatesViewDto): PluginUpdates {
   return {
     enableAutoUpdate: raw.enable_plugin_auto_update,
     intervalHours: raw.plugin_update_check_interval_hours,
+    lastCheck: raw.last_plugin_update_check ?? null,
     enablePostCommands: raw.enable_plugin_post_update_commands,
     commandIds: raw.plugin_post_update_command_ids ?? [],
     plugins: (raw.plugins ?? []).map(toPlugin),
+  };
+}
+
+function toPluginStatus(raw: PluginUpdateStatusViewDto): PluginUpdateStatus {
+  return {
+    state: raw.state,
+    phase: raw.phase,
+    message: raw.message ?? null,
+    current: raw.current,
+    total: raw.total,
+    logs: (raw.logs ?? []).map(parsePluginStatusLog),
+    startedAt: raw.started_at ?? null,
+    finishedAt: raw.finished_at ?? null,
   };
 }
 
@@ -285,6 +306,16 @@ export async function patchUpdatePlugin(
   );
   if (!result.ok) return result;
   return { ok: true, data: toPlugin(result.data) };
+}
+
+export async function getPluginUpdateStatus(
+  serverId: number,
+): Promise<ApiResult<PluginUpdateStatus>> {
+  const result = await apiFetch<PluginUpdateStatusViewDto>(
+    `/api/v1/servers/${serverId}/plugin-updates/status`,
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: toPluginStatus(result.data) };
 }
 
 export async function runPluginUpdates(

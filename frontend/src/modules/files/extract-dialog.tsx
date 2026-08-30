@@ -7,6 +7,7 @@ import {
   extractArchiveAction,
   inspectArchiveAction,
 } from "@/modules/files/actions";
+import type { ExtractRevealHint } from "@/modules/files/extract-reveal";
 import {
   ARCHIVE_FORMATS_LABEL,
   type FileArchiveInspect,
@@ -32,7 +33,7 @@ export function ExtractDialog({
   entry: FileEntry;
   destination: string;
   onClose: () => void;
-  onStarted: (task: FileTask) => void;
+  onStarted: (task: FileTask, reveal: ExtractRevealHint) => void;
 }) {
   const t = useTranslations("files");
   const [inspect, setInspect] = useState<FileArchiveInspect | null>(null);
@@ -64,8 +65,21 @@ export function ExtractDialog({
   }, [entry.path, serverId, t]);
 
   useEffect(() => {
-    void inspectArchive();
-  }, [inspectArchive]);
+    let cancelled = false;
+    void inspectArchiveAction(serverId, entry.path).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) {
+        setInspectError(result.error || t("failed"));
+        setInspecting(false);
+        return;
+      }
+      setInspect(result.data);
+      setInspecting(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.path, serverId, t]);
 
   const folders = inspect?.folders ?? [];
   const folderMode = mode === "folder";
@@ -96,7 +110,13 @@ export function ExtractDialog({
       setStarting(false);
       return;
     }
-    onStarted(result.data);
+    onStarted(result.data, {
+      destination: dest.trim(),
+      archiveName: entry.name,
+      sourceFolder: folderMode ? folder : undefined,
+      stripSourceFolder: folderMode && stripFolder,
+      archiveFolders: inspect?.folders ?? [],
+    });
   }
 
   return (

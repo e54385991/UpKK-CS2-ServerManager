@@ -253,6 +253,27 @@ def is_leading_bot_mention(content: str, bot_user_id: int | str) -> bool:
     return leading_bot_mention_content(content, bot_user_id) is not None
 
 
+def mention_trigger_content(
+    content: str,
+    bot_user_id: int | str,
+    *,
+    mentioned: bool,
+) -> str | None:
+    """Return remainder text for a menu/agent trigger, or None if this is not one.
+
+    Leading ``<@Bot>`` is the normal path. When Message Content is stripped,
+    Discord still populates ``message.mentions``; treat a mention with empty
+    content as ``@Bot`` with no extra prompt.
+    """
+
+    leading = leading_bot_mention_content(content, bot_user_id)
+    if leading is not None:
+        return leading
+    if mentioned and not (content or "").strip():
+        return ""
+    return None
+
+
 def menu_issued_at() -> int:
     return int(time.time())
 

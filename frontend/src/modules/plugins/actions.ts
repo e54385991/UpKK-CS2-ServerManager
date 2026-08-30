@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getSession } from "@/modules/auth/session";
 import type { ActionResultDto } from "@/shared/api/types";
 import type { ApiResult } from "@/shared/api/server-fetch";
 import {
@@ -12,6 +13,7 @@ import {
   installGitHubPlugin,
   installMarketPlugin,
   listGitHubReleases,
+  listServerPlugins,
   planGitHubPluginInstall,
   uninstallGitHubPlugin,
   uninstallMarketPlugin,
@@ -61,6 +63,19 @@ export async function exportPluginCatalogAction(): Promise<
   ApiResult<PluginCatalogBundle>
 > {
   return exportPluginCatalog();
+}
+
+export async function listServerMarketPluginIdsAction(
+  serverId: number,
+): Promise<ApiResult<readonly number[]>> {
+  const result = await listServerPlugins(serverId);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: result.data.flatMap((item) =>
+      item.marketPluginId != null ? [item.marketPluginId] : [],
+    ),
+  };
 }
 
 export async function listGitHubReleasesAction(
@@ -162,6 +177,10 @@ export async function importPluginCatalogAction(
 export async function deleteMarketPluginAction(
   pluginId: number,
 ): Promise<ApiResult<ActionResultDto>> {
+  const session = await getSession();
+  if (!session?.isAdmin) {
+    return { ok: false, status: 403, error: "Not enough permissions" };
+  }
   const result = await deleteMarketPlugin(pluginId);
   if (result.ok) {
     revalidatePath("/plugins");

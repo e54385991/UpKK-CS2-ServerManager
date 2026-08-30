@@ -69,7 +69,7 @@ from services.discord_menu_ui import (
     control_view,
     is_exact_wake_word,
     launcher_is_expired,
-    leading_bot_mention_content,
+    mention_trigger_content,
     menu_is_expired,
     menu_issued_at,
     no_access_view,
@@ -255,6 +255,16 @@ def _is_channel_manager(source: discord.Interaction | discord.Message) -> bool:
     """
 
     return _actor_privileges(source)[1]
+
+
+def _message_mentions_bot(message: object, bot_user_id: int) -> bool:
+    """Prefer the Gateway ``mentions`` array; ``raw_mentions`` needs message content."""
+
+    if bot_user_id in set(getattr(message, "raw_mentions", []) or []):
+        return True
+    return any(
+        getattr(user, "id", None) == bot_user_id for user in getattr(message, "mentions", []) or []
+    )
 
 
 def format_panel_update_age(timestamp: object | None) -> str | None:
@@ -542,14 +552,23 @@ class ManagedDiscordClient(discord.Client):
                 )
             )
             bindings = list(result.scalars().all())
+            bot = await db.get(UserDiscordBot, self.owner_user_id)
         bound_ids = {int(item.guild_id) for item in bindings if item.guild_id}
+        if (
+            bot is not None
+            and bot.global_binding_configured is True
+            and bot.global_binding_enabled is True
+            and bot.global_guild_id
+        ):
+            bound_ids.add(int(bot.global_guild_id))
         guild_ids = {guild.id for guild in self.guilds}
         for guild_id in guild_ids:
             guild = discord.Object(id=guild_id)
             try:
                 self.tree.clear_commands(guild=guild)
-                if guild_id in bound_ids:
-                    self.tree.copy_global_to(guild=guild)
+                # Slash / @-app commands are visible in every guild the Bot has
+                # joined. Runtime authorization still fail-closes per binding.
+                self.tree.copy_global_to(guild=guild)
                 await self.tree.sync(guild=guild)
             except Exception as exc:
                 logger.warning(
@@ -931,9 +950,11 @@ class DiscordBotManager:
             or client.user is None
         ):
             return
-        mentioned = client.user.id in set(getattr(message, "raw_mentions", []))
-        mention_content = (
-            leading_bot_mention_content(message.content, client.user.id) if mentioned else None
+        mentioned = _message_mentions_bot(message, client.user.id)
+        mention_content = mention_trigger_content(
+            getattr(message, "content", None) or "",
+            client.user.id,
+            mentioned=mentioned,
         )
         exact_wake_word = is_exact_wake_word(message.content, client.user.id)
         mention_trigger = mention_content is not None

@@ -6,7 +6,11 @@ import logging
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from services.steam_api_service import steam_api_service, versions_equivalent
+from services.steam_api_service import (
+    resolve_advertised_version,
+    steam_api_service,
+    versions_equivalent,
+)
 from services.steam_inf_service import steam_inf_service
 
 logger = logging.getLogger(__name__)
@@ -89,12 +93,17 @@ async def _inspect_game_version(server, *, refresh: bool) -> GameVersionStatus:
         )
 
     advertised = result.get("required_version")
-    advertised_text = str(advertised) if advertised else None
+    advertised_text = str(advertised).strip() if advertised else None
     up_to_date = result.get("up_to_date")
     if up_to_date is None and installed and advertised_text:
         up_to_date = versions_match(installed, advertised_text)
     elif up_to_date is not None:
         up_to_date = bool(up_to_date)
+    advertised_text = resolve_advertised_version(
+        advertised_text,
+        installed=installed,
+        up_to_date=up_to_date,
+    )
 
     return GameVersionStatus(
         installed_version=installed,

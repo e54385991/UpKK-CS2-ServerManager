@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import {
-  CleanupConsole,
+  CleanupPanel,
   CleanupPanelSkeleton,
-} from "@/modules/cleanup/cleanup-console";
+} from "@/modules/cleanup/cleanup-panel";
 import { parseServerId } from "@/modules/servers/workspace";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -24,7 +24,7 @@ export default async function ServerCleanupPage({
 
   return (
     <Suspense fallback={<CleanupPanelSkeleton />}>
-      <CleanupConsole serverId={serverId} />
+      <CleanupPanel serverId={serverId} />
     </Suspense>
   );
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { ApiResult } from "@/shared/api/server-fetch";
 import {
+  copyFilePaths,
   createDirectory,
   createDownloadTicket,
   deleteFilePath,
@@ -68,6 +69,16 @@ export async function deleteFileAction(
   path: string,
 ): Promise<ApiResult<FileMutation>> {
   const result = await deleteFilePath(serverId, path);
+  if (result.ok) revalidateFiles(serverId);
+  return result;
+}
+
+export async function copyFilesAction(
+  serverId: number,
+  sources: readonly string[],
+  destination: string,
+): Promise<ApiResult<FileMutation>> {
+  const result = await copyFilePaths(serverId, sources, destination);
   if (result.ok) revalidateFiles(serverId);
   return result;
 }

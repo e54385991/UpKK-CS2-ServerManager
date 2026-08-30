@@ -28,13 +28,32 @@ export async function DiscordPanel() {
       </Card>
     );
   }
+  const menuOptions = menu.ok
+    ? {
+        ...menu.data,
+        tokenConfigured:
+          menu.data.tokenConfigured || (options.ok && options.data.tokenConfigured),
+        guilds:
+          menu.data.guilds.length > 0
+            ? menu.data.guilds
+            : options.ok
+              ? options.data.guilds
+              : [],
+      }
+    : options.ok
+      ? {
+          ...options.data,
+          message: t("fetchError", { status: menu.status || "network" }),
+        }
+      : null;
+
   return (
     <div className="space-y-6">
       <DiscordForm initial={bot.data} />
       {binding.ok && options.ok ? (
         <DiscordBindingForm scope="global" initial={binding.data} options={options.data} />
       ) : null}
-      {menu.ok ? <DiscordMenuForm options={menu.data} /> : null}
+      {menuOptions ? <DiscordMenuForm options={menuOptions} /> : null}
     </div>
   );
 }

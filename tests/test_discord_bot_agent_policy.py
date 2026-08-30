@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from api.routes.discord_bot import (
     _bot_response,
     _bound_menu_push_channels,
+    get_discord_menu_push_options,
     push_discord_menu,
     update_discord_global_binding,
 )
@@ -86,6 +87,7 @@ from services.discord_menu_ui import (
     launcher_is_expired,
     launcher_view,
     leading_bot_mention_content,
+    mention_trigger_content,
     menu_is_expired,
     menu_issued_at,
     normalize_message_trigger,
@@ -391,6 +393,93 @@ async def test_server_administrators_are_authorized_only_when_explicitly_enabled
         actor_is_server_administrator=True,
     )
     assert denied_when_disabled == []
+
+
+@pytest.mark.asyncio
+async def test_authorized_bindings_fall_back_to_global_template_for_unbound_servers():
+    bot = UserDiscordBot(
+        user_id=1,
+        token_encrypted="encrypted",
+        enabled=True,
+        global_binding_configured=True,
+        global_binding_enabled=True,
+        global_guild_id="100",
+        global_channel_ids=["200"],
+        global_user_ids=["400"],
+        global_capabilities=["status"],
+    )
+    owner = User(
+        id=1,
+        username="owner",
+        email="owner@example.com",
+        hashed_password="hash",
+        is_active=True,
+    )
+    server = Server(
+        id=10,
+        user_id=1,
+        name="Server",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+    )
+    binding_result = Mock()
+    binding_result.all.return_value = []
+    server_result = Mock()
+    server_result.scalars.return_value.all.return_value = [server]
+    db = AsyncMock()
+    db.get.side_effect = [bot, owner]
+    db.execute.side_effect = [binding_result, server_result]
+
+    allowed = await authorized_bindings(
+        db,
+        bot_owner_user_id=1,
+        guild_id="100",
+        channel_id="200",
+        actor_user_id="400",
+        actor_role_ids=set(),
+    )
+    assert len(allowed) == 1
+    assert allowed[0][1] is server
+    assert allowed[0][0].channel_ids == ["200"]
+    assert allowed[0][0].capabilities == ["status"]
+
+    db.get.side_effect = [bot, owner]
+    db.execute.side_effect = [binding_result, server_result]
+    denied = await authorized_bindings(
+        db,
+        bot_owner_user_id=1,
+        guild_id="100",
+        channel_id="200",
+        actor_user_id="999",
+        actor_role_ids=set(),
+    )
+    assert denied == []
+
+    existing = ServerDiscordBinding(
+        server_id=10,
+        user_id=1,
+        enabled=True,
+        guild_id="100",
+        channel_ids=["200"],
+        user_ids=["999"],
+        capabilities=["status"],
+    )
+    configured = Mock()
+    configured.all.return_value = [(existing, server)]
+    owned = Mock()
+    owned.scalars.return_value.all.return_value = [server]
+    db.get.side_effect = [bot, owner]
+    db.execute.side_effect = [configured, owned]
+    skipped = await authorized_bindings(
+        db,
+        bot_owner_user_id=1,
+        guild_id="100",
+        channel_id="200",
+        actor_user_id="400",
+        actor_role_ids=set(),
+    )
+    assert skipped == []
 
 
 def test_channel_manager_detection_uses_manage_channels_or_administrator():
@@ -700,6 +789,10 @@ def test_friendly_menu_wake_words_are_exact_normalized_and_mention_safe():
         "ze1 执行 meta list"
     )
     assert leading_bot_mention_content("please ask <@123>", 123) is None
+    assert mention_trigger_content("<@123>", 123, mentioned=True) == ""
+    assert mention_trigger_content("", 123, mentioned=True) == ""
+    assert mention_trigger_content("", 123, mentioned=False) is None
+    assert mention_trigger_content("please ask <@123>", 123, mentioned=True) is None
     assert menu_is_expired(100, now=999) is False
     assert menu_is_expired(100, now=1001) is True
     assert launcher_is_expired(100, now=400) is False
@@ -861,7 +954,17 @@ async def test_message_menu_requires_trigger_authorization_and_rate_limit(monkey
     await manager.handle_message(client, message)
     message.reply.assert_not_awaited()
 
+    message.reply.reset_mock()
+    message.content = ""
+    message.raw_mentions = []
+    message.mentions = [SimpleNamespace(id=999)]
+    await manager.handle_message(client, message)
+    message.reply.assert_awaited_once()
+
+    message.reply.reset_mock()
+    message.mentions = []
     message.content = "<@!999> menu!"
+    message.raw_mentions = [999]
     await manager.handle_message(client, message)
     message.reply.assert_awaited_once()
 
@@ -1363,6 +1466,51 @@ async def test_bound_menu_push_channels_fail_closed():
     db.execute.return_value = result
 
     assert await _bound_menu_push_channels(db, 1) == {"100": {"200", "201"}}
+
+
+@pytest.mark.asyncio
+async def test_bound_menu_push_channels_include_enabled_global_binding():
+    db = AsyncMock()
+    result = Mock()
+    result.all.return_value = []
+    db.execute.return_value = result
+    db.get = AsyncMock(return_value=_global_bot())
+
+    assert await _bound_menu_push_channels(db, 1) == {"100": {"200"}}
+
+
+@pytest.mark.asyncio
+async def test_menu_options_list_all_guilds_and_filter_channels(monkeypatch):
+    monkeypatch.setattr(
+        "api.routes.discord_bot._stored_token",
+        AsyncMock(return_value=(SimpleNamespace(), "secret-token")),
+    )
+    monkeypatch.setattr(
+        "api.routes.discord_bot._bound_menu_push_channels",
+        AsyncMock(return_value={"100": {"200"}}),
+    )
+    monkeypatch.setattr(
+        "api.routes.discord_bot._load_discord_options",
+        AsyncMock(
+            return_value=(
+                [{"id": "100", "name": "Bound"}, {"id": "101", "name": "Other"}],
+                [
+                    {"id": "200", "type": 0, "name": "ops"},
+                    {"id": "201", "type": 0, "name": "chat"},
+                ],
+                [],
+            )
+        ),
+    )
+
+    listed = await get_discord_menu_push_options(AsyncMock(), SimpleNamespace(id=1), None)
+    assert [item.id for item in listed.guilds] == ["100", "101"]
+
+    unbound = await get_discord_menu_push_options(AsyncMock(), SimpleNamespace(id=1), "101")
+    assert unbound.channels == []
+
+    bound = await get_discord_menu_push_options(AsyncMock(), SimpleNamespace(id=1), "100")
+    assert [item.id for item in bound.channels] == ["200"]
 
 
 @pytest.mark.asyncio

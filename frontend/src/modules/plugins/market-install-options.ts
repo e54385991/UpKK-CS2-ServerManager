@@ -1,3 +1,19 @@
+export function pluginTrackedOnServer(
+  installedMarketPluginIds: readonly number[],
+  pluginId: number,
+): boolean {
+  return installedMarketPluginIds.includes(pluginId);
+}
+
+export function installOptionDefaults(existsOnServer: boolean): {
+  readonly upgradeMode: boolean;
+  readonly installDependencies: boolean;
+} {
+  return existsOnServer
+    ? { upgradeMode: true, installDependencies: false }
+    : { upgradeMode: false, installDependencies: true };
+}
+
 export function pickDefaultAssetIndex(
   assets: readonly { readonly runtimeCompatibility: string }[],
 ): number | null {

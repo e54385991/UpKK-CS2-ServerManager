@@ -1539,10 +1539,29 @@ class FileRenameRequest(BaseModel):
     new_name: str = Field(min_length=1, max_length=255)
 
 
+class FileCopyRequest(BaseModel):
+    sources: list[str] = Field(min_length=1, max_length=50)
+    destination: str = Field(min_length=1, max_length=4096)
+
+    @field_validator("sources")
+    @classmethod
+    def validate_copy_sources(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for item in value:
+            path = item.strip()
+            if not path:
+                raise ValueError("source paths cannot be empty")
+            if len(path) > 4096:
+                raise ValueError("source path is too long")
+            cleaned.append(path)
+        return cleaned
+
+
 class FileMutationResult(BaseModel):
     success: bool = True
     message: str
     path: str | None = None
+    paths: list[str] = Field(default_factory=list)
 
 
 class FileDownloadTicketView(BaseModel):
@@ -2104,6 +2123,9 @@ class CleanupScanView(BaseModel):
     archive_items: list[CleanupItemView] = Field(default_factory=list)
     workshop_summary: CleanupWorkshopView
     total_size: int = 0
+    safe_item_count: int = 0
+    archive_item_count: int = 0
+    truncated: bool = False
 
 
 class CleanupDeleteBody(BaseModel):
@@ -2123,6 +2145,74 @@ class CleanupDeleteView(BaseModel):
     deleted_count: int = 0
     freed_bytes_estimate: int = 0
     failed_items: list[CleanupFailedItemView] = Field(default_factory=list)
+
+
+class CleanupSystemTargetView(BaseModel):
+    id: str
+    title: str
+    reason: str
+    size: int = 0
+    needs_privilege: bool = False
+    can_apply: bool = False
+    command: str | None = None
+
+
+class CleanupSystemScanView(BaseModel):
+    privilege: Literal["root", "sudo", "none"]
+    retain_days: int
+    has_sudo_password: bool = False
+    targets: list[CleanupSystemTargetView] = Field(default_factory=list)
+    total_size: int = 0
+    can_apply_privileged: bool = False
+    manual_execute: list[str] = Field(default_factory=list)
+    manual_setup: list[str] = Field(default_factory=list)
+
+
+class CleanupSystemApplyBody(BaseModel):
+    targets: list[str] = Field(min_length=1)
+    retain_days: int | None = Field(default=None, ge=1, le=90)
+
+
+class CleanupTargetResultView(BaseModel):
+    id: str
+    error: str
+
+
+class CleanupSystemApplyView(BaseModel):
+    success: bool
+    message: str
+    privilege: Literal["root", "sudo", "none"]
+    applied: list[str] = Field(default_factory=list)
+    skipped: list[CleanupTargetResultView] = Field(default_factory=list)
+    failed: list[CleanupTargetResultView] = Field(default_factory=list)
+    deleted_count: int = 0
+    freed_bytes_estimate: int = 0
+    manual_execute: list[str] = Field(default_factory=list)
+    manual_setup: list[str] = Field(default_factory=list)
+
+
+class CleanupPolicyView(BaseModel):
+    enabled: bool = False
+    retain_days: int = 7
+    schedule_value: str = "03:30"
+    targets: list[str] = Field(default_factory=list)
+    has_sudo_password: bool = False
+    last_run: datetime | None = None
+    next_run: datetime | None = None
+    last_status: str | None = None
+    last_error: str | None = None
+    run_count: int = 0
+    privilege: Literal["root", "sudo", "none"] | None = None
+    manual_execute: list[str] = Field(default_factory=list)
+    manual_setup: list[str] = Field(default_factory=list)
+    message: str | None = None
+
+
+class CleanupPolicyBody(BaseModel):
+    enabled: bool
+    retain_days: int = Field(default=7, ge=1, le=90)
+    schedule_value: str = Field(default="03:30", min_length=4, max_length=5)
+    targets: list[str] = Field(default_factory=list)
 
 
 class InitializedHostView(BaseModel):

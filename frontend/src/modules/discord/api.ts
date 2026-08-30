@@ -150,7 +150,9 @@ export async function getDiscordGlobalOptions(
   guildId?: string,
 ): Promise<ApiResult<DiscordOptions>> {
   const query = guildId ? `?guild_id=${encodeURIComponent(guildId)}` : "";
-  const result = await apiFetch<DiscordOptionsViewDto>(`/api/v1/discord/global/options${query}`);
+  const result = await apiFetch<DiscordOptionsViewDto>(`/api/v1/discord/global/options${query}`, {
+    timeoutMs: 20000,
+  });
   if (!result.ok) return result;
   return { ok: true, data: toOptions(result.data) };
 }
@@ -159,7 +161,9 @@ export async function getDiscordMenuOptions(
   guildId?: string,
 ): Promise<ApiResult<DiscordOptions>> {
   const query = guildId ? `?guild_id=${encodeURIComponent(guildId)}` : "";
-  const result = await apiFetch<DiscordOptionsViewDto>(`/api/v1/discord/menu/options${query}`);
+  const result = await apiFetch<DiscordOptionsViewDto>(`/api/v1/discord/menu/options${query}`, {
+    timeoutMs: 20000,
+  });
   if (!result.ok) return result;
   return { ok: true, data: toOptions(result.data) };
 }

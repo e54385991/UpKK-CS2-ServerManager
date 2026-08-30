@@ -128,6 +128,14 @@ class Server(SQLModel, table=True):
     # MapChooser custom remote map-pool synchronization
     map_pool_sync_url: Optional[str] = Field(default=None, max_length=4096)
 
+    # Automatic log / Linux junk cleanup (panel scheduled task + optional sudo)
+    cleanup_auto_enabled: bool = Field(default=False)
+    cleanup_retain_days: int = Field(default=7)
+    cleanup_targets: List[str] = Field(
+        default_factory=lambda: ["game_logs"],
+        sa_column=Column(JSON, nullable=True),
+    )
+
     # CPU affinity configuration
     cpu_affinity: Optional[str] = Field(default=None, max_length=500)
 

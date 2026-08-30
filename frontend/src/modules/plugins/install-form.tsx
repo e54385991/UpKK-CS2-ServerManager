@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Download, Trash2, TriangleAlert } from "lucide-react";
@@ -9,11 +9,14 @@ import {
   getPluginInstallPlanAction,
   installMarketPluginAction,
   listGitHubReleasesAction,
+  listServerMarketPluginIdsAction,
   uninstallMarketPluginAction,
 } from "@/modules/plugins/actions";
 import {
   formatArchiveSize,
+  installOptionDefaults,
   pickDefaultAssetIndex,
+  pluginTrackedOnServer,
   toggleExclusion,
 } from "@/modules/plugins/market-install-options";
 import type {
@@ -70,8 +73,13 @@ export function InstallForm({
   }>({ key: "", releases: [], error: null });
   const [releaseIndex, setReleaseIndex] = useState<number | null>(null);
   const [assetIndex, setAssetIndex] = useState<number | null>(null);
-  const [upgradeMode, setUpgradeMode] = useState(false);
-  const [installDependencies, setInstallDependencies] = useState(false);
+  const [upgradeMode, setUpgradeMode] = useState(
+    () => installOptionDefaults(false).upgradeMode,
+  );
+  const [installDependencies, setInstallDependencies] = useState(
+    () => installOptionDefaults(false).installDependencies,
+  );
+  const presenceByServer = useRef(new Map<number, boolean>());
   const [advanced, setAdvanced] = useState(false);
   const [archive, setArchive] = useState<GitHubArchive | null>(null);
   const [exclusionMode, setExclusionMode] = useState<"directory" | "file">(
@@ -109,6 +117,37 @@ export function InstallForm({
     () => archive?.allFiles.filter((item) => !item.isDir) ?? [],
     [archive],
   );
+
+  useEffect(() => {
+    presenceByServer.current.clear();
+  }, [pluginId]);
+
+  useEffect(() => {
+    if (serverId == null) return;
+    const apply = (existsOnServer: boolean) => {
+      const defaults = installOptionDefaults(existsOnServer);
+      setUpgradeMode(defaults.upgradeMode);
+      setInstallDependencies(defaults.installDependencies);
+      setPlan(null);
+    };
+    const cached = presenceByServer.current.get(serverId);
+    if (cached != null) {
+      apply(cached);
+      return;
+    }
+    apply(false);
+    let cancelled = false;
+    void listServerMarketPluginIdsAction(serverId).then((result) => {
+      if (cancelled) return;
+      const exists =
+        result.ok && pluginTrackedOnServer(result.data, pluginId);
+      presenceByServer.current.set(serverId, exists);
+      apply(exists);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pluginId, serverId]);
 
   useEffect(() => {
     if (serverId == null || !githubUrl) return;
@@ -444,6 +483,7 @@ export function InstallForm({
         <input
           type="checkbox"
           className="mt-0.5 size-4 rounded border-line accent-primary"
+          data-testid="market-upgrade-mode"
           checked={upgradeMode}
           disabled={busy}
           onChange={(event) => {
@@ -463,6 +503,7 @@ export function InstallForm({
         <input
           type="checkbox"
           className="mt-0.5 size-4 rounded border-line accent-primary"
+          data-testid="market-install-dependencies"
           checked={installDependencies}
           disabled={busy}
           onChange={(event) => {

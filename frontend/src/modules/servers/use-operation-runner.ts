@@ -16,10 +16,10 @@ import { confirm } from "@/shared/feedback";
 import {
   lastEventSequence,
   mergeOperationEvents,
-  nextReconnectDelayMs,
   operationEventsUrl,
   parseOperationEvent,
 } from "@/modules/servers/operation-events";
+import { subscribeVisibleEventSource } from "@/shared/lib/visible-event-source";
 import {
   CONFIRM_ACTIONS,
   type DeploymentLock,
@@ -140,9 +140,6 @@ export function useOperationRunner({
   useEffect(() => {
     if (!operationId) return;
     let cancelled = false;
-    let source: EventSource | null = null;
-    let timer: number | null = null;
-    let attempt = 0;
     let received = false;
     let finished = !isActiveOperation(operationRef.current);
     const seen = new Set<string>();
@@ -160,24 +157,19 @@ export function useOperationRunner({
       return event;
     };
 
-    const attach = () => {
-      if (cancelled) return;
-      source = new EventSource(
-        operationEventsUrl(serverId, operationId, after.current),
-      );
-      source.onopen = () => {
-        attempt = 0;
-        setStreamFailed(false);
-      };
-      source.onmessage = (message) => {
-        ingest(message.data);
-      };
-      const onNamed = (message: MessageEvent<string>) => {
-        const event = ingest(message.data);
+    const stop = subscribeVisibleEventSource({
+      url: () => operationEventsUrl(serverId, operationId, after.current),
+      eventTypes: ["progress", "operation_completed", "operation_failed"],
+      shouldReconnect: () => !finished,
+      onOpen: () => setStreamFailed(false),
+      onUnavailable: () => {
+        if (!received) setStreamFailed(true);
+      },
+      onData: (raw) => {
+        const event = ingest(raw);
         if (
           event &&
-          (event.type === "operation_completed" ||
-            event.type === "operation_failed")
+          (event.type === "operation_completed" || event.type === "operation_failed")
         ) {
           const wasActive = !finished;
           finished = true;
@@ -198,29 +190,12 @@ export function useOperationRunner({
           );
           if (wasActive) void refreshAfterTerminal();
         }
-      };
-      source.addEventListener("progress", onNamed);
-      source.addEventListener("operation_completed", onNamed);
-      source.addEventListener("operation_failed", onNamed);
-      source.onerror = () => {
-        source?.close();
-        source = null;
-        if (cancelled) return;
-        if (finished) {
-          if (!received) setStreamFailed(true);
-          return;
-        }
-        const delay = nextReconnectDelayMs(attempt);
-        attempt += 1;
-        timer = window.setTimeout(attach, delay);
-      };
-    };
+      },
+    });
 
-    attach();
     return () => {
       cancelled = true;
-      if (timer != null) window.clearTimeout(timer);
-      source?.close();
+      stop();
     };
   }, [operationId, refreshAfterTerminal, serverId]);
 

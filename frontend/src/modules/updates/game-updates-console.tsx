@@ -14,6 +14,11 @@ import {
   saveGameUpdatesAction,
   startGameUpdateAction,
 } from "@/modules/updates/actions";
+import {
+  GAME_UPDATE_HOUR_INTERVALS,
+  GAME_UPDATE_MINUTE_INTERVALS,
+  matchGameInterval,
+} from "@/modules/updates/intervals";
 import type { GameUpdateAction, GameUpdates } from "@/modules/updates/types";
 import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
@@ -29,35 +34,14 @@ import { Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 
-const INTERVALS = [
-  { value: 0.0167, key: "1m" },
-  { value: 0.0833, key: "5m" },
-  { value: 0.25, key: "15m" },
-  { value: 0.5, key: "30m" },
-  { value: 1, key: "1h" },
-  { value: 2, key: "2h" },
-  { value: 6, key: "6h" },
-  { value: 12, key: "12h" },
-  { value: 24, key: "24h" },
-] as const;
-
 function formatWhen(value: string | null, fallback: string): string {
   if (!value) return fallback;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? fallback : date.toLocaleString();
 }
 
-function closestInterval(hours: number): number {
-  let best: number = INTERVALS[0].value;
-  let delta = Math.abs(hours - best);
-  for (const item of INTERVALS) {
-    const next = Math.abs(hours - item.value);
-    if (next < delta) {
-      best = item.value;
-      delta = next;
-    }
-  }
-  return best;
+function intervalSelectValue(hours: number): string {
+  return String(matchGameInterval(hours) ?? hours);
 }
 
 export function GameUpdatesConsole({
@@ -74,7 +58,7 @@ export function GameUpdatesConsole({
   const [workspace, setWorkspace] = useState(initial);
   const [enabled, setEnabled] = useState(initial.enableAutoUpdate);
   const [intervalHours, setIntervalHours] = useState(
-    String(closestInterval(initial.intervalHours)),
+    intervalSelectValue(initial.intervalHours),
   );
   const [pending, setPending] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
@@ -93,10 +77,10 @@ export function GameUpdatesConsole({
         ? t("statusOutdated")
         : t("statusUnknown");
 
-  const intervalOptions = useMemo(() => {
+  const customInterval = useMemo(() => {
     const selected = Number(intervalHours);
-    if (INTERVALS.some((item) => item.value === selected)) return INTERVALS;
-    return [{ value: selected, key: "custom" as const }, ...INTERVALS];
+    if (!Number.isFinite(selected)) return null;
+    return matchGameInterval(selected) == null ? selected : null;
   }, [intervalHours]);
 
   async function save() {
@@ -113,6 +97,7 @@ export function GameUpdatesConsole({
       return;
     }
     setWorkspace(result.data);
+    setIntervalHours(intervalSelectValue(result.data.intervalHours));
     setBanner(t("saved"));
   }
 
@@ -127,7 +112,7 @@ export function GameUpdatesConsole({
     }
     setWorkspace(result.data);
     setEnabled(result.data.enableAutoUpdate);
-    setIntervalHours(String(closestInterval(result.data.intervalHours)));
+    setIntervalHours(intervalSelectValue(result.data.intervalHours));
     setBanner(t("refreshed"));
   }
 
@@ -233,22 +218,39 @@ export function GameUpdatesConsole({
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="game-interval">{t("interval")}</Label>
-          <Select
-            id="game-interval"
-            value={intervalHours}
-            onChange={(event) => setIntervalHours(event.target.value)}
-          >
-            {intervalOptions.map((item) => (
-              <option key={item.key} value={String(item.value)}>
-                {item.key === "custom"
-                  ? `${item.value}`
-                  : t(`intervals.${item.key}`)}
-              </option>
-            ))}
-          </Select>
-        </div>
+        {enabled ? (
+          <div className="space-y-2">
+            <Label htmlFor="game-interval">{t("interval")}</Label>
+            <Select
+              id="game-interval"
+              value={intervalHours}
+              onChange={(event) => setIntervalHours(event.target.value)}
+            >
+              {customInterval != null ? (
+                <option value={String(customInterval)}>{customInterval}</option>
+              ) : null}
+              <optgroup label={t("intervalMinutes")}>
+                {GAME_UPDATE_MINUTE_INTERVALS.map((item) => (
+                  <option key={item.key} value={String(item.value)}>
+                    {t(`intervals.${item.key}`)}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label={t("intervalHours")}>
+                {GAME_UPDATE_HOUR_INTERVALS.map((item) => (
+                  <option key={item.key} value={String(item.value)}>
+                    {t(`intervals.${item.key}`)}
+                  </option>
+                ))}
+              </optgroup>
+            </Select>
+            <p className="text-xs text-fg-subtle">{t("intervalHint")}</p>
+          </div>
+        ) : null}
+
+        <p className="rounded-md border border-warn/30 bg-warn-muted/40 px-3 py-2 text-xs text-warn">
+          {t("autoUpdateWarning")}
+        </p>
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" disabled={Boolean(pending)} onClick={() => void save()}>

@@ -65,7 +65,7 @@ export function GoogleCallbackClient() {
   }, [canPost, snapshot.idToken]);
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4">
+    <main className="flex flex-1 items-center justify-center px-4">
       <p
         className="max-w-sm text-center text-sm text-fg-muted"
         role="status"

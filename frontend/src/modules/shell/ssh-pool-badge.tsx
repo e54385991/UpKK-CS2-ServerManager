@@ -21,19 +21,29 @@ export function SshPoolBadge() {
 
   useEffect(() => {
     let cancelled = false;
+    let timer = 0;
 
     async function load() {
+      if (document.hidden) return;
       const result = await refreshSshPoolAction();
       if (!cancelled && result.ok) setStats(result.data);
     }
 
-    void load();
-    const timer = window.setInterval(() => {
+    const schedule = () => {
+      window.clearInterval(timer);
+      if (document.hidden) return;
       void load();
-    }, POLL_MS);
+      timer = window.setInterval(() => {
+        void load();
+      }, POLL_MS);
+    };
+
+    document.addEventListener("visibilitychange", schedule);
+    schedule();
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", schedule);
     };
   }, []);
 

@@ -3,8 +3,10 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 import { publicAppUrlFromHeaders } from "@/shared/config/public-app-url";
 import { FeedbackHost } from "@/shared/feedback/feedback-host";
+import { RuntimeFooter, RuntimeFooterSkeleton } from "@/modules/shell/runtime-footer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,11 +26,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(publicAppUrlFromHeaders(await headers())),
     title: {
-      default: `${t("name")} · ${t("fullName")}`,
+      default: t("name"),
       template: `%s · ${t("name")}`,
     },
     description: t("tagline"),
-    applicationName: t("fullName"),
+    applicationName: t("name"),
     robots: { index: false, follow: false },
   };
 }
@@ -53,7 +55,14 @@ export default async function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <FeedbackHost />
-          {children}
+          <div className="flex h-dvh flex-col overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {children}
+            </div>
+            <Suspense fallback={<RuntimeFooterSkeleton />}>
+              <RuntimeFooter />
+            </Suspense>
+          </div>
         </NextIntlClientProvider>
       </body>
     </html>

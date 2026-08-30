@@ -37,7 +37,11 @@ export function DeleteMarketPluginButton({
     const result = await deleteMarketPluginAction(pluginId);
     setPending(false);
     if (!result.ok) {
-      notify.error(result.error || t("deleteCatalogFailed"));
+      notify.error(
+        result.status === 403
+          ? t("deleteCatalogForbidden")
+          : result.error || t("deleteCatalogFailed"),
+      );
       return;
     }
     notify.success(t("deleteCatalogSuccess", { name: pluginTitle }));
@@ -53,7 +57,9 @@ export function DeleteMarketPluginButton({
       type="button"
       size="sm"
       variant="outline"
+      className="border-danger/40 text-danger hover:bg-danger-muted"
       data-testid="market-delete"
+      title={t("deleteCatalogHint")}
       disabled={pending}
       onClick={() => void onDelete()}
     >

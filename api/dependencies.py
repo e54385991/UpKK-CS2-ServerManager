@@ -51,8 +51,10 @@ async def get_bearer_or_cookie_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    token = credentials.credentials if credentials is not None else request.cookies.get(
-        WEB_SESSION_COOKIE
+    token = (
+        credentials.credentials
+        if credentials is not None
+        else request.cookies.get(WEB_SESSION_COOKIE)
     )
     if not token:
         raise credentials_exception

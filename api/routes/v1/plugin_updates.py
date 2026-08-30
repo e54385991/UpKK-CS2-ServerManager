@@ -25,6 +25,16 @@ from .schemas import (
 router = APIRouter(prefix="/api/v1/servers", tags=["v1-plugin-updates"])
 
 
+def _status_log_line(item: object) -> str:
+    if isinstance(item, dict):
+        message = str(item.get("message") or "").strip()
+        raw_time = item.get("time")
+        if raw_time and message:
+            return f"{raw_time} {message}"
+        return message or str(item)
+    return str(item)
+
+
 def _plugin_view(item) -> ManagedPluginUpdateView:
     return ManagedPluginUpdateView(
         id=int(item.id),
@@ -181,7 +191,7 @@ async def get_plugin_update_status(
         message=payload.get("message"),
         current=int(payload.get("current") or 0),
         total=int(payload.get("total") or 0),
-        logs=[str(item) for item in logs],
+        logs=[_status_log_line(item) for item in logs],
         started_at=payload.get("started_at"),
         finished_at=payload.get("finished_at"),
     )

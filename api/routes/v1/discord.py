@@ -221,8 +221,11 @@ async def get_discord_menu_options(
     try:
         payload = await legacy.get_discord_menu_push_options(db, current_user, guild_id)
     except HTTPException as exc:
-        if exc.status_code == 409:
-            return DiscordOptionsView(token_configured=False, message=str(exc.detail))
+        if exc.status_code in {400, 409}:
+            return DiscordOptionsView(
+                token_configured=exc.status_code != 409,
+                message=str(exc.detail),
+            )
         raise
     return _options_view(payload, token_configured=True)
 

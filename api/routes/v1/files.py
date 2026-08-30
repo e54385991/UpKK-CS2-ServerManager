@@ -11,6 +11,7 @@ from api.routes.file_manager import archives as legacy_archives
 from api.routes.file_manager import downloads as legacy_downloads
 from api.routes.file_manager import files as legacy_files
 from api.routes.file_manager.common import (
+    CopyPathsRequest,
     CreateDirectoryRequest,
     DownloadTicketRequest,
     DownloadUrlRequest,
@@ -28,6 +29,7 @@ from .schemas import (
     FileArchiveInspectView,
     FileContentUpdateRequest,
     FileContentView,
+    FileCopyRequest,
     FileDownloadTicketView,
     FileEntryView,
     FileExtractRequest,
@@ -40,6 +42,31 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api/v1/servers/{server_id}/files", tags=["v1-files"])
+
+_MISSING_PATH_MARKERS = (
+    "no such file",
+    "no such path",
+    "not a directory",
+    "does not exist",
+)
+
+
+def _is_missing_path_error(error: str | None) -> bool:
+    text = (error or "").lower()
+    return any(marker in text for marker in _MISSING_PATH_MARKERS)
+
+
+def _rewrite_nested_cs2_game(path: str, root: str) -> str | None:
+    """Try the other CS2 layout: ``<root>/cs2/game/…`` ↔ ``<root>/game/…``."""
+    if "/cs2/game/" in path or path.endswith("/cs2/game"):
+        alternate = path.replace("/cs2/game", "/game", 1)
+    elif "/game/" in path or path.endswith("/game"):
+        alternate = path.replace("/game", "/cs2/game", 1)
+    else:
+        return None
+    if alternate == path or not is_path_safe(root, alternate):
+        return None
+    return alternate
 
 
 def _entry(raw: dict[str, object]) -> FileEntryView:
@@ -68,7 +95,8 @@ def _task(
         error=str(payload["error"]) if payload.get("error") else None,
         target_path=str(payload["target_path"]) if payload.get("target_path") else None,
         destination=destination
-        or (str(payload["destination"]) if payload.get("destination") else None),
+        or (str(payload["destination"]) if payload.get("destination") else None)
+        or (str(payload["destination_path"]) if payload.get("destination_path") else None),
         elapsed_seconds=float(payload["elapsed_seconds"])
         if payload.get("elapsed_seconds") is not None
         else None,
@@ -94,9 +122,24 @@ async def get_files_workspace(
     ssh = SSHManager()
     try:
         success, files, error = await ssh.list_directory(requested, server)
+        if not success and _is_missing_path_error(error):
+            rewritten = _rewrite_nested_cs2_game(requested, root)
+            if rewritten:
+                success, files, error = await ssh.list_directory(rewritten, server)
+                if success:
+                    requested = rewritten
     finally:
         await ssh.disconnect()
     if not success:
+        if _is_missing_path_error(error):
+            return FilesWorkspaceView(
+                server_id=server_id,
+                root=root,
+                path=requested,
+                ssh_ok=True,
+                files=[],
+                message=error or "No such file",
+            )
         return FilesWorkspaceView(
             server_id=server_id,
             root=root,
@@ -154,12 +197,34 @@ async def upload_file(
     db: DatabaseSession,
     current_user: ActiveUser,
     file: UploadFile = File(...),
+    relative_path: str | None = Query(default=None, max_length=1500),
 ) -> FileMutationResult:
-    payload = await legacy_files.upload_file(server_id, path, file, db, current_user)
+    payload = await legacy_files.upload_file(server_id, path, file, db, current_user, relative_path)
     return FileMutationResult(
         success=bool(payload.get("success", True)),
         message=str(payload.get("message") or "File uploaded successfully"),
         path=str(payload.get("path") or ""),
+    )
+
+
+@router.post("/copy", response_model=FileMutationResult)
+async def copy_paths(
+    server_id: int,
+    body: FileCopyRequest,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> FileMutationResult:
+    payload = await legacy_files.copy_paths(
+        server_id,
+        CopyPathsRequest(sources=list(body.sources), destination=body.destination),
+        db,
+        current_user,
+    )
+    return FileMutationResult(
+        success=bool(payload.get("success", True)),
+        message=str(payload.get("message") or "Copied successfully"),
+        path=str(payload.get("path") or ""),
+        paths=[str(item) for item in payload.get("paths") or []],
     )
 
 

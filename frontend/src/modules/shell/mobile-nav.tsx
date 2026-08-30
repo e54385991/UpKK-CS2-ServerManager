@@ -55,7 +55,7 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
             <span className="flex size-8 items-center justify-center rounded-md bg-primary-muted text-primary ring-1 ring-primary/30">
               <Crosshair className="size-4.5" />
             </span>
-            <span className="text-sm font-semibold text-fg">
+            <span className="min-w-0 text-[12px] font-semibold leading-snug text-fg">
               {tSite("name")}
             </span>
           </span>

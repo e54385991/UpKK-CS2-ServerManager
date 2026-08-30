@@ -136,6 +136,13 @@ class RenameRequest(SQLModel):
     new_name: str
 
 
+class CopyPathsRequest(SQLModel):
+    """Copy one or more remote paths into a destination directory."""
+
+    sources: List[str]
+    destination: str
+
+
 class ExtractArchiveRequest(SQLModel):
     """Extract archive request"""
 
@@ -269,6 +276,27 @@ def is_path_safe(base_path: str, requested_path: str) -> bool:
 def remote_join(*parts: str) -> str:
     """Join remote server paths using POSIX separators."""
     return posixpath.normpath(posixpath.join(*parts))
+
+
+def safe_relative_upload_path(relative_path: str | None, filename: str | None) -> str:
+    """Accept ``a/b/c.cfg`` for folder uploads. Reject ``..`` and absolute paths."""
+
+    raw = (relative_path or "").strip().replace("\\", "/")
+    fallback = _validate_direct_child_name(filename or "upload", "filename")
+    if not raw:
+        return fallback
+    if raw.startswith("/") or raw.startswith("./../") or raw.startswith("../"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="relative_path must stay inside the destination folder",
+        )
+    parts = [part for part in raw.split("/") if part and part != "."]
+    if not parts or any(part == ".." for part in parts):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="relative_path must stay inside the destination folder",
+        )
+    return "/".join(_validate_direct_child_name(part, "relative_path") for part in parts)
 
 
 def _validate_direct_child_name(name: str, label: str = "name") -> str:

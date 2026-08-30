@@ -955,6 +955,78 @@ class RemoteFileMixin:
         except Exception as e:
             return False, f"Error creating directory: {str(e)}"
 
+    async def _remote_exists(self, path: str) -> bool:
+        if not self.conn:
+            return False
+        try:
+            async with self.conn.start_sftp_client() as sftp:
+                await sftp.lstat(path)
+            return True
+        except asyncssh.SFTPNoSuchFile, asyncssh.SFTPNoSuchPath:
+            return False
+        except asyncssh.SFTPError:
+            return False
+
+    @staticmethod
+    def copy_collision_name(basename: str, index: int) -> str:
+        if index <= 0:
+            return basename
+        stem, ext = posixpath.splitext(basename)
+        suffix = " copy" if index == 1 else f" copy {index}"
+        return f"{stem}{suffix}{ext}"
+
+    async def copy_into_directory(
+        self, source: str, dest_dir: str, server: Server
+    ) -> Tuple[bool, str, str]:
+        """Copy a remote file or directory into ``dest_dir``. Returns the new path."""
+
+        if not self.conn:
+            success, msg = await self.connect(server)
+            if not success:
+                return False, "", f"Connection failed: {msg}"
+
+        source_n = posixpath.normpath(source)
+        dest_n = posixpath.normpath(dest_dir)
+        basename = posixpath.basename(source_n)
+        if not basename or basename in {".", ".."}:
+            return False, "", "Invalid source path"
+        if dest_n == source_n or dest_n.startswith(source_n.rstrip("/") + "/"):
+            return False, "", "Cannot copy a folder into itself"
+
+        valid_source, source_error = await self.validate_path_within_base(
+            server.game_directory, source_n, server
+        )
+        if not valid_source:
+            return False, "", source_error
+        valid_dest, dest_error = await self.validate_path_within_base(
+            server.game_directory, dest_n, server
+        )
+        if not valid_dest:
+            return False, "", dest_error
+
+        candidate = posixpath.join(dest_n, basename)
+        for index in range(0, 100):
+            name = self.copy_collision_name(basename, index)
+            candidate = posixpath.join(dest_n, name)
+            if not await self._remote_exists(candidate):
+                break
+        else:
+            return False, "", "Too many name collisions at the destination"
+
+        valid_target, target_error = await self.validate_path_within_base(
+            server.game_directory, candidate, server, allow_missing=True
+        )
+        if not valid_target:
+            return False, "", target_error
+
+        success, stdout, stderr = await self.execute_command(
+            f"cp -a -- {shlex.quote(source_n)} {shlex.quote(candidate)}",
+            timeout=120,
+        )
+        if not success:
+            return False, "", self._short_command_error(stdout, stderr)
+        return True, candidate, ""
+
     async def rename_path(self, old_path: str, new_path: str, server: Server) -> Tuple[bool, str]:
         """
         Rename or move file/directory
@@ -1539,6 +1611,26 @@ class RemoteFileMixin:
                     f"rmdir -- {safe_temp_root} 2>/dev/null || true", timeout=10
                 )
 
+    async def _ensure_remote_parent(self, remote_path: str, sftp) -> Tuple[bool, str]:
+        """Create every missing parent of ``remote_path`` before a put/open."""
+        parent_dir = posixpath.dirname(remote_path)
+        if not parent_dir or parent_dir in (".", "/"):
+            return True, ""
+        try:
+            await sftp.makedirs(parent_dir, exist_ok=True)
+            return True, ""
+        except asyncssh.SFTPError, OSError:
+            success, stdout, stderr = await self.execute_command(
+                f"mkdir -p -- {shlex.quote(parent_dir)}",
+                timeout=30,
+            )
+            if success:
+                return True, ""
+            return (
+                False,
+                f"Failed to create upload directory: {self._short_command_error(stdout, stderr)}",
+            )
+
     async def upload_file(
         self, local_path: str, remote_path: str, server: Server
     ) -> Tuple[bool, str]:
@@ -1560,13 +1652,9 @@ class RemoteFileMixin:
 
         try:
             async with self.conn.start_sftp_client() as sftp:
-                # Ensure parent directory exists
-                parent_dir = posixpath.dirname(remote_path)
-                if parent_dir:
-                    try:
-                        await sftp.stat(parent_dir)
-                    except asyncssh.SFTPNoSuchFile:
-                        await sftp.makedirs(parent_dir)
+                created, create_error = await self._ensure_remote_parent(remote_path, sftp)
+                if not created:
+                    return False, create_error
 
                 # Upload file
                 await sftp.put(local_path, remote_path)
@@ -1691,13 +1779,9 @@ class RemoteFileMixin:
             bytes_uploaded = 0
 
             async with self.conn.start_sftp_client() as sftp:
-                # Ensure parent directory exists
-                parent_dir = posixpath.dirname(remote_path)
-                if parent_dir:
-                    try:
-                        await sftp.stat(parent_dir)
-                    except asyncssh.SFTPNoSuchFile:
-                        await sftp.makedirs(parent_dir)
+                created, create_error = await self._ensure_remote_parent(remote_path, sftp)
+                if not created:
+                    return False, create_error
 
                 # Upload file with progress tracking
                 # Read file in chunks and upload

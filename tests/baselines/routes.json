@@ -1076,6 +1076,14 @@
     "methods": [
       "POST"
     ],
+    "name": "copy_paths",
+    "path": "/servers/{server_id}/files/copy"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
     "name": "inspect_archive",
     "path": "/servers/{server_id}/files/archive/inspect"
   },
@@ -2098,10 +2106,58 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "GET"
+    ],
+    "name": "scan_server_cleanup_events",
+    "path": "/api/v1/servers/{server_id}/cleanup/scan/events"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "POST"
     ],
     "name": "delete_server_cleanup_items",
     "path": "/api/v1/servers/{server_id}/cleanup/delete"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_cleanup_policy",
+    "path": "/api/v1/servers/{server_id}/cleanup/policy"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "PUT"
+    ],
+    "name": "update_cleanup_policy",
+    "path": "/api/v1/servers/{server_id}/cleanup/policy"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "scan_system_cleanup",
+    "path": "/api/v1/servers/{server_id}/cleanup/system"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "scan_system_cleanup_events",
+    "path": "/api/v1/servers/{server_id}/cleanup/system/events"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "apply_system_cleanup",
+    "path": "/api/v1/servers/{server_id}/cleanup/system"
   },
   {
     "kind": "APIRoute",
@@ -2590,6 +2646,14 @@
     ],
     "name": "upload_file",
     "path": "/api/v1/servers/{server_id}/files/upload"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "copy_paths",
+    "path": "/api/v1/servers/{server_id}/files/copy"
   },
   {
     "kind": "APIRoute",

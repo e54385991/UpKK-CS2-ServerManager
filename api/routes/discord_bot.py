@@ -140,6 +140,18 @@ async def _bound_menu_push_channels(db: DatabaseSession, user_id: int) -> dict[s
         ):
             continue
         channels_by_guild.setdefault(binding.guild_id, set()).update(binding.channel_ids or [])
+    bot = await db.get(UserDiscordBot, user_id)
+    if (
+        bot is not None
+        and bot.global_binding_configured is True
+        and bot.global_binding_enabled is True
+        and isinstance(bot.global_guild_id, str)
+        and bot.global_guild_id
+        and known_capabilities.intersection(bot.global_capabilities or [])
+    ):
+        channels_by_guild.setdefault(bot.global_guild_id, set()).update(
+            str(item) for item in (bot.global_channel_ids or []) if item
+        )
     return channels_by_guild
 
 
@@ -459,29 +471,30 @@ async def get_discord_menu_push_options(
     current_user: ActiveUser,
     guild_id: str | None = Query(default=None, pattern=r"^[1-9][0-9]{0,19}$"),
 ) -> DiscordMenuPushOptionsResponse:
-    _bot, token = await _connected_bot_token(db, current_user.id)
+    _bot, token = await _stored_token(db, current_user.id)
     allowed = await _bound_menu_push_channels(db, current_user.id)
     try:
         guild_payload, channels, _roles = await _load_discord_options(
             current_user.id, token, guild_id
         )
     except DiscordBotAPIError as exc:
+        if allowed:
+            return DiscordMenuPushOptionsResponse(
+                guilds=[
+                    DiscordGuildOption(id=item_id, name=item_id) for item_id in sorted(allowed)
+                ],
+                channels=[],
+            )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     guilds = [
         DiscordGuildOption(
             id=str(item["id"]), name=str(item.get("name") or item["id"]), icon=item.get("icon")
         )
         for item in guild_payload
-        if str(item["id"]) in allowed
     ]
     if guild_id is None:
         return DiscordMenuPushOptionsResponse(guilds=guilds)
-    if guild_id not in allowed:
-        raise HTTPException(
-            status_code=422,
-            detail="The selected Guild has no enabled Discord server binding",
-        )
-    allowed_channel_ids = allowed[guild_id]
+    allowed_channel_ids = allowed.get(guild_id, set())
     return DiscordMenuPushOptionsResponse(
         guilds=guilds,
         channels=[

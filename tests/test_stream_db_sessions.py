@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from api.dependencies import close_request_session, get_bearer_or_cookie_user
+from api.routes.v1.cleanup import scan_server_cleanup_events, scan_system_cleanup_events
 from api.routes.v1.operation_inbox import stream_operation_inbox
 from api.routes.v1.operations import stream_server_operation_events
 
@@ -26,6 +27,11 @@ def test_operation_event_stream_does_not_take_request_db():
 def test_inbox_event_stream_does_not_take_request_db():
     parameters = inspect.signature(stream_operation_inbox).parameters
     assert "db" not in parameters
+
+
+def test_cleanup_scan_stream_does_not_take_request_db():
+    assert "db" not in inspect.signature(scan_server_cleanup_events).parameters
+    assert "db" not in inspect.signature(scan_system_cleanup_events).parameters
 
 
 @pytest.mark.asyncio

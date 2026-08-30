@@ -5,6 +5,7 @@ import type { ApiResult } from "@/shared/api/server-fetch";
 import type { ActionResultDto } from "@/shared/api/types";
 import {
   getGameUpdates,
+  getPluginUpdateStatus,
   getPluginUpdates,
   listRegisterReleases,
   patchUpdatePlugin,
@@ -22,6 +23,7 @@ import type {
   GameUpdates,
   ManagedPluginRegisterInput,
   ManagedUpdatePlugin,
+  PluginUpdateStatus,
   PluginUpdates,
   RegisterRelease,
 } from "@/modules/updates/types";
@@ -64,6 +66,12 @@ export async function refreshPluginUpdatesAction(
   serverId: number,
 ): Promise<ApiResult<PluginUpdates>> {
   return getPluginUpdates(serverId);
+}
+
+export async function getPluginUpdateStatusAction(
+  serverId: number,
+): Promise<ApiResult<PluginUpdateStatus>> {
+  return getPluginUpdateStatus(serverId);
 }
 
 export async function savePluginUpdatesAction(
