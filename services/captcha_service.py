@@ -45,7 +45,9 @@ class CaptchaService:
         code = self._generate_code()
 
         # Store code in Redis with expiration
-        await redis_manager.client.setex(f"captcha:{token}", self.expiration_seconds, code)
+        await redis_manager.client.setex(
+            redis_manager.prefixed_key(f"captcha:{token}"), self.expiration_seconds, code
+        )
 
         # Generate CAPTCHA image
         image_bytes = await to_thread.run_sync(self._render_image, code)
@@ -64,7 +66,7 @@ class CaptchaService:
             return False
 
         # Get stored code from Redis
-        key = f"captcha:{token}"
+        key = redis_manager.prefixed_key(f"captcha:{token}")
         stored_code = await redis_manager.client.get(key)
 
         if not stored_code:
@@ -89,7 +91,7 @@ class CaptchaService:
         """
         # Delete old token if provided
         if old_token:
-            await redis_manager.client.delete(f"captcha:{old_token}")
+            await redis_manager.client.delete(redis_manager.prefixed_key(f"captcha:{old_token}"))
 
         # Generate new CAPTCHA
         return await self.generate_captcha()

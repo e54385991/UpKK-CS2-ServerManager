@@ -4,8 +4,28 @@ import { redirect } from "next/navigation";
 import type { SessionUserDto } from "@/shared/api/types";
 import { internalApiUrl } from "@/shared/config/internal-api";
 
-/** Backend HttpOnly session cookie. Its value is the JWT access token. */
+/** Default backend HttpOnly session cookie. A port suffix isolates two consoles on one host. */
 export const SESSION_COOKIE = "upkk_access_token";
+
+/**
+ * Cookie name for this panel instance. Read at call time so Docker
+ * `SESSION_COOKIE_SUFFIX` (public console port) is not inlined at build.
+ */
+export function sessionCookieName(): string {
+  const suffix = process.env["SESSION_COOKIE_SUFFIX"]?.trim();
+  return suffix ? `${SESSION_COOKIE}_${suffix}` : SESSION_COOKIE;
+}
+
+export function sessionTokenFrom(store: {
+  get(name: string): { value: string } | undefined;
+}): string | undefined {
+  return store.get(sessionCookieName())?.value;
+}
+
+/** Cheap presence check for this instance only; layouts still validate the JWT. */
+export function hasSessionCookie(store: { has(name: string): boolean }): boolean {
+  return store.has(sessionCookieName());
+}
 
 export type SessionUser = {
   readonly id: number;
@@ -22,7 +42,7 @@ export type SessionUser = {
  * the caller can redirect to login.
  */
 export async function getSession(): Promise<SessionUser | null> {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const token = sessionTokenFrom(await cookies());
   if (!token) return null;
 
   try {

@@ -16,7 +16,7 @@ from modules import (
     get_current_web_user,
     get_db,
 )
-from modules.auth import WEB_SESSION_COOKIE, _get_active_user_for_token, optional_oauth2_scheme
+from modules.auth import _get_active_user_for_token, optional_oauth2_scheme, web_session_cookie_name
 from modules.database import async_session_maker
 from services.container import ServiceContainer
 from services.maintenance_lock import maintenance_lock_service
@@ -54,7 +54,7 @@ async def get_bearer_or_cookie_user(
     token = (
         credentials.credentials
         if credentials is not None
-        else request.cookies.get(WEB_SESSION_COOKIE)
+        else request.cookies.get(web_session_cookie_name())
     )
     if not token:
         raise credentials_exception

@@ -1,6 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { SESSION_COOKIE } from "@/modules/auth/session";
+import { sessionTokenFrom } from "@/modules/auth/session";
 import { internalApiUrl } from "@/shared/config/internal-api";
 
 export type ApiResult<T> =
@@ -24,7 +24,7 @@ export async function apiFetch<T>(
   path: string,
   init?: ApiFetchInit,
 ): Promise<ApiResult<T>> {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const token = sessionTokenFrom(await cookies());
   const { timeoutMs, signal, headers, ...rest } = init ?? {};
   try {
     const response = await fetch(`${internalApiUrl()}${path}`, {

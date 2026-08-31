@@ -1,6 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { SESSION_COOKIE } from "@/modules/auth/session";
+import { sessionTokenFrom } from "@/modules/auth/session";
 import { internalApiUrl } from "@/shared/config/internal-api";
 
 /**
@@ -9,7 +9,7 @@ import { internalApiUrl } from "@/shared/config/internal-api";
  * image pull.
  */
 export async function proxyAssistant(request: Request): Promise<Response> {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const token = sessionTokenFrom(await cookies());
   if (!token) {
     return Response.json({ detail: "Authentication required" }, { status: 401 });
   }

@@ -1,13 +1,13 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
-import { SESSION_COOKIE } from "@/modules/auth/session";
+import { sessionTokenFrom } from "@/modules/auth/session";
 import { internalApiUrl } from "@/shared/config/internal-api";
 
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ runId: string }> },
 ) {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const token = sessionTokenFrom(await cookies());
   if (!token) {
     return new Response("Authentication required", { status: 401 });
   }

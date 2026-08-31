@@ -140,7 +140,7 @@ async def get_metamod_status(
     server = await get_server_and_verify_ownership(db, server_id, current_user)
 
     # Create cache key
-    cache_key = f"metamod_status:server:{server_id}"
+    cache_key = redis_manager.prefixed_key(f"metamod_status:server:{server_id}")
 
     # Try to get from cache first (1 hour TTL)
     try:

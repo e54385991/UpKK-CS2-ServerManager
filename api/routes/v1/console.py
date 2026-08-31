@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 
 from api.dependencies import ActiveUser, DatabaseSession, StreamUser, require_server_access
 from modules import Server, async_session_maker
-from modules.auth import WEB_SESSION_COOKIE, _get_active_user_for_token
+from modules.auth import _get_active_user_for_token, web_session_cookie_name
 from services.game_session import (
     attach_command,
     capture_console_command,
@@ -52,7 +52,7 @@ async def _authenticate_console(
         await websocket.close(code=4403, reason="Invalid WebSocket origin")
         return None
 
-    token = websocket.cookies.get(WEB_SESSION_COOKIE)
+    token = websocket.cookies.get(web_session_cookie_name())
     if not token:
         await websocket.close(code=4401, reason="Authentication required")
         return None

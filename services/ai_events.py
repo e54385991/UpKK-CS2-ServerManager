@@ -62,7 +62,7 @@ class AIEventHub:
             "type": event_type,
             "payload": payload or {},
         }
-        key = f"ai:run:{run_id}:events"
+        key = redis_manager.prefixed_key(f"ai:run:{run_id}:events")
         try:
             encoded = json.dumps(event, ensure_ascii=False, default=str)
             pipeline = redis_manager.client.pipeline(transaction=False)
@@ -97,7 +97,7 @@ class AIEventHub:
         return event
 
     async def replay(self, run_id: str, after_sequence: int = 0) -> list[dict[str, Any]]:
-        key = f"ai:run:{run_id}:events"
+        key = redis_manager.prefixed_key(f"ai:run:{run_id}:events")
         try:
             values = await redis_manager.client.lrange(key, 0, -1)
         except Exception as exc:

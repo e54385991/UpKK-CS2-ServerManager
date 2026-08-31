@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE } from "@/modules/auth/session";
+import { hasSessionCookie } from "@/modules/auth/session";
 
 /**
  * Edge guard for the authenticated console (Next 16 `proxy` convention). This is
@@ -8,7 +8,7 @@ import { SESSION_COOKIE } from "@/modules/auth/session";
  * the backend. Public routes and the API proxy are excluded via the matcher.
  */
 export function proxy(request: NextRequest) {
-  const hasSession = request.cookies.has(SESSION_COOKIE);
+  const hasSession = hasSessionCookie(request.cookies);
   const { pathname, search } = request.nextUrl;
 
   if (!hasSession) {

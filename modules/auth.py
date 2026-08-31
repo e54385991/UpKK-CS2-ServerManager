@@ -25,6 +25,15 @@ BCRYPT_ROUNDS = 12
 BCRYPT_MAX_PASSWORD_BYTES = 72
 WEB_SESSION_COOKIE = "upkk_access_token"
 
+
+def web_session_cookie_name() -> str:
+    """Return the HttpOnly session cookie name for this panel instance."""
+    suffix = (settings.SESSION_COOKIE_SUFFIX or "").strip()
+    if not suffix:
+        return WEB_SESSION_COOKIE
+    return f"{WEB_SESSION_COOKIE}_{suffix}"
+
+
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -68,7 +77,7 @@ async def get_password_hash_async(password: str) -> str:
 def set_web_session_cookie(request: Request, response: Response, token: str) -> None:
     """Set the HTTP-only cookie used only to protect HTML and WebSocket routes."""
     response.set_cookie(
-        key=WEB_SESSION_COOKIE,
+        key=web_session_cookie_name(),
         value=token,
         max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         httponly=True,
@@ -80,7 +89,7 @@ def set_web_session_cookie(request: Request, response: Response, token: str) -> 
 
 def clear_web_session_cookie(response: Response) -> None:
     """Remove the browser session cookie without changing bearer-token behavior."""
-    response.delete_cookie(WEB_SESSION_COOKIE, path="/", samesite="lax")
+    response.delete_cookie(web_session_cookie_name(), path="/", samesite="lax")
 
 
 def _decode_user_id(token: str) -> int:
@@ -108,7 +117,7 @@ async def get_current_web_user(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     """Authenticate browser page navigation with the HTTP-only session cookie."""
-    token = request.cookies.get(WEB_SESSION_COOKIE)
+    token = request.cookies.get(web_session_cookie_name())
     user = await _get_active_user_for_token(token, db) if token else None
     if user is None:
         raise HTTPException(
@@ -140,7 +149,7 @@ async def authenticate_websocket(
         await websocket.close(code=4403, reason="Invalid WebSocket origin")
         return None, None
 
-    token = websocket.cookies.get(WEB_SESSION_COOKIE)
+    token = websocket.cookies.get(web_session_cookie_name())
     if not token:
         await websocket.close(code=4401, reason="Authentication required")
         return None, None

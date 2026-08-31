@@ -532,7 +532,9 @@ class ServerOperationHub:
 
     async def _expire_events(self, operation_id: str, expire: int) -> None:
         try:
-            await redis_manager.client.expire(self._events_key(operation_id), expire)
+            await redis_manager.client.expire(
+                redis_manager.prefixed_key(self._events_key(operation_id)), expire
+            )
         except Exception as exc:
             logger.warning("Unable to refresh event TTL for %s: %s", operation_id, exc)
 
@@ -600,7 +602,7 @@ class ServerOperationHub:
             )
 
     async def _persist_event(self, operation_id: str, event: dict[str, Any]) -> None:
-        key = self._events_key(operation_id)
+        key = redis_manager.prefixed_key(self._events_key(operation_id))
         try:
             encoded = json.dumps(event, ensure_ascii=False, default=str)
             pipeline = redis_manager.client.pipeline(transaction=False)
@@ -613,7 +615,9 @@ class ServerOperationHub:
 
     async def _load_events(self, operation_id: str) -> list[dict[str, Any]]:
         try:
-            values = await redis_manager.client.lrange(self._events_key(operation_id), 0, -1)
+            values = await redis_manager.client.lrange(
+                redis_manager.prefixed_key(self._events_key(operation_id)), 0, -1
+            )
         except Exception as exc:
             logger.warning("Unable to load operation events %s: %s", operation_id, exc)
             return []

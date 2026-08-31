@@ -105,8 +105,12 @@ is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-
   FastAPI directly. Set `INTERNAL_API_URL` in `frontend/.env` for `next
   dev`. Production standalone applies the same variable at process start
   (`scripts/with-internal-api-url.mjs`) so Docker/compose can point at
-  `http://app:8000` without rebuilding the image.
-- Session: the backend sets an HttpOnly cookie `upkk_access_token` whose value is
+  `http://app:8000` without rebuilding the image. 1Panel multi-instance
+  compose uses `http://${CONTAINER_NAME}:8000` because service name `app`
+  collides on `1panel-network`.
+- Session: the backend sets an HttpOnly cookie `upkk_access_token` (or
+  `upkk_access_token_<SESSION_COOKIE_SUFFIX>` when two consoles share a
+  host). Its value is
   the JWT. `src/modules/auth/session.ts` resolves the user via
   `GET /api/auth/me` with a bearer header; `src/proxy.ts` cheaply guards console
   routes on cookie presence; layouts validate for real.

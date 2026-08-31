@@ -736,9 +736,9 @@ async def google_oauth_login(
 @router.post("/logout")
 async def logout(request: Request, response: Response, db: DatabaseSession):
     """Clear the HTTP-only browser session cookie."""
-    from modules.auth import WEB_SESSION_COOKIE, _get_active_user_for_token
+    from modules.auth import _get_active_user_for_token, web_session_cookie_name
 
-    token = request.cookies.get(WEB_SESSION_COOKIE)
+    token = request.cookies.get(web_session_cookie_name())
     user = await _get_active_user_for_token(token, db) if token else None
     await record_audit_event(
         category="auth",

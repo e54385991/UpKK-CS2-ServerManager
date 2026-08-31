@@ -2,7 +2,7 @@
 
 **不要用两个「运行环境」分别部署前后端。** Next 容器访问宿主机局域网 IP
 （例如 `http://192.168.50.245:8000`）会走 Docker hairpin，登录页慢、验证码一直
-Loading。正确做法是一套 Compose：Caddy → Next → `app:8000`。
+Loading。正确做法是一套 Compose：Caddy → Next → 本实例 FastAPI（容器内 `:8000`）。
 
 推荐两条路径：
 
@@ -10,8 +10,8 @@ Loading。正确做法是一套 Compose：Caddy → Next → `app:8000`。
 2. **容器 → Compose** 粘贴仓库根目录 `docker-compose.yml`（自带 PostgreSQL 和 Redis）。
 
 The two-runtime 1Panel setup is unsupported. Install the local app package or
-paste the root Compose file so Next proxies to `http://app:8000` on the private
-network.
+paste the root Compose file so Next proxies to FastAPI on container port 8000
+(the service name `app` is unique only inside that Compose project).
 
 ## 中文
 
@@ -57,10 +57,13 @@ test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
 
 - PostgreSQL / Redis：选择 1Panel 已安装的服务实例。PostgreSQL 库名、用户、密码默认自动生成；
   Redis 密码必填，选中本地 Redis 时一般会自动填上，空密码不能安装；
-- **控制台 HTTP 端口**：默认 `3000`，映射到 Caddy `:80`，再反代 Next。FastAPI 只在容器网内 `app:8000`；
+- **控制台 HTTP 端口**：默认 `3000`，映射到 Caddy `:80`，再反代 Next。FastAPI
+  只在该实例容器内监听 `:8000`，不要改成 `:8001`，也不要映射到宿主机；
 - **浏览器访问地址**：默认 `http://localhost:3000`。装完后改成实际地址，例如
   `http://192.168.50.245:3000`（改端口时一并改这里）。不要填 `0.0.0.0`；
-- **后端内部地址**：保持 `http://app:8000`。不要填 `http://192.168.x.x:8000`；
+- **后端内部地址**：保持默认。Compose 会改成 `http://<本实例容器名>:8000`。
+  不要改成 `http://app:8000`（两套应用在 `1panel-network` 上会抢 `app`），
+  也不要改成 `:8001`；
 - 前后端镜像：保持表单默认的 Docker Hub 地址，不要留空（1Panel 拉镜像不会展开 `${VAR:-默认值}`）；
 - `SECRET_KEY` / `JWT_SECRET_KEY`：保持自动生成。init 脚本会把短占位值升级为 64 位十六进制密钥。
 
@@ -88,7 +91,9 @@ docker ps -a --filter name=cs2-server-manager
 docker network inspect 1panel-network >/dev/null
 ```
 
-商店包走同网 `app:8000`，不要给前端加 `host.docker.internal:host-gateway`（部分 1Panel Docker 会在 Creating 阶段直接失败）。
+商店包里 Next 走本实例容器名 `:8000`，不要给前端加
+`host.docker.internal:host-gateway`（部分 1Panel Docker 会在 Creating 阶段直接失败）。
+也不要把 FastAPI 改成宿主机 `8001`。
 
 ```bash
 docker network inspect 1panel-network
@@ -100,7 +105,25 @@ docker exec <应用容器名> python -c \
 - 无法解析数据库主机：重新选择 1Panel 服务实例，确认它加入 `1panel-network`；
 - PostgreSQL 版本错误：应用要求主版本 18 或更高；
 - 认证失败：核对专用数据库用户名、密码、数据库名以及 Redis 密码；
+- 第二个实例登录后 401：先确认控制台端口和「浏览器访问地址」是 `3001` 而不是
+  把 FastAPI 改成 `8001`；并重新复制本仓库 1Panel 包后重建容器（见下文「两个实例」）；
 - 迁移失败：先查看应用日志和 PostgreSQL 日志，不要手工删除表。
+
+### 5. 同一台机器安装两个实例
+
+可以共用 1Panel 的 PostgreSQL / Redis。第二套请：
+
+1. **控制台 HTTP 端口**用另一个端口（例如 `3001`），**浏览器访问地址**写成
+   `http://服务器IP:3001`。公网入口是 Caddy → Next，不是 FastAPI。
+2. **不要**把 FastAPI 改成 `8001`，也**不要**把「后端内部地址」改成 `:8001`。
+   FastAPI 始终在该实例容器内 `:8000`。
+3. 为第二套选**另一个 PostgreSQL 库**（表单会自动生成库名/用户）。Redis 可以
+   继续用 DB `0`：应用会用容器名给 key 加前缀。也可以选不同的 Redis DB，但不是必须。
+4. 每个实例各自生成 `JWT_SECRET_KEY`。会话 cookie 会带上控制台端口
+   （`upkk_access_token_3000` / `upkk_access_token_3001`），避免同一浏览器串会话。
+
+旧包里 Next 默认访问共享主机名 `app:8000`，两套会打到同一套后端，表现为登录成功后立刻 401。
+把本仓库 `deploy/1panel/apps/cs2-server-manager` 重新复制到 1Panel 本地应用目录并重建容器即可。
 
 根目录 Docker 用户仍可直接使用 [Docker 一键部署文档](DOCKER_QUICKSTART.md)，该路径会独立启动自己的 PostgreSQL 和 Redis。
 
@@ -144,9 +167,11 @@ PostgreSQL name/user/password unless you are reusing an existing 1Panel database
 The Redis password is required: a local Redis instance usually auto-fills it; an
 empty password cannot be installed.
 Set **Console HTTP Port** to `3000` (or another free host port). That port maps to
-Caddy `:80` → Next; FastAPI stays private at `app:8000`. Set **Browser origin URL**
+Caddy `:80` → Next; FastAPI stays private on container port `8000`. Set **Browser origin URL**
 to the address people type, such as `http://192.168.50.245:3000` — never `0.0.0.0`.
-Keep **Internal API URL** as `http://app:8000`. Keep the default backend and
+Leave **Internal API URL** at the default. Compose rewrites it to
+`http://<this-instance-container>:8000`. Do not change it to `:8001` or to the
+shared hostname `app`. Keep the default backend and
 frontend image fields (do not leave them empty; 1Panel cannot pull
 `${VAR:-default}` image refs). Keep the generated `SECRET_KEY` /
 `JWT_SECRET_KEY`; `init.sh` upgrades short placeholders to 64-character
@@ -166,5 +191,23 @@ existing accounts are preserved and the administrator password is not reset.
 - App upgrades replace only the application container and do not remove external PostgreSQL or Redis;
 - Check 1Panel's data deletion option before uninstalling;
 - Keep a verified database backup for rollback.
+
+### 4. Two instances on one host
+
+Both installs may share the 1Panel PostgreSQL and Redis services.
+
+1. Give the second console another HTTP port (`3001`) and set **Browser origin URL**
+   to `http://SERVER_IP:3001`. The public entry is Caddy → Next, not FastAPI.
+2. Do **not** remap FastAPI to host `8001`, and do **not** set the internal API to
+   `:8001`. FastAPI stays on container port `8000`.
+3. Use a **separate PostgreSQL database** (the form generates one). Redis may stay
+   on DB `0`: keys are prefixed with the container name. A different Redis DB is
+   optional, not required.
+4. Each install keeps its own `JWT_SECRET_KEY`. Session cookies include the console
+   port (`upkk_access_token_3000` vs `upkk_access_token_3001`).
+
+Older packages pointed Next at the shared hostname `app:8000`, so the second
+install logged in against the first API and then got 401. Recopy this repo's
+1Panel package and recreate the containers.
 
 For the self-contained Docker path, use the [Docker quick-start guide](DOCKER_QUICKSTART.md).

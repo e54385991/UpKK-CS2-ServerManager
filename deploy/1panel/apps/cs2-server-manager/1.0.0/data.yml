@@ -205,22 +205,22 @@ additionalProperties:
       required: true
       rule: paramExtUrl
       type: text
-    - default: http://app:8000
-      edit: true
+    - default: http://${CONTAINER_NAME}:8000
+      edit: false
       envKey: FRONTEND_INTERNAL_API_URL
-      labelEn: Internal API URL (keep http://app:8000)
-      labelZh: 后端内部地址（保持 http://app:8000）
+      labelEn: Internal API URL (locked; not :8001)
+      labelZh: 后端内部地址（已锁定，不是 :8001）
       label:
-        en: Internal API URL (keep http://app:8000)
-        es-es: URL interna de la API (dejar http://app:8000)
-        ja: 内部 API URL（http://app:8000 のまま）
-        ms: URL API dalaman (kekalkan http://app:8000)
-        pt-br: URL interna da API (manter http://app:8000)
-        ru: Внутренний URL API (оставьте http://app:8000)
-        ko: 내부 API 주소 (http://app:8000 유지)
-        zh-Hant: 後端內部位址（保持 http://app:8000）
-        zh: 后端内部地址（保持 http://app:8000）
-        tr: Dahili API URL (http://app:8000 olarak bırakın)
+        en: Internal API URL (locked; not :8001)
+        es-es: URL interna de la API (no use :8001)
+        ja: 内部 API URL（:8001 にしない）
+        ms: URL API dalaman (jangan guna :8001)
+        pt-br: URL interna da API (não use :8001)
+        ru: Внутренний URL API (не :8001)
+        ko: 내부 API 주소 (:8001로 바꾸지 마세요)
+        zh-Hant: 後端內部位址（不要改成 :8001）
+        zh: 后端内部地址（已锁定，不是 :8001）
+        tr: Dahili API URL (:8001 yapmayın)
       required: true
       type: text
     - default: docker.io/e54385991/upkk-cs2-server-manager:latest

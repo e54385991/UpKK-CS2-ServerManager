@@ -38,8 +38,20 @@ class RedisManager:
             decode_responses=True,
         )
 
+    def prefixed_key(self, key: str) -> str:
+        """Namespace a Redis key so two panels can share one Redis DB."""
+        prefix = (settings.REDIS_KEY_PREFIX or "").strip()
+        if not prefix:
+            return key
+        if not prefix.endswith(":"):
+            prefix = f"{prefix}:"
+        if key.startswith(prefix):
+            return key
+        return f"{prefix}{key}"
+
     async def set(self, key: str, value: Any, expire: int = 300) -> bool:
         """Set a value in Redis with optional expiration"""
+        key = self.prefixed_key(key)
         try:
             if isinstance(value, (dict, list)):
                 value = json.dumps(value)
@@ -50,6 +62,7 @@ class RedisManager:
 
     async def get(self, key: str) -> Optional[Any]:
         """Get a value from Redis"""
+        key = self.prefixed_key(key)
         try:
             value = await self.client.get(key)
             if value:
@@ -64,6 +77,7 @@ class RedisManager:
 
     async def delete(self, key: str) -> bool:
         """Delete a key from Redis"""
+        key = self.prefixed_key(key)
         try:
             return bool(await self.client.delete(key))
         except Exception as e:
@@ -72,6 +86,7 @@ class RedisManager:
 
     async def acquire_lock(self, key: str, token: str, expire: int) -> Optional[bool]:
         """Atomically acquire a distributed lock; return None when Redis is unavailable."""
+        key = self.prefixed_key(key)
         if time.monotonic() < self._coordination_retry_after:
             return None
         try:
@@ -87,6 +102,7 @@ class RedisManager:
 
     async def is_lock_held(self, key: str) -> Optional[bool]:
         """Check a coordination lock with the same short deadline/circuit breaker."""
+        key = self.prefixed_key(key)
         if time.monotonic() < self._coordination_retry_after:
             return None
         try:
@@ -98,6 +114,7 @@ class RedisManager:
 
     async def get_lock_token(self, key: str) -> Optional[str]:
         """Read a lock token for guarded stale-lock reconciliation."""
+        key = self.prefixed_key(key)
         if time.monotonic() < self._coordination_retry_after:
             return None
         try:
@@ -110,6 +127,7 @@ class RedisManager:
 
     async def refresh_lock(self, key: str, token: str, expire: int) -> bool:
         """Extend a lock only when it is still owned by ``token``."""
+        key = self.prefixed_key(key)
         if time.monotonic() < self._coordination_retry_after:
             return False
         script = """
@@ -132,6 +150,7 @@ class RedisManager:
 
     async def release_lock(self, key: str, token: str) -> bool:
         """Release a distributed lock without deleting a newer owner's lock."""
+        key = self.prefixed_key(key)
         if time.monotonic() < self._coordination_retry_after:
             return False
         script = """
@@ -154,6 +173,7 @@ class RedisManager:
 
     async def hit_rate_limit(self, key: str, limit: int, window: int) -> tuple[bool, int]:
         """Increment a fixed-window counter atomically and return (allowed, retry_after)."""
+        key = self.prefixed_key(key)
         if time.monotonic() < self._coordination_retry_after:
             return True, 0
         script = """
@@ -186,7 +206,7 @@ class RedisManager:
 
     async def clear_server_cache(self, server_id: int) -> bool:
         """Clear all cache for a server"""
-        pattern = f"server:{server_id}:*"
+        pattern = self.prefixed_key(f"server:{server_id}:*")
         try:
             await self.delete_by_pattern(pattern)
             return True
@@ -196,6 +216,7 @@ class RedisManager:
 
     async def delete_by_pattern(self, pattern: str, count: int = 100) -> int:
         """Delete keys matching a pattern without blocking Redis."""
+        pattern = self.prefixed_key(pattern)
         deleted = 0
         cursor = 0
         while True:
@@ -235,7 +256,7 @@ class RedisManager:
             raise Exception("Failed to store server data in Redis")
 
         # Also maintain a list of server keys for this user
-        list_key = f"user:{user_id}:initialized_servers"
+        list_key = self.prefixed_key(f"user:{user_id}:initialized_servers")
         try:
             await self.client.rpush(list_key, server_key)
             await self.client.expire(list_key, expire)
@@ -248,7 +269,7 @@ class RedisManager:
 
     async def get_initialized_servers(self, user_id: int) -> list:
         """Get all initialized servers for a user"""
-        list_key = f"user:{user_id}:initialized_servers"
+        list_key = self.prefixed_key(f"user:{user_id}:initialized_servers")
         try:
             server_keys = await self.client.lrange(list_key, 0, -1)
             servers = []
@@ -271,7 +292,7 @@ class RedisManager:
     async def delete_initialized_server(self, user_id: int, server_key: str) -> bool:
         """Delete an initialized server"""
         # Remove from user's list
-        list_key = f"user:{user_id}:initialized_servers"
+        list_key = self.prefixed_key(f"user:{user_id}:initialized_servers")
         try:
             await self.client.lrem(list_key, 1, server_key)
         except Exception as e:
@@ -299,7 +320,7 @@ class RedisManager:
         Returns:
             bool: Success status
         """
-        key = f"deployment_progress:{server_id}"
+        key = self.prefixed_key(f"deployment_progress:{server_id}")
         try:
             message = truncate_utf8_tail(
                 message,
@@ -333,7 +354,7 @@ class RedisManager:
         Returns:
             list: List of progress message dicts
         """
-        key = f"deployment_progress:{server_id}"
+        key = self.prefixed_key(f"deployment_progress:{server_id}")
         try:
             progress_entries = await self.client.lrange(
                 key,
@@ -375,7 +396,7 @@ class RedisManager:
         Returns:
             bool: Success status
         """
-        key = f"batch_action:{batch_id}:{server_id}"
+        key = self.prefixed_key(f"batch_action:{batch_id}:{server_id}")
         try:
             data = json.dumps({"status": status, "message": message, "timestamp": time.time()})
             return await self.client.setex(key, expire, data)
@@ -396,7 +417,7 @@ class RedisManager:
         try:
             async with self.client.pipeline(transaction=False) as pipeline:
                 for server_id in server_ids:
-                    key = f"batch_action:{batch_id}:{server_id}"
+                    key = self.prefixed_key(f"batch_action:{batch_id}:{server_id}")
                     data = json.dumps(
                         {"status": status, "message": message, "timestamp": timestamp}
                     )
@@ -419,7 +440,7 @@ class RedisManager:
         Returns:
             dict: Dictionary of server_id -> status data
         """
-        pattern = f"batch_action:{batch_id}:*"
+        pattern = self.prefixed_key(f"batch_action:{batch_id}:*")
         try:
             results = {}
             cursor = 0
@@ -451,7 +472,7 @@ class RedisManager:
         expire: int = 3600,
     ) -> bool:
         """Store the actor and action for a batch journal (separate from per-server keys)."""
-        key = f"batch_meta:{batch_id}"
+        key = self.prefixed_key(f"batch_meta:{batch_id}")
         try:
             data = json.dumps(
                 {"actor_user_id": actor_user_id, "action": action, "timestamp": time.time()}
@@ -463,7 +484,7 @@ class RedisManager:
 
     async def get_batch_action_meta(self, batch_id: str) -> dict | None:
         """Return actor metadata for a batch, or None when expired/missing."""
-        key = f"batch_meta:{batch_id}"
+        key = self.prefixed_key(f"batch_meta:{batch_id}")
         try:
             value = await self.client.get(key)
             if not value:
@@ -496,7 +517,7 @@ class RedisManager:
         Returns:
             bool: Success status
         """
-        key = f"monitoring_logs:{server_id}:{event_type}"
+        key = self.prefixed_key(f"monitoring_logs:{server_id}:{event_type}")
         try:
             # Create log entry with timestamp
             log_entry = json.dumps(
@@ -544,7 +565,7 @@ class RedisManager:
         try:
             if event_type:
                 # Get logs for specific event type
-                key = f"monitoring_logs:{server_id}:{event_type}"
+                key = self.prefixed_key(f"monitoring_logs:{server_id}:{event_type}")
                 log_entries = await self.client.lrange(key, 0, limit - 1)
                 logger.debug(
                     f"Retrieved {len(log_entries)} logs for server={server_id}, type={event_type}"
@@ -562,7 +583,7 @@ class RedisManager:
                 all_logs = []
 
                 for etype in event_types:
-                    key = f"monitoring_logs:{server_id}:{etype}"
+                    key = self.prefixed_key(f"monitoring_logs:{server_id}:{etype}")
                     log_entries = await self.client.lrange(key, 0, limit - 1)
                     for entry in log_entries:
                         all_logs.append(json.loads(entry))
@@ -589,7 +610,7 @@ class RedisManager:
         """
         try:
             if event_type:
-                key = f"monitoring_logs:{server_id}:{event_type}"
+                key = self.prefixed_key(f"monitoring_logs:{server_id}:{event_type}")
                 await self.client.delete(key)
             else:
                 # Clear all event types
@@ -601,7 +622,7 @@ class RedisManager:
                     "a2s_check",
                 ]
                 for etype in event_types:
-                    key = f"monitoring_logs:{server_id}:{etype}"
+                    key = self.prefixed_key(f"monitoring_logs:{server_id}:{etype}")
                     await self.client.delete(key)
             logger.debug(
                 f"Cleared monitoring logs for server={server_id}, type={event_type or 'all'}"

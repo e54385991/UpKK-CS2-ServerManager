@@ -32,7 +32,7 @@ IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+(?:@sha256:[0-9a-f]{64})?$")
 SIMPLE_VARIABLE_PATTERN = re.compile(r"^\$\{([A-Z][A-Z0-9_]*)\}$")
 KNOWN_1PANEL_VARIABLES = {"CONTAINER_NAME"}
 REQUIRED_SERVICES = {"app", "frontend", "caddy"}
-DEFAULT_INTERNAL_API_URL = "http://app:8000"
+DEFAULT_INTERNAL_API_URL = "http://${CONTAINER_NAME}:8000"
 DEFAULT_APP_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager:latest"
 DEFAULT_WEB_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager-web:latest"
 
@@ -233,30 +233,44 @@ def main() -> None:
     if not isinstance(frontend_env, dict):
         fail("frontend environment is required")
     internal_api = frontend_env.get("INTERNAL_API_URL")
-    if internal_api not in {
-        DEFAULT_INTERNAL_API_URL,
-        "${FRONTEND_INTERNAL_API_URL}",
-        f"${{FRONTEND_INTERNAL_API_URL:-{DEFAULT_INTERNAL_API_URL}}}",
-    }:
-        fail("frontend must proxy API calls to the private app:8000 listener")
+    if internal_api != DEFAULT_INTERNAL_API_URL:
+        fail("frontend must proxy API calls to this instance's ${CONTAINER_NAME}:8000")
+    if frontend_env.get("SESSION_COOKIE_SUFFIX") != "${PANEL_APP_PORT_HTTP}":
+        fail("frontend must suffix the session cookie with PANEL_APP_PORT_HTTP")
     if frontend_env.get("PUBLIC_APP_URL"):
         fail("frontend must not pin PUBLIC_APP_URL; derive the browser origin from Host")
     if frontend.get("extra_hosts"):
         fail(
             "1Panel compose must not set extra_hosts; host-gateway fails on "
-            "some 1Panel Docker engines and app:8000 is already on 1panel-network"
+            "some 1Panel Docker engines; Next talks to ${CONTAINER_NAME}:8000"
         )
     app_env = app.get("environment")
     if not isinstance(app_env, dict) or app_env.get("CONSOLE_PUBLIC_URL") != "${BACKEND_URL}":
         fail("app must set CONSOLE_PUBLIC_URL from BACKEND_URL")
+    if str(app_env.get("API_PORT")) != "8000":
+        fail("FastAPI must stay on container port 8000; 8001 is not a second-instance port")
+    if app_env.get("REDIS_KEY_PREFIX") != "${CONTAINER_NAME}":
+        fail("app must prefix Redis keys with CONTAINER_NAME")
+    if app_env.get("SESSION_COOKIE_SUFFIX") != "${PANEL_APP_PORT_HTTP}":
+        fail("app must suffix the session cookie with the console HTTP port")
+    if app_env.get("SESSION_COOKIE_SUFFIX") in {"8000", "8001", "${API_PORT}"}:
+        fail("session cookie suffix must follow PANEL_APP_PORT_HTTP, not FastAPI")
     caddy_image = caddy.get("image")
     if not isinstance(caddy_image, str) or IMAGE_PATTERN.fullmatch(caddy_image) is None:
         fail("caddy image must use a tag and immutable sha256 digest")
     caddyfile = (VERSION_ROOT / "Caddyfile").read_text(encoding="utf-8")
-    if "reverse_proxy frontend:3000" not in caddyfile:
-        fail("1Panel Caddyfile must reverse-proxy the public root to Next :3000")
+    if "reverse_proxy {$FRONTEND_UPSTREAM}" not in caddyfile:
+        fail("1Panel Caddyfile must reverse-proxy this instance's Next container")
+    if "reverse_proxy frontend:3000" in caddyfile:
+        fail("1Panel Caddyfile must not use the shared service name frontend")
     if "reverse_proxy app:8000" in caddyfile:
         fail("1Panel Caddyfile must not expose FastAPI as the public root")
+    caddy_env = caddy.get("environment")
+    if (
+        not isinstance(caddy_env, dict)
+        or caddy_env.get("FRONTEND_UPSTREAM") != "${CONTAINER_NAME}-web:3000"
+    ):
+        fail("caddy must proxy to ${CONTAINER_NAME}-web:3000")
     if "./Caddyfile:/etc/caddy/Caddyfile:ro" not in caddy.get("volumes", []):
         fail("caddy must mount the package Caddyfile read-only")
     compose_text = (VERSION_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
@@ -304,8 +318,9 @@ def main() -> None:
     if (
         not isinstance(internal_api_field, dict)
         or internal_api_field.get("default") != DEFAULT_INTERNAL_API_URL
+        or internal_api_field.get("edit") is not False
     ):
-        fail("FRONTEND_INTERNAL_API_URL must default to http://app:8000")
+        fail("FRONTEND_INTERNAL_API_URL must be locked to http://${CONTAINER_NAME}:8000")
     port_field = next(
         (field for field in version_fields if field.get("envKey") == "PANEL_APP_PORT_HTTP"), None
     )
@@ -321,6 +336,8 @@ def main() -> None:
         fail("compose must map PANEL_APP_PORT_HTTP to Caddy port 80")
     if "${PANEL_APP_PORT_HTTP}:8000" in compose_text:
         fail("compose must not map the public HTTP port onto FastAPI :8000")
+    if ":8001" in compose_text or "8001:" in compose_text:
+        fail("compose must not publish or remap FastAPI as 8001")
     for secret_key in ("SECRET_KEY", "JWT_SECRET_KEY"):
         secret_field = next(
             (field for field in version_fields if field.get("envKey") == secret_key), None
@@ -352,7 +369,7 @@ def main() -> None:
             "PANEL_REDIS_DB": "0",
             "PANEL_APP_PORT_HTTP": "18000",
             "BACKEND_URL": "http://localhost:18000",
-            "FRONTEND_INTERNAL_API_URL": "http://app:8000",
+            "FRONTEND_INTERNAL_API_URL": "http://${CONTAINER_NAME}:8000",
             "CS2_MANAGER_IMAGE": DEFAULT_APP_IMAGE,
             "CS2_FRONTEND_IMAGE": DEFAULT_WEB_IMAGE,
             "SECRET_KEY": "test-secret-key",

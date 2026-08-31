@@ -1208,7 +1208,7 @@ async def interrupt_active_ai_runs() -> int:
         await db.commit()
     # Release stale AI write locks left behind by the previous process.
     for uid in user_ids:
-        key = f"server_operation_lock:-{uid + 1}"
+        key = redis_manager.prefixed_key(f"server_operation_lock:-{uid + 1}")
         try:
             await redis_manager.client.delete(key)
         except Exception:

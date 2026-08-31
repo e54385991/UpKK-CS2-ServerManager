@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     REDIS_PORT: int
     REDIS_PASSWORD: Optional[str]
     REDIS_DB: int
+    # Namespace Redis keys so two panels can share one Redis DB (operators
+    # often leave REDIS_DB=0). Empty keeps the historical unprefixed keys.
+    REDIS_KEY_PREFIX: str = ""
+    # Browser cookies are not port-scoped. Suffix isolates
+    # upkk_access_token_<port> when two consoles share a host (3000 vs 3001).
+    SESSION_COOKIE_SUFFIX: str = ""
 
     # Redis Connection Pool Configuration
     # These settings optimize Redis connection management for better performance

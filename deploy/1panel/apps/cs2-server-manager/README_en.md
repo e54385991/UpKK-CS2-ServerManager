@@ -10,8 +10,9 @@ The app root must contain `data.yml`, `logo.png`, and `1.0.0/data.yml`; do not c
 `1.0.0` directory.
 
 After install, open `http://SERVER_IP:3000` (or the console port you chose).
-Default login is `admin` / `admin123`. Keep the internal API URL as
-`http://app:8000`. Set the browser origin to the real URL, not `0.0.0.0`.
+Default login is `admin` / `admin123`. FastAPI stays on container port
+`8000` — do not remap it to `8001`. For a second instance use console
+port `3001` and set the browser origin to that URL, not `0.0.0.0`.
 
 ## Features
 
