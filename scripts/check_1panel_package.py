@@ -275,6 +275,19 @@ def main() -> None:
         or redis_field.get("rule") != "integerNumberWith0"
     ):
         fail("PANEL_REDIS_DB must be a non-negative integer field")
+    redis_password_field = next(
+        (field for field in version_fields if field.get("envKey") == "PANEL_REDIS_ROOT_PASSWORD"),
+        None,
+    )
+    if (
+        not isinstance(redis_password_field, dict)
+        or redis_password_field.get("type") != "password"
+        or redis_password_field.get("required") is not True
+        or redis_password_field.get("random") is True
+    ):
+        fail("PANEL_REDIS_ROOT_PASSWORD must be a required password field")
+    if app_env.get("REDIS_PASSWORD") != "${PANEL_REDIS_ROOT_PASSWORD}":
+        fail("app must take REDIS_PASSWORD from PANEL_REDIS_ROOT_PASSWORD")
     backend_field = next(
         (field for field in version_fields if field.get("envKey") == "BACKEND_URL"), None
     )
@@ -335,7 +348,7 @@ def main() -> None:
             "PANEL_DB_NAME": "cs2_manager",
             "PANEL_REDIS_TYPE": "redis",
             "PANEL_REDIS_HOST": "redis",
-            "PANEL_REDIS_PASSWORD": "",
+            "PANEL_REDIS_ROOT_PASSWORD": "test-redis-password",
             "PANEL_REDIS_DB": "0",
             "PANEL_APP_PORT_HTTP": "18000",
             "BACKEND_URL": "http://localhost:18000",

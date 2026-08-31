@@ -222,6 +222,18 @@ test("server workspace two-row nav reaches named surfaces", async ({ page }) => 
       .or(page.getByText(/暂时无法加载自动更新|Unable to load auto-update/)),
   ).toBeVisible();
 
+  await nav.getByRole("link", { name: /快速安装游戏模式|Quick game-mode install/ }).click();
+  await expect(page).toHaveURL(/\/servers\/1\/game-modes$/);
+  await expect(page.getByTestId("game-modes-wizard")).toBeVisible();
+  await expect(page.getByTestId("game-modes-kz")).toBeVisible();
+  await expect(page.getByTestId("game-modes-wipe")).toBeVisible();
+  await expect(
+    page.getByRole("switch", {
+      name: /清空 addons|Wipe the addons/,
+    }),
+  ).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByTestId("game-modes-wipe-ack")).toHaveCount(0);
+
   await nav.getByRole("link", { name: /^地图$|^Maps$/ }).click();
   await expect(page).toHaveURL(/\/servers\/1\/maps$/);
   await expect(

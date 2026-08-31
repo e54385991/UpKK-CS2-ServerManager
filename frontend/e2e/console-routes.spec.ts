@@ -8,6 +8,7 @@ const CONSOLE_ROUTES = [
   "/servers/1",
   "/servers/1/operations",
   "/servers/1/frameworks",
+  "/servers/1/game-modes",
   "/servers/1/backups",
   "/servers/1/plugins",
   "/servers/1/plugin-configs",

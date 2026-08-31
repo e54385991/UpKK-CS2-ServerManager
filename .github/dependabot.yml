@@ -14,6 +14,23 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:10"
+      timezone: Asia/Shanghai
+    groups:
+      next-console-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly

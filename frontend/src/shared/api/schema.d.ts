@@ -3721,6 +3721,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servers/{server_id}/game-modes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Game Modes
+         * @description List installable game-mode recipes and a best-effort presence snapshot.
+         */
+        get: operations["list_game_modes_api_v1_servers__server_id__game_modes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/game-modes/{mode_id}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Install Game Mode
+         * @description Accept a confirmed game-mode plan and return immediately with an operation_id.
+         */
+        post: operations["install_game_mode_api_v1_servers__server_id__game_modes__mode_id__install_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/game-modes/{mode_id}/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Game Mode Preflight
+         * @description Inspect the server and return every mutation the install would make.
+         */
+        post: operations["game_mode_preflight_api_v1_servers__server_id__game_modes__mode_id__preflight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers/{server_id}/game-updates": {
         parameters: {
             query?: never;
@@ -9565,6 +9625,186 @@ export interface components {
              */
             email: string;
         };
+        /** GameModeCatalogView */
+        GameModeCatalogView: {
+            /** Additional Parameters */
+            additional_parameters?: string | null;
+            /** Addons Path */
+            addons_path: string;
+            /** Addons Present */
+            addons_present?: boolean | null;
+            /** Modes */
+            modes?: components["schemas"]["GameModeSummaryView"][];
+            /** Reachable */
+            reachable: boolean;
+            /** Server Id */
+            server_id: number;
+            /** Swiftly Installed */
+            swiftly_installed?: boolean | null;
+        };
+        /** GameModeInstallRequest */
+        GameModeInstallRequest: {
+            /** Acknowledge Warning Rule Ids */
+            acknowledge_warning_rule_ids?: number[];
+            /** Plan Hash */
+            plan_hash: string;
+            /**
+             * Wipe Addons
+             * @default false
+             */
+            wipe_addons: boolean;
+            /**
+             * Wipe Addons Acknowledged
+             * @default false
+             */
+            wipe_addons_acknowledged: boolean;
+        };
+        /** GameModeMapView */
+        GameModeMapView: {
+            /** Name */
+            name: string;
+            /** Workshop Id */
+            workshop_id: string;
+        };
+        /** GameModeMutationView */
+        GameModeMutationView: {
+            /** After */
+            after?: unknown | null;
+            /** Before */
+            before?: unknown | null;
+            /**
+             * Destructive
+             * @default false
+             */
+            destructive: boolean;
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+            /** Target */
+            target: string;
+        };
+        /** GameModePlanView */
+        GameModePlanView: {
+            /** Addons Path */
+            addons_path: string;
+            /** Blocked */
+            blocked: boolean;
+            /** Blocking Reasons */
+            blocking_reasons?: string[];
+            /** Current */
+            current: {
+                [key: string]: boolean;
+            };
+            /** Hard Conflicts */
+            hard_conflicts?: components["schemas"]["PluginConflictView"][];
+            /** Maps */
+            maps: components["schemas"]["GameModeMapView"][];
+            /** Mode Id */
+            mode_id: string;
+            /** Mutations */
+            mutations?: components["schemas"]["GameModeMutationView"][];
+            /** Plan Hash */
+            plan_hash: string;
+            /** Plugin Config */
+            plugin_config: {
+                [key: string]: unknown;
+            };
+            /** Plugin Plans */
+            plugin_plans?: {
+                [key: string]: components["schemas"]["PluginInstallPlanView"];
+            };
+            /** Server Id */
+            server_id: number;
+            startup: components["schemas"]["GameModeStartupView"];
+            /** Steps */
+            steps?: components["schemas"]["GameModeStepView"][];
+            /** Wait Files */
+            wait_files: string[];
+            /** Warnings */
+            warnings?: components["schemas"]["PluginConflictView"][];
+            /** Wipe Addons */
+            wipe_addons: boolean;
+        };
+        /** GameModePreflightRequest */
+        GameModePreflightRequest: {
+            /**
+             * Wipe Addons
+             * @default false
+             */
+            wipe_addons: boolean;
+        };
+        /** GameModeStartupView */
+        GameModeStartupView: {
+            /** After */
+            after?: string | null;
+            /** Before */
+            before?: string | null;
+            /**
+             * Changed
+             * @default false
+             */
+            changed: boolean;
+        };
+        /** GameModeStepView */
+        GameModeStepView: {
+            /** Action */
+            action: string;
+            /**
+             * Destructive
+             * @default false
+             */
+            destructive: boolean;
+            /** Files */
+            files?: string[] | null;
+            /** Framework */
+            framework?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name?: string | null;
+            /** Path */
+            path?: string | null;
+            /** Plugin Id */
+            plugin_id?: number | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title?: string | null;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
+            /** Workshop Id */
+            workshop_id?: string | null;
+        };
+        /** GameModeSummaryView */
+        GameModeSummaryView: {
+            /** Frameworks */
+            frameworks: string[];
+            /** Id */
+            id: string;
+            /** Launch Upsert */
+            launch_upsert: {
+                [key: string]: string;
+            };
+            /** Maps */
+            maps: components["schemas"]["GameModeMapView"][];
+            /** Market Plugin Titles */
+            market_plugin_titles: string[];
+            /** Missing Market Plugins */
+            missing_market_plugins?: string[];
+            /** Plugin Config */
+            plugin_config: {
+                [key: string]: unknown;
+            };
+            /** Present */
+            present: {
+                [key: string]: boolean | null;
+            };
+            /** Startup Workshop Map */
+            startup_workshop_map: string;
+        };
         /** GameUpdateOperationRequest */
         GameUpdateOperationRequest: {
             /**
@@ -11171,7 +11411,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -13802,7 +14042,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -21962,6 +22202,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FileMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_game_modes_api_v1_servers__server_id__game_modes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameModeCatalogView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    install_game_mode_api_v1_servers__server_id__game_modes__mode_id__install_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                mode_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GameModeInstallRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    game_mode_preflight_api_v1_servers__server_id__game_modes__mode_id__preflight_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+                mode_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GameModePreflightRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameModePlanView"];
                 };
             };
             /** @description Validation Error */

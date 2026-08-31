@@ -116,6 +116,7 @@ def test_v1_operation_action_literals_match_legacy_allow_list():
         "uninstall_github_plugin",
         "apply_apt_mirror",
         "s3_restore",
+        "install_game_mode",
     }
 
 

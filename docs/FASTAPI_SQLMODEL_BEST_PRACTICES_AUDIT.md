@@ -45,7 +45,7 @@
 | py7zr | 1.1.3 | 1.1.3 | 更新兼容下界 |
 | Ruff | 0.16.4 | 0.16.4 | 0.16.0 → 0.16.4 |
 | pre-commit | 4.6.2 | 4.6.2 | 4.6.1 → 4.6.2 |
-| Alpine.js / Marked | 3.16.3 / 18.0.11 | 同兼容下界 | 全部升级并重新 vendoring |
+| Alpine.js / Marked | 3.17.0 / 18.0.11 | 同兼容下界 | 全部升级并重新 vendoring |
 
 项目继续采用 `pyproject.toml` 声明兼容下界、`uv.lock` 精确锁定应用环境的策略。
 `requirements.txt` 从锁文件生成，仅包含生产依赖。

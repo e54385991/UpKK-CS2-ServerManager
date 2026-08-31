@@ -130,3 +130,7 @@ export type PluginCatalogExportDto = Schemas["PluginCatalogExport"];
 export type PluginCatalogImportRequestDto = Schemas["PluginCatalogImportRequest"];
 export type PluginCatalogImportResponseDto = Schemas["PluginCatalogImportResponse"];
 export type PluginCatalogImportResultDto = Schemas["PluginCatalogImportResult"];
+export type GameModeCatalogViewDto = Schemas["GameModeCatalogView"];
+export type GameModePlanViewDto = Schemas["GameModePlanView"];
+export type GameModePreflightRequestDto = Schemas["GameModePreflightRequest"];
+export type GameModeInstallRequestDto = Schemas["GameModeInstallRequest"];

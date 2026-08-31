@@ -26,8 +26,9 @@ network.
 ### 1. 准备外部服务
 
 1. 在 1Panel 应用商店安装并启动 PostgreSQL 18.6 和 Redis 8.10.1。
-2. 记住 Redis 密码和使用的 DB 编号。Redis 无密码时，安装表单中的密码保持为空；
-   Redis 数据库编号只选择现有 DB，不会由应用创建 Redis 实例或 ACL 用户。
+2. Redis 密码为必填。先在 1Panel 安装带密码的 Redis，再选择该实例。本地商店 Redis
+   选中后通常会回填 `PANEL_REDIS_ROOT_PASSWORD`；没回填就从 **数据库 → Redis → 连接信息**
+   复制。本包只复用已有 Redis 实例和 DB，不会创建 Redis 或 ACL 用户。不支持无密码 Redis。
 3. 确认 PostgreSQL、Redis 和待安装应用都连接到 1Panel 的 `1panel-network`。
 
 不要填写 `localhost` 作为容器内的数据库地址；安装表单应选择对应的 1Panel 服务实例。容器内的 `localhost` 指向应用容器本身。
@@ -54,7 +55,8 @@ test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
 
 安装表单（前后端在同一套应用里，不用再填局域网 IP）：
 
-- PostgreSQL / Redis：选择 1Panel 已安装的服务实例。数据库名、用户、密码默认自动生成；
+- PostgreSQL / Redis：选择 1Panel 已安装的服务实例。PostgreSQL 库名、用户、密码默认自动生成；
+  Redis 密码必填，选中本地 Redis 时一般会自动填上，空密码不能安装；
 - **控制台 HTTP 端口**：默认 `3000`，映射到 Caddy `:80`，再反代 Next。FastAPI 只在容器网内 `app:8000`；
 - **浏览器访问地址**：默认 `http://localhost:3000`。装完后改成实际地址，例如
   `http://192.168.50.245:3000`（改端口时一并改这里）。不要填 `0.0.0.0`；
@@ -115,7 +117,7 @@ The 1Panel app store provides [PostgreSQL 18.6](https://github.com/1Panel-dev/ap
 ### 1. Prepare the external services
 
 1. Install and start PostgreSQL 18.6 and Redis 8.10.1 from the 1Panel App Store.
-2. Keep the Redis password and DB number available. Leave the password empty when Redis has no password; the package reuses the selected Redis instance and DB and does not create a Redis server or ACL user.
+2. The Redis password is required. Install Redis in 1Panel with a password first, then select that instance. A local App Store Redis usually fills `PANEL_REDIS_ROOT_PASSWORD` when you pick it; otherwise copy the password from **Database → Redis → Connection info**. The package reuses the selected Redis instance and DB and does not create a Redis server or ACL user. Redis without a password is not supported by this package.
 3. Confirm that both services and the application will use 1Panel's `1panel-network`.
 
 Do not use `localhost` for a database host inside the application container. Select the matching 1Panel service instance in the installation form; container `localhost` means the application container itself.
@@ -138,7 +140,9 @@ Copy the package root, not only `1.0.0` and not the whole repository. If the syn
 Open **App Store → Local Apps → Refresh**, select **CS2 Server Manager**, and install it.
 
 In the form, select the PostgreSQL and Redis service instances. Keep the generated
-database name/user/password unless you are reusing an existing 1Panel database.
+PostgreSQL name/user/password unless you are reusing an existing 1Panel database.
+The Redis password is required: a local Redis instance usually auto-fills it; an
+empty password cannot be installed.
 Set **Console HTTP Port** to `3000` (or another free host port). That port maps to
 Caddy `:80` → Next; FastAPI stays private at `app:8000`. Set **Browser origin URL**
 to the address people type, such as `http://192.168.50.245:3000` — never `0.0.0.0`.

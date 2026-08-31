@@ -10,6 +10,26 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_1panel_redis_password_is_required() -> None:
+    import yaml
+
+    version_data = yaml.safe_load(
+        (PROJECT_ROOT / "deploy/1panel/apps/cs2-server-manager/1.0.0/data.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    fields = version_data["additionalProperties"]["formFields"]
+    redis_password = next(
+        item for item in fields if item.get("envKey") == "PANEL_REDIS_ROOT_PASSWORD"
+    )
+    assert redis_password["required"] is True
+    assert redis_password.get("random") is not True
+    compose = (
+        PROJECT_ROOT / "deploy/1panel/apps/cs2-server-manager/1.0.0/docker-compose.yml"
+    ).read_text(encoding="utf-8")
+    assert "REDIS_PASSWORD: ${PANEL_REDIS_ROOT_PASSWORD}" in compose
+
+
 def test_1panel_package_validator_passes() -> None:
     result = subprocess.run(
         [sys.executable, "scripts/check_1panel_package.py"],

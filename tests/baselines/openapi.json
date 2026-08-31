@@ -7838,6 +7838,521 @@
         "title": "ForgotPasswordRequest",
         "type": "object"
       },
+      "GameModeCatalogView": {
+        "properties": {
+          "additional_parameters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Parameters"
+          },
+          "addons_path": {
+            "title": "Addons Path",
+            "type": "string"
+          },
+          "addons_present": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addons Present"
+          },
+          "modes": {
+            "items": {
+              "$ref": "#/components/schemas/GameModeSummaryView"
+            },
+            "title": "Modes",
+            "type": "array"
+          },
+          "reachable": {
+            "title": "Reachable",
+            "type": "boolean"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "swiftly_installed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Swiftly Installed"
+          }
+        },
+        "required": [
+          "server_id",
+          "reachable",
+          "addons_path"
+        ],
+        "title": "GameModeCatalogView",
+        "type": "object"
+      },
+      "GameModeInstallRequest": {
+        "properties": {
+          "acknowledge_warning_rule_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Acknowledge Warning Rule Ids",
+            "type": "array"
+          },
+          "plan_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "wipe_addons": {
+            "default": false,
+            "title": "Wipe Addons",
+            "type": "boolean"
+          },
+          "wipe_addons_acknowledged": {
+            "default": false,
+            "title": "Wipe Addons Acknowledged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "plan_hash"
+        ],
+        "title": "GameModeInstallRequest",
+        "type": "object"
+      },
+      "GameModeMapView": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "workshop_id": {
+            "title": "Workshop Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "workshop_id"
+        ],
+        "title": "GameModeMapView",
+        "type": "object"
+      },
+      "GameModeMutationView": {
+        "properties": {
+          "after": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "destructive": {
+            "default": false,
+            "title": "Destructive",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "target",
+          "status"
+        ],
+        "title": "GameModeMutationView",
+        "type": "object"
+      },
+      "GameModePlanView": {
+        "properties": {
+          "addons_path": {
+            "title": "Addons Path",
+            "type": "string"
+          },
+          "blocked": {
+            "title": "Blocked",
+            "type": "boolean"
+          },
+          "blocking_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Reasons",
+            "type": "array"
+          },
+          "current": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Current",
+            "type": "object"
+          },
+          "hard_conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/PluginConflictView"
+            },
+            "title": "Hard Conflicts",
+            "type": "array"
+          },
+          "maps": {
+            "items": {
+              "$ref": "#/components/schemas/GameModeMapView"
+            },
+            "title": "Maps",
+            "type": "array"
+          },
+          "mode_id": {
+            "title": "Mode Id",
+            "type": "string"
+          },
+          "mutations": {
+            "items": {
+              "$ref": "#/components/schemas/GameModeMutationView"
+            },
+            "title": "Mutations",
+            "type": "array"
+          },
+          "plan_hash": {
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "plugin_config": {
+            "additionalProperties": true,
+            "title": "Plugin Config",
+            "type": "object"
+          },
+          "plugin_plans": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PluginInstallPlanView"
+            },
+            "title": "Plugin Plans",
+            "type": "object"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "startup": {
+            "$ref": "#/components/schemas/GameModeStartupView"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/GameModeStepView"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "wait_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Wait Files",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/PluginConflictView"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "wipe_addons": {
+            "title": "Wipe Addons",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "server_id",
+          "mode_id",
+          "wipe_addons",
+          "addons_path",
+          "current",
+          "startup",
+          "plugin_config",
+          "maps",
+          "wait_files",
+          "blocked",
+          "plan_hash"
+        ],
+        "title": "GameModePlanView",
+        "type": "object"
+      },
+      "GameModePreflightRequest": {
+        "properties": {
+          "wipe_addons": {
+            "default": false,
+            "title": "Wipe Addons",
+            "type": "boolean"
+          }
+        },
+        "title": "GameModePreflightRequest",
+        "type": "object"
+      },
+      "GameModeStartupView": {
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "changed": {
+            "default": false,
+            "title": "Changed",
+            "type": "boolean"
+          }
+        },
+        "title": "GameModeStartupView",
+        "type": "object"
+      },
+      "GameModeStepView": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "destructive": {
+            "default": false,
+            "title": "Destructive",
+            "type": "boolean"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "plugin_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          },
+          "workshop_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workshop Id"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "status"
+        ],
+        "title": "GameModeStepView",
+        "type": "object"
+      },
+      "GameModeSummaryView": {
+        "properties": {
+          "frameworks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Frameworks",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "launch_upsert": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Launch Upsert",
+            "type": "object"
+          },
+          "maps": {
+            "items": {
+              "$ref": "#/components/schemas/GameModeMapView"
+            },
+            "title": "Maps",
+            "type": "array"
+          },
+          "market_plugin_titles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Market Plugin Titles",
+            "type": "array"
+          },
+          "missing_market_plugins": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Market Plugins",
+            "type": "array"
+          },
+          "plugin_config": {
+            "additionalProperties": true,
+            "title": "Plugin Config",
+            "type": "object"
+          },
+          "present": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Present",
+            "type": "object"
+          },
+          "startup_workshop_map": {
+            "title": "Startup Workshop Map",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "launch_upsert",
+          "frameworks",
+          "market_plugin_titles",
+          "maps",
+          "plugin_config",
+          "startup_workshop_map",
+          "present"
+        ],
+        "title": "GameModeSummaryView",
+        "type": "object"
+      },
       "GameUpdateOperationRequest": {
         "properties": {
           "action": {
@@ -12388,7 +12903,8 @@
               "install_github_plugin",
               "uninstall_github_plugin",
               "apply_apt_mirror",
-              "s3_restore"
+              "s3_restore",
+              "install_game_mode"
             ],
             "title": "Action",
             "type": "string"
@@ -18517,7 +19033,8 @@
               "install_github_plugin",
               "uninstall_github_plugin",
               "apply_apt_mirror",
-              "s3_restore"
+              "s3_restore",
+              "install_game_mode"
             ],
             "title": "Action",
             "type": "string"
@@ -33533,6 +34050,188 @@
         "summary": "Upload File",
         "tags": [
           "v1-files"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/game-modes": {
+      "get": {
+        "description": "List installable game-mode recipes and a best-effort presence snapshot.",
+        "operationId": "list_game_modes_api_v1_servers__server_id__game_modes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameModeCatalogView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Game Modes",
+        "tags": [
+          "v1-game-modes"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/game-modes/{mode_id}/install": {
+      "post": {
+        "description": "Accept a confirmed game-mode plan and return immediately with an operation_id.",
+        "operationId": "install_game_mode_api_v1_servers__server_id__game_modes__mode_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mode_id",
+            "required": true,
+            "schema": {
+              "title": "Mode Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GameModeInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerOperationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Install Game Mode",
+        "tags": [
+          "v1-game-modes"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/game-modes/{mode_id}/preflight": {
+      "post": {
+        "description": "Inspect the server and return every mutation the install would make.",
+        "operationId": "game_mode_preflight_api_v1_servers__server_id__game_modes__mode_id__preflight_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mode_id",
+            "required": true,
+            "schema": {
+              "title": "Mode Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GameModePreflightRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameModePlanView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Game Mode Preflight",
+        "tags": [
+          "v1-game-modes"
         ]
       }
     },

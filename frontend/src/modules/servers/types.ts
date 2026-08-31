@@ -216,6 +216,7 @@ export const SERVER_OPERATION_ACTIONS = [
   "uninstall_github_plugin",
   "apply_apt_mirror",
   "s3_restore",
+  "install_game_mode",
 ] as const;
 
 export type ServerOperationAction = (typeof SERVER_OPERATION_ACTIONS)[number];

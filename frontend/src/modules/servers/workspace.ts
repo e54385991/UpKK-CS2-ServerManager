@@ -9,6 +9,7 @@ export const SERVER_WORKSPACE_NAV_ROWS = [
       "operations",
       "config",
       "frameworks",
+      "game-modes",
       "backups",
       "plugins",
       "plugin-configs",

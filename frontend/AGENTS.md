@@ -27,6 +27,7 @@ Jinja/Bootstrap UI and talks to the FastAPI backend through a same-origin proxy.
 | Styling | `tailwindcss@4.3.3` + `@tailwindcss/postcss` | v4 engine; design tokens live in `src/app/globals.css` under `@theme`. |
 | Lint | `eslint@9.39.5` + `eslint-config-next@16.3.3` | Flat config. ESLint 10 is incompatible with the TS-ESLint parser's scope manager here — stay on ESLint 9. |
 | Icons | `lucide-react` | Import per-icon; never pass an icon **component** across the server→client boundary (see RSC rules). |
+| Docker runtime | `node:26.8.1-alpine` | Production image + CI use Node 26 Current. |
 
 Dependencies are pinned to exact versions and committed with `package-lock.json`.
 Do not broadly upgrade or rewrite the lockfile without a reason.

@@ -2620,6 +2620,30 @@
     "methods": [
       "GET"
     ],
+    "name": "list_game_modes",
+    "path": "/api/v1/servers/{server_id}/game-modes"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "game_mode_preflight",
+    "path": "/api/v1/servers/{server_id}/game-modes/{mode_id}/preflight"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "install_game_mode",
+    "path": "/api/v1/servers/{server_id}/game-modes/{mode_id}/install"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "get_files_workspace",
     "path": "/api/v1/servers/{server_id}/files"
   },

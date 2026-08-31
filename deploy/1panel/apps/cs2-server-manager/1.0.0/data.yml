@@ -133,7 +133,7 @@ additionalProperties:
         - label: Redis
           value: redis
     - default: ""
-      envKey: PANEL_REDIS_PASSWORD
+      envKey: PANEL_REDIS_ROOT_PASSWORD
       labelEn: Redis Password
       labelZh: Redis 密码
       label:
@@ -147,7 +147,7 @@ additionalProperties:
         zh-Hant: Redis 密碼
         zh: Redis 密码
         tr: Redis parolası
-      required: false
+      required: true
       type: password
     - default: 0
       envKey: PANEL_REDIS_DB

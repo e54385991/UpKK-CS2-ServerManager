@@ -19,6 +19,7 @@ from . import (
     discord,
     discord_servers,
     files,
+    game_modes,
     game_updates,
     github_plugins,
     maps,
@@ -61,6 +62,7 @@ router.include_router(overview.router)
 router.include_router(audit.router)
 router.include_router(settings.router)
 router.include_router(maps.router)
+router.include_router(game_modes.router)
 router.include_router(files.router)
 router.include_router(console.router)
 router.include_router(assistant.router)

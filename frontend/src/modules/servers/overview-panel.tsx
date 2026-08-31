@@ -137,6 +137,13 @@ export async function OverviewPanel({ serverId }: { serverId: number }) {
           {t("goFrameworks")}
         </LinkButton>
         <LinkButton
+          href={workspaceHref(server.id, "game-modes")}
+          variant="outline"
+          size="sm"
+        >
+          {t("goGameModes")}
+        </LinkButton>
+        <LinkButton
           href={workspaceHref(server.id, "plugins")}
           variant="outline"
           size="sm"
