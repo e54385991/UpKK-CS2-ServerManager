@@ -263,6 +263,7 @@ function ActionGroup({
             size={prominent ? "md" : "sm"}
             variant={actionVariant(action, prominent)}
             disabled={running}
+            data-testid={`operations-action-${action}`}
             onClick={() => onRun(action)}
           >
             {busyAction === action ? (

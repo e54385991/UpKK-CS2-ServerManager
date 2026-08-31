@@ -125,6 +125,11 @@ test("servers list exports a redacted configuration bundle", async ({
 
 test("server workspace two-row nav reaches named surfaces", async ({ page }) => {
   await page.goto("/servers/1");
+  const sshCard = page.getByTestId("workspace-ssh-card");
+  await expect(sshCard).toBeVisible();
+  await expect(sshCard.getByTestId("workspace-action-restart")).toBeVisible();
+  await expect(sshCard.getByTestId("workspace-action-stop")).toBeVisible();
+  await expect(sshCard.getByTestId("workspace-action-update")).toBeVisible();
   const nav = page.getByRole("navigation", { name: WORKSPACE_NAV });
   await expect(nav).toBeVisible();
   await expect(nav.getByText(/运行|Run/)).toBeVisible();
@@ -591,12 +596,17 @@ test("destructive actions use in-app confirm instead of window dialogs", async (
   });
 
   await page.goto("/servers/1/operations");
-  await page.getByRole("button", { name: /^停止$|^Stop$/ }).click();
+  await page.getByTestId("workspace-action-stop").click();
   const confirm = page.getByTestId("app-confirm");
   await expect(confirm).toBeVisible();
   await expect(
     confirm.getByRole("heading", { name: /请确认|Please confirm/ }),
   ).toBeVisible();
+  await confirm.getByRole("button", { name: /取消|Cancel/ }).click();
+  await expect(confirm).toHaveCount(0);
+
+  await page.getByTestId("operations-action-stop").click();
+  await expect(confirm).toBeVisible();
   await expect(
     page.getByRole("region", { name: /Notifications/i }),
   ).toBeAttached();

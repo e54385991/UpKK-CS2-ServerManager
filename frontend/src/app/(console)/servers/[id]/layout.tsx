@@ -88,6 +88,7 @@ export default async function ServerWorkspaceLayout({
       {server ? (
         <SshReconnectCard
           serverId={server.id}
+          serverName={server.name}
           isSshDown={server.isSshDown}
           sshPooled={server.sshPooled}
           sshInUse={server.sshInUse}

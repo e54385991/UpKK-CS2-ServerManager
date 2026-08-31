@@ -354,6 +354,8 @@
     "sshReconnecting": "Reconnecting...",
     "sshReconnectOk": "SSH reconnected.",
     "sshReconnectFail": "SSH reconnect failed.",
+    "actionQueued": "Queued {action}. Watch progress in the task queue.",
+    "actionSubmitFail": "Could not submit the action.",
     "openLiveTerminal": "Open live terminal",
     "openSshConsole": "Open SSH console",
     "openGameConsole": "Open game console",

@@ -354,6 +354,8 @@
     "sshReconnecting": "正在重连…",
     "sshReconnectOk": "SSH 已重新连接。",
     "sshReconnectFail": "SSH 重连失败。",
+    "actionQueued": "已提交「{action}」，进度在右上角任务队列查看。",
+    "actionSubmitFail": "提交失败。",
     "openLiveTerminal": "打开实时终端",
     "openSshConsole": "打开 SSH 终端",
     "openGameConsole": "打开游戏控制台",
