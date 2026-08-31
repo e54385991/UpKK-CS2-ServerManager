@@ -189,7 +189,9 @@ function EditorFrame({
             <X />
           </Button>
         </header>
-        <div className="min-h-0 flex-1 bg-[#1e1e1e]">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#1e1e1e]">
+          {children}
+        </div>
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[#2b2b2b] px-4 py-3">
           <p className={cn("font-mono text-xs text-fg-subtle")}>
             {language}
