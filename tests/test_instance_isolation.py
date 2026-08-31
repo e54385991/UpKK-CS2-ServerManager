@@ -110,11 +110,13 @@ async def test_redis_manager_set_writes_prefixed_key(monkeypatch) -> None:
 
 
 def test_1panel_compose_isolates_shared_network_and_redis() -> None:
-    assert "INTERNAL_API_URL: http://${CONTAINER_NAME}:8000" in PANEL_COMPOSE
+    assert "INTERNAL_API_URL: http://app:8000" in PANEL_COMPOSE
     assert "INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL}" not in PANEL_COMPOSE
     assert "REDIS_KEY_PREFIX: ${CONTAINER_NAME}" in PANEL_COMPOSE
     assert "SESSION_COOKIE_SUFFIX: ${PANEL_APP_PORT_HTTP}" in PANEL_COMPOSE
-    assert "FRONTEND_UPSTREAM: ${CONTAINER_NAME}-web:3000" in PANEL_COMPOSE
+    assert "FRONTEND_UPSTREAM" not in PANEL_COMPOSE
+    assert "- cs2\n      - 1panel-network" in PANEL_COMPOSE
+    assert PANEL_COMPOSE.count("- 1panel-network") == 1
     assert 'API_PORT: "8000"' in PANEL_COMPOSE
     assert 'expose:\n      - "8000"' in PANEL_COMPOSE
     assert "${PANEL_APP_PORT_HTTP}:80" in PANEL_COMPOSE

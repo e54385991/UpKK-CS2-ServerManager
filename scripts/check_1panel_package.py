@@ -32,7 +32,8 @@ IMAGE_PATTERN = re.compile(r"^[^\s:@]+:[^\s@]+(?:@sha256:[0-9a-f]{64})?$")
 SIMPLE_VARIABLE_PATTERN = re.compile(r"^\$\{([A-Z][A-Z0-9_]*)\}$")
 KNOWN_1PANEL_VARIABLES = {"CONTAINER_NAME"}
 REQUIRED_SERVICES = {"app", "frontend", "caddy"}
-DEFAULT_INTERNAL_API_URL = "http://${CONTAINER_NAME}:8000"
+DEFAULT_INTERNAL_API_URL = "http://app:8000"
+PRIVATE_NETWORK = "cs2"
 DEFAULT_APP_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager:latest"
 DEFAULT_WEB_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager-web:latest"
 
@@ -58,14 +59,26 @@ def compose_image_ref(raw: object, fields: list[Any]) -> str:
     return raw
 
 
-def require_1panel_service(name: str, service: dict[str, Any]) -> None:
+def require_1panel_service(
+    name: str, service: dict[str, Any], *, panel_network: bool = True
+) -> None:
     if service.get("restart") != "always":
         fail(f"{name} must use restart: always")
     labels = service.get("labels")
     if not isinstance(labels, dict) or labels.get("createdBy") != "Apps":
         fail(f"{name} must have labels.createdBy: Apps")
-    if "1panel-network" not in service.get("networks", []):
-        fail(f"{name} must join 1panel-network")
+    networks = service.get("networks", [])
+    if not isinstance(networks, list):
+        fail(f"{name} networks must be a list")
+    if PRIVATE_NETWORK not in networks:
+        fail(f"{name} must join the private {PRIVATE_NETWORK} network")
+    if panel_network:
+        if "1panel-network" not in networks:
+            fail(f"{name} must join 1panel-network to reach PostgreSQL and Redis")
+    elif "1panel-network" in networks:
+        fail(
+            f"{name} must not join 1panel-network; service name {name} collides across two installs"
+        )
     for volume in service.get("volumes", []):
         source = str(volume).split(":", 1)[0]
         if source.startswith("/") or "docker.sock" in source:
@@ -201,9 +214,9 @@ def main() -> None:
         fail("frontend service must be a mapping")
     if not isinstance(caddy, dict):
         fail("caddy service must be a mapping")
-    require_1panel_service("app", app)
-    require_1panel_service("frontend", frontend)
-    require_1panel_service("caddy", caddy)
+    require_1panel_service("app", app, panel_network=True)
+    require_1panel_service("frontend", frontend, panel_network=False)
+    require_1panel_service("caddy", caddy, panel_network=False)
     if app.get("container_name") != "${CONTAINER_NAME}":
         fail("app must use container_name: ${CONTAINER_NAME}")
     if frontend.get("container_name") != "${CONTAINER_NAME}-web":
@@ -213,6 +226,11 @@ def main() -> None:
     networks = compose.get("networks", {})
     if networks.get("1panel-network", {}).get("external") is not True:
         fail("1panel-network must be external")
+    private_network = networks.get(PRIVATE_NETWORK)
+    if PRIVATE_NETWORK not in networks or (
+        isinstance(private_network, dict) and private_network.get("external")
+    ):
+        fail("compose must define a private non-external cs2 network")
     if "./data:/app/data" not in app.get("volumes", []):
         fail("app must persist ./data:/app/data")
     if app.get("ports"):
@@ -234,7 +252,7 @@ def main() -> None:
         fail("frontend environment is required")
     internal_api = frontend_env.get("INTERNAL_API_URL")
     if internal_api != DEFAULT_INTERNAL_API_URL:
-        fail("frontend must proxy API calls to this instance's ${CONTAINER_NAME}:8000")
+        fail("frontend must proxy API calls to app:8000 on the private cs2 network")
     if frontend_env.get("SESSION_COOKIE_SUFFIX") != "${PANEL_APP_PORT_HTTP}":
         fail("frontend must suffix the session cookie with PANEL_APP_PORT_HTTP")
     if frontend_env.get("PUBLIC_APP_URL"):
@@ -242,7 +260,7 @@ def main() -> None:
     if frontend.get("extra_hosts"):
         fail(
             "1Panel compose must not set extra_hosts; host-gateway fails on "
-            "some 1Panel Docker engines; Next talks to ${CONTAINER_NAME}:8000"
+            "some 1Panel Docker engines; Next talks to app:8000 on the private network"
         )
     app_env = app.get("environment")
     if not isinstance(app_env, dict) or app_env.get("CONSOLE_PUBLIC_URL") != "${BACKEND_URL}":
@@ -259,18 +277,14 @@ def main() -> None:
     if not isinstance(caddy_image, str) or IMAGE_PATTERN.fullmatch(caddy_image) is None:
         fail("caddy image must use a tag and immutable sha256 digest")
     caddyfile = (VERSION_ROOT / "Caddyfile").read_text(encoding="utf-8")
-    if "reverse_proxy {$FRONTEND_UPSTREAM}" not in caddyfile:
-        fail("1Panel Caddyfile must reverse-proxy this instance's Next container")
-    if "reverse_proxy frontend:3000" in caddyfile:
-        fail("1Panel Caddyfile must not use the shared service name frontend")
+    if "reverse_proxy frontend:3000" not in caddyfile:
+        fail("1Panel Caddyfile must reverse-proxy frontend:3000 on the private network")
+    if "reverse_proxy {$FRONTEND_UPSTREAM}" in caddyfile:
+        fail("1Panel Caddyfile must not use a shared-network FRONTEND_UPSTREAM")
     if "reverse_proxy app:8000" in caddyfile:
         fail("1Panel Caddyfile must not expose FastAPI as the public root")
-    caddy_env = caddy.get("environment")
-    if (
-        not isinstance(caddy_env, dict)
-        or caddy_env.get("FRONTEND_UPSTREAM") != "${CONTAINER_NAME}-web:3000"
-    ):
-        fail("caddy must proxy to ${CONTAINER_NAME}-web:3000")
+    if caddy.get("environment"):
+        fail("caddy must not take FRONTEND_UPSTREAM from the shared 1panel-network")
     if "./Caddyfile:/etc/caddy/Caddyfile:ro" not in caddy.get("volumes", []):
         fail("caddy must mount the package Caddyfile read-only")
     compose_text = (VERSION_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
@@ -320,7 +334,7 @@ def main() -> None:
         or internal_api_field.get("default") != DEFAULT_INTERNAL_API_URL
         or internal_api_field.get("edit") is not False
     ):
-        fail("FRONTEND_INTERNAL_API_URL must be locked to http://${CONTAINER_NAME}:8000")
+        fail("FRONTEND_INTERNAL_API_URL must be locked to http://app:8000")
     port_field = next(
         (field for field in version_fields if field.get("envKey") == "PANEL_APP_PORT_HTTP"), None
     )
@@ -369,7 +383,7 @@ def main() -> None:
             "PANEL_REDIS_DB": "0",
             "PANEL_APP_PORT_HTTP": "18000",
             "BACKEND_URL": "http://localhost:18000",
-            "FRONTEND_INTERNAL_API_URL": "http://${CONTAINER_NAME}:8000",
+            "FRONTEND_INTERNAL_API_URL": "http://app:8000",
             "CS2_MANAGER_IMAGE": DEFAULT_APP_IMAGE,
             "CS2_FRONTEND_IMAGE": DEFAULT_WEB_IMAGE,
             "SECRET_KEY": "test-secret-key",

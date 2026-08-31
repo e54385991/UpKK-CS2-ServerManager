@@ -106,8 +106,8 @@ is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-
   dev`. Production standalone applies the same variable at process start
   (`scripts/with-internal-api-url.mjs`) so Docker/compose can point at
   `http://app:8000` without rebuilding the image. 1Panel multi-instance
-  compose uses `http://${CONTAINER_NAME}:8000` because service name `app`
-  collides on `1panel-network`.
+  compose keeps Next and Caddy on a private network so `app:8000` cannot
+  resolve to another install on `1panel-network`.
 - Session: the backend sets an HttpOnly cookie `upkk_access_token` (or
   `upkk_access_token_<SESSION_COOKIE_SUFFIX>` when two consoles share a
   host). Its value is

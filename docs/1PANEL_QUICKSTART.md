@@ -61,9 +61,9 @@ test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
   只在该实例容器内监听 `:8000`，不要改成 `:8001`，也不要映射到宿主机；
 - **浏览器访问地址**：默认 `http://localhost:3000`。装完后改成实际地址，例如
   `http://192.168.50.245:3000`（改端口时一并改这里）。不要填 `0.0.0.0`；
-- **后端内部地址**：保持默认。Compose 会改成 `http://<本实例容器名>:8000`。
-  不要改成 `http://app:8000`（两套应用在 `1panel-network` 上会抢 `app`），
-  也不要改成 `:8001`；
+- **后端内部地址**：保持 `http://app:8000`。每套应用有自己的内部网，
+  `app` 只在这一套里解析。不要改成 `:8001`，也不要把 Next/Caddy 挂到
+  共享的 `1panel-network`（两套会抢 `app` / `frontend`）；
 - 前后端镜像：保持表单默认的 Docker Hub 地址，不要留空（1Panel 拉镜像不会展开 `${VAR:-默认值}`）；
 - `SECRET_KEY` / `JWT_SECRET_KEY`：保持自动生成。init 脚本会把短占位值升级为 64 位十六进制密钥。
 
@@ -122,8 +122,10 @@ docker exec <应用容器名> python -c \
 4. 每个实例各自生成 `JWT_SECRET_KEY`。会话 cookie 会带上控制台端口
    （`upkk_access_token_3000` / `upkk_access_token_3001`），避免同一浏览器串会话。
 
-旧包里 Next 默认访问共享主机名 `app:8000`，两套会打到同一套后端，表现为登录成功后立刻 401。
-把本仓库 `deploy/1panel/apps/cs2-server-manager` 重新复制到 1Panel 本地应用目录并重建容器即可。
+旧包把 Next / Caddy / FastAPI 都挂在共享的 `1panel-network` 上，两套的服务名
+`app` 会抢 DNS，表现为登录成功后立刻 401。把本仓库
+`deploy/1panel/apps/cs2-server-manager` 重新复制到 1Panel 本地应用目录并**重建**
+两套容器（只改端口不够）。
 
 根目录 Docker 用户仍可直接使用 [Docker 一键部署文档](DOCKER_QUICKSTART.md)，该路径会独立启动自己的 PostgreSQL 和 Redis。
 
@@ -169,9 +171,9 @@ empty password cannot be installed.
 Set **Console HTTP Port** to `3000` (or another free host port). That port maps to
 Caddy `:80` → Next; FastAPI stays private on container port `8000`. Set **Browser origin URL**
 to the address people type, such as `http://192.168.50.245:3000` — never `0.0.0.0`.
-Leave **Internal API URL** at the default. Compose rewrites it to
-`http://<this-instance-container>:8000`. Do not change it to `:8001` or to the
-shared hostname `app`. Keep the default backend and
+Leave **Internal API URL** at `http://app:8000`. Each install has a private
+compose network, so `app` is unique to that stack. Do not change it to `:8001`.
+Keep the default backend and
 frontend image fields (do not leave them empty; 1Panel cannot pull
 `${VAR:-default}` image refs). Keep the generated `SECRET_KEY` /
 `JWT_SECRET_KEY`; `init.sh` upgrades short placeholders to 64-character
@@ -206,8 +208,9 @@ Both installs may share the 1Panel PostgreSQL and Redis services.
 4. Each install keeps its own `JWT_SECRET_KEY`. Session cookies include the console
    port (`upkk_access_token_3000` vs `upkk_access_token_3001`).
 
-Older packages pointed Next at the shared hostname `app:8000`, so the second
-install logged in against the first API and then got 401. Recopy this repo's
-1Panel package and recreate the containers.
+Older packages put Next, Caddy, and FastAPI on the shared `1panel-network`, so
+both installs answered the service name `app` and the second console got 401
+after login. Recopy this repo's 1Panel package and **recreate both stacks**
+(changing only the console port is not enough).
 
 For the self-contained Docker path, use the [Docker quick-start guide](DOCKER_QUICKSTART.md).

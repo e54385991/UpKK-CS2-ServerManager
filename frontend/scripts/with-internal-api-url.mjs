@@ -45,23 +45,21 @@ export function apiOriginCandidates(configured, gateway) {
   };
   try {
     const url = new URL(origin);
+    // Docker service/container names must stay pinned. Falling back to the
+    // host gateway or host.docker.internal:8000 can land on another 1Panel
+    // instance that shares the host.
+    if (!isNonLoopbackIpHost(url.hostname)) {
+      push(origin);
+      return unique;
+    }
     const port = url.port || (url.protocol === "https:" ? "443" : "80");
-    const dockerHost = [];
     if (gateway && gateway !== url.hostname) {
-      dockerHost.push(`${url.protocol}//${gateway}:${port}`);
+      push(`${url.protocol}//${gateway}:${port}`);
     }
     if (url.hostname !== "host.docker.internal") {
-      dockerHost.push(`${url.protocol}//host.docker.internal:${port}`);
+      push(`${url.protocol}//host.docker.internal:${port}`);
     }
-    // A container using the host LAN IP (1Panel split runtimes) hairpins and
-    // hangs /api/captcha. Try the Docker host first; keep the LAN IP last.
-    if (isNonLoopbackIpHost(url.hostname)) {
-      for (const item of dockerHost) push(item);
-      push(origin);
-    } else {
-      push(origin);
-      for (const item of dockerHost) push(item);
-    }
+    push(origin);
   } catch {
     push(origin);
   }

@@ -40,6 +40,7 @@ services:
     volumes:
       - ./data:/app/data
     networks:
+      - cs2
       - 1panel-network
     labels:
       createdBy: "Apps"
@@ -61,7 +62,7 @@ services:
     container_name: ${CONTAINER_NAME}-web
     restart: always
     environment:
-      INTERNAL_API_URL: http://${CONTAINER_NAME}:8000
+      INTERNAL_API_URL: http://app:8000
       SESSION_COOKIE_SUFFIX: ${PANEL_APP_PORT_HTTP}
     expose:
       - "3000"
@@ -69,7 +70,7 @@ services:
       app:
         condition: service_healthy
     networks:
-      - 1panel-network
+      - cs2
     labels:
       createdBy: "Apps"
     healthcheck:
@@ -91,17 +92,16 @@ services:
     restart: always
     ports:
       - "${PANEL_APP_PORT_HTTP}:80"
-    environment:
-      FRONTEND_UPSTREAM: ${CONTAINER_NAME}-web:3000
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       - frontend
     networks:
-      - 1panel-network
+      - cs2
     labels:
       createdBy: "Apps"
 
 networks:
+  cs2:
   1panel-network:
     external: true

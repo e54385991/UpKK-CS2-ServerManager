@@ -36,12 +36,13 @@ def test_1panel_compose_isolates_second_instance() -> None:
     compose = (
         PROJECT_ROOT / "deploy/1panel/apps/cs2-server-manager/1.0.0/docker-compose.yml"
     ).read_text(encoding="utf-8")
-    assert "INTERNAL_API_URL: http://${CONTAINER_NAME}:8000" in compose
+    assert "INTERNAL_API_URL: http://app:8000" in compose
     assert "REDIS_KEY_PREFIX: ${CONTAINER_NAME}" in compose
     assert "SESSION_COOKIE_SUFFIX: ${PANEL_APP_PORT_HTTP}" in compose
-    assert "FRONTEND_UPSTREAM: ${CONTAINER_NAME}-web:3000" in compose
+    assert "FRONTEND_UPSTREAM" not in compose
     assert 'API_PORT: "8000"' in compose
     assert "8001" not in compose
+    assert "- cs2\n      - 1panel-network" in compose
 
     version_data = yaml.safe_load(
         (PROJECT_ROOT / "deploy/1panel/apps/cs2-server-manager/1.0.0/data.yml").read_text(
@@ -54,7 +55,7 @@ def test_1panel_compose_isolates_second_instance() -> None:
         if item.get("envKey") == "FRONTEND_INTERNAL_API_URL"
     )
     assert internal_api.get("edit") is False
-    assert internal_api.get("default") == "http://${CONTAINER_NAME}:8000"
+    assert internal_api.get("default") == "http://app:8000"
 
 
 def test_1panel_package_validator_passes() -> None:

@@ -39,12 +39,12 @@ def test_root_compose_publishes_next_and_keeps_fastapi_private() -> None:
 def test_1panel_compose_publishes_caddy_as_public_root() -> None:
     assert "${PANEL_APP_PORT_HTTP}:80" in PANEL_COMPOSE
     assert "${PANEL_APP_PORT_HTTP}:8000" not in PANEL_COMPOSE
-    assert "reverse_proxy {$FRONTEND_UPSTREAM}" in PANEL_CADDY
-    assert "reverse_proxy frontend:3000" not in PANEL_CADDY
-    assert "INTERNAL_API_URL: http://${CONTAINER_NAME}:8000" in PANEL_COMPOSE
+    assert "reverse_proxy frontend:3000" in PANEL_CADDY
+    assert "reverse_proxy {$FRONTEND_UPSTREAM}" not in PANEL_CADDY
+    assert "INTERNAL_API_URL: http://app:8000" in PANEL_COMPOSE
     assert "REDIS_KEY_PREFIX: ${CONTAINER_NAME}" in PANEL_COMPOSE
     assert "SESSION_COOKIE_SUFFIX: ${PANEL_APP_PORT_HTTP}" in PANEL_COMPOSE
-    assert "FRONTEND_UPSTREAM: ${CONTAINER_NAME}-web:3000" in PANEL_COMPOSE
+    assert "FRONTEND_UPSTREAM" not in PANEL_COMPOSE
     assert 'API_PORT: "8000"' in PANEL_COMPOSE
     assert "8001" not in PANEL_COMPOSE
     assert "upkk-cs2-server-manager:latest" in (

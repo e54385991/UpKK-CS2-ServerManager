@@ -1,8 +1,8 @@
 # 1Panel public edge: Caddy → Next → FastAPI.
 # PANEL_APP_PORT_HTTP publishes this container's :80.
 # FastAPI stays on container port 8000. Do not publish or remap it to 8001.
-# FRONTEND_UPSTREAM is this instance's Next container. The Compose service
-# name "frontend" collides when two apps share 1panel-network.
+# app / frontend / caddy share a private compose network so service names
+# do not collide with a second install on 1panel-network.
 # /google-callback is a Next public page (Google OAuth popup).
 {
 	admin off
@@ -11,7 +11,7 @@
 :80 {
     encode gzip
 
-	reverse_proxy {$FRONTEND_UPSTREAM} {
+	reverse_proxy frontend:3000 {
 		flush_interval -1
 	}
 }

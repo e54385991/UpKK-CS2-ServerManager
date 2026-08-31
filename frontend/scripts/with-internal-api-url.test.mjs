@@ -69,12 +69,14 @@ test("offers docker-host fallbacks when a LAN IP is configured", () => {
   ]);
 });
 
-test("keeps a docker DNS name first", () => {
+test("keeps a docker DNS name pinned so a second instance cannot steal /health", () => {
   assert.deepEqual(apiOriginCandidates("http://app:8000", "172.18.0.1"), [
     "http://app:8000",
-    "http://172.18.0.1:8000",
-    "http://host.docker.internal:8000",
   ]);
+  assert.deepEqual(
+    apiOriginCandidates("http://cs2-server-manager-b:8000", "172.18.0.1"),
+    ["http://cs2-server-manager-b:8000"],
+  );
 });
 
 test("prefers the docker host over a healthy hairpin LAN IP", async () => {
