@@ -114,6 +114,7 @@ async def _start_batch(
     operation_label: str,
     callback_factory,
     response_message: str,
+    acquire_lock: bool = True,
 ) -> BatchActionView:
     valid_server_ids = await authorized_server_ids(db, server_ids, current_user.id)
     if not valid_server_ids:
@@ -141,6 +142,7 @@ async def _start_batch(
                 batch_id,
                 operation_label,
                 callback_factory(server_id, batch_id),
+                acquire_lock=acquire_lock,
             )
         )
         _store_task(task)
@@ -191,6 +193,7 @@ async def start_batch_actions(
             )
         ),
         response_message=f"Batch action '{body.action}' started for {{count}} server(s)",
+        acquire_lock=False,
     )
 
 
@@ -223,6 +226,7 @@ async def start_batch_install_plugins(
             )
         ),
         response_message="Installing plugins on {count} server(s) in background",
+        acquire_lock=False,
     )
 
 

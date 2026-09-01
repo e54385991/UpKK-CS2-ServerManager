@@ -3120,6 +3120,14 @@
     "methods": [
       "GET"
     ],
+    "name": "read_latest_diagnostic_run",
+    "path": "/api/v1/servers/{server_id}/plugin-diagnostics/latest-run"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "read_diagnostic_run",
     "path": "/api/v1/servers/{server_id}/plugin-diagnostics/runs/{diagnostic_id}"
   },

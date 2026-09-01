@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -76,15 +77,89 @@ def test_v1_plugin_updates_workspace_and_run(monkeypatch):
     assert body["plugins"][0]["exclude_dirs"] == []
     assert body["plugins"][0]["exclude_files"] == []
 
+    operation_id = str(uuid4())
     monkeypatch.setattr(
-        "api.routes.v1.plugin_updates.legacy.run_now",
+        "api.routes.v1.plugin_updates.require_server_access",
+        AsyncMock(return_value=SimpleNamespace(id=2)),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugin_updates.reject_stuck_lock_unless_active",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugin_updates.enqueue_plugin_auto_update",
         AsyncMock(
-            return_value=SimpleNamespace(success=True, message="Plugin update check started")
+            return_value={
+                "operation_id": operation_id,
+                "server_id": 2,
+                "action": "plugin_auto_update",
+                "status": "queued",
+                "success": None,
+                "message": None,
+                "server_status": None,
+                "actor_user_id": 1,
+                "started_at": "2026-09-01T00:00:00+00:00",
+                "completed_at": None,
+            }
         ),
     )
     started = client.post("/api/v1/servers/2/plugin-updates/run")
     assert started.status_code == 202
-    assert started.json()["success"] is True
+    queued = started.json()
+    assert queued["operation_id"] == operation_id
+    assert queued["action"] == "plugin_auto_update"
+    assert queued["stream_url"] == f"/api/v1/servers/2/operations/{operation_id}/events"
+
+
+def test_v1_plugin_updates_test_enqueues(monkeypatch):
+    app = create_app(lifespan=None)
+    user = SimpleNamespace(id=1, username="owner", is_admin=False, is_active=True)
+    plugin = SimpleNamespace(id=3, server_id=2)
+
+    async def fake_db():
+        yield SimpleNamespace(
+            add=lambda *_a, **_k: None,
+            commit=AsyncMock(),
+            refresh=AsyncMock(),
+            get=AsyncMock(return_value=plugin),
+        )
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_active_user] = lambda: user
+    app.dependency_overrides[get_db] = fake_db
+    client = TestClient(app)
+    operation_id = str(uuid4())
+    monkeypatch.setattr(
+        "api.routes.v1.plugin_updates.require_server_access",
+        AsyncMock(return_value=SimpleNamespace(id=2)),
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.plugin_updates.reject_stuck_lock_unless_active",
+        AsyncMock(),
+    )
+    enqueue = AsyncMock(
+        return_value={
+            "operation_id": operation_id,
+            "server_id": 2,
+            "action": "plugin_auto_update_test",
+            "status": "queued",
+            "success": None,
+            "message": None,
+            "server_status": None,
+            "actor_user_id": user.id,
+            "started_at": "2026-09-01T00:00:00+00:00",
+            "completed_at": None,
+        }
+    )
+    monkeypatch.setattr("api.routes.v1.plugin_updates.enqueue_plugin_auto_update", enqueue)
+    response = client.post("/api/v1/servers/2/plugin-updates/plugins/3/test")
+    assert response.status_code == 202
+    body = response.json()
+    assert body["operation_id"] == operation_id
+    assert body["action"] == "plugin_auto_update_test"
+    enqueue.assert_awaited_once()
+    assert enqueue.await_args.kwargs["plugin_id"] == 3
+    assert enqueue.await_args.kwargs["force"] is True
 
 
 def test_v1_plugin_updates_patch_exclusions(monkeypatch):

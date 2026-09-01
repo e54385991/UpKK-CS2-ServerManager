@@ -38,6 +38,8 @@ import type {
 import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
+import { trackQueuedOperation } from "@/modules/servers/activity-store";
+import { useQueuedOperationTerminal } from "@/modules/servers/use-queued-operation-terminal";
 import {
   Card,
   CardContent,
@@ -104,8 +106,8 @@ export function UpdatesConsole({
   const [banner, setBanner] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<PluginUpdateStatus | null>(null);
   const [statusEpoch, setStatusEpoch] = useState(0);
+  const [queuedOperationId, setQueuedOperationId] = useState<string | null>(null);
   const seenFinishedAt = useRef<string | null | undefined>(undefined);
-  const runBusy = pluginRunIsBusy(runStatus?.state);
   const availableCommands = availablePostUpdateCommands(savedCommands, commandIds);
 
   function replacePlugin(next: ManagedUpdatePlugin) {
@@ -165,6 +167,19 @@ export function UpdatesConsole({
     if (finishedAt) seenFinishedAt.current = finishedAt;
   }, [runStatus?.finishedAt, runStatus?.state, serverId]);
 
+  useQueuedOperationTerminal(queuedOperationId, serverId, (status, message) => {
+    setStatusEpoch((current) => current + 1);
+    setBanner(message || (status === "failed" ? t("failed") : t("queuedDone")));
+    void refreshPluginUpdatesAction(serverId).then((result) => {
+      if (!result.ok) return;
+      setWorkspace((current) => ({
+        ...current,
+        lastCheck: result.data.lastCheck,
+        plugins: result.data.plugins,
+      }));
+    });
+  });
+
   async function save() {
     setPending("save");
     setBanner(null);
@@ -189,15 +204,17 @@ export function UpdatesConsole({
   }
 
   async function run() {
-    if (runBusy) {
-      setBanner(t("runBusy"));
-      return;
-    }
     setPending("run");
     const result = await runPluginUpdatesAction(serverId);
     setPending(null);
-    setBanner(result.ok ? result.data.message : result.error || t("failed"));
-    if (result.ok) setStatusEpoch((current) => current + 1);
+    if (!result.ok) {
+      setBanner(result.error || t("failed"));
+      return;
+    }
+    trackQueuedOperation(result.data);
+    setQueuedOperationId(result.data.operationId);
+    setBanner(t("queuedToTray"));
+    setStatusEpoch((current) => current + 1);
   }
 
   async function toggle(pluginId: number, next: boolean) {
@@ -366,7 +383,7 @@ export function UpdatesConsole({
             <Button
               type="button"
               variant="outline"
-              disabled={Boolean(pending) || runBusy}
+              disabled={Boolean(pending)}
               onClick={() => void run()}
             >
               {pending === "run" ? t("running") : t("run")}
@@ -419,11 +436,11 @@ export function UpdatesConsole({
               serverId={serverId}
               plugin={plugin}
               pending={pending}
-              runBusy={runBusy}
               onPending={setPending}
               onBanner={setBanner}
               onSaved={replacePlugin}
               onKickStatus={() => setStatusEpoch((current) => current + 1)}
+              onQueued={(operationId) => setQueuedOperationId(operationId)}
               onRemoved={(pluginId) =>
                 setWorkspace((current) => ({
                   ...current,
@@ -456,24 +473,24 @@ function PluginExcludeEditor({
   serverId,
   plugin,
   pending,
-  runBusy,
   onPending,
   onBanner,
   onSaved,
   onRemoved,
   onToggle,
   onKickStatus,
+  onQueued,
 }: {
   serverId: number;
   plugin: ManagedUpdatePlugin;
   pending: string | null;
-  runBusy: boolean;
   onPending: (value: string | null) => void;
   onBanner: (value: string | null) => void;
   onSaved: (plugin: ManagedUpdatePlugin) => void;
   onRemoved: (pluginId: number) => void;
   onToggle: (next: boolean) => void;
   onKickStatus: () => void;
+  onQueued: (operationId: string) => void;
 }) {
   const t = useTranslations("pluginUpdates");
   const [dirs, setDirs] = useState(joinLines(plugin.excludeDirs));
@@ -520,15 +537,17 @@ function PluginExcludeEditor({
   }
 
   async function testUpdate() {
-    if (runBusy) {
-      onBanner(t("runBusy"));
-      return;
-    }
     onPending(`test-${plugin.id}`);
     const result = await testManagedPluginUpdateAction(serverId, plugin.id);
     onPending(null);
-    onBanner(result.ok ? result.data.message : result.error || t("failed"));
-    if (result.ok) onKickStatus();
+    if (!result.ok) {
+      onBanner(result.error || t("failed"));
+      return;
+    }
+    trackQueuedOperation(result.data);
+    onQueued(result.data.operationId);
+    onBanner(t("queuedToTray"));
+    onKickStatus();
   }
 
   async function unregister() {
@@ -571,7 +590,7 @@ function PluginExcludeEditor({
             type="button"
             size="sm"
             variant="outline"
-            disabled={Boolean(pending) || runBusy}
+            disabled={Boolean(pending)}
             onClick={() => void testUpdate()}
           >
             {pending === `test-${plugin.id}` ? t("testing") : t("test")}

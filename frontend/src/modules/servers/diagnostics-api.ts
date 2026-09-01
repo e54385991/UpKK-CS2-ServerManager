@@ -1,5 +1,8 @@
 import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
+import { mapServerOperation } from "@/modules/servers/operation-inbox";
+import type { ServerOperation } from "@/modules/servers/types";
+import type { ServerOperationViewDto } from "@/shared/api/types";
 
 export type DiagnosticScope = "metamod" | "counterstrikesharp" | "both";
 
@@ -100,8 +103,8 @@ export async function executePluginDiagnostic(
   serverId: number,
   scope: DiagnosticScope,
   expectedPlanHash: string,
-): Promise<ApiResult<DiagnosticRun>> {
-  const result = await apiFetch<RunDto>(
+): Promise<ApiResult<ServerOperation>> {
+  const result = await apiFetch<ServerOperationViewDto>(
     `/api/v1/servers/${serverId}/plugin-diagnostics/runs`,
     {
       method: "POST",
@@ -113,24 +116,26 @@ export async function executePluginDiagnostic(
     },
   );
   if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      id: result.data.id,
-      status: result.data.status,
-      planHash: result.data.plan_hash,
-      error: result.data.error ?? null,
-    },
-  };
+  return { ok: true, data: mapServerOperation(result.data) };
 }
 
 export async function restorePluginDiagnostic(
   serverId: number,
   diagnosticId: string,
-): Promise<ApiResult<DiagnosticRun>> {
-  const result = await apiFetch<RunDto>(
+): Promise<ApiResult<ServerOperation>> {
+  const result = await apiFetch<ServerOperationViewDto>(
     `/api/v1/servers/${serverId}/plugin-diagnostics/runs/${diagnosticId}/restore`,
     { method: "POST" },
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: mapServerOperation(result.data) };
+}
+
+export async function getLatestPluginDiagnostic(
+  serverId: number,
+): Promise<ApiResult<DiagnosticRun>> {
+  const result = await apiFetch<RunDto>(
+    `/api/v1/servers/${serverId}/plugin-diagnostics/latest-run`,
   );
   if (!result.ok) return result;
   return {

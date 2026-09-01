@@ -320,20 +320,25 @@ export async function getPluginUpdateStatus(
 
 export async function runPluginUpdates(
   serverId: number,
-): Promise<ApiResult<ActionResultDto>> {
-  return apiFetch<ActionResultDto>(`/api/v1/servers/${serverId}/plugin-updates/run`, {
-    method: "POST",
-  });
+): Promise<ApiResult<ServerOperation>> {
+  const result = await apiFetch<ServerOperationViewDto>(
+    `/api/v1/servers/${serverId}/plugin-updates/run`,
+    { method: "POST" },
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: toOperation(result.data) };
 }
 
 export async function testManagedPluginUpdate(
   serverId: number,
   pluginId: number,
-): Promise<ApiResult<ActionResultDto>> {
-  return apiFetch<ActionResultDto>(
+): Promise<ApiResult<ServerOperation>> {
+  const result = await apiFetch<ServerOperationViewDto>(
     `/api/v1/servers/${serverId}/plugin-updates/plugins/${pluginId}/test`,
     { method: "POST" },
   );
+  if (!result.ok) return result;
+  return { ok: true, data: toOperation(result.data) };
 }
 
 export async function listRegisterMarketOptions(): Promise<

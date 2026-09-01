@@ -465,7 +465,12 @@
       "extract_archive": "解压归档",
       "download_url": "从 URL 下载",
       "cleanup_delete": "清理删除",
-      "cleanup_system": "系统清理"
+      "cleanup_system": "系统清理",
+      "plugin_auto_update": "插件自动更新",
+      "plugin_auto_update_test": "插件测试更新",
+      "plugin_diagnostic_execute": "插件诊断",
+      "plugin_diagnostic_restore": "恢复诊断快照",
+      "plugin_diagnostic_resume": "继续插件诊断"
     },
     "confirm": {
       "deploy": "要向这台主机部署 CS2 吗？SteamCMD 可能耗时很长，期间会锁定其他操作。",
@@ -1180,6 +1185,8 @@
     "diagnosticPlanHash": "计划哈希",
     "diagnosticMaxStarts": "最多启动 {count} 次",
     "diagnosticRunStatus": "运行状态",
+    "queuedToTray": "已投递到右上角任务队列，可继续浏览。",
+    "queuedDone": "插件诊断已完成。",
     "openDiagnosticAssistant": "打开 AI 诊断",
     "diagnosticRestarts": "最近重启 {count} / {max} 次",
     "diagnosticReasons": {
@@ -1339,6 +1346,15 @@
         "catalog": {
           "delete": "删除市场插件",
           "import": "导入插件目录"
+        },
+        "auto_update": {
+          "run": "排队插件自动更新",
+          "test": "排队插件测试更新"
+        },
+        "diagnostic": {
+          "execute": "排队插件诊断",
+          "restore": "排队诊断恢复",
+          "resume": "排队继续诊断"
         }
       }
     }
@@ -1958,6 +1974,8 @@
     "removeCommand": "移除",
     "missingCommand": "命令 #{id}",
     "runBusy": "已有插件更新正在运行。",
+    "queuedToTray": "已投递到右上角任务队列，可继续浏览。",
+    "queuedDone": "插件更新已完成。",
     "noSavedCommands": "还没有快捷命令。请到操作中心添加。",
     "save": "保存",
     "saving": "保存中…",

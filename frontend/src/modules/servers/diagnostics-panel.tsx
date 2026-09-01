@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { TriangleAlert } from "lucide-react";
 import {
   executePluginDiagnosticAction,
+  getLatestPluginDiagnosticAction,
   planPluginDiagnosticAction,
   restorePluginDiagnosticAction,
 } from "@/modules/servers/diagnostics-actions";
@@ -16,6 +17,8 @@ import type {
   DiagnosticRun,
   DiagnosticScope,
 } from "@/modules/servers/diagnostics-api";
+import { trackQueuedOperation } from "@/modules/servers/activity-store";
+import { useQueuedOperationTerminal } from "@/modules/servers/use-queued-operation-terminal";
 import { Button } from "@/shared/ui/button";
 import {
   Card,
@@ -45,10 +48,26 @@ export function PluginDiagnosticsPanel({
   const [run, setRun] = useState<DiagnosticRun | null>(null);
   const [pending, setPending] = useState<"plan" | "run" | "restore" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
+  const [queuedOperationId, setQueuedOperationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getLatestPluginDiagnosticAction(serverId).then((result) => {
+      if (result.ok) setRun(result.data);
+    });
+  }, [serverId]);
+
+  useQueuedOperationTerminal(queuedOperationId, serverId, (status, message) => {
+    setBanner(message || (status === "failed" ? message : t("queuedDone")));
+    void getLatestPluginDiagnosticAction(serverId).then((result) => {
+      if (result.ok) setRun(result.data);
+    });
+  });
 
   async function onPlan() {
     setPending("plan");
     setError(null);
+    setBanner(null);
     const result = await planPluginDiagnosticAction(serverId, scope);
     setPending(null);
     if (!result.ok) {
@@ -62,6 +81,7 @@ export function PluginDiagnosticsPanel({
     if (!plan) return;
     setPending("run");
     setError(null);
+    setBanner(null);
     const result = await executePluginDiagnosticAction(
       serverId,
       scope,
@@ -72,20 +92,25 @@ export function PluginDiagnosticsPanel({
       setError(result.error);
       return;
     }
-    setRun(result.data);
+    trackQueuedOperation(result.data);
+    setQueuedOperationId(result.data.operationId);
+    setBanner(t("queuedToTray"));
   }
 
   async function onRestore() {
     if (!run) return;
     setPending("restore");
     setError(null);
+    setBanner(null);
     const result = await restorePluginDiagnosticAction(serverId, run.id);
     setPending(null);
     if (!result.ok) {
       setError(result.error);
       return;
     }
-    setRun(result.data);
+    trackQueuedOperation(result.data);
+    setQueuedOperationId(result.data.operationId);
+    setBanner(t("queuedToTray"));
   }
 
   return (
@@ -138,6 +163,11 @@ export function PluginDiagnosticsPanel({
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />
               <span>{error}</span>
             </div>
+          ) : null}
+          {banner && !error ? (
+            <p className="text-sm text-fg-muted" data-testid="diagnostic-banner">
+              {banner}
+            </p>
           ) : null}
           <Select
             value={scope}

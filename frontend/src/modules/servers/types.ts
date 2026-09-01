@@ -221,6 +221,11 @@ export const SERVER_OPERATION_ACTIONS = [
   "download_url",
   "cleanup_delete",
   "cleanup_system",
+  "plugin_auto_update",
+  "plugin_auto_update_test",
+  "plugin_diagnostic_execute",
+  "plugin_diagnostic_restore",
+  "plugin_diagnostic_resume",
 ] as const;
 
 export type ServerOperationAction = (typeof SERVER_OPERATION_ACTIONS)[number];

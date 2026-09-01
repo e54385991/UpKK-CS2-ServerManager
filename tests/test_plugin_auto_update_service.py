@@ -778,3 +778,93 @@ async def test_post_update_commands_run_once_after_all_plugins_finish(monkeypatc
     ]
     assert result["post_update_commands"]["success"] is True
     assert len(result["post_update_commands"]["results"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_check_all_servers_enqueues_due_update(monkeypatch):
+    service = PluginAutoUpdateService()
+    server = Server(
+        id=12,
+        user_id=3,
+        name="Due",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+        enable_plugin_auto_update=True,
+        plugin_update_check_interval_hours=1.0,
+        last_plugin_update_check=None,
+        is_ssh_down=False,
+    )
+
+    class Result:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [server]
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def execute(self, _query):
+            return Result()
+
+    enqueue = AsyncMock(return_value={"operation_id": "op-1"})
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.async_session_maker", lambda: Session()
+    )
+    monkeypatch.setattr(service, "_plugin_update_already_queued", AsyncMock(return_value=False))
+    monkeypatch.setattr("services.operation_enqueue.enqueue_plugin_auto_update", enqueue)
+
+    await service.check_all_servers()
+
+    enqueue.assert_awaited_once_with(server_id=12, actor_user_id=3, force=False)
+
+
+@pytest.mark.asyncio
+async def test_check_all_servers_skips_when_already_queued(monkeypatch):
+    service = PluginAutoUpdateService()
+    server = Server(
+        id=12,
+        user_id=3,
+        name="Due",
+        host="127.0.0.1",
+        ssh_user="steam",
+        auth_type=AuthType.PASSWORD,
+        enable_plugin_auto_update=True,
+        plugin_update_check_interval_hours=1.0,
+        last_plugin_update_check=None,
+        is_ssh_down=False,
+    )
+
+    class Result:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return [server]
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def execute(self, _query):
+            return Result()
+
+    enqueue = AsyncMock()
+    monkeypatch.setattr(
+        "services.plugin_auto_update_service.async_session_maker", lambda: Session()
+    )
+    monkeypatch.setattr(service, "_plugin_update_already_queued", AsyncMock(return_value=True))
+    monkeypatch.setattr("services.operation_enqueue.enqueue_plugin_auto_update", enqueue)
+
+    await service.check_all_servers()
+
+    enqueue.assert_not_awaited()

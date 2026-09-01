@@ -158,8 +158,10 @@ export async function unregisterManagedPluginAction(
 export async function testManagedPluginUpdateAction(
   serverId: number,
   pluginId: number,
-): Promise<ApiResult<ActionResultDto>> {
-  return testManagedPluginUpdate(serverId, pluginId);
+): Promise<ApiResult<ServerOperation>> {
+  const result = await testManagedPluginUpdate(serverId, pluginId);
+  if (result.ok) revalidate(serverId);
+  return result;
 }
 
 export async function listRegisterReleasesAction(
@@ -171,6 +173,8 @@ export async function listRegisterReleasesAction(
 
 export async function runPluginUpdatesAction(
   serverId: number,
-): Promise<ApiResult<ActionResultDto>> {
-  return runPluginUpdates(serverId);
+): Promise<ApiResult<ServerOperation>> {
+  const result = await runPluginUpdates(serverId);
+  if (result.ok) revalidate(serverId);
+  return result;
 }

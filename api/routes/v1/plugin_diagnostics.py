@@ -2,24 +2,33 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from api.dependencies import ActiveUser, DatabaseSession
 from services.ai_access import AgentAccessDenied, enforce_agent_rate_limit
+from services.audit_log_service import record_audit_event
 from services.plugin_diagnostic_service import (
     build_diagnostic_plan,
-    execute_diagnostic_plan,
     get_diagnostic_recommendation,
     get_diagnostic_run,
-    restore_diagnostic_run,
+    get_latest_diagnostic_run,
 )
+from services.server_operation_hub import ServerOperationConflict
 
+from .operation_locks import reject_stuck_lock_unless_active
+from .operation_runner import (
+    enqueue_plugin_diagnostic_execute,
+    enqueue_plugin_diagnostic_restore,
+    enqueue_plugin_diagnostic_resume,
+)
+from .operations import to_view
 from .schemas import (
     PluginDiagnosticExecuteBody,
     PluginDiagnosticPlanBody,
     PluginDiagnosticPlanView,
     PluginDiagnosticRecommendationView,
     PluginDiagnosticRunView,
+    ServerOperationView,
 )
 
 router = APIRouter(
@@ -101,30 +110,56 @@ async def plan_diagnostic(
         raise _not_found(exc) from exc
 
 
-@router.post("/runs", response_model=PluginDiagnosticRunView)
+@router.post("/runs", response_model=ServerOperationView, status_code=status.HTTP_202_ACCEPTED)
 async def execute_diagnostic(
     server_id: int,
     body: PluginDiagnosticExecuteBody,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
-) -> PluginDiagnosticRunView:
+) -> ServerOperationView:
     try:
         await enforce_agent_rate_limit(
             current_user.id, "diagnostic_execute", limit=2, window_seconds=300
         )
-        return _to_run(
-            await execute_diagnostic_plan(
-                db,
-                current_user,
-                server_id,
-                body.scope,
-                body.expected_plan_hash,
-            )
+        plan = await build_diagnostic_plan(db, current_user, server_id, body.scope)
+        if plan["plan_hash"] != body.expected_plan_hash:
+            raise ValueError("Diagnostic plan changed; inspect and approve it again")
+        await reject_stuck_lock_unless_active(server_id)
+        record = await enqueue_plugin_diagnostic_execute(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            scope=body.scope,
+            expected_plan_hash=body.expected_plan_hash,
         )
     except AgentAccessDenied as exc:
         raise _not_found(exc) from exc
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await record_audit_event(
+        category="plugin",
+        action="plugin.diagnostic.execute",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"operation_id": record["operation_id"], "scope": body.scope},
+    )
+    return to_view(record)
+
+
+@router.get("/latest-run", response_model=PluginDiagnosticRunView)
+async def read_latest_diagnostic_run(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> PluginDiagnosticRunView:
+    try:
+        return _to_run(await get_latest_diagnostic_run(db, current_user, server_id))
+    except (AgentAccessDenied, LookupError) as exc:
+        raise _not_found(exc) from exc
 
 
 @router.get("/runs/{diagnostic_id}", response_model=PluginDiagnosticRunView)
@@ -140,42 +175,80 @@ async def read_diagnostic_run(
         raise _not_found(exc) from exc
 
 
-@router.post("/runs/{diagnostic_id}/restore", response_model=PluginDiagnosticRunView)
+@router.post(
+    "/runs/{diagnostic_id}/restore",
+    response_model=ServerOperationView,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def restore_diagnostic(
     server_id: int,
     diagnostic_id: str,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
-) -> PluginDiagnosticRunView:
+) -> ServerOperationView:
     try:
-        return _to_run(await restore_diagnostic_run(db, current_user, server_id, diagnostic_id))
+        await get_diagnostic_run(db, current_user, server_id, diagnostic_id)
+        await reject_stuck_lock_unless_active(server_id)
+        record = await enqueue_plugin_diagnostic_restore(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            diagnostic_id=diagnostic_id,
+        )
     except (AgentAccessDenied, LookupError) as exc:
         raise _not_found(exc) from exc
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await record_audit_event(
+        category="plugin",
+        action="plugin.diagnostic.restore",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"operation_id": record["operation_id"], "diagnostic_id": diagnostic_id},
+    )
+    return to_view(record)
 
 
-@router.post("/runs/{diagnostic_id}/resume", response_model=PluginDiagnosticRunView)
+@router.post(
+    "/runs/{diagnostic_id}/resume",
+    response_model=ServerOperationView,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def resume_diagnostic(
     server_id: int,
     diagnostic_id: str,
     body: PluginDiagnosticExecuteBody,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
-) -> PluginDiagnosticRunView:
+) -> ServerOperationView:
     try:
         existing = await get_diagnostic_run(db, current_user, server_id, diagnostic_id)
         if existing["status"] not in {"interrupted", "failed", "inconclusive"}:
             raise ValueError("Only interrupted or incomplete diagnostics can be resumed")
-        await restore_diagnostic_run(db, current_user, server_id, diagnostic_id)
-        return _to_run(
-            await execute_diagnostic_plan(
-                db,
-                current_user,
-                server_id,
-                body.scope,
-                body.expected_plan_hash,
-            )
+        await reject_stuck_lock_unless_active(server_id)
+        record = await enqueue_plugin_diagnostic_resume(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            diagnostic_id=diagnostic_id,
+            scope=body.scope,
+            expected_plan_hash=body.expected_plan_hash,
         )
     except (AgentAccessDenied, LookupError) as exc:
         raise _not_found(exc) from exc
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await record_audit_event(
+        category="plugin",
+        action="plugin.diagnostic.resume",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"operation_id": record["operation_id"], "diagnostic_id": diagnostic_id},
+    )
+    return to_view(record)

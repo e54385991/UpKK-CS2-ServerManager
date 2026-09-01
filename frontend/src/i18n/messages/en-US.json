@@ -465,7 +465,12 @@
       "extract_archive": "Extract archive",
       "download_url": "Download from URL",
       "cleanup_delete": "Cleanup delete",
-      "cleanup_system": "System cleanup"
+      "cleanup_system": "System cleanup",
+      "plugin_auto_update": "Plugin auto-update",
+      "plugin_auto_update_test": "Plugin test update",
+      "plugin_diagnostic_execute": "Plugin diagnostic",
+      "plugin_diagnostic_restore": "Restore diagnostic snapshot",
+      "plugin_diagnostic_resume": "Resume plugin diagnostic"
     },
     "confirm": {
       "deploy": "Deploy CS2 to this host? SteamCMD can take a long time and will lock other actions.",
@@ -1180,6 +1185,8 @@
     "diagnosticPlanHash": "Plan hash",
     "diagnosticMaxStarts": "at most {count} starts",
     "diagnosticRunStatus": "Run status",
+    "queuedToTray": "Submitted to the task queue in the top-right. You can keep browsing.",
+    "queuedDone": "Plugin diagnostic finished.",
     "openDiagnosticAssistant": "Open AI diagnosis",
     "diagnosticRestarts": "Recent restarts {count} / {max}",
     "diagnosticReasons": {
@@ -1339,6 +1346,15 @@
         "catalog": {
           "delete": "Delete market plugin",
           "import": "Import plugin catalog"
+        },
+        "auto_update": {
+          "run": "Queue plugin auto-update",
+          "test": "Queue plugin test update"
+        },
+        "diagnostic": {
+          "execute": "Queue plugin diagnostic",
+          "restore": "Queue diagnostic restore",
+          "resume": "Queue diagnostic resume"
         }
       }
     }
@@ -1958,6 +1974,8 @@
     "removeCommand": "Remove",
     "missingCommand": "Command #{id}",
     "runBusy": "Another plugin update is already running.",
+    "queuedToTray": "Submitted to the task queue in the top-right. You can keep browsing.",
+    "queuedDone": "Plugin update finished.",
     "noSavedCommands": "No saved quick commands yet. Add them on Operations.",
     "save": "Save",
     "saving": "Saving…",

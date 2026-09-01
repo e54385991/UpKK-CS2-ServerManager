@@ -15,7 +15,7 @@
   "execute_command": "(self, command: str, timeout: int = 30) -> Tuple[bool, str, str]",
   "execute_command_streaming": "(self, command: str, output_callback=None, timeout: int = 1800) -> Tuple[bool, str, str]",
   "execute_sudo_command": "(self, command: str, sudo_password: str | None = None, timeout: int = 30) -> Tuple[bool, str, str]",
-  "extract_archive": "(self, archive_path: str, destination_path: str, server: modules.models.Server, overwrite: bool = False, source_folder: str | None = None, strip_source_folder: bool = False) -> Tuple[bool, str]",
+  "extract_archive": "(self, archive_path: str, destination_path: str, server: modules.models.Server, overwrite: bool = False, source_folder: str | None = None, strip_source_folder: bool = False, progress_callback=None) -> Tuple[bool, str]",
   "get_file_size": "(self, remote_path: str, server: modules.models.Server) -> Tuple[bool, int | None, str]",
   "get_server_status": "(self, server: modules.models.Server) -> Tuple[bool, str]",
   "inspect_archive": "(self, archive_path: str, server: modules.models.Server) -> Tuple[bool, Dict[str, Any], str]",

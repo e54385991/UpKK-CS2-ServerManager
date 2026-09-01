@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from services.server_operation_hub import EVENT_LIMIT, ServerOperationHub
@@ -102,3 +104,32 @@ async def test_emit_keeps_only_the_latest_event_limit(hub, monkeypatch):
         "line-4",
     ]
     assert EVENT_LIMIT == 300
+
+
+@pytest.mark.asyncio
+async def test_wait_until_terminal_returns_already_finished_record(hub: ServerOperationHub):
+    record = await hub.create(server_id=1, action="stop", actor_user_id=1)
+    await hub.finish(record["operation_id"], success=True, message="stopped")
+    waited = await hub.wait_until_terminal(record["operation_id"])
+    assert waited["operation_id"] == record["operation_id"]
+    assert waited["status"] == "completed"
+    assert waited["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_wait_until_terminal_subscribes_until_finish(hub: ServerOperationHub):
+    record = await hub.create(server_id=1, action="stop", actor_user_id=1)
+    operation_id = record["operation_id"]
+    waiting = asyncio.create_task(hub.wait_until_terminal(operation_id))
+    for _ in range(50):
+        if hub._queues.get(operation_id):
+            break
+        await asyncio.sleep(0.01)
+    else:
+        waiting.cancel()
+        raise AssertionError("wait_until_terminal never subscribed")
+    await hub.finish(operation_id, success=False, message="timed out")
+    final = await waiting
+    assert final["status"] == "failed"
+    assert final["success"] is False
+    assert final["message"] == "timed out"

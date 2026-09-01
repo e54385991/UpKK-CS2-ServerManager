@@ -32,6 +32,11 @@ from services.plugins.tracking import (
     upsert_managed_plugin,
 )
 from services.redis_manager import redis_manager
+from services.server_operation_hub import (
+    ACTIVE_STATUSES,
+    ServerOperationConflict,
+    server_operation_hub,
+)
 from services.ssh_manager import SSHManager
 
 logger = logging.getLogger(__name__)
@@ -60,6 +65,7 @@ class PluginAutoUpdateService:
         self.running = False
         self._status_cache: Dict[int, Dict[str, Any]] = {}
         self._redis_status_retry_after = 0.0
+        self._progress_sinks: Dict[int, Any] = {}
 
     async def _publish_status(
         self,
@@ -107,6 +113,11 @@ class PluginAutoUpdateService:
             logs.append({"time": get_current_time().isoformat(), "message": log})
             status["logs"] = logs[-100:]
         self._status_cache[server_id] = status
+        sink = self._progress_sinks.get(server_id)
+        if sink is not None:
+            line = log or message
+            if line:
+                await sink(line)
         now = asyncio.get_running_loop().time()
         if now >= self._redis_status_retry_after:
             try:
@@ -145,6 +156,22 @@ class PluginAutoUpdateService:
             "started_at": None,
             "finished_at": None,
         }
+
+    def set_progress_sink(self, server_id: int, sink) -> None:
+        """Forward status lines to a hub SSE emitter for one server."""
+        self._progress_sinks[server_id] = sink
+
+    def clear_progress_sink(self, server_id: int) -> None:
+        self._progress_sinks.pop(server_id, None)
+
+    async def _plugin_update_already_queued(self, server_id: int) -> bool:
+        for record in await server_operation_hub.list_for_server(server_id):
+            if record.get("status") in ACTIVE_STATUSES and record.get("action") in {
+                "plugin_auto_update",
+                "plugin_auto_update_test",
+            }:
+                return True
+        return False
 
     async def start(self) -> None:
         if self.running:
@@ -191,7 +218,21 @@ class PluginAutoUpdateService:
             if self._due(
                 server.last_plugin_update_check, server.plugin_update_check_interval_hours or 1.0
             ):
-                await self.check_server(server.id)
+                if await self._plugin_update_already_queued(server.id):
+                    continue
+                try:
+                    from services.operation_enqueue import enqueue_plugin_auto_update
+
+                    await enqueue_plugin_auto_update(
+                        server_id=server.id,
+                        actor_user_id=server.user_id,
+                        force=False,
+                    )
+                except ServerOperationConflict:
+                    logger.info(
+                        "Skipping plugin auto-update for server %s: the per-server queue is full",
+                        server.id,
+                    )
 
     @staticmethod
     def _is_windows_asset(asset_name: str) -> bool:

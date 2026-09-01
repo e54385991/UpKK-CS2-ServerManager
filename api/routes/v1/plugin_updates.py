@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 
-from api.dependencies import ActiveUser, DatabaseSession
+from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from api.routes import plugin_auto_update as legacy
+from modules import ManagedPlugin
 from modules.schemas.plugins import (
     ManagedPluginCreate,
     ManagedPluginUpdate,
     PluginAutoUpdateSettings,
 )
 from services.audit_log_service import record_audit_event
+from services.server_operation_hub import ServerOperationConflict
 
+from .operation_locks import reject_stuck_lock_unless_active
+from .operation_runner import enqueue_plugin_auto_update
+from .operations import to_view
 from .schemas import (
     ActionResult,
     ManagedPluginRegisterRequest,
@@ -21,6 +26,7 @@ from .schemas import (
     PluginUpdatesSettingsRequest,
     PluginUpdateStatusView,
     PluginUpdatesView,
+    ServerOperationView,
 )
 
 router = APIRouter(prefix="/api/v1/servers", tags=["v1-plugin-updates"])
@@ -171,27 +177,77 @@ async def patch_managed_plugin(
     )
 
 
-@router.post("/{server_id}/plugin-updates/run", response_model=ActionResult, status_code=202)
+@router.post(
+    "/{server_id}/plugin-updates/run",
+    response_model=ServerOperationView,
+    status_code=202,
+)
 async def run_plugin_updates(
-    server_id: int, db: DatabaseSession, current_user: ActiveUser
-) -> ActionResult:
-    result = await legacy.run_now(server_id, db, current_user)
-    return ActionResult(success=bool(result.success), message=str(result.message))
+    server_id: int,
+    request: Request,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ServerOperationView:
+    await require_server_access(db, server_id, current_user)
+    await reject_stuck_lock_unless_active(server_id)
+    try:
+        record = await enqueue_plugin_auto_update(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            force=True,
+        )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await record_audit_event(
+        category="plugin",
+        action="plugin.auto_update.run",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"operation_id": record["operation_id"]},
+    )
+    return to_view(record)
 
 
 @router.post(
     "/{server_id}/plugin-updates/plugins/{plugin_id}/test",
-    response_model=ActionResult,
+    response_model=ServerOperationView,
     status_code=202,
 )
 async def test_plugin_update(
     server_id: int,
     plugin_id: int,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
-) -> ActionResult:
-    result = await legacy.test_plugin_update(server_id, plugin_id, db, current_user)
-    return ActionResult(success=bool(result.success), message=str(result.message))
+) -> ServerOperationView:
+    await require_server_access(db, server_id, current_user)
+    plugin = await db.get(ManagedPlugin, plugin_id)
+    if plugin is None or plugin.server_id != server_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Managed plugin not found"
+        )
+    await reject_stuck_lock_unless_active(server_id)
+    try:
+        record = await enqueue_plugin_auto_update(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            plugin_id=plugin_id,
+            force=True,
+        )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await record_audit_event(
+        category="plugin",
+        action="plugin.auto_update.test",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"operation_id": record["operation_id"], "plugin_id": plugin_id},
+    )
+    return to_view(record)
 
 
 @router.get("/{server_id}/plugin-updates/status", response_model=PluginUpdateStatusView)

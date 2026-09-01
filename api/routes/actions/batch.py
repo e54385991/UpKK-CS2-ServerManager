@@ -65,6 +65,7 @@ async def batch_server_actions(
                 lambda server_id=server_id: execute_single_server_action(
                     server_id, request.action, current_user.id, current_user.is_admin, batch_id
                 ),
+                acquire_lock=False,
             )
         )
         _store_task(task)
@@ -176,6 +177,7 @@ async def batch_install_plugins(
                 lambda server_id=server_id: execute_single_server_plugins(
                     server_id, request.plugins, current_user.id, current_user.is_admin, batch_id
                 ),
+                acquire_lock=False,
             )
         )
         _store_task(task)

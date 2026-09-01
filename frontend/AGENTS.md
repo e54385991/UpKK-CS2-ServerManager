@@ -139,12 +139,15 @@ is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-
   console go through Next.js Server Actions in `src/modules/<domain>/actions.ts`,
   which attach the session JWT as Bearer — the browser never reads the HttpOnly
   cookie. Long-running server actions (market/GitHub plugin installs, archive
-  extract, URL download to the host, cleanup delete / system apply) are a
+  extract, URL download to the host, cleanup delete / system apply, plugin
+  auto-update run/test, plugin diagnostics execute/restore/resume) are a
   **delivery queue**: POST returns **202** with an `operation_id` and the
   page must not block. Jobs run **one at a time per server** so SSH locks
-  and plugin extracts do not overlap. Short file mutations (list, edit,
-  mkdir, rename, copy, single-file delete, upload) and cleanup **scan**
-  stay on their existing HTTP / SSE paths. The live log is the existing
+  and plugin extracts do not overlap. Scheduled lifecycle / `backup_plugins`
+  and fleet batch restart/stop/update/framework install enqueue onto the same
+  per-server FIFO and wait there, instead of taking `maintenance_lock`.
+  Short file mutations (list, edit, mkdir, rename, copy, single-file delete,
+  upload) and cleanup **scan** stay on their existing HTTP / SSE paths. The live log is the existing
   replayable SSE stream — do not add a second WebSocket for panel jobs, and
   do not attach the task tray to tmux (tmux is only the game/SteamCMD pane
   via `/live-console/{id}`). `EventSource` cannot set `Authorization`, so

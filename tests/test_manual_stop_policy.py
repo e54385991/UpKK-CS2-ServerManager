@@ -181,15 +181,10 @@ async def test_single_start_and_restart_clear_intent_before_ssh(monkeypatch, act
 async def test_batch_stop_persists_intent_before_ssh_and_keeps_it_on_failure(monkeypatch):
     server = server_fixture()
     db = FakeSession(server)
-
-    class Manager:
-        async def stop_server(self, current_server):
-            assert current_server.manual_stop_requested is True
-            assert db.commit_calls >= 1
-            return False, "shutdown timed out"
+    enqueue = AsyncMock(return_value={"operation_id": "op-stop", "status": "queued"})
+    wait = AsyncMock(return_value={"success": False, "message": "shutdown timed out"})
 
     monkeypatch.setattr(action_common, "async_session_maker", lambda: db)
-    monkeypatch.setattr(action_common, "SSHManager", Manager)
     monkeypatch.setattr(
         action_common.Server,
         "get_by_id_and_user",
@@ -201,10 +196,18 @@ async def test_batch_stop_persists_intent_before_ssh_and_keeps_it_on_failure(mon
         AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
-        action_common,
-        "send_discord_action_notification",
-        AsyncMock(return_value=None),
+        "api.routes.v1.operation_runner.enqueue_server_operation",
+        enqueue,
     )
+    monkeypatch.setattr(
+        "services.server_operation_hub.server_operation_hub.wait_until_terminal",
+        wait,
+    )
+
+    def unexpected_manager(*_args, **_kwargs):
+        raise AssertionError("batch stop must enqueue instead of calling SSHManager")
+
+    monkeypatch.setattr(action_common, "SSHManager", unexpected_manager)
 
     await action_common.execute_single_server_action(
         server.id,
@@ -215,7 +218,9 @@ async def test_batch_stop_persists_intent_before_ssh_and_keeps_it_on_failure(mon
     )
 
     assert server.manual_stop_requested is True
-    assert server.status == ServerStatus.ERROR
+    assert db.commit_calls >= 1
+    enqueue.assert_awaited_once()
+    wait.assert_awaited_once_with("op-stop")
 
 
 @pytest.mark.asyncio
@@ -272,6 +277,11 @@ async def test_scheduled_start_is_skipped_before_ssh(monkeypatch):
         lambda *args, **kwargs: lock,
     )
     monkeypatch.setattr(scheduled_task_service, "_update_task_status", update_status)
+    enqueue = AsyncMock()
+    monkeypatch.setattr(
+        "services.operation_enqueue.enqueue_server_operation",
+        enqueue,
+    )
 
     def unexpected_manager():
         raise AssertionError("SSH manager must not be created for a blocked scheduled start")
@@ -280,7 +290,8 @@ async def test_scheduled_start_is_skipped_before_ssh(monkeypatch):
 
     await scheduled_task_service._execute_task(task)
 
-    assert lock.acquired is True
+    assert lock.acquired is False
+    enqueue.assert_not_awaited()
     update_status.assert_awaited_once_with(task.id, "skipped", MANUAL_STOP_BLOCK_REASON)
 
 

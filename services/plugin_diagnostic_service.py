@@ -286,6 +286,23 @@ async def get_diagnostic_recommendation(
     }
 
 
+async def get_latest_diagnostic_run(db: AsyncSession, user: User, server_id: int) -> dict[str, Any]:
+    await authorized_server(db, user, server_id)
+    result = await db.execute(
+        select(PluginDiagnosticRun)
+        .where(PluginDiagnosticRun.server_id == server_id)
+        .order_by(
+            PluginDiagnosticRun.created_at.desc(),
+            PluginDiagnosticRun.id.desc(),
+        )
+        .limit(1)
+    )
+    run = result.scalar_one_or_none()
+    if run is None:
+        raise LookupError("Diagnostic run not found")
+    return await diagnostic_run_payload(db, run)
+
+
 async def _validate_remote_path(
     manager: SSHManager,
     server: Server,

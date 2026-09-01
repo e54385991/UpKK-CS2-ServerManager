@@ -12764,7 +12764,12 @@
               "extract_archive",
               "download_url",
               "cleanup_delete",
-              "cleanup_system"
+              "cleanup_system",
+              "plugin_auto_update",
+              "plugin_auto_update_test",
+              "plugin_diagnostic_execute",
+              "plugin_diagnostic_restore",
+              "plugin_diagnostic_resume"
             ],
             "title": "Action",
             "type": "string"
@@ -18898,7 +18903,12 @@
               "extract_archive",
               "download_url",
               "cleanup_delete",
-              "cleanup_system"
+              "cleanup_system",
+              "plugin_auto_update",
+              "plugin_auto_update_test",
+              "plugin_diagnostic_execute",
+              "plugin_diagnostic_restore",
+              "plugin_diagnostic_resume"
             ],
             "title": "Action",
             "type": "string"
@@ -35743,6 +35753,53 @@
         ]
       }
     },
+    "/api/v1/servers/{server_id}/plugin-diagnostics/latest-run": {
+      "get": {
+        "operationId": "read_latest_diagnostic_run_api_v1_servers__server_id__plugin_diagnostics_latest_run_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDiagnosticRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Latest Diagnostic Run",
+        "tags": [
+          "v1-plugin-diagnostics"
+        ]
+      }
+    },
     "/api/v1/servers/{server_id}/plugin-diagnostics/plan": {
       "post": {
         "operationId": "plan_diagnostic_api_v1_servers__server_id__plugin_diagnostics_plan_post",
@@ -35872,11 +35929,11 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PluginDiagnosticRunView"
+                  "$ref": "#/components/schemas/ServerOperationView"
                 }
               }
             },
@@ -35984,11 +36041,11 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PluginDiagnosticRunView"
+                  "$ref": "#/components/schemas/ServerOperationView"
                 }
               }
             },
@@ -36050,11 +36107,11 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PluginDiagnosticRunView"
+                  "$ref": "#/components/schemas/ServerOperationView"
                 }
               }
             },
@@ -36389,7 +36446,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ActionResult"
+                  "$ref": "#/components/schemas/ServerOperationView"
                 }
               }
             },
@@ -36436,7 +36493,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ActionResult"
+                  "$ref": "#/components/schemas/ServerOperationView"
                 }
               }
             },

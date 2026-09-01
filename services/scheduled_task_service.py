@@ -34,6 +34,9 @@ DISCORD_SCHEDULED_EVENT_TYPES = {
     "backup_plugins": EVENT_PLUGIN_UPDATE,
 }
 MAX_CONCURRENT_SCHEDULED_TASKS = 4
+HUB_SCHEDULED_ACTIONS = frozenset(
+    {"start", "stop", "restart", "update", "validate", "backup_plugins"}
+)
 
 
 class ScheduledTaskService:
@@ -136,7 +139,6 @@ class ScheduledTaskService:
         server = None
         operation_lock = None
         try:
-            # Get the server
             async with async_session_maker() as db:
                 server = await db.get(Server, task.server_id)
 
@@ -147,25 +149,6 @@ class ScheduledTaskService:
                     )
                     return
 
-            operation_lock = maintenance_lock_service.get(
-                server.id,
-                operation=f"scheduled:{task.action}",
-                wait=False,
-                ttl=3600,
-            )
-            await operation_lock.acquire()
-
-            # Re-read after acquiring the operation lock. A user action may
-            # have changed lifecycle intent while this task was waiting.
-            async with async_session_maker() as db:
-                server = await db.get(Server, task.server_id)
-
-            if not server:
-                await self._update_task_status(
-                    task.id, "failed", f"Server {task.server_id} not found"
-                )
-                return
-
             if task.action in {"start", "restart"}:
                 block_reason = automatic_start_block_reason(server)
                 if block_reason:
@@ -173,7 +156,6 @@ class ScheduledTaskService:
                     await self._update_task_status(task.id, "skipped", block_reason)
                     return
 
-            # Skip task if server is marked as down due to SSH failures
             if server.should_skip_background_checks():
                 logger.info(
                     f"Skipping scheduled task {task.id} for server {server.id} - marked as SSH down for 3+ days"
@@ -183,10 +165,52 @@ class ScheduledTaskService:
                 )
                 return
 
-            # Create SSH manager using the pattern from main.py
-            ssh_manager = SSHManager()
+            if task.action in HUB_SCHEDULED_ACTIONS:
+                from services.operation_enqueue import enqueue_server_operation
+                from services.server_operation_hub import (
+                    ServerOperationConflict,
+                    server_operation_hub,
+                )
 
-            # Connect to server
+                try:
+                    record = await enqueue_server_operation(
+                        server_id=server.id,
+                        action=task.action,
+                        actor_user_id=server.user_id,
+                    )
+                except ServerOperationConflict as exc:
+                    logger.info("Skipping scheduled task %s: %s", task.id, exc)
+                    await self._update_task_status(task.id, "skipped", str(exc))
+                    return
+                final = await server_operation_hub.wait_until_terminal(str(record["operation_id"]))
+                success = bool(final.get("success"))
+                message = str(final.get("message") or "")
+                if success:
+                    logger.info(f"Task {task.id} completed successfully")
+                    await self._update_task_status(task.id, "success", None)
+                else:
+                    logger.error(f"Task {task.id} failed: {message}")
+                    await self._update_task_status(task.id, "failed", message)
+                return
+
+            operation_lock = maintenance_lock_service.get(
+                server.id,
+                operation=f"scheduled:{task.action}",
+                wait=False,
+                ttl=3600,
+            )
+            await operation_lock.acquire()
+
+            async with async_session_maker() as db:
+                server = await db.get(Server, task.server_id)
+
+            if not server:
+                await self._update_task_status(
+                    task.id, "failed", f"Server {task.server_id} not found"
+                )
+                return
+
+            ssh_manager = SSHManager()
             connect_success, connect_msg = await ssh_manager.connect(server)
             if not connect_success:
                 logger.error(
@@ -204,7 +228,6 @@ class ScheduledTaskService:
                 return
 
             try:
-                # Execute the action
                 success, message = await self._execute_action(ssh_manager, server, task.action)
 
                 if success:
@@ -230,7 +253,6 @@ class ScheduledTaskService:
         finally:
             if operation_lock is not None:
                 await operation_lock.__aexit__(None, None, None)
-            # Remove from running tasks
             self.running_tasks.pop(task.id, None)
             self.running_server_ids.discard(task.server_id)
 

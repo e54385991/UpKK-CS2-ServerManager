@@ -1446,7 +1446,21 @@ async def apply_managed_plugin_upgrade(
         raise PermissionError("Managed plugin upgrade plan changed after approval")
     if plan["no_op"]:
         return {"success": True, "message": "No plugin update available", "no_op": True}
-    return await plugin_auto_update_service.check_plugin(server.id, data.plugin_id)
+    from services.operation_enqueue import enqueue_plugin_auto_update
+    from services.server_operation_hub import server_operation_hub
+
+    record = await enqueue_plugin_auto_update(
+        server_id=server.id,
+        actor_user_id=ctx.user.id,
+        plugin_id=data.plugin_id,
+        force=True,
+    )
+    final = await server_operation_hub.wait_until_terminal(str(record["operation_id"]))
+    return {
+        "success": bool(final.get("success")),
+        "message": str(final.get("message") or ""),
+        "no_op": False,
+    }
 
 
 async def apply_workshop_map(ctx: ToolContext, data: ApplyWorkshopPlanInput) -> dict[str, Any]:

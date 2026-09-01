@@ -467,6 +467,44 @@ class ServerOperationHub:
             if not queues:
                 self._queues.pop(operation_id, None)
 
+    async def wait_until_terminal(
+        self, operation_id: str, *, timeout: float | None = None
+    ) -> dict[str, Any]:
+        """Block until this operation completes or fails.
+
+        Scheduled tasks and fleet batch jobs enqueue onto the per-server FIFO,
+        then wait here so their own status records stay accurate without
+        holding the maintenance lock.
+        """
+        record = await self.get(operation_id)
+        if record is None:
+            raise LookupError(f"Operation {operation_id} was not found")
+        if record.get("status") not in ACTIVE_STATUSES:
+            return record
+        queue = await self.subscribe_queue(operation_id)
+        try:
+            record = await self.get(operation_id)
+            if record is None:
+                raise LookupError(f"Operation {operation_id} was not found")
+            if record.get("status") not in ACTIVE_STATUSES:
+                return record
+            loop = asyncio.get_running_loop()
+            deadline = None if timeout is None else loop.time() + timeout
+            while True:
+                remaining = None
+                if deadline is not None:
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        raise TimeoutError(f"Timed out waiting for operation {operation_id}")
+                event = await asyncio.wait_for(queue.get(), timeout=remaining)
+                if event.get("type") in TERMINAL_EVENT_TYPES:
+                    finished = await self.get(operation_id)
+                    if finished is None:
+                        raise LookupError(f"Operation {operation_id} was not found")
+                    return finished
+        finally:
+            await self.unsubscribe_queue(operation_id, queue)
+
     async def _pending_ids_unlocked(self, server_id: int) -> list[str]:
         cached = self._pending.get(server_id)
         if cached is not None:

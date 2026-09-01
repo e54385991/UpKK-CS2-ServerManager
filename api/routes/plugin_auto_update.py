@@ -1,13 +1,12 @@
 """Configuration API for per-server managed plugin automatic updates."""
 
-import asyncio
-import logging
-
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from api.dependencies import ActiveUser, DatabaseSession
+from api.routes.v1.operation_locks import reject_stuck_lock_unless_active
+from api.routes.v1.operation_runner import enqueue_plugin_auto_update
 from modules import (
     ActionResponse,
     CustomCommand,
@@ -21,24 +20,17 @@ from modules import (
     Server,
     User,
 )
-from services.maintenance_lock import maintenance_lock_service
 from services.plugin_auto_update_service import (
     FRAMEWORKS,
     canonical_repo_url,
     plugin_auto_update_service,
 )
+from services.server_operation_hub import ServerOperationConflict
 from services.task_registry import plugin_update_task_registry
 
 router = APIRouter(
     prefix="/api/servers/{server_id}/plugin-auto-update", tags=["plugin-auto-update"]
 )
-_background_tasks = plugin_update_task_registry.tasks
-logger = logging.getLogger(__name__)
-
-
-def _task_done(task: asyncio.Task) -> None:
-    if not task.cancelled() and task.exception():
-        logger.error("Manual plugin update check failed: %s", task.exception())
 
 
 async def shutdown_background_tasks() -> None:
@@ -268,16 +260,15 @@ async def run_now(
     current_user: ActiveUser,
 ):
     await owned_server(db, server_id, current_user)
-    if await maintenance_lock_service.is_locked(server_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Another maintenance operation is already running",
+    await reject_stuck_lock_unless_active(server_id)
+    try:
+        await enqueue_plugin_auto_update(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            force=True,
         )
-    task = asyncio.create_task(plugin_auto_update_service.check_server(server_id, force=True))
-    plugin_update_task_registry.add(
-        task,
-        on_error=lambda completed, _error: _task_done(completed),
-    )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return ActionResponse(success=True, message="Plugin update check started")
 
 
@@ -295,16 +286,16 @@ async def test_plugin_update(
     """Run the normal protected update pipeline for one managed plugin."""
     await owned_server(db, server_id, current_user)
     await owned_plugin(db, server_id, plugin_id)
-    if await maintenance_lock_service.is_locked(server_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Another maintenance operation is already running",
+    await reject_stuck_lock_unless_active(server_id)
+    try:
+        await enqueue_plugin_auto_update(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            plugin_id=plugin_id,
+            force=True,
         )
-    task = asyncio.create_task(plugin_auto_update_service.check_plugin(server_id, plugin_id))
-    plugin_update_task_registry.add(
-        task,
-        on_error=lambda completed, _error: _task_done(completed),
-    )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return ActionResponse(success=True, message="Plugin test update started")
 
 

@@ -4186,6 +4186,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servers/{server_id}/plugin-diagnostics/latest-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Latest Diagnostic Run */
+        get: operations["read_latest_diagnostic_run_api_v1_servers__server_id__plugin_diagnostics_latest_run_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers/{server_id}/plugin-diagnostics/plan": {
         parameters: {
             query?: never;
@@ -11346,7 +11363,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -13977,7 +13994,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -23225,6 +23242,37 @@ export interface operations {
             };
         };
     };
+    read_latest_diagnostic_run_api_v1_servers__server_id__plugin_diagnostics_latest_run_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginDiagnosticRunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     plan_diagnostic_api_v1_servers__server_id__plugin_diagnostics_plan_post: {
         parameters: {
             query?: never;
@@ -23307,12 +23355,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PluginDiagnosticRunView"];
+                    "application/json": components["schemas"]["ServerOperationView"];
                 };
             };
             /** @description Validation Error */
@@ -23371,12 +23419,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PluginDiagnosticRunView"];
+                    "application/json": components["schemas"]["ServerOperationView"];
                 };
             };
             /** @description Validation Error */
@@ -23407,12 +23455,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PluginDiagnosticRunView"];
+                    "application/json": components["schemas"]["ServerOperationView"];
                 };
             };
             /** @description Validation Error */
@@ -23613,7 +23661,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ActionResult"];
+                    "application/json": components["schemas"]["ServerOperationView"];
                 };
             };
             /** @description Validation Error */
@@ -23644,7 +23692,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ActionResult"];
+                    "application/json": components["schemas"]["ServerOperationView"];
                 };
             };
             /** @description Validation Error */

@@ -2733,11 +2733,20 @@ class DiscordBotManager:
                 data = GameConsoleCommandInput(command=_operation_game_console_command(item))
                 return await spec.handler(context, data)
         if item.action == "plugin_upgrade":
-            from services.plugin_auto_update_service import plugin_auto_update_service
+            from services.operation_enqueue import enqueue_plugin_auto_update
+            from services.server_operation_hub import server_operation_hub
 
-            return await plugin_auto_update_service.check_plugin(
-                item.server_id, int(item.arguments["plugin_id"])
+            record = await enqueue_plugin_auto_update(
+                server_id=item.server_id,
+                actor_user_id=item.owner_user_id,
+                plugin_id=int(item.arguments["plugin_id"]),
+                force=True,
             )
+            final = await server_operation_hub.wait_until_terminal(str(record["operation_id"]))
+            return {
+                "success": bool(final.get("success")),
+                "message": str(final.get("message") or ""),
+            }
         raise ValueError(f"Unsupported Discord operation: {item.action}")
 
 

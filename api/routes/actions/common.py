@@ -197,18 +197,28 @@ async def _run_bounded_batch_operation(
     batch_id: str,
     operation: str,
     callback,
-) -> None:
-    """Bound global fan-out and serialize destructive work per server."""
+    *,
+    acquire_lock: bool = True,
+):
+    """Bound global fan-out. Lifecycle/plugin jobs join the per-server hub FIFO.
+
+    ``acquire_lock`` stays on for short game-console commands that do not go
+    through the hub. Hub-backed jobs must not hold the lock or the worker
+    cannot start.
+    """
     try:
         async with _batch_operation_limiter.slot(user_id):
             try:
-                async with maintenance_lock_service.get(
-                    server_id,
-                    operation=operation,
-                    wait=True,
-                    wait_timeout=30,
-                    ttl=7200,
-                ):
+                if acquire_lock:
+                    async with maintenance_lock_service.get(
+                        server_id,
+                        operation=operation,
+                        wait=True,
+                        wait_timeout=30,
+                        ttl=7200,
+                    ):
+                        await callback()
+                else:
                     await callback()
             except OperationBusyError as exc:
                 await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(exc))
@@ -281,29 +291,17 @@ async def clear_deployment_progress_after_delay(
 async def execute_single_server_action(
     server_id: int, action: str, user_id: int, is_admin: bool, batch_id: str
 ):
-    """
-    Execute an action on a single server in the background.
-    This function is designed to run as a background task.
-
-    Args:
-        server_id: Server ID
-        action: Action to perform (restart, stop, update)
-        user_id: User ID for ownership verification
-        is_admin: Whether the user is an admin
-        batch_id: Batch ID for tracking progress
-    """
+    """Enqueue one lifecycle action onto the per-server FIFO and wait for it."""
     import logging
 
     logger = logging.getLogger(__name__)
     server = None
 
     try:
-        # Update status to in_progress
         await redis_manager.set_batch_action_status(
-            batch_id, server_id, "in_progress", "Starting..."
+            batch_id, server_id, "in_progress", "Queued on the server task list..."
         )
 
-        # Get server and verify ownership - close DB session quickly to avoid pool exhaustion
         async with async_session_maker() as db:
             if is_admin:
                 server = await Server.get_by_id(db, server_id)
@@ -317,106 +315,30 @@ async def execute_single_server_action(
 
             if action in {"start", "stop", "restart"}:
                 apply_user_lifecycle_intent(server, action)
-                # Persist intent before SSH work so background services cannot
-                # race an explicit user stop or start request.
                 await db.commit()
 
-        # DB session closed here - perform SSH operations without holding DB connection
-        ssh_manager = SSHManager()
-        success = False
-        message = ""
-        new_status = None
+        from api.routes.v1.operation_runner import enqueue_server_operation
+        from services.server_operation_hub import ServerOperationConflict, server_operation_hub
 
         try:
-            if action == "restart":
-                (
-                    manager_ready,
-                    preflight_message,
-                ) = await ssh_manager.check_session_manager_available(server)
-                if not manager_ready:
-                    success = False
-                    message = (
-                        f"Restart aborted before stopping: {preflight_message}. "
-                        "The existing game session was left untouched."
-                    )
-                else:
-                    # Stop then start only after the selected manager is ready.
-                    await redis_manager.set_batch_action_status(
-                        batch_id, server_id, "in_progress", "Stopping server..."
-                    )
-                    stop_success, stop_msg = await ssh_manager.stop_server(server)
-                    if not stop_success:
-                        success = False
-                        message = f"Restart stopped because shutdown failed: {stop_msg}"
-                        new_status = ServerStatus.ERROR
-                    else:
-                        # Add small delay before starting a fully stopped server.
-                        await asyncio.sleep(0.5)
-                        await redis_manager.set_batch_action_status(
-                            batch_id, server_id, "in_progress", "Starting server..."
-                        )
-                        success, message = await ssh_manager.start_server(server)
-                        new_status = ServerStatus.RUNNING if success else ServerStatus.ERROR
-
-            elif action == "stop":
-                success, message = await ssh_manager.stop_server(server)
-                if success:
-                    new_status = ServerStatus.STOPPED
-                else:
-                    new_status = ServerStatus.ERROR
-
-            elif action == "update":
-                await redis_manager.set_batch_action_status(
-                    batch_id, server_id, "in_progress", "Updating server..."
-                )
-                success, message = await ssh_manager.update_server(server)
-                if not success:
-                    new_status = ServerStatus.ERROR
-
-            # Update server status and create deployment log in a separate quick session
-            async with async_session_maker() as db:
-                if new_status:
-                    server_to_update = await db.get(Server, server_id)
-                    if server_to_update:
-                        server_to_update.status = new_status
-                        await db.commit()
-
-                # Create deployment log
-                log = DeploymentLog(
-                    server_id=server_id,
-                    action=action,
-                    status="success" if success else "failed",
-                    output=message if success else None,
-                    error_message=message if not success else None,
-                )
-                db.add(log)
-                await db.commit()
-
-            # Update final status
-            if success:
-                await redis_manager.set_batch_action_status(batch_id, server_id, "success", message)
-            else:
-                await redis_manager.set_batch_action_status(batch_id, server_id, "failed", message)
-
-            await send_discord_action_notification(
-                server,
-                action,
-                success,
-                message,
-                details={"Batch ID": batch_id},
+            record = await enqueue_server_operation(
+                server_id=server_id,
+                action=action,
+                actor_user_id=user_id,
             )
+        except ServerOperationConflict as exc:
+            await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(exc))
+            return
 
-        except Exception as e:
-            logger.error(f"Error executing action {action} on server {server_id}: {e}")
-            await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(e))
-            await send_discord_action_notification(
-                server,
-                action,
-                False,
-                str(e),
-                details={"Batch ID": batch_id},
-            )
-
+        final = await server_operation_hub.wait_until_terminal(str(record["operation_id"]))
+        success = bool(final.get("success"))
+        message = str(final.get("message") or "")
+        await redis_manager.set_batch_action_status(
+            batch_id,
+            server_id,
+            "success" if success else "failed",
+            message,
+        )
     except Exception as e:
         logger.error(f"Background task error for server {server_id}: {e}")
         await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(e))
@@ -425,145 +347,75 @@ async def execute_single_server_action(
 async def execute_single_server_plugins(
     server_id: int, plugins: List[str], user_id: int, is_admin: bool, batch_id: str
 ):
-    """
-    Install plugins on a single server in the background.
-    This function is designed to run as a background task.
-
-    Args:
-        server_id: Server ID
-        plugins: List of plugins to install
-        user_id: User ID for ownership verification
-        is_admin: Whether the user is an admin
-        batch_id: Batch ID for tracking progress
-    """
+    """Enqueue framework installs onto the per-server FIFO, one plugin at a time."""
     import logging
 
     logger = logging.getLogger(__name__)
-    server = None
-    owner = None
+    plugin_actions = {
+        "metamod": "install_metamod",
+        "counterstrikesharp": "install_counterstrikesharp",
+        "cs2fixes": "install_cs2fixes",
+    }
 
     try:
-        # Update status to in_progress
         await redis_manager.set_batch_action_status(
-            batch_id, server_id, "in_progress", "Starting plugin installation..."
+            batch_id, server_id, "in_progress", "Queued plugin installation..."
         )
 
-        # Get server and verify ownership - close DB session quickly to avoid pool exhaustion
         async with async_session_maker() as db:
             if is_admin:
                 server = await Server.get_by_id(db, server_id)
             else:
                 server = await Server.get_by_id_and_user(db, server_id, user_id)
-            owner = await db.get(User, server.user_id) if server else None
-
             if not server:
                 await redis_manager.set_batch_action_status(
                     batch_id, server_id, "failed", "Server not found"
                 )
                 return
 
-        # DB session closed here - perform SSH operations without holding DB connection
-        ssh_manager = SSHManager()
+        from api.routes.v1.operation_runner import enqueue_server_operation
+        from services.server_operation_hub import ServerOperationConflict, server_operation_hub
+
         plugin_results = []
-
         for plugin in plugins:
-            try:
-                await redis_manager.set_batch_action_status(
-                    batch_id, server_id, "in_progress", f"Installing {plugin}..."
+            action = plugin_actions.get(plugin)
+            if action is None:
+                plugin_results.append(
+                    {"plugin": plugin, "success": False, "message": f"Unknown plugin: {plugin}"}
                 )
+                continue
+            await redis_manager.set_batch_action_status(
+                batch_id, server_id, "in_progress", f"Queued {plugin}..."
+            )
+            try:
+                record = await enqueue_server_operation(
+                    server_id=server_id,
+                    action=action,
+                    actor_user_id=user_id,
+                )
+            except ServerOperationConflict as exc:
+                plugin_results.append({"plugin": plugin, "success": False, "message": str(exc)})
+                break
+            final = await server_operation_hub.wait_until_terminal(str(record["operation_id"]))
+            success = bool(final.get("success"))
+            message = str(final.get("message") or "")
+            plugin_results.append({"plugin": plugin, "success": success, "message": message})
+            if not success:
+                break
 
-                success = False
-                message = ""
-
-                if plugin == "metamod":
-                    success, message = await ssh_manager.install_metamod(server)
-                elif plugin == "counterstrikesharp":
-                    success, message = await ssh_manager.install_counterstrikesharp(server)
-                elif plugin == "cs2fixes":
-                    success, message = await ssh_manager.install_cs2fixes(server)
-                else:
-                    success = False
-                    message = f"Unknown plugin: {plugin}"
-
-                if success and owner:
-                    try:
-                        from services.plugin_auto_update_service import (
-                            record_framework_installation,
-                            record_known_github_installation,
-                        )
-
-                        if plugin in {"metamod", "counterstrikesharp"}:
-                            await record_framework_installation(server, owner, plugin)
-                            if plugin == "counterstrikesharp":
-                                await record_framework_installation(server, owner, "metamod")
-                        elif plugin == "cs2fixes":
-                            await record_known_github_installation(
-                                server,
-                                owner,
-                                "https://github.com/Source2ZE/CS2Fixes",
-                                "CS2Fixes",
-                                "CS2Fixes-*-linux.tar.gz",
-                            )
-                            await record_framework_installation(server, owner, "metamod")
-                    except Exception as tracking_error:
-                        logger.warning(
-                            "Plugin installed but tracking metadata failed: %s", tracking_error
-                        )
-
-                # Create deployment log in a separate quick session
-                async with async_session_maker() as db:
-                    log = DeploymentLog(
-                        server_id=server_id,
-                        action=f"install_{plugin}",
-                        status="success" if success else "failed",
-                        output=message if success else None,
-                        error_message=message if not success else None,
-                    )
-                    db.add(log)
-                    await db.commit()
-
-                plugin_results.append({"plugin": plugin, "success": success, "message": message})
-
-            except Exception as e:
-                logger.error(f"Error installing {plugin} on server {server_id}: {e}")
-                plugin_results.append({"plugin": plugin, "success": False, "message": str(e)})
-
-        # Determine overall success
-        overall_success = all(r["success"] for r in plugin_results)
+        overall_success = bool(plugin_results) and all(item["success"] for item in plugin_results)
         summary = ", ".join(
-            [f"{r['plugin']}: {'✓' if r['success'] else '✗'}" for r in plugin_results]
+            f"{item['plugin']}: {'ok' if item['success'] else 'failed'}" for item in plugin_results
         )
-
-        if overall_success:
-            await redis_manager.set_batch_action_status(batch_id, server_id, "success", summary)
-        else:
-            await redis_manager.set_batch_action_status(batch_id, server_id, "failed", summary)
-
-        await send_discord_action_notification(
-            server,
-            "batch_install_plugins",
-            overall_success,
+        await redis_manager.set_batch_action_status(
+            batch_id,
+            server_id,
+            "success" if overall_success else "failed",
             summary,
-            details={
-                "Batch ID": batch_id,
-                "Plugins": ", ".join(plugins),
-            },
         )
-
     except Exception as e:
         logger.error(f"Background task error for server {server_id}: {e}")
         await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(e))
-        if server:
-            await send_discord_action_notification(
-                server,
-                "batch_install_plugins",
-                False,
-                str(e),
-                details={
-                    "Batch ID": batch_id,
-                    "Plugins": ", ".join(plugins),
-                },
-            )
 
 
 async def execute_single_server_command(
