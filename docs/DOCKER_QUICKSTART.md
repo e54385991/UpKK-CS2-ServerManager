@@ -62,6 +62,24 @@ docker compose up -d --build
 
 可以通过环境变量覆盖端口、数据库密码和镜像标签。公网部署仍建议在反向代理后启用 HTTPS，并设置强数据库密码。
 
+## 本地编译并推送到 Docker Hub
+
+仓库根目录有一对一键脚本，用当前工作区源码打 `linux/amd64` + `linux/arm64`，并推 `latest`：
+
+```bash
+# Linux / macOS（先 docker login）
+./publish-docker-images.sh
+./publish-docker-images.sh web
+```
+
+```bat
+REM Windows（先启动 Docker Desktop，再 docker login）
+publish-docker-images.bat
+publish-docker-images.bat web
+```
+
+可用环境变量覆盖：`DOCKERHUB_USERNAME`、`IMAGE_TAG`、`DOCKER_BUILDER`、`DOCKER_PLATFORMS`。加 `--no-push` 只编译、不推送。
+
 ## 自动发布到 Docker Hub
 
 在 GitHub 仓库设置以下 Actions Secrets（不要把 Token 提交到代码）：

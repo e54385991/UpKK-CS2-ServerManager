@@ -3,3 +3,6 @@
 
 # Shell scripts must use Unix line endings so Linux can resolve shebangs.
 *.sh text eol=lf
+
+# Windows batch files need CRLF so cmd.exe parses them correctly.
+*.bat text eol=crlf

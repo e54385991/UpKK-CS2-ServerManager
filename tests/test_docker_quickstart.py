@@ -8,6 +8,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = (PROJECT_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 DEBUG_COMPOSE = (PROJECT_ROOT / "docker-compose.debug.yml").read_text(encoding="utf-8")
 QUICKSTART = (PROJECT_ROOT / "docker-quickstart.sh").read_text(encoding="utf-8")
+PUBLISH_SH = (PROJECT_ROOT / "publish-docker-images.sh").read_text(encoding="utf-8")
+PUBLISH_BAT = (PROJECT_ROOT / "publish-docker-images.bat").read_text(encoding="utf-8")
 README = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
 README_ZH = (PROJECT_ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
 
@@ -44,6 +46,17 @@ def test_quickstart_installs_console_on_port_3000() -> None:
     assert "CONSOLE_PUBLIC_URL" in QUICKSTART
     assert "BACKEND_URL" in QUICKSTART
     assert "is_loopback_url" in QUICKSTART
+
+
+def test_publish_scripts_build_both_hub_images() -> None:
+    for script in (PUBLISH_SH, PUBLISH_BAT):
+        assert "upkk-cs2-server-manager" in script
+        assert "upkk-cs2-server-manager-web" in script
+        assert "linux/amd64,linux/arm64" in script
+        assert "e54385991" in script
+        assert "--push" in script
+        assert "DOCKERHUB_USERNAME" in script
+        assert "frontend/Dockerfile" in script or "frontend\\Dockerfile" in script
 
 
 def test_readme_sends_operators_to_port_3000() -> None:
