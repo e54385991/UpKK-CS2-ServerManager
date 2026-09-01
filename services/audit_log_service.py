@@ -22,8 +22,8 @@ AUDIT_LOG_RETENTION_DAYS = 30
 INVALID_CREDENTIALS_DETAILS = {"reason": "invalid_credentials"}
 _USER_AGENT_LIMIT = 500
 
-AUDIT_CATEGORIES = frozenset({"auth", "discord", "server", "settings"})
-AUDIT_STATUSES = frozenset({"success", "failure", "cancelled", "expired", "requested"})
+AUDIT_CATEGORIES = frozenset({"auth", "discord", "server", "settings", "files", "config", "plugin"})
+AUDIT_STATUSES = frozenset({"success", "failure", "cancelled", "expired", "requested", "partial"})
 
 
 def client_ip_address(request: Request | None) -> str | None:

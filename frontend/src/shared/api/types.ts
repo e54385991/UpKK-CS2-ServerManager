@@ -121,7 +121,6 @@ export type StartupCommandViewDto = Schemas["StartupCommandView"];
 export type ConfirmDeploymentViewDto = Schemas["ConfirmDeploymentView"];
 export type CleanupScanViewDto = Schemas["CleanupScanView"];
 export type CleanupDeleteBodyDto = Schemas["CleanupDeleteBody"];
-export type CleanupDeleteViewDto = Schemas["CleanupDeleteView"];
 export type ServerConfigExportDto = Schemas["ServerConfigExport"];
 export type ServerConfigImportRequestDto = Schemas["ServerConfigImportRequest"];
 export type ServerConfigImportResponseDto = Schemas["ServerConfigImportResponse"];

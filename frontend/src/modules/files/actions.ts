@@ -25,6 +25,7 @@ import type {
   FilesWorkspace,
   FileTask,
 } from "@/modules/files/types";
+import type { ServerOperation } from "@/modules/servers/types";
 
 function revalidateFiles(serverId: number) {
   revalidatePath(`/servers/${serverId}/files`);
@@ -109,7 +110,7 @@ export async function startUrlDownloadAction(
     readonly filename?: string;
     readonly overwrite?: boolean;
   },
-): Promise<ApiResult<FileTask>> {
+): Promise<ApiResult<ServerOperation>> {
   return startUrlDownload(serverId, input);
 }
 
@@ -136,7 +137,7 @@ export async function extractArchiveAction(
     readonly sourceFolder?: string;
     readonly stripSourceFolder?: boolean;
   },
-): Promise<ApiResult<FileTask>> {
+): Promise<ApiResult<ServerOperation>> {
   return extractArchive(serverId, input);
 }
 

@@ -12,8 +12,8 @@ import {
   ARCHIVE_FORMATS_LABEL,
   type FileArchiveInspect,
   type FileEntry,
-  type FileTask,
 } from "@/modules/files/types";
+import type { ServerOperation } from "@/modules/servers/types";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Dialog } from "@/shared/ui/dialog";
@@ -33,7 +33,7 @@ export function ExtractDialog({
   entry: FileEntry;
   destination: string;
   onClose: () => void;
-  onStarted: (task: FileTask, reveal: ExtractRevealHint) => void;
+  onStarted: (operation: ServerOperation, reveal: ExtractRevealHint) => void;
 }) {
   const t = useTranslations("files");
   const [inspect, setInspect] = useState<FileArchiveInspect | null>(null);

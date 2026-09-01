@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from api.routes import plugin_configs as legacy
+from services.audit_log_service import record_audit_event
 
 from .schemas import (
     PluginConfigBrowseItemView,
@@ -213,6 +214,7 @@ async def save_config_file(
     server_id: int,
     source_id: int,
     body: PluginConfigSaveRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> PluginConfigFileView:
@@ -228,5 +230,14 @@ async def save_config_file(
         ),
         db,
         current_user,
+    )
+    await record_audit_event(
+        category="config",
+        action="config.plugin_file.update",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"path": body.path, "source_id": source_id, "mode": body.mode},
     )
     return _file(payload)

@@ -1365,6 +1365,17 @@ async def patch_server_text_file(ctx: ToolContext, data: FilePatchInput) -> dict
             raise RuntimeError(error)
     finally:
         await manager.disconnect()
+    from services.audit_log_service import record_audit_event
+
+    await record_audit_event(
+        category="files",
+        action="files.edit",
+        status="success",
+        user=ctx.user,
+        source="assistant",
+        server_id=server.id,
+        details={"path": relative, "bytes": len(data.content.encode()), "source": "assistant"},
+    )
     return {
         "success": True,
         "path": relative,

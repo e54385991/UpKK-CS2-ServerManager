@@ -318,6 +318,7 @@ async def install_market_plugin(
     server_id: int,
     plugin_id: int,
     body: PluginInstallRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ServerOperationView:
@@ -369,6 +370,19 @@ async def install_market_plugin(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+    await record_audit_event(
+        category="plugin",
+        action="plugin.install",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "operation_id": record["operation_id"],
+            "plugin_id": plugin_id,
+            "upgrade_mode": body.upgrade_mode,
+        },
+    )
     return to_view(record)
 
 
@@ -381,6 +395,7 @@ async def uninstall_market_plugin(
     server_id: int,
     plugin_id: int,
     body: GitHubUninstallRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ServerOperationView:
@@ -402,4 +417,17 @@ async def uninstall_market_plugin(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+    await record_audit_event(
+        category="plugin",
+        action="plugin.uninstall",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "operation_id": record["operation_id"],
+            "plugin_id": plugin_id,
+            "file_count": len(body.files_to_delete),
+        },
+    )
     return to_view(record)

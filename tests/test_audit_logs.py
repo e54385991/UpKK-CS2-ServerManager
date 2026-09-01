@@ -13,7 +13,9 @@ from api.application import create_app
 from modules.models import AuditLog, DiscordOperationRun
 from modules.schemas import AuditLogListResponse, AuditLogResponse
 from services.audit_log_service import (
+    AUDIT_CATEGORIES,
     AUDIT_LOG_RETENTION_DAYS,
+    AUDIT_STATUSES,
     INVALID_CREDENTIALS_DETAILS,
     discord_operation_details,
     record_audit_event,
@@ -245,3 +247,32 @@ def test_audit_logs_api_lists_rows_for_admin(monkeypatch):
     assert body["total"] == 1
     assert body["items"][0]["action"] == "login"
     assert body["retention_days"] == 30
+
+
+def test_audit_categories_include_files_config_plugin():
+    assert {"files", "config", "plugin"} <= AUDIT_CATEGORIES
+    assert "partial" in AUDIT_STATUSES
+
+
+def test_v1_audit_filters_new_category_and_partial_status(monkeypatch):
+    from modules import get_current_active_user, get_current_admin_user, get_current_user, get_db
+
+    listed = AsyncMock(return_value=SimpleNamespace(items=[], total=0, limit=50, offset=0))
+    monkeypatch.setattr("api.routes.v1.audit.list_audit_logs", listed)
+    app = create_app(lifespan=None)
+    admin = SimpleNamespace(id=1, username="admin", is_admin=True, is_active=True)
+    app.dependency_overrides[get_current_user] = lambda: admin
+    app.dependency_overrides[get_current_active_user] = lambda: admin
+    app.dependency_overrides[get_current_admin_user] = lambda: admin
+
+    async def fake_db():
+        yield SimpleNamespace()
+
+    app.dependency_overrides[get_db] = fake_db
+    client = TestClient(app)
+    assert client.get("/api/v1/audit", params={"category": "nope"}).status_code == 400
+    assert client.get("/api/v1/audit", params={"status": "bogus"}).status_code == 400
+    response = client.get("/api/v1/audit", params={"category": "files", "status": "partial"})
+    assert response.status_code == 200
+    assert listed.await_args.kwargs["category"] == "files"
+    assert listed.await_args.kwargs["status"] == "partial"

@@ -117,6 +117,10 @@ def test_v1_operation_action_literals_match_legacy_allow_list():
         "apply_apt_mirror",
         "s3_restore",
         "install_game_mode",
+        "extract_archive",
+        "download_url",
+        "cleanup_delete",
+        "cleanup_system",
     }
 
 

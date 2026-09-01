@@ -237,7 +237,7 @@ def test_v1_files_get_lists_entries(monkeypatch):
 def test_v1_files_mkdir_wraps_legacy(monkeypatch):
     client, _server, _user = _client(monkeypatch)
 
-    async def fake_mkdir(server_id, path, request, db, current_user):
+    async def fake_mkdir(server_id, path, request, db, current_user, _http_request=None):
         return {
             "success": True,
             "message": "Directory created successfully",
@@ -285,7 +285,7 @@ def test_v1_files_content_round_trip(monkeypatch):
 def test_v1_files_copy_wraps_legacy(monkeypatch):
     client, _server, _user = _client(monkeypatch)
 
-    async def fake_copy(server_id, request, db, current_user):
+    async def fake_copy(server_id, request, db, current_user, _http_request=None):
         return {
             "success": True,
             "message": "Copied successfully",
@@ -343,3 +343,149 @@ def test_v1_files_copy_rejects_empty_sources(monkeypatch):
         json={"sources": [], "destination": "/tmp/cs2-ops-verify"},
     )
     assert response.status_code == 422
+
+
+def _queued_file_record(*, action: str, operation_id: str = "op-file-1") -> dict:
+    return {
+        "operation_id": operation_id,
+        "server_id": 1,
+        "action": action,
+        "status": "queued",
+        "success": None,
+        "message": None,
+        "server_status": None,
+        "actor_user_id": 1,
+        "started_at": "2026-09-01T00:00:00+00:00",
+        "completed_at": None,
+        "command": f"{action} /tmp/cs2-ops-verify/a.zip",
+    }
+
+
+def test_v1_files_extract_enqueues_hub_operation(monkeypatch):
+    client, _server, _user = _client(monkeypatch)
+    record = _queued_file_record(action="extract_archive")
+    monkeypatch.setattr("api.routes.v1.files.reject_stuck_lock_unless_active", AsyncMock())
+    monkeypatch.setattr(
+        "api.routes.v1.files.enqueue_extract_archive",
+        AsyncMock(return_value=record),
+    )
+    monkeypatch.setattr("api.routes.v1.files.record_audit_event", AsyncMock())
+    response = client.post(
+        "/api/v1/servers/1/files/archives/extract",
+        json={"archive_path": "/tmp/cs2-ops-verify/a.zip"},
+    )
+    assert response.status_code == 202
+    body = response.json()
+    assert body["operation_id"] == "op-file-1"
+    assert body["action"] == "extract_archive"
+    assert body["status"] == "queued"
+
+
+def test_v1_files_extract_status_maps_hub_queued_to_pending(monkeypatch):
+    client, _server, _user = _client(monkeypatch)
+    monkeypatch.setattr(
+        "api.routes.v1.files.server_operation_hub.get",
+        AsyncMock(
+            return_value={
+                "operation_id": "op-file-1",
+                "server_id": 1,
+                "status": "queued",
+                "message": "Waiting in queue",
+                "destination": "/tmp/cs2-ops-verify",
+            }
+        ),
+    )
+    response = client.get("/api/v1/servers/1/files/archives/extract/op-file-1")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["task_id"] == "op-file-1"
+    assert body["status"] == "pending"
+    assert body["destination"] == "/tmp/cs2-ops-verify"
+
+
+def test_v1_files_download_url_enqueues_hub_operation(monkeypatch):
+    client, _server, _user = _client(monkeypatch)
+    record = _queued_file_record(action="download_url", operation_id="op-dl-1")
+    ssh = SimpleNamespace(
+        validate_path_within_base=AsyncMock(return_value=(True, "")),
+        disconnect=AsyncMock(),
+    )
+    monkeypatch.setattr("api.routes.v1.files.SSHManager", lambda: ssh)
+    monkeypatch.setattr("api.routes.v1.files.reject_stuck_lock_unless_active", AsyncMock())
+    monkeypatch.setattr(
+        "api.routes.v1.files.enqueue_url_download",
+        AsyncMock(return_value=record),
+    )
+    monkeypatch.setattr("api.routes.v1.files.record_audit_event", AsyncMock())
+    response = client.post(
+        "/api/v1/servers/1/files/download-url",
+        json={
+            "url": "https://github.com/example/repo/releases/download/v1/a.zip",
+            "destination_path": "/tmp/cs2-ops-verify",
+        },
+    )
+    assert response.status_code == 202
+    body = response.json()
+    assert body["operation_id"] == "op-dl-1"
+    assert body["action"] == "download_url"
+
+
+def test_v1_files_content_put_audits_metadata_without_body(monkeypatch):
+    client, server, _user = _client(monkeypatch)
+    recorded: list[dict] = []
+
+    async def capture(**kwargs):
+        recorded.append(kwargs)
+
+    monkeypatch.setattr("api.routes.file_manager.files.record_audit_event", capture)
+    monkeypatch.setattr(
+        "api.routes.file_manager.files.get_server_for_user",
+        AsyncMock(return_value=server),
+    )
+    ssh = SimpleNamespace(write_file=AsyncMock(return_value=(True, "")), disconnect=AsyncMock())
+    monkeypatch.setattr("api.routes.file_manager.files.SSHManager", lambda: ssh)
+
+    response = client.put(
+        "/api/v1/servers/1/files/content",
+        params={"path": "/tmp/cs2-ops-verify/server.cfg"},
+        json={"content": "hostname secret-body"},
+    )
+    assert response.status_code == 200
+    assert recorded
+    event = recorded[0]
+    assert event["category"] == "files"
+    assert event["action"] == "files.edit"
+    details = event["details"]
+    assert details["path"] == "/tmp/cs2-ops-verify/server.cfg"
+    assert "content" not in details
+    assert "secret-body" not in str(details)
+
+
+def test_v1_files_upload_audits_size_without_body(monkeypatch):
+    client, server, _user = _client(monkeypatch)
+    recorded: list[dict] = []
+
+    async def capture(**kwargs):
+        recorded.append(kwargs)
+
+    monkeypatch.setattr("api.routes.file_manager.files.record_audit_event", capture)
+    monkeypatch.setattr(
+        "api.routes.file_manager.files.get_server_for_user",
+        AsyncMock(return_value=server),
+    )
+    ssh = SimpleNamespace(upload_file=AsyncMock(return_value=(True, "")), disconnect=AsyncMock())
+    monkeypatch.setattr("api.routes.file_manager.files.SSHManager", lambda: ssh)
+
+    response = client.post(
+        "/api/v1/servers/1/files/upload",
+        params={"path": "/tmp/cs2-ops-verify"},
+        files={"file": ("note.txt", b"hello-secret", "text/plain")},
+    )
+    assert response.status_code == 200
+    assert recorded
+    event = recorded[0]
+    assert event["action"] == "files.upload"
+    details = event["details"]
+    assert details["size"] == len(b"hello-secret")
+    assert "hello-secret" not in str(details)
+    assert "content" not in details

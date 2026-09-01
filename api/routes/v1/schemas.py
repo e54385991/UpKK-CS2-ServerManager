@@ -804,6 +804,10 @@ ServerOperationAction = Literal[
     "apply_apt_mirror",
     "s3_restore",
     "install_game_mode",
+    "extract_archive",
+    "download_url",
+    "cleanup_delete",
+    "cleanup_system",
 ]
 
 ServerOperationStatus = Literal["queued", "running", "completed", "failed"]

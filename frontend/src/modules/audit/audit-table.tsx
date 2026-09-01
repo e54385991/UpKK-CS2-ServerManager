@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
 import { ScrollText, ChevronLeft, ChevronRight } from "lucide-react";
 import { listAudit, type AuditQuery } from "@/modules/audit/api";
@@ -10,6 +11,13 @@ function formatTime(iso: string | null): string {
   if (!iso) return "—";
   // Deterministic, locale-independent formatting (server-rendered).
   return iso.slice(0, 19).replace("T", " ");
+}
+
+function detailsEntries(details: Record<string, unknown>): [string, string][] {
+  return Object.entries(details).map(([key, value]) => [
+    key,
+    typeof value === "string" ? value : JSON.stringify(value),
+  ]);
 }
 
 export async function AuditTable({ query }: { query: AuditQuery }) {
@@ -65,13 +73,23 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
               <th className="px-4 py-3 font-medium">{t("columns.action")}</th>
               <th className="px-4 py-3 font-medium">{t("columns.status")}</th>
               <th className="px-4 py-3 font-medium">{t("columns.user")}</th>
+              <th className="px-4 py-3 font-medium">{t("columns.server")}</th>
               <th className="px-4 py-3 font-medium">{t("columns.ip")}</th>
               <th className="px-4 py-3 font-medium">{t("columns.source")}</th>
+              <th className="px-4 py-3 font-medium">{t("columns.details")}</th>
             </tr>
           </thead>
           <tbody>
             {items.map((entry) => {
               const tone = statusTone(entry.status);
+              const categoryKey = `categories.${entry.category}`;
+              const statusKey = `statuses.${entry.status}`;
+              const actionKey = `actions.${entry.action}`;
+              const details = detailsEntries(entry.details);
+              const serverHref =
+                entry.serverId != null
+                  ? (`/servers/${entry.serverId}` as Route)
+                  : null;
               return (
                 <tr
                   key={entry.id}
@@ -81,19 +99,56 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
                     {formatTime(entry.createdAt)}
                   </td>
                   <td className="px-4 py-2.5">
-                    <Badge tone="neutral">{t(`categories.${entry.category}`)}</Badge>
+                    <Badge tone="neutral">
+                      {t.has(categoryKey) ? t(categoryKey) : entry.category}
+                    </Badge>
                   </td>
-                  <td className="px-4 py-2.5 text-fg">{entry.action}</td>
+                  <td className="px-4 py-2.5 text-fg">
+                    {t.has(actionKey) ? t(actionKey) : entry.action}
+                  </td>
                   <td className="px-4 py-2.5">
-                    <Badge tone={tone}>{t(`statuses.${entry.status}`)}</Badge>
+                    <Badge tone={tone}>
+                      {t.has(statusKey) ? t(statusKey) : entry.status}
+                    </Badge>
                   </td>
                   <td className="px-4 py-2.5 text-fg-muted">
                     {entry.actorUsername ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {serverHref ? (
+                      <Link
+                        href={serverHref}
+                        className="text-primary hover:underline"
+                      >
+                        #{entry.serverId}
+                      </Link>
+                    ) : (
+                      <span className="text-fg-subtle">—</span>
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-fg-subtle">
                     {entry.ipAddress ?? "—"}
                   </td>
                   <td className="px-4 py-2.5 text-fg-subtle">{entry.source}</td>
+                  <td className="px-4 py-2.5">
+                    {details.length === 0 ? (
+                      <span className="text-fg-subtle">—</span>
+                    ) : (
+                      <details>
+                        <summary className="cursor-pointer text-xs text-fg-muted">
+                          {t("columns.details")}
+                        </summary>
+                        <dl className="mt-2 max-w-sm space-y-1 font-mono text-[11px] text-fg-muted">
+                          {details.map(([key, value]) => (
+                            <div key={key}>
+                              <dt className="inline text-fg-subtle">{key}: </dt>
+                              <dd className="inline break-all">{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </details>
+                    )}
+                  </td>
                 </tr>
               );
             })}

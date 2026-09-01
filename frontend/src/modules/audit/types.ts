@@ -8,6 +8,7 @@ export type AuditEntry = {
   readonly ipAddress: string | null;
   readonly source: string;
   readonly serverId: number | null;
+  readonly details: Record<string, unknown>;
 };
 
 export type Tone = "ok" | "warn" | "danger" | "info" | "neutral";
@@ -18,6 +19,9 @@ export const AUDIT_CATEGORY_VALUES = [
   "discord",
   "server",
   "settings",
+  "files",
+  "config",
+  "plugin",
 ] as const;
 
 export const AUDIT_STATUS_VALUES = [
@@ -26,6 +30,7 @@ export const AUDIT_STATUS_VALUES = [
   "cancelled",
   "expired",
   "requested",
+  "partial",
 ] as const;
 
 /** Status → visual tone (presentation only). */
@@ -35,6 +40,7 @@ export const AUDIT_STATUS_TONE: Record<string, Tone> = {
   cancelled: "neutral",
   expired: "warn",
   requested: "info",
+  partial: "warn",
 };
 
 export function statusTone(value: string): Tone {

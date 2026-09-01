@@ -82,30 +82,72 @@ def test_v1_cleanup_scan_projects_candidates(monkeypatch):
     assert "ssh_password" not in str(body)
 
 
-def test_v1_cleanup_delete_safe(monkeypatch):
+def test_v1_cleanup_delete_enqueues_hub(monkeypatch):
     client = _client()
-
-    async def fake_delete(*_args, **_kwargs):
-        return {
-            "success": True,
-            "message": "Deleted 1 item",
-            "deleted_count": 1,
-            "freed_bytes_estimate": 128,
-            "failed_items": [],
-        }
-
+    record = {
+        "operation_id": "op-clean-1",
+        "server_id": 7,
+        "action": "cleanup_delete",
+        "status": "queued",
+        "success": None,
+        "message": None,
+        "server_status": None,
+        "actor_user_id": 1,
+        "started_at": "2026-09-01T00:00:00+00:00",
+        "completed_at": None,
+        "command": "cleanup delete safe",
+    }
     monkeypatch.setattr(
-        "api.routes.v1.cleanup.legacy.delete_server_cleanup_items",
-        fake_delete,
+        "api.routes.v1.cleanup.get_server_with_permission",
+        AsyncMock(return_value=SimpleNamespace(id=7)),
     )
+    monkeypatch.setattr("api.routes.v1.cleanup.reject_stuck_lock_unless_active", AsyncMock())
+    enqueue = AsyncMock(return_value=record)
+    monkeypatch.setattr("api.routes.v1.cleanup.enqueue_cleanup_delete", enqueue)
+    monkeypatch.setattr("api.routes.v1.cleanup.record_audit_event", AsyncMock())
     response = client.post(
         "/api/v1/servers/7/cleanup/delete",
         json={"mode": "safe", "paths": []},
     )
-    assert response.status_code == 200
+    assert response.status_code == 202
     body = response.json()
-    assert body["success"] is True
-    assert body["deleted_count"] == 1
+    assert body["operation_id"] == "op-clean-1"
+    assert body["action"] == "cleanup_delete"
+    assert enqueue.await_args.kwargs["mode"] == "safe"
+
+
+def test_v1_cleanup_system_apply_enqueues_hub(monkeypatch):
+    client = _client()
+    record = {
+        "operation_id": "op-sys-1",
+        "server_id": 7,
+        "action": "cleanup_system",
+        "status": "queued",
+        "success": None,
+        "message": None,
+        "server_status": None,
+        "actor_user_id": 1,
+        "started_at": "2026-09-01T00:00:00+00:00",
+        "completed_at": None,
+        "command": "cleanup system journal",
+    }
+    monkeypatch.setattr(
+        "api.routes.v1.cleanup.get_server_with_permission",
+        AsyncMock(return_value=SimpleNamespace(id=7)),
+    )
+    monkeypatch.setattr("api.routes.v1.cleanup.reject_stuck_lock_unless_active", AsyncMock())
+    enqueue = AsyncMock(return_value=record)
+    monkeypatch.setattr("api.routes.v1.cleanup.enqueue_cleanup_system", enqueue)
+    monkeypatch.setattr("api.routes.v1.cleanup.record_audit_event", AsyncMock())
+    response = client.post(
+        "/api/v1/servers/7/cleanup/system",
+        json={"targets": ["journal"]},
+    )
+    assert response.status_code == 202
+    body = response.json()
+    assert body["operation_id"] == "op-sys-1"
+    assert body["action"] == "cleanup_system"
+    assert enqueue.await_args.kwargs["targets"] == ["journal"]
 
 
 def test_v1_cleanup_policy_and_system_require_authentication():

@@ -1,11 +1,9 @@
 import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
 import type {
-  CleanupDeleteResult,
   CleanupMode,
   CleanupPolicy,
   CleanupScan,
-  CleanupSystemApplyResult,
   CleanupSystemScan,
 } from "@/modules/cleanup/types";
 import {
@@ -14,14 +12,9 @@ import {
   type CleanupScanViewDto,
   type CleanupSystemScanDto,
 } from "@/modules/cleanup/wire";
-
-type CleanupDeleteViewDto = {
-  success: boolean;
-  message: string;
-  deleted_count: number;
-  freed_bytes_estimate: number;
-};
-
+import { mapServerOperation } from "@/modules/servers/operation-inbox";
+import type { ServerOperation } from "@/modules/servers/types";
+import type { ServerOperationViewDto } from "@/shared/api/types";
 
 export async function scanCleanup(
   serverId: number,
@@ -41,13 +34,12 @@ export async function deleteCleanup(
     readonly paths?: readonly string[];
     readonly confirmationText?: string;
   },
-): Promise<ApiResult<CleanupDeleteResult>> {
-  const result = await apiFetch<CleanupDeleteViewDto>(
+): Promise<ApiResult<ServerOperation>> {
+  const result = await apiFetch<ServerOperationViewDto>(
     `/api/v1/servers/${serverId}/cleanup/delete`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      timeoutMs: 180_000,
       body: JSON.stringify({
         mode: input.mode,
         paths: input.paths ?? [],
@@ -56,15 +48,7 @@ export async function deleteCleanup(
     },
   );
   if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      success: result.data.success,
-      message: result.data.message,
-      deletedCount: result.data.deleted_count,
-      freedBytes: result.data.freed_bytes_estimate,
-    },
-  };
+  return { ok: true, data: mapServerOperation(result.data) };
 }
 
 type CleanupPolicyDto = {
@@ -82,19 +66,6 @@ type CleanupPolicyDto = {
   manual_execute: string[];
   manual_setup: string[];
   message: string | null;
-};
-
-type CleanupSystemApplyDto = {
-  success: boolean;
-  message: string;
-  privilege: CleanupSystemApplyResult["privilege"];
-  applied: string[];
-  skipped: Array<{ id: string; error: string }>;
-  failed: Array<{ id: string; error: string }>;
-  deleted_count: number;
-  freed_bytes_estimate: number;
-  manual_execute: string[];
-  manual_setup: string[];
 };
 
 function toPolicy(raw: CleanupPolicyDto): CleanupPolicy {
@@ -169,13 +140,12 @@ export async function applySystemCleanup(
     readonly targets: readonly string[];
     readonly retainDays?: number;
   },
-): Promise<ApiResult<CleanupSystemApplyResult>> {
-  const result = await apiFetch<CleanupSystemApplyDto>(
+): Promise<ApiResult<ServerOperation>> {
+  const result = await apiFetch<ServerOperationViewDto>(
     `/api/v1/servers/${serverId}/cleanup/system`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      timeoutMs: 180_000,
       body: JSON.stringify({
         targets: input.targets,
         retain_days: input.retainDays ?? null,
@@ -183,19 +153,5 @@ export async function applySystemCleanup(
     },
   );
   if (!result.ok) return result;
-  return {
-    ok: true,
-    data: {
-      success: result.data.success,
-      message: result.data.message,
-      privilege: result.data.privilege,
-      applied: result.data.applied ?? [],
-      skipped: result.data.skipped ?? [],
-      failed: result.data.failed ?? [],
-      deletedCount: result.data.deleted_count,
-      freedBytes: result.data.freed_bytes_estimate,
-      manualExecute: result.data.manual_execute ?? [],
-      manualSetup: result.data.manual_setup ?? [],
-    },
-  };
+  return { ok: true, data: mapServerOperation(result.data) };
 }

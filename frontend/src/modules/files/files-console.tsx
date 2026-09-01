@@ -28,9 +28,7 @@ import {
   createDirectoryAction,
   createDownloadTicketAction,
   deleteFileAction,
-  getExtractStatusAction,
   getFileContentAction,
-  getUrlDownloadStatusAction,
   listFilesAction,
   renameFileAction,
   saveFileContentAction,
@@ -66,7 +64,7 @@ import {
   type LocalUpload,
   type UploadItem,
 } from "@/modules/files/upload";
-import { notify } from "@/shared/feedback";
+import { confirm, notify } from "@/shared/feedback";
 import { copyText } from "@/shared/lib/clipboard";
 import {
   FILE_KIND_FILTERS,
@@ -81,10 +79,10 @@ import {
   type FileKindFilter,
   type FileSortDir,
   type FileSortKey,
-  type FileTask,
   type FilesWorkspace,
 } from "@/modules/files/types";
-import { confirm } from "@/shared/feedback";
+import { trackQueuedOperation } from "@/modules/servers/activity-store";
+import { useQueuedOperationTerminal } from "@/modules/servers/use-queued-operation-terminal";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -129,7 +127,6 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     overwrite: false,
   });
   const [urlTaskId, setUrlTaskId] = useState<string | null>(null);
-  const [urlTask, setUrlTask] = useState<FileTask | null>(null);
   const [extractEntry, setExtractEntry] = useState<FileEntry | null>(null);
   const [extractTaskId, setExtractTaskId] = useState<string | null>(null);
   const [extractFinishDest, setExtractFinishDest] = useState<string | null>(null);
@@ -211,66 +208,34 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
     node.indeterminate = selectedVisible.length > 0 && !allVisibleSelected;
   }, [allVisibleSelected, selectedVisible.length]);
 
-  useEffect(() => {
-    if (!urlTaskId) return;
-    let cancelled = false;
-    async function tick() {
-      if (!urlTaskId) return;
-      const result = await getUrlDownloadStatusAction(serverId, urlTaskId);
-      if (cancelled || !result.ok) return;
-      setUrlTask(result.data);
-      if (result.data.status === "completed" || result.data.status === "failed") {
-        setUrlTaskId(null);
-        setBanner({
-          tone: result.data.status === "completed" ? "ok" : "danger",
-          text: result.data.message || result.data.error || t("urlDone"),
-        });
-        if (result.data.status === "completed") void load(workspace.path);
-      }
-    }
-    const id = window.setInterval(() => {
-      void tick();
-    }, 2000);
-    void tick();
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [load, serverId, t, urlTaskId, workspace.path]);
+  useQueuedOperationTerminal(urlTaskId, serverId, (status, message) => {
+    setUrlTaskId(null);
+    setBanner({
+      tone: status === "completed" ? "ok" : "danger",
+      text: message || t("urlDone"),
+    });
+    if (status === "completed") void load(workspace.path);
+  });
 
-  useEffect(() => {
-    if (!extractTaskId) return;
-    let cancelled = false;
-    async function tick() {
-      if (!extractTaskId) return;
-      const result = await getExtractStatusAction(serverId, extractTaskId);
-      if (cancelled || !result.ok) return;
-      if (result.data.status === "completed" || result.data.status === "failed") {
-        setExtractTaskId(null);
-        setExtractEntry(null);
-        const failed = result.data.status === "failed";
-        setBanner({
-          tone: failed ? "danger" : "ok",
-          text: result.data.message || result.data.error || t("extractDone"),
-        });
-        if (failed) {
-          extractHintRef.current = null;
-          return;
-        }
-        setExtractFinishDest(
-          extractHintRef.current?.destination || result.data.destination || workspace.path,
-        );
-      }
+  useQueuedOperationTerminal(extractTaskId, serverId, (status, message) => {
+    setExtractTaskId(null);
+    setExtractEntry(null);
+    if (status === "failed") {
+      extractHintRef.current = null;
+      setBanner({
+        tone: "danger",
+        text: message || t("extractDone"),
+      });
+      return;
     }
-    const id = window.setInterval(() => {
-      void tick();
-    }, 2000);
-    void tick();
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [extractTaskId, serverId, t, workspace.path]);
+    setBanner({
+      tone: "ok",
+      text: message || t("extractDone"),
+    });
+    setExtractFinishDest(
+      extractHintRef.current?.destination || workspace.path,
+    );
+  });
 
   useEffect(() => {
     if (!extractFinishDest) return;
@@ -996,14 +961,12 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
           entry={extractEntry}
           destination={workspace.path}
           onClose={() => setExtractEntry(null)}
-          onStarted={(task, reveal) => {
-            extractHintRef.current = {
-              ...reveal,
-              destination: task.destination || reveal.destination,
-            };
+          onStarted={(operation, reveal) => {
+            extractHintRef.current = reveal;
             setExtractEntry(null);
-            setExtractTaskId(task.taskId);
-            setBanner({ tone: "ok", text: t("extracting") });
+            setExtractTaskId(operation.operationId);
+            trackQueuedOperation(operation);
+            setBanner({ tone: "ok", text: t("queuedToTray") });
           }}
         />
       ) : null}
@@ -1109,20 +1072,15 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                   setBanner({ tone: "danger", text: result.error || t("failed") });
                   return false;
                 }
-                setUrlTaskId(result.data.taskId);
-                setUrlTask(result.data);
+                setUrlTaskId(result.data.operationId);
+                trackQueuedOperation(result.data);
+                setBanner({ tone: "ok", text: t("queuedToTray") });
                 return false;
               })
             }
           >
             {urlTaskId ? t("urlRunning") : t("startUrl")}
           </Button>
-          {urlTask ? (
-            <p className="text-xs text-fg-subtle">
-              {urlTask.status}
-              {urlTask.targetPath ? ` · ${urlTask.targetPath}` : ""}
-            </p>
-          ) : null}
         </CardContent>
       </Card>
     </div>

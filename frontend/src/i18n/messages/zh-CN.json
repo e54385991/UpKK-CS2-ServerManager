@@ -461,7 +461,11 @@
       "uninstall_github_plugin": "卸载插件文件",
       "apply_apt_mirror": "切换 apt 镜像",
       "s3_restore": "恢复 S3 备份",
-      "install_game_mode": "安装游戏模式"
+      "install_game_mode": "安装游戏模式",
+      "extract_archive": "解压归档",
+      "download_url": "从 URL 下载",
+      "cleanup_delete": "清理删除",
+      "cleanup_system": "系统清理"
     },
     "confirm": {
       "deploy": "要向这台主机部署 CS2 吗？SteamCMD 可能耗时很长，期间会锁定其他操作。",
@@ -1268,21 +1272,75 @@
       "action": "动作",
       "status": "状态",
       "user": "用户",
+      "server": "服务器",
       "ip": "IP",
-      "source": "来源"
+      "source": "来源",
+      "details": "详情"
     },
     "categories": {
       "auth": "认证",
       "discord": "Discord",
       "server": "服务器",
-      "settings": "设置"
+      "settings": "设置",
+      "files": "文件",
+      "config": "配置",
+      "plugin": "插件"
     },
     "statuses": {
       "success": "成功",
       "failure": "失败",
       "cancelled": "已取消",
       "expired": "已过期",
-      "requested": "已请求"
+      "requested": "已请求",
+      "partial": "部分成功"
+    },
+    "actions": {
+      "files": {
+        "edit": "编辑文件",
+        "upload": "上传文件",
+        "delete": "删除文件",
+        "mkdir": "新建目录",
+        "rename": "重命名",
+        "copy": "复制文件",
+        "extract": "解压归档",
+        "download_url": "从 URL 下载",
+        "cleanup": "清理游戏目录",
+        "cleanup_system": "系统清理"
+      },
+      "config": {
+        "plugin_file": {
+          "update": "更新插件配置文件"
+        },
+        "schedule": {
+          "create": "创建计划任务",
+          "update": "更新计划任务",
+          "delete": "删除计划任务",
+          "toggle": "开关计划任务"
+        },
+        "plugin_updates": "插件自动更新策略",
+        "game_updates": "游戏自动更新策略",
+        "cleanup": {
+          "policy": "清理策略"
+        },
+        "maps": {
+          "add": "添加地图",
+          "enable": "开关地图",
+          "delete": "删除地图",
+          "preset": "应用地图预设",
+          "plugin_uninstall": "卸载地图插件",
+          "plugin_config": "更新地图插件配置",
+          "custom_sync": "保存地图同步",
+          "custom_sync_run": "运行地图同步"
+        }
+      },
+      "plugin": {
+        "install": "安装插件",
+        "uninstall": "卸载插件",
+        "catalog": {
+          "delete": "删除市场插件",
+          "import": "导入插件目录"
+        }
+      }
     }
   },
   "maps": {
@@ -1668,6 +1726,7 @@
     "urlRunning": "下载中…",
     "urlDone": "远程下载已结束。",
     "extractTitle": "高级解压",
+    "queuedToTray": "已投递到右上角任务队列，可继续浏览。",
     "extracting": "解压中…",
     "extractDone": "解压已结束。",
     "extractOpened": "已打开解压出的文件夹 {name}。",
@@ -2268,6 +2327,8 @@
     "confirmArchives": "删除所选残留压缩包？",
     "confirmWorkshop": "删除这台服务器的全部创意工坊内容？",
     "failed": "清理操作失败。",
+    "queuedToTray": "已投递到右上角任务队列，可继续浏览。",
+    "queuedDone": "清理任务已结束。",
     "fetchError": "暂时无法打开清理页（{status}）。",
     "systemTitle": "Linux 系统垃圾",
     "systemHelp": "清理常见的包缓存、journal、过期临时文件和轮转日志。只跑固定命令，不会让你填任意路径。",

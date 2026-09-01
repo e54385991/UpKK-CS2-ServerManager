@@ -2,6 +2,7 @@ import {
   SERVER_OPERATION_ACTIONS,
   type OperationInbox,
   type OperationInboxItem,
+  type ServerOperation,
   type ServerOperationAction,
   type ServerStatus,
 } from "@/modules/servers/types";
@@ -56,20 +57,41 @@ function toOperationAction(value: string): ServerOperationAction {
     : "status";
 }
 
+type OperationViewDto = {
+  operation_id: string;
+  server_id: number;
+  action: string;
+  status: ServerOperation["status"];
+  success?: boolean | null;
+  message?: string | null;
+  server_status?: string | null;
+  started_at: string;
+  completed_at?: string | null;
+  actor_user_id: number;
+  stream_url: string;
+  command?: string | null;
+};
+
+export function mapServerOperation(raw: OperationViewDto): ServerOperation {
+  return {
+    operationId: raw.operation_id,
+    serverId: raw.server_id,
+    action: toOperationAction(raw.action),
+    status: raw.status,
+    success: raw.success ?? null,
+    message: raw.message ?? null,
+    serverStatus: raw.server_status ? toStatus(raw.server_status) : null,
+    startedAt: raw.started_at,
+    completedAt: raw.completed_at ?? null,
+    actorUserId: raw.actor_user_id,
+    streamUrl: raw.stream_url,
+    command: typeof raw.command === "string" ? raw.command : null,
+  };
+}
+
 function toInboxItem(item: InboxItemDto): OperationInboxItem {
   return {
-    operationId: item.operation_id,
-    serverId: item.server_id,
-    action: toOperationAction(item.action),
-    status: item.status,
-    success: item.success ?? null,
-    message: item.message ?? null,
-    serverStatus: item.server_status ? toStatus(item.server_status) : null,
-    startedAt: item.started_at,
-    completedAt: item.completed_at ?? null,
-    actorUserId: item.actor_user_id,
-    streamUrl: item.stream_url,
-    command: typeof item.command === "string" ? item.command : null,
+    ...mapServerOperation(item),
     serverName: item.server_name,
     latestMessage: item.latest_message ?? null,
     queuePosition: item.queue_position ?? 0,

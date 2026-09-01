@@ -12,11 +12,15 @@ from sqlmodel import select
 from api.dependencies import ActiveUser, DatabaseSession, StreamUser
 from api.routes.servers import maintenance as legacy
 from api.routes.servers.common import get_server_with_permission
-from modules import CleanupDeleteRequest as LegacyCleanupDeleteRequest
+from api.routes.v1.operation_locks import reject_stuck_lock_unless_active
+from api.routes.v1.operation_runner import enqueue_cleanup_delete, enqueue_cleanup_system
+from api.routes.v1.operations import to_view
 from modules.database import async_session_maker
 from modules.models import ScheduledTask
 from modules.utils import get_current_time
+from services.audit_log_service import record_audit_event
 from services.game_cleanup_service import game_cleanup_service
+from services.server_operation_hub import ServerOperationConflict
 from services.ssh_manager import SSHManager
 from services.system_cleanup_service import (
     LOG_CLEANUP_ACTION,
@@ -31,18 +35,15 @@ from services.system_cleanup_service import (
 
 from .schemas import (
     CleanupDeleteBody,
-    CleanupDeleteView,
-    CleanupFailedItemView,
     CleanupItemView,
     CleanupPolicyBody,
     CleanupPolicyView,
     CleanupScanView,
     CleanupSystemApplyBody,
-    CleanupSystemApplyView,
     CleanupSystemScanView,
     CleanupSystemTargetView,
-    CleanupTargetResultView,
     CleanupWorkshopView,
+    ServerOperationView,
 )
 
 router = APIRouter(prefix="/api/v1/servers", tags=["v1-cleanup"])
@@ -126,44 +127,6 @@ def _stream_headers() -> dict[str, str]:
     }
 
 
-def _delete_view(payload) -> CleanupDeleteView:
-    if isinstance(payload, dict):
-        failed = payload.get("failed_items") or []
-        return CleanupDeleteView(
-            success=bool(payload.get("success")),
-            message=str(payload.get("message") or ""),
-            deleted_count=int(payload.get("deleted_count") or 0),
-            freed_bytes_estimate=int(payload.get("freed_bytes_estimate") or 0),
-            failed_items=[
-                CleanupFailedItemView(
-                    path=str(
-                        item.get("path") if isinstance(item, dict) else getattr(item, "path", "")
-                    ),
-                    error=str(
-                        item.get("error") if isinstance(item, dict) else getattr(item, "error", "")
-                    ),
-                )
-                for item in failed
-            ],
-        )
-    failed = getattr(payload, "failed_items", []) or []
-    return CleanupDeleteView(
-        success=bool(getattr(payload, "success", False)),
-        message=str(getattr(payload, "message", "") or ""),
-        deleted_count=int(getattr(payload, "deleted_count", 0) or 0),
-        freed_bytes_estimate=int(getattr(payload, "freed_bytes_estimate", 0) or 0),
-        failed_items=[
-            CleanupFailedItemView(
-                path=str(item.get("path") if isinstance(item, dict) else getattr(item, "path", "")),
-                error=str(
-                    item.get("error") if isinstance(item, dict) else getattr(item, "error", "")
-                ),
-            )
-            for item in failed
-        ],
-    )
-
-
 @router.get("/{server_id}/cleanup/scan", response_model=CleanupScanView)
 async def scan_server_cleanup(
     server_id: int, db: DatabaseSession, current_user: ActiveUser
@@ -210,25 +173,44 @@ async def scan_server_cleanup_events(
     )
 
 
-@router.post("/{server_id}/cleanup/delete", response_model=CleanupDeleteView)
+@router.post(
+    "/{server_id}/cleanup/delete",
+    response_model=ServerOperationView,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def delete_server_cleanup_items(
     server_id: int,
     body: CleanupDeleteBody,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
-) -> CleanupDeleteView:
-    return _delete_view(
-        await legacy.delete_server_cleanup_items(
-            server_id,
-            LegacyCleanupDeleteRequest(
-                mode=body.mode,
-                paths=body.paths,
-                confirmation_text=body.confirmation_text,
-            ),
-            db,
-            current_user,
+) -> ServerOperationView:
+    await get_server_with_permission(server_id, current_user, db)
+    await reject_stuck_lock_unless_active(server_id)
+    try:
+        record = await enqueue_cleanup_delete(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            mode=body.mode,
+            paths=list(body.paths or []),
+            confirmation_text=body.confirmation_text,
         )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await record_audit_event(
+        category="files",
+        action="files.cleanup",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "operation_id": record["operation_id"],
+            "mode": body.mode,
+            "path_count": len(body.paths or []),
+        },
     )
+    return to_view(record)
 
 
 async def _cleanup_task(db, server_id: int) -> ScheduledTask | None:
@@ -263,21 +245,6 @@ def _system_scan_view(payload: dict) -> CleanupSystemScanView:
     )
 
 
-def _system_apply_view(payload: dict) -> CleanupSystemApplyView:
-    return CleanupSystemApplyView(
-        success=bool(payload.get("success")),
-        message=str(payload.get("message") or ""),
-        privilege=payload["privilege"],
-        applied=list(payload.get("applied") or []),
-        skipped=[CleanupTargetResultView(**item) for item in payload.get("skipped") or []],
-        failed=[CleanupTargetResultView(**item) for item in payload.get("failed") or []],
-        deleted_count=int(payload.get("deleted_count") or 0),
-        freed_bytes_estimate=int(payload.get("freed_bytes_estimate") or 0),
-        manual_execute=list(payload.get("manual_execute") or []),
-        manual_setup=list(payload.get("manual_setup") or []),
-    )
-
-
 @router.get("/{server_id}/cleanup/policy", response_model=CleanupPolicyView)
 async def get_cleanup_policy(
     server_id: int, db: DatabaseSession, current_user: ActiveUser
@@ -304,6 +271,7 @@ async def get_cleanup_policy(
 async def update_cleanup_policy(
     server_id: int,
     body: CleanupPolicyBody,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> CleanupPolicyView:
@@ -360,6 +328,20 @@ async def update_cleanup_policy(
             "Policy saved. Privileged targets need root/sudo — "
             "save a sudo password on Host config, or run the manual commands."
         )
+    await record_audit_event(
+        category="config",
+        action="config.cleanup.policy",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "enabled": body.enabled,
+            "retain_days": body.retain_days,
+            "schedule_value": schedule_value,
+            "targets": list(targets),
+        },
+    )
     return _policy_view(system_cleanup_service.policy_from_server(server, task), extras)
 
 
@@ -421,34 +403,42 @@ async def scan_system_cleanup_events(
     )
 
 
-@router.post("/{server_id}/cleanup/system", response_model=CleanupSystemApplyView)
+@router.post(
+    "/{server_id}/cleanup/system",
+    response_model=ServerOperationView,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def apply_system_cleanup(
     server_id: int,
     body: CleanupSystemApplyBody,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
-) -> CleanupSystemApplyView:
-    server = await get_server_with_permission(server_id, current_user, db)
+) -> ServerOperationView:
+    await get_server_with_permission(server_id, current_user, db)
     try:
         targets = normalize_targets(body.targets)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
-    ssh_manager = SSHManager()
+    await reject_stuck_lock_unless_active(server_id)
     try:
-        try:
-            payload = await system_cleanup_service.apply(
-                ssh_manager,
-                server,
-                targets,
-                retain_days=body.retain_days,
-            )
-        except RuntimeError as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-        return _system_apply_view(payload)
-    finally:
-        try:
-            await ssh_manager.disconnect()
-        except Exception:
-            pass
+        record = await enqueue_cleanup_system(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            targets=list(targets),
+            retain_days=body.retain_days,
+        )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await record_audit_event(
+        category="files",
+        action="files.cleanup_system",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"operation_id": record["operation_id"], "targets": list(targets)},
+    )
+    return to_view(record)

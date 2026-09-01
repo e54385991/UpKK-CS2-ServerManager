@@ -2,7 +2,10 @@
 
 # ruff: noqa: F403,F405
 
+from fastapi import Request
+
 from api.dependencies import ActiveUser, DatabaseSession
+from services.audit_log_service import record_audit_event
 
 from .common import *
 
@@ -75,6 +78,7 @@ async def update_file_content(
     request: FileContentRequest,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ):
     """Update file content"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -93,6 +97,15 @@ async def update_file_content(
     if not success:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
 
+    await record_audit_event(
+        category="files",
+        action="files.edit",
+        status="success",
+        user=current_user,
+        request=http_request,
+        server_id=server_id,
+        details={"path": path, "bytes": len((request.content or "").encode("utf-8"))},
+    )
     return {"success": True, "message": "File updated successfully"}
 
 
@@ -104,6 +117,7 @@ async def upload_file(
     db: DatabaseSession = None,
     current_user: ActiveUser = None,
     relative_path: Optional[str] = Query(default=None, max_length=1500),
+    http_request: Request = None,
 ):
     """Upload file to server"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -149,6 +163,15 @@ async def upload_file(
         if not success:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
 
+        await record_audit_event(
+            category="files",
+            action="files.upload",
+            status="success",
+            user=current_user,
+            request=http_request,
+            server_id=server_id,
+            details={"path": remote_path, "size": uploaded_bytes},
+        )
         return {
             "success": True,
             "message": "File uploaded successfully",
@@ -260,6 +283,7 @@ async def create_directory(
     request: CreateDirectoryRequest,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ):
     """Create a new directory"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -286,6 +310,15 @@ async def create_directory(
     if not success:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
 
+    await record_audit_event(
+        category="files",
+        action="files.mkdir",
+        status="success",
+        user=current_user,
+        request=http_request,
+        server_id=server_id,
+        details={"path": new_dir_path},
+    )
     return {"success": True, "message": "Directory created successfully", "path": new_dir_path}
 
 
@@ -295,6 +328,7 @@ async def delete_path(
     path: str,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ):
     """Delete file or directory"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -319,6 +353,15 @@ async def delete_path(
     if not success:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
 
+    await record_audit_event(
+        category="files",
+        action="files.delete",
+        status="success",
+        user=current_user,
+        request=http_request,
+        server_id=server_id,
+        details={"path": path},
+    )
     return {"success": True, "message": "Deleted successfully"}
 
 
@@ -329,6 +372,7 @@ async def rename_file_or_directory(
     request: RenameRequest,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ):
     """Rename file or directory"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -363,6 +407,15 @@ async def rename_file_or_directory(
     if not success:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
 
+    await record_audit_event(
+        category="files",
+        action="files.rename",
+        status="success",
+        user=current_user,
+        request=http_request,
+        server_id=server_id,
+        details={"path": old_path, "new_path": new_path},
+    )
     return {"success": True, "message": "Renamed successfully", "new_path": new_path}
 
 
@@ -372,6 +425,7 @@ async def copy_paths(
     request: CopyPathsRequest,
     db: DatabaseSession,
     current_user: ActiveUser,
+    http_request: Request,
 ):
     """Copy files or directories into a destination folder."""
     server = await get_server_for_user(server_id, db, current_user)
@@ -411,6 +465,15 @@ async def copy_paths(
             copied.append(new_path)
     finally:
         await ssh_manager.disconnect()
+    await record_audit_event(
+        category="files",
+        action="files.copy",
+        status="success",
+        user=current_user,
+        request=http_request,
+        server_id=server_id,
+        details={"destination": destination, "paths": copied, "count": len(copied)},
+    )
     return {
         "success": True,
         "message": "Copied successfully",

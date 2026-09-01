@@ -96,6 +96,7 @@ class ServerOperationHub:
         action: str,
         actor_user_id: int,
         command: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         async with self._lock:
             current = await self._read_current(server_id)
@@ -120,6 +121,11 @@ class ServerOperationHub:
                 "started_at": get_current_time().isoformat(),
                 "completed_at": None,
             }
+            if extra:
+                for key in ("destination", "target_path", "archive_path"):
+                    value = extra.get(key)
+                    if value is not None:
+                        record[key] = value
             self._records[operation_id] = record
             self._events[operation_id] = []
             queued_behind = busy
@@ -574,6 +580,14 @@ class ServerOperationHub:
                 self._records[operation_id] = stored_record
                 record = stored_record
         return dict(record) if record else None
+
+    async def patch(self, operation_id: str, **changes: Any) -> dict[str, Any] | None:
+        """Persist extra file-job fields such as a resolved download path."""
+        allowed = {"destination", "target_path", "archive_path"}
+        filtered = {key: value for key, value in changes.items() if key in allowed}
+        if not filtered:
+            return await self.get(operation_id)
+        return await self._update(operation_id, **filtered)
 
     async def _update(self, operation_id: str, **changes: Any) -> dict[str, Any] | None:
         async with self._lock:

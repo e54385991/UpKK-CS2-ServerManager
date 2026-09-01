@@ -461,7 +461,11 @@
       "uninstall_github_plugin": "Uninstall plugin files",
       "apply_apt_mirror": "Switch apt mirror",
       "s3_restore": "Restore S3 backup",
-      "install_game_mode": "Install game mode"
+      "install_game_mode": "Install game mode",
+      "extract_archive": "Extract archive",
+      "download_url": "Download from URL",
+      "cleanup_delete": "Cleanup delete",
+      "cleanup_system": "System cleanup"
     },
     "confirm": {
       "deploy": "Deploy CS2 to this host? SteamCMD can take a long time and will lock other actions.",
@@ -1268,21 +1272,75 @@
       "action": "Action",
       "status": "Status",
       "user": "User",
+      "server": "Server",
       "ip": "IP",
-      "source": "Source"
+      "source": "Source",
+      "details": "Details"
     },
     "categories": {
       "auth": "Auth",
       "discord": "Discord",
       "server": "Server",
-      "settings": "Settings"
+      "settings": "Settings",
+      "files": "Files",
+      "config": "Config",
+      "plugin": "Plugin"
     },
     "statuses": {
       "success": "Success",
       "failure": "Failure",
       "cancelled": "Cancelled",
       "expired": "Expired",
-      "requested": "Requested"
+      "requested": "Requested",
+      "partial": "Partial"
+    },
+    "actions": {
+      "files": {
+        "edit": "Edit file",
+        "upload": "Upload file",
+        "delete": "Delete file",
+        "mkdir": "Create directory",
+        "rename": "Rename",
+        "copy": "Copy files",
+        "extract": "Extract archive",
+        "download_url": "Download from URL",
+        "cleanup": "Clean game files",
+        "cleanup_system": "System cleanup"
+      },
+      "config": {
+        "plugin_file": {
+          "update": "Update plugin config file"
+        },
+        "schedule": {
+          "create": "Create scheduled task",
+          "update": "Update scheduled task",
+          "delete": "Delete scheduled task",
+          "toggle": "Toggle scheduled task"
+        },
+        "plugin_updates": "Plugin auto-update policy",
+        "game_updates": "Game auto-update policy",
+        "cleanup": {
+          "policy": "Cleanup policy"
+        },
+        "maps": {
+          "add": "Add map",
+          "enable": "Toggle map",
+          "delete": "Remove map",
+          "preset": "Apply map preset",
+          "plugin_uninstall": "Uninstall map plugin",
+          "plugin_config": "Update map plugin config",
+          "custom_sync": "Save map sync",
+          "custom_sync_run": "Run map sync"
+        }
+      },
+      "plugin": {
+        "install": "Install plugin",
+        "uninstall": "Uninstall plugin",
+        "catalog": {
+          "delete": "Delete market plugin",
+          "import": "Import plugin catalog"
+        }
+      }
     }
   },
   "maps": {
@@ -1668,6 +1726,7 @@
     "urlRunning": "Downloading…",
     "urlDone": "Remote download finished.",
     "extractTitle": "Advanced extraction",
+    "queuedToTray": "Submitted to the task queue in the top-right. You can keep browsing.",
     "extracting": "Extracting…",
     "extractDone": "Extraction finished.",
     "extractOpened": "Opened the extracted folder {name}.",
@@ -2268,6 +2327,8 @@
     "confirmArchives": "Delete the selected leftover archives?",
     "confirmWorkshop": "Delete all Steam Workshop contents for this server?",
     "failed": "Cleanup operation failed.",
+    "queuedToTray": "Submitted to the task queue in the top-right. You can keep browsing.",
+    "queuedDone": "Cleanup job finished.",
     "fetchError": "Unable to open cleanup ({status}).",
     "systemTitle": "Linux system junk",
     "systemHelp": "Clear common package caches, the systemd journal, old temp files, and rotated logs. Only allowlisted commands run — you never type arbitrary paths.",

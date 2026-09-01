@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from api.routes import map_management as legacy
@@ -23,6 +23,7 @@ from api.routes.map_management import (
     MapPresetApplyRequest as LegacyMapPresetApplyRequest,
 )
 from modules import Server
+from services.audit_log_service import record_audit_event
 from services.maintenance_lock import maintenance_lock_service
 from services.map_management_service import (
     MapConfigError,
@@ -48,6 +49,24 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api/v1/servers/{server_id}/maps", tags=["v1-maps"])
+
+
+async def _audit_maps(
+    action: str,
+    user,
+    request: Request,
+    server_id: int,
+    details: dict | None = None,
+) -> None:
+    await record_audit_event(
+        category="config",
+        action=action,
+        status="success",
+        user=user,
+        request=request,
+        server_id=server_id,
+        details=details or {},
+    )
 
 
 def _entry(raw: dict[str, object]) -> MapEntryView:
@@ -248,6 +267,7 @@ async def get_maps_workspace(
 async def add_map(
     server_id: int,
     body: MapAddRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> MapsWorkspaceView:
@@ -257,6 +277,13 @@ async def add_map(
         LegacyMapAddRequest(**body.model_dump()),
         db,
         current_user,
+    )
+    await _audit_maps(
+        "config.maps.add",
+        current_user,
+        request,
+        server_id,
+        {"name": body.name, "workshop_id": body.workshop_id},
     )
     return _workspace(
         server_id,
@@ -271,6 +298,7 @@ async def add_map(
 async def update_map_enabled(
     server_id: int,
     body: MapEnabledPatchRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> MapsWorkspaceView:
@@ -282,6 +310,13 @@ async def update_map_enabled(
         workshop_id=body.workshop_id,
         expected_revision=body.expected_revision,
         enabled=body.enabled,
+    )
+    await _audit_maps(
+        "config.maps.enable",
+        current_user,
+        request,
+        server_id,
+        {"name": body.name, "workshop_id": body.workshop_id, "enabled": body.enabled},
     )
     return _workspace(
         server_id,
@@ -296,6 +331,7 @@ async def update_map_enabled(
 async def delete_map(
     server_id: int,
     body: MapPoolIdentityRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> MapsWorkspaceView:
@@ -306,6 +342,13 @@ async def delete_map(
         workshop_id=body.workshop_id,
         expected_revision=body.expected_revision,
         delete=True,
+    )
+    await _audit_maps(
+        "config.maps.delete",
+        current_user,
+        request,
+        server_id,
+        {"name": body.name, "workshop_id": body.workshop_id},
     )
     return _workspace(
         server_id,
@@ -378,6 +421,7 @@ async def _mutate_map(
 async def apply_map_preset(
     server_id: int,
     body: MapPresetApplyRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> MapsWorkspaceView:
@@ -387,6 +431,13 @@ async def apply_map_preset(
         LegacyMapPresetApplyRequest(**body.model_dump()),
         db,
         current_user,
+    )
+    await _audit_maps(
+        "config.maps.preset",
+        current_user,
+        request,
+        server_id,
+        {"preset": body.preset},
     )
     plugin = payload.get("plugin_config")
     return _workspace(
@@ -403,6 +454,7 @@ async def apply_map_preset(
 async def uninstall_mapchooser_plugin(
     server_id: int,
     body: MapChooserUninstallRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> MapsWorkspaceView:
@@ -413,6 +465,7 @@ async def uninstall_mapchooser_plugin(
         db,
         current_user,
     )
+    await _audit_maps("config.maps.plugin_uninstall", current_user, request, server_id)
     workspace = await _load_workspace(server, db)
     return workspace.model_copy(update={"message": "MapChooser plugin directory removed"})
 
@@ -421,6 +474,7 @@ async def uninstall_mapchooser_plugin(
 async def update_plugin_config(
     server_id: int,
     body: MapPluginConfigUpdateRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> MapsWorkspaceView:
@@ -431,6 +485,7 @@ async def update_plugin_config(
         db,
         current_user,
     )
+    await _audit_maps("config.maps.plugin_config", current_user, request, server_id)
     workspace = await _load_workspace(server, db)
     return workspace.model_copy(update={"message": "MapChooser config.json saved successfully"})
 
@@ -439,6 +494,7 @@ async def update_plugin_config(
 async def update_custom_sync(
     server_id: int,
     body: MapSyncUpdateRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> MapsWorkspaceView:
@@ -449,6 +505,7 @@ async def update_custom_sync(
         db,
         current_user,
     )
+    await _audit_maps("config.maps.custom_sync", current_user, request, server_id)
     workspace = await _load_workspace(server, db)
     return workspace.model_copy(
         update={"message": "Custom map-pool synchronization settings saved"}
@@ -459,6 +516,7 @@ async def update_custom_sync(
 async def run_custom_sync(
     server_id: int,
     body: MapSyncRunRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> MapsWorkspaceView:
@@ -469,6 +527,7 @@ async def run_custom_sync(
         db,
         current_user,
     )
+    await _audit_maps("config.maps.custom_sync_run", current_user, request, server_id)
     return _workspace(
         server_id,
         sync=_sync_view(payload.get("custom_sync") or {}),

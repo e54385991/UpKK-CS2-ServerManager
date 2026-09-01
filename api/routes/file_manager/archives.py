@@ -3,6 +3,9 @@
 # ruff: noqa: F403,F405
 
 from api.dependencies import ActiveUser, DatabaseSession
+from api.routes.v1.operation_locks import reject_stuck_lock_unless_active
+from api.routes.v1.operation_runner import enqueue_extract_archive
+from services.server_operation_hub import ServerOperationConflict, server_operation_hub
 
 from .common import *
 
@@ -58,76 +61,31 @@ async def extract_archive(
     """
     server = await get_server_for_user(server_id, db, current_user)
 
-    archive_path = posixpath.normpath(request.archive_path)
-    source_folder = _normalize_source_folder(request.source_folder)
-    # If no destination specified or empty string, extract to the same directory as the archive
-    if not request.destination_path or request.destination_path.strip() == "":
-        destination_path = posixpath.dirname(archive_path)
-    else:
-        destination_path = posixpath.normpath(request.destination_path)
-
-    # Security check
-    if not is_path_safe(server.game_directory, archive_path):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: archive path is outside server directory",
-        )
-
-    if not is_path_safe(server.game_directory, destination_path):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: destination path is outside server directory",
-        )
-
-    # Clean up old extraction tasks periodically
-    await _cleanup_old_extraction_tasks()
-
-    # Generate unique task ID
-    task_id = str(uuid.uuid4())
-
-    # Initialize task status with lock
-    async with extraction_tasks_lock:
-        extraction_tasks[task_id] = {
-            "status": "pending",
-            "archive_path": archive_path,
-            "destination_path": destination_path,
-            "source_folder": source_folder,
-            "strip_source_folder": bool(request.strip_source_folder and source_folder),
-            "server_id": server_id,
-            "user_id": current_user.id,
-            "created_at": time.time(),
-            "started_at": None,
-            "completed_at": None,
-            "message": None,
-            "error": None,
-        }
-
-    # Start extraction task in background and store reference
-    task = asyncio.create_task(
-        _run_bounded_file_task(
-            current_user.id,
-            lambda: _run_extraction_task(
-                task_id,
-                archive_path,
-                destination_path,
-                server,
-                request.overwrite,
-                source_folder,
-                bool(request.strip_source_folder and source_folder),
-            ),
-        )
+    archive_path, destination_path = resolve_extract_paths(
+        server, request.archive_path, request.destination_path
     )
-    file_task_registry.add(task)
+    source_folder = _normalize_source_folder(request.source_folder)
 
-    # Store task reference for proper cleanup/tracking
-    async with extraction_tasks_lock:
-        _extraction_task_refs[task_id] = task
+    await reject_stuck_lock_unless_active(server_id)
+    try:
+        record = await enqueue_extract_archive(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            archive_path=archive_path,
+            destination_path=destination_path,
+            overwrite=request.overwrite,
+            source_folder=source_folder,
+            strip_source_folder=bool(request.strip_source_folder and source_folder),
+        )
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
-    logger.info(f"[Extraction] Created task {task_id} for archive {archive_path}")
-
+    logger.info(
+        "[Extraction] Queued hub operation %s for archive %s", record["operation_id"], archive_path
+    )
     return {
         "success": True,
-        "task_id": task_id,
+        "task_id": record["operation_id"],
         "message": "Extraction started",
         "status": "pending",
         "destination": destination_path,
@@ -146,43 +104,14 @@ async def get_extraction_status(
 
     Returns the current status (pending, running, completed, failed) and any error message.
     """
-    # Verify user has access to this server
     await get_server_for_user(server_id, db, current_user)
-
-    async with extraction_tasks_lock:
-        if task_id not in extraction_tasks:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Extraction task not found or has expired",
-            )
-
-        task_info = extraction_tasks[task_id].copy()  # Copy to avoid holding lock during response
-
-    # Verify the task belongs to this server and user
-    if task_info.get("server_id") != server_id:
+    record = await server_operation_hub.get(task_id)
+    if record is None or int(record["server_id"]) != server_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Task does not belong to this server"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Extraction task not found or has expired",
         )
-
-    if task_info.get("user_id") != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Task does not belong to this user"
-        )
-
-    # Calculate elapsed time
-    elapsed = None
-    if task_info.get("started_at"):
-        end_time = task_info.get("completed_at") or time.time()
-        elapsed = round(end_time - task_info["started_at"], 1)
-
-    return {
-        "task_id": task_id,
-        "status": task_info["status"],
-        "archive_path": task_info["archive_path"],
-        "destination_path": task_info["destination_path"],
-        "source_folder": task_info.get("source_folder"),
-        "strip_source_folder": task_info.get("strip_source_folder", False),
-        "message": task_info.get("message"),
-        "error": task_info.get("error"),
-        "elapsed_seconds": elapsed,
-    }
+    payload = file_task_payload_from_hub(record)
+    payload["source_folder"] = None
+    payload["strip_source_folder"] = False
+    return payload

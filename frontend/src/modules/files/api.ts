@@ -13,7 +13,10 @@ import type {
   FilesWorkspaceViewDto,
   FileTaskViewDto,
   FileUrlDownloadRequestDto,
+  ServerOperationViewDto,
 } from "@/shared/api/types";
+import { mapServerOperation } from "@/modules/servers/operation-inbox";
+import type { ServerOperation } from "@/modules/servers/types";
 import type {
   FileArchiveInspect,
   FileContent,
@@ -216,14 +219,14 @@ export async function startUrlDownload(
     readonly filename?: string;
     readonly overwrite?: boolean;
   },
-): Promise<ApiResult<FileTask>> {
+): Promise<ApiResult<ServerOperation>> {
   const body: FileUrlDownloadRequestDto = {
     url: input.url,
     destination_path: input.destinationPath,
     filename: input.filename ?? null,
     overwrite: input.overwrite ?? false,
   };
-  const result = await apiFetch<FileTaskViewDto>(
+  const result = await apiFetch<ServerOperationViewDto>(
     `/api/v1/servers/${serverId}/files/download-url`,
     {
       method: "POST",
@@ -232,7 +235,7 @@ export async function startUrlDownload(
     },
   );
   if (!result.ok) return result;
-  return { ok: true, data: toTask(result.data) };
+  return { ok: true, data: mapServerOperation(result.data) };
 }
 
 export async function getUrlDownloadStatus(
@@ -278,7 +281,7 @@ export async function extractArchive(
     readonly sourceFolder?: string;
     readonly stripSourceFolder?: boolean;
   },
-): Promise<ApiResult<FileTask>> {
+): Promise<ApiResult<ServerOperation>> {
   const body: FileExtractRequestDto = {
     archive_path: input.archivePath,
     destination_path: input.destinationPath ?? null,
@@ -286,7 +289,7 @@ export async function extractArchive(
     source_folder: input.sourceFolder ?? null,
     strip_source_folder: input.stripSourceFolder ?? false,
   };
-  const result = await apiFetch<FileTaskViewDto>(
+  const result = await apiFetch<ServerOperationViewDto>(
     `/api/v1/servers/${serverId}/files/archives/extract`,
     {
       method: "POST",
@@ -295,7 +298,7 @@ export async function extractArchive(
     },
   );
   if (!result.ok) return result;
-  return { ok: true, data: toTask(result.data) };
+  return { ok: true, data: mapServerOperation(result.data) };
 }
 
 export async function getExtractStatus(

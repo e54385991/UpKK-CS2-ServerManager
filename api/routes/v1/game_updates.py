@@ -10,6 +10,7 @@ from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from api.routes.servers.crud import update_server as update_legacy_server
 from modules import ServerUpdate
 from modules.utils import get_current_time
+from services.audit_log_service import record_audit_event
 from services.game_version import GameVersionStatus, inspect_game_version
 
 from .operations import start_server_operation
@@ -116,6 +117,18 @@ async def update_game_updates(
         db,
         current_user,
         request,
+    )
+    await record_audit_event(
+        category="config",
+        action="config.game_updates",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "enable_auto_update": body.enable_auto_update,
+            "update_check_interval_hours": body.update_check_interval_hours,
+        },
     )
     snapshot = await _safe_inspect(updated, refresh=False)
     return _view(updated, snapshot)

@@ -217,6 +217,10 @@ export const SERVER_OPERATION_ACTIONS = [
   "apply_apt_mirror",
   "s3_restore",
   "install_game_mode",
+  "extract_archive",
+  "download_url",
+  "cleanup_delete",
+  "cleanup_system",
 ] as const;
 
 export type ServerOperationAction = (typeof SERVER_OPERATION_ACTIONS)[number];

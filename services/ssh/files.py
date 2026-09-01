@@ -1307,8 +1307,18 @@ class RemoteFileMixin:
         overwrite: bool = False,
         source_folder: Optional[str] = None,
         strip_source_folder: bool = False,
+        progress_callback=None,
     ) -> Tuple[bool, str]:
         """Inspect, stage, and merge a supported archive on the SSH host."""
+
+        async def send_progress(message: str) -> None:
+            if progress_callback is None:
+                return
+            if asyncio.iscoroutinefunction(progress_callback):
+                await progress_callback(message)
+            else:
+                progress_callback(message)
+
         archive_type = self.archive_type_from_path(archive_path)
         if archive_type is None:
             return False, (
@@ -1334,6 +1344,7 @@ class RemoteFileMixin:
         if not destination_valid:
             return False, destination_error
 
+        await send_progress("Inspecting archive")
         inspect_success, archive_info, inspect_error = await self._inspect_archive_connected(
             archive_path,
             archive_type,
@@ -1366,6 +1377,7 @@ class RemoteFileMixin:
         temp_root_validated = False
 
         try:
+            await send_progress("Preparing staging directory")
             temp_root_safe, temp_root_error = await self.validate_path_within_base(
                 server.game_directory,
                 temp_root,
@@ -1505,6 +1517,7 @@ class RemoteFileMixin:
             else:
                 return False, "Unsupported archive format"
 
+            await send_progress("Extracting archive")
             extract_success, extract_stdout, extract_stderr = await self.execute_command(
                 extract_command,
                 timeout=self.ARCHIVE_EXTRACT_TIMEOUT,
@@ -1592,6 +1605,7 @@ class RemoteFileMixin:
             merge_command = (
                 f"{shlex.quote(cp_tool)} {copy_options} -- {copy_source} {safe_destination}/"
             )
+            await send_progress("Merging extracted files")
             merge_success, merge_stdout, merge_stderr = await self.execute_command(
                 merge_command,
                 timeout=self.ARCHIVE_EXTRACT_TIMEOUT,
@@ -1601,6 +1615,7 @@ class RemoteFileMixin:
                     False,
                     f"Failed to merge extracted files: {self._short_command_error(merge_stdout, merge_stderr)}",
                 )
+            await send_progress("Extraction complete")
             return True, ""
         except Exception as exc:
             return False, f"Error extracting archive: {exc}"

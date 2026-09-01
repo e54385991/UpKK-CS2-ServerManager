@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from api.dependencies import ActiveUser, DatabaseSession
 from api.routes import scheduled_tasks as legacy
 from modules import ScheduledTaskCreate, ScheduledTaskUpdate
+from services.audit_log_service import record_audit_event
 
 from .schemas import (
     ActionResult,
@@ -49,6 +50,7 @@ async def list_scheduled_tasks(
 async def create_scheduled_task(
     server_id: int,
     body: ScheduledTaskCreateRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ScheduledTaskView:
@@ -63,6 +65,15 @@ async def create_scheduled_task(
         ),
         db,
         current_user,
+    )
+    await record_audit_event(
+        category="config",
+        action="config.schedule.create",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"task_id": task.id, "name": body.name, "task_action": body.action},
     )
     return _view(task)
 
@@ -82,6 +93,7 @@ async def update_scheduled_task(
     server_id: int,
     task_id: int,
     body: ScheduledTaskUpdateRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ScheduledTaskView:
@@ -92,6 +104,15 @@ async def update_scheduled_task(
         db,
         current_user,
     )
+    await record_audit_event(
+        category="config",
+        action="config.schedule.update",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"task_id": task_id, "changed_fields": list(body.model_dump(exclude_unset=True))},
+    )
     return _view(task)
 
 
@@ -99,10 +120,20 @@ async def update_scheduled_task(
 async def delete_scheduled_task(
     server_id: int,
     task_id: int,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ActionResult:
     result = await legacy.delete_scheduled_task(server_id, task_id, db, current_user)
+    await record_audit_event(
+        category="config",
+        action="config.schedule.delete",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"task_id": task_id},
+    )
     return ActionResult(
         success=bool(result.get("success", True)),
         message=str(result.get("message", "Scheduled task deleted")),
@@ -113,7 +144,18 @@ async def delete_scheduled_task(
 async def toggle_scheduled_task(
     server_id: int,
     task_id: int,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ScheduledTaskView:
-    return _view(await legacy.toggle_scheduled_task(server_id, task_id, db, current_user))
+    task = await legacy.toggle_scheduled_task(server_id, task_id, db, current_user)
+    await record_audit_event(
+        category="config",
+        action="config.schedule.toggle",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={"task_id": task_id, "enabled": bool(task.enabled)},
+    )
+    return _view(task)

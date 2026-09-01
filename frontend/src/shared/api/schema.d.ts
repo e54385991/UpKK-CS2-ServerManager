@@ -8069,37 +8069,11 @@ export interface components {
             /** Success */
             success: boolean;
         };
-        /** CleanupDeleteView */
-        CleanupDeleteView: {
-            /**
-             * Deleted Count
-             * @default 0
-             */
-            deleted_count: number;
-            /** Failed Items */
-            failed_items?: components["schemas"]["CleanupFailedItemView"][];
-            /**
-             * Freed Bytes Estimate
-             * @default 0
-             */
-            freed_bytes_estimate: number;
-            /** Message */
-            message: string;
-            /** Success */
-            success: boolean;
-        };
         /**
          * CleanupFailedItem
          * @description Schema for a cleanup deletion failure
          */
         CleanupFailedItem: {
-            /** Error */
-            error: string;
-            /** Path */
-            path: string;
-        };
-        /** CleanupFailedItemView */
-        CleanupFailedItemView: {
             /** Error */
             error: string;
             /** Path */
@@ -8264,38 +8238,6 @@ export interface components {
             /** Targets */
             targets: string[];
         };
-        /** CleanupSystemApplyView */
-        CleanupSystemApplyView: {
-            /** Applied */
-            applied?: string[];
-            /**
-             * Deleted Count
-             * @default 0
-             */
-            deleted_count: number;
-            /** Failed */
-            failed?: components["schemas"]["CleanupTargetResultView"][];
-            /**
-             * Freed Bytes Estimate
-             * @default 0
-             */
-            freed_bytes_estimate: number;
-            /** Manual Execute */
-            manual_execute?: string[];
-            /** Manual Setup */
-            manual_setup?: string[];
-            /** Message */
-            message: string;
-            /**
-             * Privilege
-             * @enum {string}
-             */
-            privilege: "root" | "sudo" | "none";
-            /** Skipped */
-            skipped?: components["schemas"]["CleanupTargetResultView"][];
-            /** Success */
-            success: boolean;
-        };
         /** CleanupSystemScanView */
         CleanupSystemScanView: {
             /**
@@ -8352,13 +8294,6 @@ export interface components {
             size: number;
             /** Title */
             title: string;
-        };
-        /** CleanupTargetResultView */
-        CleanupTargetResultView: {
-            /** Error */
-            error: string;
-            /** Id */
-            id: string;
         };
         /**
          * CleanupWorkshopSummary
@@ -11411,7 +11346,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -14042,7 +13977,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -21020,12 +20955,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CleanupDeleteView"];
+                    "application/json": components["schemas"]["ServerOperationView"];
                 };
             };
             /** @description Validation Error */
@@ -21214,12 +21149,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CleanupSystemApplyView"];
+                    "application/json": components["schemas"]["ServerOperationView"];
                 };
             };
             /** @description Validation Error */
@@ -21779,7 +21714,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FileTaskView"];
+                    "application/json": components["schemas"]["ServerOperationView"];
                 };
             };
             /** @description Validation Error */
@@ -22057,7 +21992,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FileTaskView"];
+                    "application/json": components["schemas"]["ServerOperationView"];
                 };
             };
             /** @description Validation Error */

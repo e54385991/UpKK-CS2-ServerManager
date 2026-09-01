@@ -4097,41 +4097,6 @@
         "title": "CleanupDeleteResponse",
         "type": "object"
       },
-      "CleanupDeleteView": {
-        "properties": {
-          "deleted_count": {
-            "default": 0,
-            "title": "Deleted Count",
-            "type": "integer"
-          },
-          "failed_items": {
-            "items": {
-              "$ref": "#/components/schemas/CleanupFailedItemView"
-            },
-            "title": "Failed Items",
-            "type": "array"
-          },
-          "freed_bytes_estimate": {
-            "default": 0,
-            "title": "Freed Bytes Estimate",
-            "type": "integer"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message"
-        ],
-        "title": "CleanupDeleteView",
-        "type": "object"
-      },
       "CleanupFailedItem": {
         "description": "Schema for a cleanup deletion failure",
         "properties": {
@@ -4149,24 +4114,6 @@
           "error"
         ],
         "title": "CleanupFailedItem",
-        "type": "object"
-      },
-      "CleanupFailedItemView": {
-        "properties": {
-          "error": {
-            "title": "Error",
-            "type": "string"
-          },
-          "path": {
-            "title": "Path",
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "error"
-        ],
-        "title": "CleanupFailedItemView",
         "type": "object"
       },
       "CleanupItem": {
@@ -4534,79 +4481,6 @@
         "title": "CleanupSystemApplyBody",
         "type": "object"
       },
-      "CleanupSystemApplyView": {
-        "properties": {
-          "applied": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Applied",
-            "type": "array"
-          },
-          "deleted_count": {
-            "default": 0,
-            "title": "Deleted Count",
-            "type": "integer"
-          },
-          "failed": {
-            "items": {
-              "$ref": "#/components/schemas/CleanupTargetResultView"
-            },
-            "title": "Failed",
-            "type": "array"
-          },
-          "freed_bytes_estimate": {
-            "default": 0,
-            "title": "Freed Bytes Estimate",
-            "type": "integer"
-          },
-          "manual_execute": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Manual Execute",
-            "type": "array"
-          },
-          "manual_setup": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Manual Setup",
-            "type": "array"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "privilege": {
-            "enum": [
-              "root",
-              "sudo",
-              "none"
-            ],
-            "title": "Privilege",
-            "type": "string"
-          },
-          "skipped": {
-            "items": {
-              "$ref": "#/components/schemas/CleanupTargetResultView"
-            },
-            "title": "Skipped",
-            "type": "array"
-          },
-          "success": {
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "message",
-          "privilege"
-        ],
-        "title": "CleanupSystemApplyView",
-        "type": "object"
-      },
       "CleanupSystemScanView": {
         "properties": {
           "can_apply_privileged": {
@@ -4713,24 +4587,6 @@
           "reason"
         ],
         "title": "CleanupSystemTargetView",
-        "type": "object"
-      },
-      "CleanupTargetResultView": {
-        "properties": {
-          "error": {
-            "title": "Error",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "error"
-        ],
-        "title": "CleanupTargetResultView",
         "type": "object"
       },
       "CleanupWorkshopSummary": {
@@ -12904,7 +12760,11 @@
               "uninstall_github_plugin",
               "apply_apt_mirror",
               "s3_restore",
-              "install_game_mode"
+              "install_game_mode",
+              "extract_archive",
+              "download_url",
+              "cleanup_delete",
+              "cleanup_system"
             ],
             "title": "Action",
             "type": "string"
@@ -19034,7 +18894,11 @@
               "uninstall_github_plugin",
               "apply_apt_mirror",
               "s3_restore",
-              "install_game_mode"
+              "install_game_mode",
+              "extract_archive",
+              "download_url",
+              "cleanup_delete",
+              "cleanup_system"
             ],
             "title": "Action",
             "type": "string"
@@ -32028,11 +31892,11 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CleanupDeleteView"
+                  "$ref": "#/components/schemas/ServerOperationView"
                 }
               }
             },
@@ -32324,11 +32188,11 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CleanupSystemApplyView"
+                  "$ref": "#/components/schemas/ServerOperationView"
                 }
               }
             },
@@ -33269,7 +33133,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FileTaskView"
+                  "$ref": "#/components/schemas/ServerOperationView"
                 }
               }
             },
@@ -33754,7 +33618,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FileTaskView"
+                  "$ref": "#/components/schemas/ServerOperationView"
                 }
               }
             },

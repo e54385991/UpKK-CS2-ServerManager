@@ -29,6 +29,10 @@ function toEntry(raw: AuditEntryDto): AuditEntry {
     ipAddress: raw.ip_address ?? null,
     source: raw.source,
     serverId: raw.server_id ?? null,
+    details:
+      raw.details && typeof raw.details === "object" && !Array.isArray(raw.details)
+        ? (raw.details as Record<string, unknown>)
+        : {},
   };
 }
 

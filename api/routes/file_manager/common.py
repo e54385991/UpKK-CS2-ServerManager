@@ -352,6 +352,53 @@ def _normalize_source_folder(source_folder: Optional[str]) -> Optional[str]:
     return normalized
 
 
+_HUB_FILE_STATUS = {
+    "queued": "pending",
+    "running": "running",
+    "completed": "completed",
+    "failed": "failed",
+}
+
+
+def resolve_extract_paths(server, archive_path: str, destination_path: str | None):
+    """Normalize extract paths and reject anything outside the game directory."""
+    archive = posixpath.normpath(archive_path)
+    if not destination_path or not str(destination_path).strip():
+        destination = posixpath.dirname(archive)
+    else:
+        destination = posixpath.normpath(destination_path)
+    if not is_path_safe(server.game_directory, archive):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: archive path is outside server directory",
+        )
+    if not is_path_safe(server.game_directory, destination):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: destination path is outside server directory",
+        )
+    return archive, destination
+
+
+def file_task_payload_from_hub(record: dict[str, Any]) -> dict[str, Any]:
+    """Map a hub operation record onto the legacy FileTask poll shape."""
+    status = _HUB_FILE_STATUS.get(str(record.get("status") or ""), "pending")
+    message = str(record["message"]) if record.get("message") else None
+    destination = record.get("destination") or record.get("destination_path")
+    target = record.get("target_path")
+    return {
+        "task_id": str(record["operation_id"]),
+        "status": status,
+        "message": None if status == "failed" else message,
+        "error": message if status == "failed" else None,
+        "target_path": str(target) if target else None,
+        "destination": str(destination) if destination else None,
+        "destination_path": str(destination) if destination else None,
+        "archive_path": str(record["archive_path"]) if record.get("archive_path") else None,
+        "elapsed_seconds": None,
+    }
+
+
 def _validate_download_url(url: str) -> str:
     """Apply transport-level validation before passing a URL to remote curl."""
     if not isinstance(url, str) or not url or len(url) > DOWNLOAD_URL_MAX_LENGTH:

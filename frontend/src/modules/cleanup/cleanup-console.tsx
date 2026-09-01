@@ -27,6 +27,8 @@ import {
   type CleanupScanViewDto,
   type CleanupSystemScanDto,
 } from "@/modules/cleanup/wire";
+import { trackQueuedOperation } from "@/modules/servers/activity-store";
+import { useQueuedOperationTerminal } from "@/modules/servers/use-queued-operation-terminal";
 import { confirm } from "@/shared/feedback";
 import { Button } from "@/shared/ui/button";
 import {
@@ -113,6 +115,8 @@ export function CleanupConsole({
   const [workshopConfirm, setWorkshopConfirm] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [queuedOperationId, setQueuedOperationId] = useState<string | null>(null);
+  const queuedKindRef = useRef<"delete" | "system" | null>(null);
   const [scanProgress, setScanProgress] = useState<string | null>(null);
   const streamCancelRef = useRef<(() => void) | null>(null);
   const [systemScan, setSystemScan] = useState<CleanupSystemScan | null>(null);
@@ -127,6 +131,7 @@ export function CleanupConsole({
     [...(initialPolicy?.targets ?? ["game_logs"])],
   );
   const hostConfigHref = `/servers/${serverId}/host-config` as Route;
+  const queued = Boolean(queuedOperationId);
 
   function closeStream() {
     streamCancelRef.current?.();
@@ -139,6 +144,21 @@ export function CleanupConsole({
       streamCancelRef.current = null;
     };
   }, []);
+
+  useQueuedOperationTerminal(queuedOperationId, serverId, (status, message) => {
+    const kind = queuedKindRef.current;
+    queuedKindRef.current = null;
+    setQueuedOperationId(null);
+    setBanner(message || (status === "completed" ? t("queuedDone") : t("failed")));
+    if (status !== "completed") return;
+    if (kind === "delete") {
+      setScan(null);
+      setSelected([]);
+    } else if (kind === "system") {
+      setSystemScan(null);
+      setSystemSelected([]);
+    }
+  });
 
   function phaseText(phase: unknown, fallback: string): string {
     const known = {
@@ -224,8 +244,10 @@ export function CleanupConsole({
       setBanner(result.error || t("failed"));
       return;
     }
-    setBanner(result.data.message);
-    setScan(null);
+    queuedKindRef.current = "delete";
+    setQueuedOperationId(result.data.operationId);
+    trackQueuedOperation(result.data);
+    setBanner(t("queuedToTray"));
   }
 
   async function removeArchives() {
@@ -241,9 +263,10 @@ export function CleanupConsole({
       setBanner(result.error || t("failed"));
       return;
     }
-    setBanner(result.data.message);
-    setScan(null);
-    setSelected([]);
+    queuedKindRef.current = "delete";
+    setQueuedOperationId(result.data.operationId);
+    trackQueuedOperation(result.data);
+    setBanner(t("queuedToTray"));
   }
 
   async function removeWorkshop() {
@@ -258,9 +281,10 @@ export function CleanupConsole({
       setBanner(result.error || t("failed"));
       return;
     }
-    setBanner(result.data.message);
-    setScan(null);
-    setWorkshopConfirm("");
+    queuedKindRef.current = "delete";
+    setQueuedOperationId(result.data.operationId);
+    trackQueuedOperation(result.data);
+    setBanner(t("queuedToTray"));
   }
 
   function runSystemScan() {
@@ -314,17 +338,10 @@ export function CleanupConsole({
       setBanner(result.error || t("failed"));
       return;
     }
-    setBanner(result.data.message);
-    setSystemScan((current) =>
-      current
-        ? {
-            ...current,
-            privilege: result.data.privilege,
-            manualExecute: result.data.manualExecute,
-            manualSetup: result.data.manualSetup,
-          }
-        : current,
-    );
+    queuedKindRef.current = "system";
+    setQueuedOperationId(result.data.operationId);
+    trackQueuedOperation(result.data);
+    setBanner(t("queuedToTray"));
   }
 
   function togglePolicyTarget(id: string, checked: boolean) {
@@ -412,7 +429,7 @@ export function CleanupConsole({
               <Button
                 type="button"
                 size="sm"
-                disabled={Boolean(pending) || scan.safeItems.length === 0}
+                disabled={Boolean(pending) || queued || scan.safeItems.length === 0}
                 onClick={() => void removeSafe()}
               >
                 {pending === "safe" ? t("deleting") : t("cleanSafe")}
@@ -448,7 +465,7 @@ export function CleanupConsole({
                 type="button"
                 size="sm"
                 variant="secondary"
-                disabled={Boolean(pending) || selected.length === 0}
+                disabled={Boolean(pending) || queued || selected.length === 0}
                 onClick={() => void removeArchives()}
               >
                 {pending === "archives" ? t("deleting") : t("deleteArchives")}
@@ -478,6 +495,7 @@ export function CleanupConsole({
                 variant="danger"
                 disabled={
                   Boolean(pending) ||
+                  queued ||
                   scan.workshopCount === 0 ||
                   workshopConfirm !== "DELETE WORKSHOP"
                 }
@@ -577,7 +595,7 @@ export function CleanupConsole({
             <Button
               type="button"
               size="sm"
-              disabled={Boolean(pending) || systemSelected.length === 0}
+              disabled={Boolean(pending) || queued || systemSelected.length === 0}
               onClick={() => void cleanSystem()}
             >
               {pending === "system-clean" ? t("deleting") : t("systemClean")}

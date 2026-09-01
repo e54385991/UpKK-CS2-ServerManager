@@ -3,6 +3,9 @@
 # ruff: noqa: F403,F405
 
 from api.dependencies import ActiveUser, DatabaseSession
+from api.routes.v1.operation_locks import reject_stuck_lock_unless_active
+from api.routes.v1.operation_runner import enqueue_url_download
+from services.server_operation_hub import ServerOperationConflict, server_operation_hub
 
 from .common import *
 
@@ -59,43 +62,22 @@ async def download_archive_from_url(
             detail=f"Access denied: {validation_error}",
         )
 
-    await _cleanup_old_download_url_tasks()
-    task_id = str(uuid.uuid4())
-    async with download_url_tasks_lock:
-        download_url_tasks[task_id] = {
-            "status": "pending",
-            "target_path": target_path,
-            "server_id": server_id,
-            "user_id": current_user.id,
-            "created_at": time.time(),
-            "started_at": None,
-            "completed_at": None,
-            "message": None,
-            "error": None,
-        }
-
-    github_token = await get_effective_github_token(db, current_user)
-    task = asyncio.create_task(
-        _run_bounded_file_task(
-            current_user.id,
-            lambda: _run_download_url_task(
-                task_id,
-                url,
-                destination_path,
-                target_path,
-                server,
-                request.overwrite,
-                github_token,
-            ),
+    await reject_stuck_lock_unless_active(server_id)
+    try:
+        record = await enqueue_url_download(
+            server_id=server_id,
+            actor_user_id=current_user.id,
+            url=url,
+            destination_path=destination_path,
+            target_path=target_path,
+            overwrite=request.overwrite,
         )
-    )
-    file_task_registry.add(task)
-    async with download_url_tasks_lock:
-        _download_url_task_refs[task_id] = task
+    except ServerOperationConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     return {
         "success": True,
-        "task_id": task_id,
+        "task_id": record["operation_id"],
         "status": "pending",
         "target_path": target_path,
     }
@@ -110,30 +92,10 @@ async def get_download_url_status(
 ):
     """Return status for a URL download task owned by this user and server."""
     await get_server_for_user(server_id, db, current_user)
-    async with download_url_tasks_lock:
-        task_info = download_url_tasks.get(task_id)
-        if task_info is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Download task not found or has expired",
-            )
-        task_info = task_info.copy()
-
-    if task_info.get("server_id") != server_id or task_info.get("user_id") != current_user.id:
+    record = await server_operation_hub.get(task_id)
+    if record is None or int(record["server_id"]) != server_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Download task does not belong to this server and user",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Download task not found or has expired",
         )
-
-    elapsed = None
-    if task_info.get("started_at"):
-        end_time = task_info.get("completed_at") or time.time()
-        elapsed = round(end_time - task_info["started_at"], 1)
-    return {
-        "task_id": task_id,
-        "status": task_info["status"],
-        "target_path": task_info["target_path"],
-        "message": task_info.get("message"),
-        "error": task_info.get("error"),
-        "elapsed_seconds": elapsed,
-    }
+    return file_task_payload_from_hub(record)

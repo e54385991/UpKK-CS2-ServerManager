@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 
 from api.dependencies import ActiveUser, DatabaseSession
 from api.routes import plugin_auto_update as legacy
@@ -11,6 +11,7 @@ from modules.schemas.plugins import (
     ManagedPluginUpdate,
     PluginAutoUpdateSettings,
 )
+from services.audit_log_service import record_audit_event
 
 from .schemas import (
     ActionResult,
@@ -81,10 +82,11 @@ async def get_plugin_updates(
 async def update_plugin_updates(
     server_id: int,
     body: PluginUpdatesSettingsRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> PluginUpdatesView:
-    return _view(
+    view = _view(
         await legacy.update_settings(
             server_id,
             PluginAutoUpdateSettings(
@@ -97,6 +99,19 @@ async def update_plugin_updates(
             current_user,
         )
     )
+    await record_audit_event(
+        category="config",
+        action="config.plugin_updates",
+        status="success",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "enable_plugin_auto_update": body.enable_plugin_auto_update,
+            "plugin_update_check_interval_hours": body.plugin_update_check_interval_hours,
+        },
+    )
+    return view
 
 
 @router.post(

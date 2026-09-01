@@ -51,7 +51,8 @@ upgrades to the single checked-in head through `migrate_db()` /
 
 # Delivery queue (plugins and long-running tasks)
 
-Plugin installs, GitHub installs, and other long server jobs are **submitted
+Plugin installs, GitHub installs, archive extract, URL download to the host,
+cleanup delete / system apply, and other long SSH jobs are **submitted
 to a per-server FIFO**, not run inline in the HTTP request.
 
 - The client **POSTs and leaves**. The API returns **202** with `operation_id`

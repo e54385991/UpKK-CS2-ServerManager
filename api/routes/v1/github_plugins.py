@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from api.routes.github_plugins import _safe_github_error
@@ -10,6 +10,7 @@ from api.routes.github_plugins import analyze_archive as analyze_legacy
 from api.routes.github_plugins import get_github_releases as list_legacy_releases
 from modules import GitHubPluginInstallPlanRequest
 from services.ai_access import AgentAccessDenied, enforce_agent_rate_limit
+from services.audit_log_service import record_audit_event
 from services.github_plugin_plan_service import GitHubPlanError, build_github_install_plan
 from services.server_operation_hub import ServerOperationConflict
 
@@ -247,6 +248,7 @@ async def plan_github_plugin_install(
 async def install_github_plugin(
     server_id: int,
     body: GitHubInstallRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ServerOperationView:
@@ -301,6 +303,19 @@ async def install_github_plugin(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+    await record_audit_event(
+        category="plugin",
+        action="plugin.install",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "operation_id": record["operation_id"],
+            "source": "github",
+            "mode": body.mode,
+        },
+    )
     return to_view(record)
 
 
@@ -312,6 +327,7 @@ async def install_github_plugin(
 async def uninstall_github_plugin(
     server_id: int,
     body: GitHubUninstallRequest,
+    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ServerOperationView:
@@ -331,4 +347,18 @@ async def uninstall_github_plugin(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+    await record_audit_event(
+        category="plugin",
+        action="plugin.uninstall",
+        status="requested",
+        user=current_user,
+        request=request,
+        server_id=server_id,
+        details={
+            "operation_id": record["operation_id"],
+            "source": "github",
+            "file_count": len(body.files_to_delete),
+            "market_plugin_id": body.market_plugin_id,
+        },
+    )
     return to_view(record)

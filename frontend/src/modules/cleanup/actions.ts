@@ -11,13 +11,12 @@ import {
   updateCleanupPolicy,
 } from "@/modules/cleanup/api";
 import type {
-  CleanupDeleteResult,
   CleanupMode,
   CleanupPolicy,
   CleanupScan,
-  CleanupSystemApplyResult,
   CleanupSystemScan,
 } from "@/modules/cleanup/types";
+import type { ServerOperation } from "@/modules/servers/types";
 
 function revalidate(serverId: number) {
   revalidatePath(`/servers/${serverId}/cleanup`);
@@ -36,10 +35,8 @@ export async function deleteCleanupAction(
     readonly paths?: readonly string[];
     readonly confirmationText?: string;
   },
-): Promise<ApiResult<CleanupDeleteResult>> {
-  const result = await deleteCleanup(serverId, input);
-  if (result.ok) revalidate(serverId);
-  return result;
+): Promise<ApiResult<ServerOperation>> {
+  return deleteCleanup(serverId, input);
 }
 
 export async function getCleanupPolicyAction(
@@ -74,8 +71,6 @@ export async function applySystemCleanupAction(
     readonly targets: readonly string[];
     readonly retainDays?: number;
   },
-): Promise<ApiResult<CleanupSystemApplyResult>> {
-  const result = await applySystemCleanup(serverId, input);
-  if (result.ok) revalidate(serverId);
-  return result;
+): Promise<ApiResult<ServerOperation>> {
+  return applySystemCleanup(serverId, input);
 }
