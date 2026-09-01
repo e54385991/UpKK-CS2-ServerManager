@@ -188,16 +188,15 @@ async def cancel_deployment(
         )
 
 
-@router.post("/servers/{server_id}/actions", response_model=ActionResponse)
-async def server_action(
+async def execute_server_action(
     server_id: int,
     action_data: ServerAction,
     db: DatabaseSession,
     current_user: ActiveUser,
-    locked_server: ServerActionLock,
-    request: Request,
+    locked_server: Server | None,
+    request: Request | None = None,
 ):
-    """Execute action on server (deploy, start, stop, restart, status)"""
+    """Execute a validated server action outside the HTTP request boundary."""
     server = (
         locked_server
         if isinstance(locked_server, Server)
@@ -725,6 +724,26 @@ async def server_action(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Action failed: {str(e)}"
         ) from e
+
+
+@router.post("/servers/{server_id}/actions", response_model=ActionResponse)
+async def server_action(
+    server_id: int,
+    action_data: ServerAction,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    locked_server: ServerActionLock,
+    request: Request,
+) -> ActionResponse:
+    """Execute action on server (deploy, start, stop, restart, status)."""
+    return await execute_server_action(
+        server_id,
+        action_data,
+        db,
+        current_user,
+        locked_server,
+        request,
+    )
 
 
 @router.get("/servers/{server_id}/deployment-progress")

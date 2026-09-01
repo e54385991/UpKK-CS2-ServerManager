@@ -2,11 +2,11 @@
 
 from fastapi import APIRouter, Request, Response, status
 
-from api.dependencies import ActiveUser, DatabaseSession
+from api.dependencies import ActiveUser, DatabaseSession, SettingsDependency
 from api.password_reset import complete_password_reset, request_password_reset
 from api.registration import register_user
 from api.routes.auth import google_oauth_login
-from modules import GoogleOAuthRequest, settings
+from modules import GoogleOAuthRequest
 
 from .schemas import (
     ActionResult,
@@ -95,9 +95,9 @@ async def reset_password(
 
 
 @router.get("/google-config", response_model=GoogleConfigView)
-async def google_config() -> GoogleConfigView:
+async def google_config(app_settings: SettingsDependency) -> GoogleConfigView:
     """Public Google OAuth client id for the Next.js login popup."""
-    client_id = (settings.GOOGLE_CLIENT_ID or "").strip()
+    client_id = (app_settings.GOOGLE_CLIENT_ID or "").strip()
     return GoogleConfigView(client_id=client_id, enabled=bool(client_id))
 
 

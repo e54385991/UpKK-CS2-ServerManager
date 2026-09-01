@@ -22,15 +22,20 @@ def executable(name: str) -> str:
     return resolved
 
 
-def run(label: str, command: list[str]) -> None:
+def run(label: str, command: list[str]) -> bool:
     print(f"\n==> {label}", flush=True)
-    subprocess.run(command, cwd=PROJECT_ROOT, check=True)
+    result = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
+    if result.returncode:
+        print(f"FAILED: {label} (exit code {result.returncode})", flush=True)
+        return False
+    return True
 
 
 def main() -> None:
     uv = executable("uv")
     pre_commit = executable("pre-commit")
     ruff = executable("ruff")
+    basedpyright = executable("basedpyright")
     pytest = executable("pytest")
     pip_audit = executable("pip-audit")
     lint_imports = executable("lint-imports")
@@ -41,20 +46,46 @@ def main() -> None:
         ("Pre-commit hooks", [pre_commit, "run", "--all-files", "--show-diff-on-failure"]),
         ("Ruff format", [ruff, "format", "--check", "."]),
         ("Ruff lint", [ruff, "check", "."]),
+        ("BasedPyright type checking", [basedpyright, "--warnings"]),
         ("Layer dependency contracts", [lint_imports, "--no-cache"]),
         (
             "Acyclic service imports",
             [sys.executable, "scripts/check_architecture.py"],
         ),
         (
-            "Complexity budget for split domains",
+            "Repository complexity budget",
             [sys.executable, "scripts/check_complexity.py"],
+        ),
+        (
+            "HTTP contract and response safety",
+            [sys.executable, "scripts/check_api_contracts.py"],
+        ),
+        (
+            "Pydantic v2 API compatibility",
+            [sys.executable, "scripts/check_pydantic_v2.py"],
+        ),
+        (
+            "Production and test file-size budget",
+            [sys.executable, "scripts/check_file_sizes.py"],
         ),
         (
             "1Panel application package",
             [sys.executable, "scripts/check_1panel_package.py"],
         ),
         ("Tests and compatibility contracts", [pytest, "-q"]),
+        (
+            "Full Python coverage",
+            [
+                pytest,
+                "-q",
+                "--cov=api",
+                "--cov=modules",
+                "--cov=services",
+                "--cov-branch",
+                "--cov-fail-under=90",
+                "--cov-report=term-missing",
+            ],
+        ),
         (
             "Coverage for newly split domains",
             [
@@ -69,6 +100,7 @@ def main() -> None:
                 "--cov=services.ai",
                 "--cov=services.discord",
                 "--cov=services.servers",
+                "--cov-branch",
                 "--cov-fail-under=90",
                 "--cov-report=term-missing",
             ],
@@ -79,12 +111,35 @@ def main() -> None:
         ),
         ("Frontend module tests", [npm, "run", "test:frontend"]),
         ("Frontend syntax", [npm, "run", "check:frontend"]),
+        (
+            "Next.js lint",
+            [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "run", "lint"],
+        ),
+        (
+            "Next.js typecheck",
+            [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "run", "typecheck"],
+        ),
+        (
+            "Next.js production build",
+            [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "run", "build"],
+        ),
+        (
+            "Next.js bundle budget",
+            [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "run", "check:bundle"],
+        ),
         ("Python dependency audit", [pip_audit, "-r", "requirements.txt"]),
         ("Frontend dependency audit", [npm, "audit", "--omit=dev"]),
     )
+    failures: list[str] = []
     for label, command in checks:
-        run(label, command)
+        if not run(label, command):
+            failures.append(label)
 
+    if failures:
+        print("\nBaseline checks failed:")
+        for label in failures:
+            print(f"  - {label}")
+        raise SystemExit(1)
     print("\nAll baseline checks passed.")
 
 

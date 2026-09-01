@@ -24,6 +24,7 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: "8000"
       DEBUG: "False"
+      RUN_MODE: production
       BACKEND_URL: ${BACKEND_URL}
       CONSOLE_PUBLIC_URL: ${BACKEND_URL}
       LOG_LEVEL: INFO

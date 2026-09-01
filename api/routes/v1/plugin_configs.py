@@ -186,7 +186,7 @@ async def browse_source_path(
     )
 
 
-@router.post("/sources/{source_id}/scan")
+@router.post("/sources/{source_id}/scan", response_model=None)
 async def scan_source_files(
     server_id: int,
     source_id: int,

@@ -98,7 +98,6 @@ def _to_journal_event(event: dict[str, Any]) -> OperationJournalEvent:
 async def start_server_operation(
     server_id: int,
     body: ServerOperationRequest,
-    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ServerOperationView:
@@ -118,7 +117,6 @@ async def start_server_operation(
             server_id=server_id,
             action=body.action,
             actor_user_id=current_user.id,
-            request=request,
         )
     except ServerOperationConflict as exc:
         raise HTTPException(
@@ -234,7 +232,7 @@ async def get_server_operation_journal(
     )
 
 
-@router.get("/{operation_id}/events")
+@router.get("/{operation_id}/events", response_model=None)
 async def stream_server_operation_events(
     server_id: int,
     operation_id: UUID,

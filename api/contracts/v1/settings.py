@@ -1,0 +1,115 @@
+"""System and profile-adjacent settings contracts."""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime
+from typing import Literal
+
+from pydantic import EmailStr, Field, field_validator
+
+from api.contracts.base import ApiRequest
+from api.contracts.v1.identity import V1Model
+
+ProxyMode = Literal["direct", "panel", "github_url"]
+EmailProvider = Literal["gmail", "smtp"]
+
+
+class SystemSettingsView(V1Model):
+    """Admin system settings with secrets replaced by presence flags."""
+
+    default_proxy_mode: ProxyMode
+    github_proxy_url: str | None = None
+    has_global_github_token: bool
+    global_github_token_prefix: str | None = None
+    email_enabled: bool
+    email_provider: EmailProvider
+    email_from_address: str | None = None
+    email_from_name: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_username: str | None = None
+    smtp_use_tls: bool
+    has_smtp_password: bool
+    has_gmail_credentials: bool
+    has_gmail_token: bool
+    gmail_ready: bool
+    updated_at: datetime | None = None
+
+
+class SystemSettingsPatch(ApiRequest):
+    """Partial admin update. Secret fields are write-only and never echoed."""
+
+    default_proxy_mode: ProxyMode | None = None
+    github_proxy_url: str | None = None
+    global_github_token: str | None = Field(default=None, max_length=255)
+    clear_global_github_token: bool = False
+    email_enabled: bool | None = None
+    email_provider: EmailProvider | None = None
+    email_from_address: str | None = None
+    email_from_name: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: str | None = Field(default=None, max_length=255)
+    smtp_use_tls: bool | None = None
+
+    @field_validator("global_github_token")
+    @classmethod
+    def validate_global_github_token(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return value
+        token = value.strip()
+        if not re.match(r"^(github_pat_[A-Za-z0-9_]+|gh[poushr]_[A-Za-z0-9_]+)$", token):
+            raise ValueError("Global GitHub token must be a valid Fine-grained or Classic token")
+        return token
+
+    @field_validator(
+        "github_proxy_url", "email_from_address", "email_from_name", "smtp_host", "smtp_username"
+    )
+    @classmethod
+    def empty_string_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
+class EmailTestRequest(ApiRequest):
+    """Send a test message through the currently saved email configuration."""
+
+    test_email: EmailStr
+
+
+class EmailTestResult(V1Model):
+    success: bool
+    message: str
+
+
+class GmailCredentialsUpload(ApiRequest):
+    """Write-only Google Cloud OAuth client JSON for Gmail API."""
+
+    credentials_json: str = Field(min_length=1)
+
+
+class GmailAuthorizeResult(V1Model):
+    authorization_url: str
+    state: str | None = None
+
+
+class ActionResult(V1Model):
+    success: bool
+    message: str
+
+
+__all__ = [
+    "SystemSettingsView",
+    "SystemSettingsPatch",
+    "EmailTestRequest",
+    "EmailTestResult",
+    "GmailCredentialsUpload",
+    "GmailAuthorizeResult",
+    "ActionResult",
+    "ProxyMode",
+    "EmailProvider",
+]

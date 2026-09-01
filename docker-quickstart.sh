@@ -148,6 +148,8 @@ prepare_env() {
         ensure_env_line "$env_file" HTTP_PORT 3000
         ensure_env_line "$env_file" CS2_MANAGER_IMAGE "$api_image"
         ensure_env_line "$env_file" CS2_FRONTEND_IMAGE "$web_image"
+        ensure_env_line "$env_file" DEBUG False
+        ensure_env_line "$env_file" RUN_MODE production
         chmod 600 "$env_file"
         return
     fi
@@ -167,6 +169,7 @@ HTTP_PORT=3000
 CS2_MANAGER_IMAGE=$api_image
 CS2_FRONTEND_IMAGE=$web_image
 DEBUG=False
+RUN_MODE=production
 LOG_LEVEL=INFO
 EOF
     chmod 600 "$env_file"

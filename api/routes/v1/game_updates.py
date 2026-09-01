@@ -142,7 +142,6 @@ async def update_game_updates(
 async def start_game_update_operation(
     server_id: int,
     body: GameUpdateOperationRequest,
-    request: Request,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> ServerOperationView:
@@ -151,7 +150,6 @@ async def start_game_update_operation(
     return await start_server_operation(
         server_id,
         ServerOperationRequest(action=body.action),
-        request,
         db,
         current_user,
     )

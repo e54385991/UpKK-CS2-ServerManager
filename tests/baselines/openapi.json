@@ -2,6 +2,7 @@
   "components": {
     "schemas": {
       "A2SCacheListView": {
+        "additionalProperties": false,
         "properties": {
           "servers": {
             "items": {
@@ -23,6 +24,7 @@
         "type": "object"
       },
       "A2SCacheView": {
+        "additionalProperties": false,
         "description": "Cached A2S snapshot for one server. Default reads never query A2S or SSH.",
         "properties": {
           "cached": {
@@ -131,6 +133,7 @@
         "type": "object"
       },
       "A2SPlayerView": {
+        "additionalProperties": false,
         "properties": {
           "duration": {
             "default": 0,
@@ -152,6 +155,7 @@
         "type": "object"
       },
       "A2SQueryView": {
+        "additionalProperties": false,
         "description": "Last cached A2S snapshot, or a live query when requested.",
         "properties": {
           "cached": {
@@ -249,6 +253,7 @@
         "type": "object"
       },
       "A2SServerInfoView": {
+        "additionalProperties": false,
         "description": "One A2S_INFO payload. Extra Valve fields are ignored.",
         "properties": {
           "bot_count": {
@@ -1655,6 +1660,7 @@
         "type": "object"
       },
       "ActionResult": {
+        "additionalProperties": false,
         "properties": {
           "message": {
             "title": "Message",
@@ -1758,6 +1764,7 @@
         "type": "object"
       },
       "AgentPolicyUpdateRequest": {
+        "additionalProperties": false,
         "properties": {
           "capabilities": {
             "items": {
@@ -1776,6 +1783,7 @@
         "type": "object"
       },
       "AgentPolicyView": {
+        "additionalProperties": false,
         "properties": {
           "capabilities": {
             "items": {
@@ -1870,6 +1878,7 @@
         "type": "object"
       },
       "AptMirrorApplyRequest": {
+        "additionalProperties": false,
         "description": "Switch the host apt mirror and retry privileged package install.",
         "properties": {
           "mirror": {
@@ -1983,6 +1992,7 @@
         "type": "object"
       },
       "ArchiveFileView": {
+        "additionalProperties": false,
         "properties": {
           "is_dir": {
             "default": false,
@@ -2006,6 +2016,7 @@
         "type": "object"
       },
       "ArchiveMappingView": {
+        "additionalProperties": false,
         "properties": {
           "source": {
             "title": "Source",
@@ -2024,6 +2035,7 @@
         "type": "object"
       },
       "AssistantConversationCreateRequest": {
+        "additionalProperties": false,
         "properties": {
           "server_id": {
             "anyOf": [
@@ -2053,6 +2065,7 @@
         "type": "object"
       },
       "AssistantConversationDetailView": {
+        "additionalProperties": false,
         "properties": {
           "created_at": {
             "anyOf": [
@@ -2113,6 +2126,7 @@
         "type": "object"
       },
       "AssistantConversationView": {
+        "additionalProperties": false,
         "properties": {
           "created_at": {
             "anyOf": [
@@ -2166,6 +2180,7 @@
         "type": "object"
       },
       "AssistantMessageCreateRequest": {
+        "additionalProperties": false,
         "properties": {
           "content": {
             "maxLength": 16000,
@@ -2181,6 +2196,7 @@
         "type": "object"
       },
       "AssistantMessageView": {
+        "additionalProperties": false,
         "properties": {
           "content": {
             "anyOf": [
@@ -2233,6 +2249,7 @@
         "type": "object"
       },
       "AssistantProviderTestBody": {
+        "additionalProperties": false,
         "properties": {
           "api_key": {
             "anyOf": [
@@ -2290,6 +2307,7 @@
         "type": "object"
       },
       "AssistantProviderTestView": {
+        "additionalProperties": false,
         "properties": {
           "message": {
             "title": "Message",
@@ -2323,6 +2341,7 @@
         "type": "object"
       },
       "AssistantRunDetailView": {
+        "additionalProperties": false,
         "properties": {
           "conversation_id": {
             "title": "Conversation Id",
@@ -2364,6 +2383,7 @@
         "type": "object"
       },
       "AssistantRunView": {
+        "additionalProperties": false,
         "properties": {
           "conversation_id": {
             "title": "Conversation Id",
@@ -2398,6 +2418,7 @@
         "type": "object"
       },
       "AssistantSystemSettingsPatch": {
+        "additionalProperties": false,
         "properties": {
           "admin_prompt": {
             "anyOf": [
@@ -2663,6 +2684,7 @@
         "type": "object"
       },
       "AssistantSystemSettingsView": {
+        "additionalProperties": false,
         "description": "Admin AI provider. API keys stay write-only.",
         "properties": {
           "admin_prompt": {
@@ -2858,6 +2880,7 @@
         "type": "object"
       },
       "AssistantToolDecisionRequest": {
+        "additionalProperties": false,
         "properties": {
           "arguments_hash": {
             "maxLength": 64,
@@ -2882,6 +2905,7 @@
         "type": "object"
       },
       "AssistantToolView": {
+        "additionalProperties": false,
         "properties": {
           "arguments_hash": {
             "title": "Arguments Hash",
@@ -2931,6 +2955,7 @@
         "type": "object"
       },
       "AssistantUserSettingsPatch": {
+        "additionalProperties": false,
         "properties": {
           "api_key": {
             "anyOf": [
@@ -3122,6 +3147,7 @@
         "type": "object"
       },
       "AssistantUserSettingsView": {
+        "additionalProperties": false,
         "description": "Personal AI provider. API keys stay write-only.",
         "properties": {
           "api_key_configured": {
@@ -3298,6 +3324,7 @@
         "type": "object"
       },
       "AssistantWorkspaceView": {
+        "additionalProperties": false,
         "properties": {
           "conversations": {
             "items": {
@@ -3339,6 +3366,7 @@
         "type": "object"
       },
       "AuditEntry": {
+        "additionalProperties": false,
         "description": "One administrator-visible audit event (metadata only, non-secret).",
         "properties": {
           "action": {
@@ -3579,6 +3607,7 @@
         "type": "object"
       },
       "AuthTokenView": {
+        "additionalProperties": false,
         "description": "Session token body. The HttpOnly cookie is the browser session; this mirrors login.",
         "properties": {
           "access_token": {
@@ -3607,6 +3636,7 @@
         "type": "string"
       },
       "AutoSetupRequest": {
+        "additionalProperties": false,
         "description": "Create the dedicated CS2 Linux user and install host packages over SSH.",
         "properties": {
           "captcha_code": {
@@ -3713,6 +3743,7 @@
         "type": "object"
       },
       "AutoSetupResultView": {
+        "additionalProperties": false,
         "description": "Completed auto-setup. ``cs2_password`` is returned once so the operator can add the server.",
         "properties": {
           "cs2_password": {
@@ -3796,6 +3827,7 @@
         "type": "object"
       },
       "BatchActionView": {
+        "additionalProperties": false,
         "properties": {
           "accepted_server_ids": {
             "items": {
@@ -3836,6 +3868,7 @@
         "type": "object"
       },
       "BatchJournalView": {
+        "additionalProperties": false,
         "properties": {
           "action": {
             "anyOf": [
@@ -3871,6 +3904,7 @@
         "type": "object"
       },
       "BatchServerStatusView": {
+        "additionalProperties": false,
         "properties": {
           "message": {
             "default": "",
@@ -3894,6 +3928,7 @@
         "type": "object"
       },
       "BatchSummaryView": {
+        "additionalProperties": false,
         "properties": {
           "completed": {
             "title": "Completed",
@@ -3993,6 +4028,7 @@
         "type": "object"
       },
       "CleanupDeleteBody": {
+        "additionalProperties": false,
         "properties": {
           "confirmation_text": {
             "anyOf": [
@@ -4172,6 +4208,7 @@
         "type": "object"
       },
       "CleanupItemView": {
+        "additionalProperties": false,
         "properties": {
           "category": {
             "title": "Category",
@@ -4215,6 +4252,7 @@
         "type": "object"
       },
       "CleanupPolicyBody": {
+        "additionalProperties": false,
         "properties": {
           "enabled": {
             "title": "Enabled",
@@ -4249,6 +4287,7 @@
         "type": "object"
       },
       "CleanupPolicyView": {
+        "additionalProperties": false,
         "properties": {
           "enabled": {
             "default": false,
@@ -4406,6 +4445,7 @@
         "type": "object"
       },
       "CleanupScanView": {
+        "additionalProperties": false,
         "properties": {
           "archive_item_count": {
             "default": 0,
@@ -4452,6 +4492,7 @@
         "type": "object"
       },
       "CleanupSystemApplyBody": {
+        "additionalProperties": false,
         "properties": {
           "retain_days": {
             "anyOf": [
@@ -4482,6 +4523,7 @@
         "type": "object"
       },
       "CleanupSystemScanView": {
+        "additionalProperties": false,
         "properties": {
           "can_apply_privileged": {
             "default": false,
@@ -4541,6 +4583,7 @@
         "type": "object"
       },
       "CleanupSystemTargetView": {
+        "additionalProperties": false,
         "properties": {
           "can_apply": {
             "default": false,
@@ -4621,6 +4664,7 @@
         "type": "object"
       },
       "CleanupWorkshopView": {
+        "additionalProperties": false,
         "properties": {
           "item_count": {
             "default": 0,
@@ -4715,6 +4759,7 @@
         "type": "object"
       },
       "ConfirmDeploymentView": {
+        "additionalProperties": false,
         "properties": {
           "last_deployed": {
             "anyOf": [
@@ -4750,6 +4795,7 @@
         "type": "object"
       },
       "ConsolePaneView": {
+        "additionalProperties": false,
         "description": "Live tmux/screen pane snapshot. GET stays 200 when SSH or the session is down.",
         "properties": {
           "heartbeat": {
@@ -4830,6 +4876,7 @@
         "type": "object"
       },
       "ConsoleWorkspaceView": {
+        "additionalProperties": false,
         "description": "Game and SSH console status. GET stays 200 when SSH is down.",
         "properties": {
           "game_running": {
@@ -4931,6 +4978,7 @@
         "type": "object"
       },
       "CurrentServerOperation": {
+        "additionalProperties": false,
         "properties": {
           "operation": {
             "anyOf": [
@@ -4976,6 +5024,7 @@
         "type": "object"
       },
       "CustomCommandExecuteBody": {
+        "additionalProperties": false,
         "properties": {
           "commands": {
             "maxLength": 20000,
@@ -5022,6 +5071,7 @@
         "type": "object"
       },
       "CustomCommandExecuteView": {
+        "additionalProperties": false,
         "properties": {
           "log": {
             "default": "",
@@ -5141,6 +5191,7 @@
         "type": "object"
       },
       "CustomCommandView": {
+        "additionalProperties": false,
         "description": "Saved host or game-process shortcut. Command text is user-authored, not a secret.",
         "properties": {
           "commands": {
@@ -5203,6 +5254,7 @@
         "type": "object"
       },
       "CustomCommandWriteRequest": {
+        "additionalProperties": false,
         "properties": {
           "commands": {
             "maxLength": 20000,
@@ -5294,6 +5346,7 @@
         "type": "object"
       },
       "DeploymentLockView": {
+        "additionalProperties": false,
         "properties": {
           "lock_active": {
             "title": "Lock Active",
@@ -5311,6 +5364,7 @@
         "type": "object"
       },
       "DeploymentLogEntry": {
+        "additionalProperties": false,
         "description": "Recent operation history. Output is redacted and truncated.",
         "properties": {
           "action": {
@@ -5603,6 +5657,7 @@
         "type": "object"
       },
       "DiscordBindingUpdateRequest": {
+        "additionalProperties": false,
         "properties": {
           "allow_channel_managers": {
             "default": false,
@@ -5668,6 +5723,7 @@
         "type": "object"
       },
       "DiscordBindingView": {
+        "additionalProperties": false,
         "properties": {
           "allow_channel_managers": {
             "default": false,
@@ -5939,6 +5995,7 @@
         "type": "object"
       },
       "DiscordBotTestBody": {
+        "additionalProperties": false,
         "properties": {
           "token": {
             "anyOf": [
@@ -6028,6 +6085,7 @@
         "type": "object"
       },
       "DiscordBotTestView": {
+        "additionalProperties": false,
         "properties": {
           "message": {
             "title": "Message",
@@ -6057,6 +6115,7 @@
         "type": "object"
       },
       "DiscordBotUpdateRequest": {
+        "additionalProperties": false,
         "properties": {
           "enabled": {
             "anyOf": [
@@ -6102,6 +6161,7 @@
         "type": "object"
       },
       "DiscordBotView": {
+        "additionalProperties": false,
         "properties": {
           "connection_status": {
             "title": "Connection Status",
@@ -6213,6 +6273,7 @@
         "type": "object"
       },
       "DiscordChannelView": {
+        "additionalProperties": false,
         "properties": {
           "guild_id": {
             "title": "Guild Id",
@@ -6399,6 +6460,7 @@
         "type": "object"
       },
       "DiscordGlobalBindingView": {
+        "additionalProperties": false,
         "properties": {
           "allow_channel_managers": {
             "default": false,
@@ -6515,6 +6577,7 @@
         "type": "object"
       },
       "DiscordGuildView": {
+        "additionalProperties": false,
         "properties": {
           "icon": {
             "anyOf": [
@@ -6544,6 +6607,7 @@
         "type": "object"
       },
       "DiscordMenuPushBody": {
+        "additionalProperties": false,
         "properties": {
           "channel_id": {
             "title": "Channel Id",
@@ -6628,6 +6692,7 @@
         "type": "object"
       },
       "DiscordMenuPushView": {
+        "additionalProperties": false,
         "properties": {
           "channel_id": {
             "title": "Channel Id",
@@ -6656,6 +6721,7 @@
         "type": "object"
       },
       "DiscordOptionsView": {
+        "additionalProperties": false,
         "description": "Guild/channel/role picker. GET stays 200 when no bot token is stored.",
         "properties": {
           "channels": {
@@ -6730,6 +6796,7 @@
         "type": "object"
       },
       "DiscordRoleView": {
+        "additionalProperties": false,
         "properties": {
           "guild_id": {
             "title": "Guild Id",
@@ -6952,6 +7019,7 @@
         "type": "object"
       },
       "DiskSpaceListView": {
+        "additionalProperties": false,
         "properties": {
           "servers": {
             "items": {
@@ -6973,6 +7041,7 @@
         "type": "object"
       },
       "DiskSpaceView": {
+        "additionalProperties": false,
         "description": "Cached host disk snapshot for one game directory. Default reads never SSH.",
         "properties": {
           "available_gb": {
@@ -7085,6 +7154,7 @@
         "type": "object"
       },
       "EmailTestResult": {
+        "additionalProperties": false,
         "properties": {
           "message": {
             "title": "Message",
@@ -7149,6 +7219,7 @@
         "type": "object"
       },
       "FileArchiveInspectRequest": {
+        "additionalProperties": false,
         "properties": {
           "archive_path": {
             "maxLength": 4096,
@@ -7164,6 +7235,7 @@
         "type": "object"
       },
       "FileArchiveInspectView": {
+        "additionalProperties": false,
         "properties": {
           "archive_type": {
             "title": "Archive Type",
@@ -7203,6 +7275,7 @@
         "type": "object"
       },
       "FileContentUpdateRequest": {
+        "additionalProperties": false,
         "properties": {
           "content": {
             "maxLength": 10485760,
@@ -7217,6 +7290,7 @@
         "type": "object"
       },
       "FileContentView": {
+        "additionalProperties": false,
         "properties": {
           "content": {
             "title": "Content",
@@ -7235,6 +7309,7 @@
         "type": "object"
       },
       "FileCopyRequest": {
+        "additionalProperties": false,
         "properties": {
           "destination": {
             "maxLength": 4096,
@@ -7260,6 +7335,7 @@
         "type": "object"
       },
       "FileDownloadTicketView": {
+        "additionalProperties": false,
         "properties": {
           "expires_in": {
             "title": "Expires In",
@@ -7283,6 +7359,7 @@
         "type": "object"
       },
       "FileEntryView": {
+        "additionalProperties": false,
         "properties": {
           "is_symlink": {
             "default": false,
@@ -7330,6 +7407,7 @@
         "type": "object"
       },
       "FileExtractRequest": {
+        "additionalProperties": false,
         "properties": {
           "archive_path": {
             "maxLength": 4096,
@@ -7423,6 +7501,7 @@
         "type": "object"
       },
       "FileMkdirRequest": {
+        "additionalProperties": false,
         "properties": {
           "name": {
             "maxLength": 255,
@@ -7438,6 +7517,7 @@
         "type": "object"
       },
       "FileMutationResult": {
+        "additionalProperties": false,
         "properties": {
           "message": {
             "title": "Message",
@@ -7474,6 +7554,7 @@
         "type": "object"
       },
       "FileRenameRequest": {
+        "additionalProperties": false,
         "properties": {
           "new_name": {
             "maxLength": 255,
@@ -7496,6 +7577,7 @@
         "type": "object"
       },
       "FileTaskView": {
+        "additionalProperties": false,
         "properties": {
           "destination": {
             "anyOf": [
@@ -7569,6 +7651,7 @@
         "type": "object"
       },
       "FileUrlDownloadRequest": {
+        "additionalProperties": false,
         "properties": {
           "destination_path": {
             "maxLength": 4096,
@@ -7608,6 +7691,7 @@
         "type": "object"
       },
       "FilesWorkspaceView": {
+        "additionalProperties": false,
         "description": "Directory listing. GET stays 200 when SSH is down.",
         "properties": {
           "files": {
@@ -7695,6 +7779,7 @@
         "type": "object"
       },
       "GameModeCatalogView": {
+        "additionalProperties": false,
         "properties": {
           "additional_parameters": {
             "anyOf": [
@@ -7758,6 +7843,7 @@
         "type": "object"
       },
       "GameModeInstallRequest": {
+        "additionalProperties": false,
         "properties": {
           "acknowledge_warning_rule_ids": {
             "items": {
@@ -7790,6 +7876,7 @@
         "type": "object"
       },
       "GameModeMapView": {
+        "additionalProperties": false,
         "properties": {
           "name": {
             "title": "Name",
@@ -7808,6 +7895,7 @@
         "type": "object"
       },
       "GameModeMutationView": {
+        "additionalProperties": false,
         "properties": {
           "after": {
             "anyOf": [
@@ -7854,6 +7942,7 @@
         "type": "object"
       },
       "GameModePlanView": {
+        "additionalProperties": false,
         "properties": {
           "addons_path": {
             "title": "Addons Path",
@@ -7968,6 +8057,7 @@
         "type": "object"
       },
       "GameModePreflightRequest": {
+        "additionalProperties": false,
         "properties": {
           "wipe_addons": {
             "default": false,
@@ -7979,6 +8069,7 @@
         "type": "object"
       },
       "GameModeStartupView": {
+        "additionalProperties": false,
         "properties": {
           "after": {
             "anyOf": [
@@ -8012,6 +8103,7 @@
         "type": "object"
       },
       "GameModeStepView": {
+        "additionalProperties": false,
         "properties": {
           "action": {
             "title": "Action",
@@ -8132,6 +8224,7 @@
         "type": "object"
       },
       "GameModeSummaryView": {
+        "additionalProperties": false,
         "properties": {
           "frameworks": {
             "items": {
@@ -8210,6 +8303,7 @@
         "type": "object"
       },
       "GameUpdateOperationRequest": {
+        "additionalProperties": false,
         "properties": {
           "action": {
             "enum": [
@@ -8227,6 +8321,7 @@
         "type": "object"
       },
       "GameUpdatesSettingsRequest": {
+        "additionalProperties": false,
         "properties": {
           "enable_auto_update": {
             "title": "Enable Auto Update",
@@ -8247,6 +8342,7 @@
         "type": "object"
       },
       "GameUpdatesView": {
+        "additionalProperties": false,
         "description": "Steam advertised version versus installed steam.inf, plus game auto-update.",
         "properties": {
           "advertised_version": {
@@ -8452,6 +8548,7 @@
         "type": "object"
       },
       "GitHubArchiveView": {
+        "additionalProperties": false,
         "properties": {
           "all_dirs": {
             "items": {
@@ -8495,6 +8592,7 @@
         "type": "object"
       },
       "GitHubInstallPlanRequest": {
+        "additionalProperties": false,
         "properties": {
           "asset_name": {
             "anyOf": [
@@ -8590,6 +8688,7 @@
         "type": "object"
       },
       "GitHubInstallPlanView": {
+        "additionalProperties": false,
         "properties": {
           "already_installed": {
             "items": {
@@ -8845,6 +8944,7 @@
         "type": "object"
       },
       "GitHubInstallRequest": {
+        "additionalProperties": false,
         "properties": {
           "acknowledge_unknown_compatibility": {
             "default": false,
@@ -9769,6 +9869,7 @@
         "type": "object"
       },
       "GitHubReleaseAssetView": {
+        "additionalProperties": false,
         "properties": {
           "browser_download_url": {
             "title": "Browser Download Url",
@@ -9819,6 +9920,7 @@
         "type": "object"
       },
       "GitHubReleaseView": {
+        "additionalProperties": false,
         "properties": {
           "assets": {
             "items": {
@@ -9942,6 +10044,7 @@
         "type": "object"
       },
       "GitHubReleasesView": {
+        "additionalProperties": false,
         "properties": {
           "linux_runtime_profile": {
             "anyOf": [
@@ -10070,6 +10173,7 @@
         "type": "object"
       },
       "GitHubUninstallRequest": {
+        "additionalProperties": false,
         "description": "Delete selected plugin files under the server csgo directory.",
         "properties": {
           "files_to_delete": {
@@ -10101,6 +10205,7 @@
         "type": "object"
       },
       "GmailAuthorizeResult": {
+        "additionalProperties": false,
         "properties": {
           "authorization_url": {
             "title": "Authorization Url",
@@ -10125,6 +10230,7 @@
         "type": "object"
       },
       "GmailCredentialsUpload": {
+        "additionalProperties": false,
         "description": "Write-only Google Cloud OAuth client JSON for Gmail API.",
         "properties": {
           "credentials_json": {
@@ -10156,6 +10262,7 @@
         "type": "object"
       },
       "GoogleConfigView": {
+        "additionalProperties": false,
         "description": "Public Google OAuth client configuration. ``client_id`` is the browser OAuth client.",
         "properties": {
           "client_id": {
@@ -10217,6 +10324,7 @@
         "type": "object"
       },
       "GoogleSignInRequest": {
+        "additionalProperties": false,
         "description": "Google identity-token sign-in. New accounts also send a username and password.",
         "properties": {
           "id_token": {
@@ -10271,6 +10379,7 @@
         "type": "object"
       },
       "InitializedHostCredentialsView": {
+        "additionalProperties": false,
         "description": "Owner-only one-time reveal of a saved auto-setup host (Redis, 24h).",
         "properties": {
           "created_at": {
@@ -10320,6 +10429,7 @@
         "type": "object"
       },
       "InitializedHostView": {
+        "additionalProperties": false,
         "description": "Saved auto-setup host. Credentials are never included on the list.",
         "properties": {
           "created_at": {
@@ -10461,6 +10571,7 @@
         "type": "object"
       },
       "LinuxRuntimeProfileView": {
+        "additionalProperties": false,
         "properties": {
           "detection_source": {
             "default": "unknown",
@@ -10671,6 +10782,7 @@
         "type": "object"
       },
       "ManagedPluginRegisterRequest": {
+        "additionalProperties": false,
         "description": "Register an already-installed plugin or framework for auto-update.",
         "properties": {
           "asset_glob": {
@@ -11133,6 +11245,7 @@
         "type": "object"
       },
       "ManagedPluginUpdateView": {
+        "additionalProperties": false,
         "description": "Managed plugin plus auto-update exclusion paths.",
         "properties": {
           "auto_update_enabled": {
@@ -11291,6 +11404,7 @@
         "type": "object"
       },
       "ManagedPluginView": {
+        "additionalProperties": false,
         "description": "A plugin already tracked on one game server.",
         "properties": {
           "auto_update_enabled": {
@@ -11425,6 +11539,7 @@
         "type": "object"
       },
       "ManualSetupScriptView": {
+        "additionalProperties": false,
         "properties": {
           "cs2_username": {
             "title": "Cs2 Username",
@@ -11445,71 +11560,6 @@
           "script"
         ],
         "title": "ManualSetupScriptView",
-        "type": "object"
-      },
-      "MapAddRequest": {
-        "properties": {
-          "enabled": {
-            "default": true,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "min_players": {
-            "default": 0,
-            "maximum": 64.0,
-            "minimum": 0.0,
-            "title": "Min Players",
-            "type": "integer"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "only_nominate": {
-            "default": false,
-            "title": "Only Nominate",
-            "type": "boolean"
-          },
-          "restricted_times": {
-            "default": "",
-            "maxLength": 512,
-            "title": "Restricted Times",
-            "type": "string"
-          },
-          "workshop_id": {
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Workshop Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "workshop_id"
-        ],
-        "title": "MapAddRequest",
-        "type": "object"
-      },
-      "MapChooserUninstallRequest": {
-        "properties": {
-          "confirmation": {
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Confirmation",
-            "type": "string"
-          }
-        },
-        "required": [
-          "confirmation"
-        ],
-        "title": "MapChooserUninstallRequest",
         "type": "object"
       },
       "MapConfigUpdateRequest": {
@@ -11541,6 +11591,7 @@
         "type": "object"
       },
       "MapEnabledPatchRequest": {
+        "additionalProperties": false,
         "properties": {
           "enabled": {
             "title": "Enabled",
@@ -11609,6 +11660,7 @@
         "type": "object"
       },
       "MapEntryView": {
+        "additionalProperties": false,
         "description": "One MapChooser pool entry. Official maps use an empty workshop_id.",
         "properties": {
           "enabled": {
@@ -11683,6 +11735,7 @@
         "type": "object"
       },
       "MapPluginConfigUpdateRequest": {
+        "additionalProperties": false,
         "properties": {
           "expected_revision": {
             "anyOf": [
@@ -11725,6 +11778,7 @@
         "type": "object"
       },
       "MapPluginConfigView": {
+        "additionalProperties": false,
         "properties": {
           "config_error": {
             "anyOf": [
@@ -11768,6 +11822,7 @@
         "type": "object"
       },
       "MapPluginFieldView": {
+        "additionalProperties": false,
         "properties": {
           "group": {
             "title": "Group",
@@ -11814,6 +11869,7 @@
         "type": "object"
       },
       "MapPoolIdentityRequest": {
+        "additionalProperties": false,
         "description": "Identify a pool entry. Official maps send an empty workshop_id.",
         "properties": {
           "expected_revision": {
@@ -11842,45 +11898,8 @@
         "title": "MapPoolIdentityRequest",
         "type": "object"
       },
-      "MapPresetApplyRequest": {
-        "properties": {
-          "expected_revision": {
-            "maxLength": 64,
-            "minLength": 64,
-            "title": "Expected Revision",
-            "type": "string"
-          },
-          "plugin_config_expected_revision": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "minLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plugin Config Expected Revision"
-          },
-          "preset": {
-            "enum": [
-              "official",
-              "kz",
-              "ze"
-            ],
-            "title": "Preset",
-            "type": "string"
-          }
-        },
-        "required": [
-          "preset",
-          "expected_revision"
-        ],
-        "title": "MapPresetApplyRequest",
-        "type": "object"
-      },
       "MapSyncRunRequest": {
+        "additionalProperties": false,
         "properties": {
           "expected_revision": {
             "maxLength": 64,
@@ -11896,6 +11915,7 @@
         "type": "object"
       },
       "MapSyncUpdateRequest": {
+        "additionalProperties": false,
         "properties": {
           "enabled": {
             "default": false,
@@ -11923,6 +11943,7 @@
         "type": "object"
       },
       "MapSyncView": {
+        "additionalProperties": false,
         "properties": {
           "enabled": {
             "default": false,
@@ -11995,6 +12016,7 @@
         "type": "object"
       },
       "MapsWorkspaceView": {
+        "additionalProperties": false,
         "description": "MapChooser workspace. GET stays 200 when SSH or prerequisites are down.",
         "properties": {
           "config_error": {
@@ -12577,6 +12599,7 @@
         "type": "object"
       },
       "MarketPluginView": {
+        "additionalProperties": false,
         "description": "Non-secret marketplace listing. GitHub URLs are public repository links.",
         "properties": {
           "author": {
@@ -12683,6 +12706,7 @@
         "type": "object"
       },
       "MonitoringLogListView": {
+        "additionalProperties": false,
         "properties": {
           "items": {
             "items": {
@@ -12696,6 +12720,7 @@
         "type": "object"
       },
       "MonitoringLogView": {
+        "additionalProperties": false,
         "properties": {
           "created_at": {
             "anyOf": [
@@ -12736,6 +12761,7 @@
         "type": "object"
       },
       "OperationInboxItem": {
+        "additionalProperties": false,
         "properties": {
           "action": {
             "enum": [
@@ -12895,6 +12921,7 @@
         "type": "object"
       },
       "OperationInboxView": {
+        "additionalProperties": false,
         "properties": {
           "active_count": {
             "default": 0,
@@ -12935,6 +12962,7 @@
         "type": "object"
       },
       "OperationJournal": {
+        "additionalProperties": false,
         "description": "Current operation record plus every persisted progress event.",
         "properties": {
           "events": {
@@ -12955,6 +12983,7 @@
         "type": "object"
       },
       "OperationJournalEvent": {
+        "additionalProperties": false,
         "description": "One persisted operation log line for JSON replay (SSE fallback).",
         "properties": {
           "kind": {
@@ -13016,6 +13045,7 @@
         "type": "object"
       },
       "OverviewSummary": {
+        "additionalProperties": false,
         "description": "Aggregate operational counters for the overview dashboard.",
         "properties": {
           "attention": {
@@ -13065,6 +13095,7 @@
         "type": "object"
       },
       "Page_AuditEntry_": {
+        "additionalProperties": false,
         "properties": {
           "items": {
             "items": {
@@ -13096,6 +13127,7 @@
         "type": "object"
       },
       "Page_MarketPluginView_": {
+        "additionalProperties": false,
         "properties": {
           "items": {
             "items": {
@@ -13171,6 +13203,7 @@
         "type": "object"
       },
       "PasswordResetCompleteRequest": {
+        "additionalProperties": false,
         "description": "Public reset-password body. The token is the one-time value from the email link.",
         "properties": {
           "new_password": {
@@ -13193,6 +13226,7 @@
         "type": "object"
       },
       "PasswordResetEmailRequest": {
+        "additionalProperties": false,
         "description": "Public forgot-password body. CAPTCHA-gated; does not reveal whether the email exists.",
         "properties": {
           "captcha_code": {
@@ -13507,7 +13541,8 @@
         "type": "object"
       },
       "PluginCatalogImportRequest": {
-        "description": "Admin-only catalog import with skip/update conflict handling.",
+        "additionalProperties": false,
+        "description": "Strict HTTP envelope for importing a portable plugin catalog.\n\nThe catalog service still receives its legacy domain model after the\nadapter validates this envelope; keeping that conversion here prevents\nSQLModel request classes from leaking into the versioned API boundary.",
         "properties": {
           "conflict_strategy": {
             "default": "skip",
@@ -13520,7 +13555,8 @@
           },
           "conflicts": {
             "items": {
-              "$ref": "#/components/schemas/PluginCatalogConflict"
+              "additionalProperties": true,
+              "type": "object"
             },
             "maxItems": 2000,
             "title": "Conflicts",
@@ -13546,7 +13582,8 @@
           },
           "plugins": {
             "items": {
-              "$ref": "#/components/schemas/PluginCatalogEntry"
+              "additionalProperties": true,
+              "type": "object"
             },
             "maxItems": 500,
             "title": "Plugins",
@@ -13667,6 +13704,7 @@
         "type": "object"
       },
       "PluginCategoryList": {
+        "additionalProperties": false,
         "properties": {
           "items": {
             "items": {
@@ -13683,6 +13721,7 @@
         "type": "object"
       },
       "PluginCategoryView": {
+        "additionalProperties": false,
         "properties": {
           "name": {
             "title": "Name",
@@ -13701,6 +13740,7 @@
         "type": "object"
       },
       "PluginConfigBrowseItemView": {
+        "additionalProperties": false,
         "properties": {
           "name": {
             "title": "Name",
@@ -13745,6 +13785,7 @@
         "type": "object"
       },
       "PluginConfigBrowseView": {
+        "additionalProperties": false,
         "properties": {
           "items": {
             "items": {
@@ -13765,6 +13806,7 @@
         "type": "object"
       },
       "PluginConfigChange": {
+        "additionalProperties": false,
         "properties": {
           "id": {
             "maxLength": 1500,
@@ -13800,6 +13842,7 @@
         "type": "object"
       },
       "PluginConfigFieldView": {
+        "additionalProperties": false,
         "properties": {
           "comment": {
             "default": "",
@@ -13858,6 +13901,7 @@
         "type": "object"
       },
       "PluginConfigFileView": {
+        "additionalProperties": false,
         "properties": {
           "content": {
             "title": "Content",
@@ -13925,6 +13969,7 @@
         "type": "object"
       },
       "PluginConfigSaveRequest": {
+        "additionalProperties": false,
         "properties": {
           "changes": {
             "items": {
@@ -13977,6 +14022,7 @@
         "type": "object"
       },
       "PluginConfigSourceCreateRequest": {
+        "additionalProperties": false,
         "properties": {
           "path": {
             "maxLength": 1500,
@@ -13992,6 +14038,7 @@
         "type": "object"
       },
       "PluginConfigSourceDeleteResult": {
+        "additionalProperties": false,
         "properties": {
           "success": {
             "default": true,
@@ -14003,6 +14050,7 @@
         "type": "object"
       },
       "PluginConfigSourceView": {
+        "additionalProperties": false,
         "description": "A persisted plugin-config file or directory under the game root.",
         "properties": {
           "absolute_path": {
@@ -14057,6 +14105,7 @@
         "type": "object"
       },
       "PluginConfigSourcesView": {
+        "additionalProperties": false,
         "description": "Source list. GET is database-only and does not open SSH.",
         "properties": {
           "game_directory": {
@@ -14208,6 +14257,7 @@
         "type": "object"
       },
       "PluginConflictView": {
+        "additionalProperties": false,
         "properties": {
           "plugin_a_id": {
             "title": "Plugin A Id",
@@ -14241,6 +14291,7 @@
         "type": "object"
       },
       "PluginDiagnosticExecuteBody": {
+        "additionalProperties": false,
         "properties": {
           "expected_plan_hash": {
             "maxLength": 64,
@@ -14291,6 +14342,7 @@
         "type": "object"
       },
       "PluginDiagnosticPlanBody": {
+        "additionalProperties": false,
         "properties": {
           "scope": {
             "default": "both",
@@ -14379,6 +14431,7 @@
         "type": "object"
       },
       "PluginDiagnosticPlanView": {
+        "additionalProperties": false,
         "properties": {
           "candidate_groups": {
             "items": {
@@ -14435,6 +14488,7 @@
         "type": "object"
       },
       "PluginDiagnosticRecommendationView": {
+        "additionalProperties": false,
         "properties": {
           "last_update_time": {
             "anyOf": [
@@ -14592,6 +14646,7 @@
         "type": "object"
       },
       "PluginDiagnosticRunView": {
+        "additionalProperties": false,
         "properties": {
           "completed_at": {
             "anyOf": [
@@ -14693,6 +14748,7 @@
         "type": "object"
       },
       "PluginInstallPlanView": {
+        "additionalProperties": false,
         "description": "Deterministic install preflight. Does not mutate the server.",
         "properties": {
           "already_installed": {
@@ -14777,6 +14833,7 @@
         "type": "object"
       },
       "PluginInstallRequest": {
+        "additionalProperties": false,
         "description": "Acknowledge warnings and optionally pin the preflight plan hash.\n\n``install_dependencies`` is opt-in, matching the legacy web installer.",
         "properties": {
           "acknowledge_warning_rule_ids": {
@@ -14839,6 +14896,7 @@
         "type": "object"
       },
       "PluginInstallStep": {
+        "additionalProperties": false,
         "properties": {
           "kind": {
             "title": "Kind",
@@ -14877,6 +14935,7 @@
         "type": "object"
       },
       "PluginRef": {
+        "additionalProperties": false,
         "properties": {
           "id": {
             "title": "Id",
@@ -14945,6 +15004,7 @@
         "type": "object"
       },
       "PluginUpdateStatusView": {
+        "additionalProperties": false,
         "properties": {
           "current": {
             "default": 0,
@@ -15019,6 +15079,7 @@
         "type": "object"
       },
       "PluginUpdatesPluginPatch": {
+        "additionalProperties": false,
         "properties": {
           "auto_update_enabled": {
             "anyOf": [
@@ -15086,6 +15147,7 @@
         "type": "object"
       },
       "PluginUpdatesSettingsRequest": {
+        "additionalProperties": false,
         "properties": {
           "enable_plugin_auto_update": {
             "title": "Enable Plugin Auto Update",
@@ -15118,6 +15180,7 @@
         "type": "object"
       },
       "PluginUpdatesView": {
+        "additionalProperties": false,
         "properties": {
           "enable_plugin_auto_update": {
             "title": "Enable Plugin Auto Update",
@@ -15167,6 +15230,7 @@
         "type": "object"
       },
       "ProfileApiKeyGenerate": {
+        "additionalProperties": false,
         "description": "Optional captcha when rotating the personal API key from the console.",
         "properties": {
           "captcha_code": {
@@ -15198,6 +15262,7 @@
         "type": "object"
       },
       "ProfileApiKeyView": {
+        "additionalProperties": false,
         "description": "The user's own panel API key. Returned only on this dedicated reveal endpoint.",
         "properties": {
           "api_key": {
@@ -15224,6 +15289,7 @@
         "type": "object"
       },
       "ProfileGsltGenerate": {
+        "additionalProperties": false,
         "description": "Create a Steam GSLT with the signed-in user's Steam Web API key.",
         "properties": {
           "captcha_code": {
@@ -15257,6 +15323,7 @@
         "type": "object"
       },
       "ProfileGsltView": {
+        "additionalProperties": false,
         "description": "Newly generated GSLT. Returned once so the operator can save it on a server.",
         "properties": {
           "login_token": {
@@ -15282,6 +15349,7 @@
         "type": "object"
       },
       "ProfilePasswordChange": {
+        "additionalProperties": false,
         "description": "Change the signed-in user's password. Requires the current password and captcha.",
         "properties": {
           "captcha_code": {
@@ -15324,6 +15392,7 @@
         "type": "object"
       },
       "ProfilePatch": {
+        "additionalProperties": false,
         "description": "Personal-center updates. Sensitive fields are write-only and captcha-gated.",
         "properties": {
           "captcha_code": {
@@ -15414,6 +15483,7 @@
         "type": "object"
       },
       "ProfileS3Patch": {
+        "additionalProperties": false,
         "description": "Partial S3 backup update. Secret is write-only; captcha is required.",
         "properties": {
           "access_key_id": {
@@ -15547,6 +15617,7 @@
         "type": "object"
       },
       "ProfileS3TestStep": {
+        "additionalProperties": false,
         "properties": {
           "message": {
             "title": "Message",
@@ -15570,6 +15641,7 @@
         "type": "object"
       },
       "ProfileS3TestView": {
+        "additionalProperties": false,
         "properties": {
           "message": {
             "title": "Message",
@@ -15595,6 +15667,7 @@
         "type": "object"
       },
       "ProfileS3View": {
+        "additionalProperties": false,
         "description": "S3-compatible backup settings. The secret key is never echoed.",
         "properties": {
           "access_key_id": {
@@ -15684,6 +15757,7 @@
         "type": "object"
       },
       "ProfileView": {
+        "additionalProperties": false,
         "description": "Personal-center projection. Secrets stay write-only except the API key reveal.",
         "properties": {
           "created_at": {
@@ -15886,6 +15960,7 @@
         "type": "object"
       },
       "RegisterRequest": {
+        "additionalProperties": false,
         "description": "Public self-registration body. CAPTCHA-gated; creates a non-admin member.",
         "properties": {
           "captcha_code": {
@@ -16016,6 +16091,7 @@
         "type": "object"
       },
       "S3BackupItemView": {
+        "additionalProperties": false,
         "description": "One S3 plugin-backup object. The object key is a path, not an access key.",
         "properties": {
           "filename": {
@@ -16052,6 +16128,7 @@
         "type": "object"
       },
       "S3BackupListView": {
+        "additionalProperties": false,
         "description": "S3 backup listing. Credentials never appear; an empty list is valid when unconfigured.",
         "properties": {
           "configured": {
@@ -16085,6 +16162,7 @@
         "type": "object"
       },
       "S3RestoreBody": {
+        "additionalProperties": false,
         "description": "Restore one listed backup. The object key must belong to this server's prefix.",
         "properties": {
           "object_key": {
@@ -16384,6 +16462,7 @@
         "type": "object"
       },
       "ScheduledTaskCreateRequest": {
+        "additionalProperties": false,
         "properties": {
           "action": {
             "enum": [
@@ -16613,6 +16692,7 @@
         "type": "object"
       },
       "ScheduledTaskUpdateRequest": {
+        "additionalProperties": false,
         "properties": {
           "action": {
             "anyOf": [
@@ -16692,6 +16772,7 @@
         "type": "object"
       },
       "ScheduledTaskView": {
+        "additionalProperties": false,
         "properties": {
           "action": {
             "title": "Action",
@@ -17418,65 +17499,6 @@
         "title": "ServerConfigExport",
         "type": "object"
       },
-      "ServerConfigImportRequest": {
-        "description": "Import request with a selectable conflict strategy.",
-        "properties": {
-          "conflict_strategy": {
-            "default": "skip",
-            "enum": [
-              "skip",
-              "update",
-              "rename"
-            ],
-            "title": "Conflict Strategy",
-            "type": "string"
-          },
-          "exported_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Exported At"
-          },
-          "format": {
-            "const": "upkk-cs2-server-config",
-            "default": "upkk-cs2-server-config",
-            "title": "Format",
-            "type": "string"
-          },
-          "include_secrets": {
-            "default": false,
-            "title": "Include Secrets",
-            "type": "boolean"
-          },
-          "servers": {
-            "items": {
-              "$ref": "#/components/schemas/ServerConfigEntry"
-            },
-            "maxItems": 100,
-            "minItems": 1,
-            "title": "Servers",
-            "type": "array"
-          },
-          "version": {
-            "default": 1,
-            "maximum": 1.0,
-            "minimum": 1.0,
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "servers"
-        ],
-        "title": "ServerConfigImportRequest",
-        "type": "object"
-      },
       "ServerConfigImportResponse": {
         "description": "Summary returned after processing a configuration import bundle.",
         "properties": {
@@ -17972,6 +17994,7 @@
         "type": "object"
       },
       "ServerCreateRequest": {
+        "additionalProperties": false,
         "description": "Create a server. Secret fields are write-only and never echoed.",
         "properties": {
           "additional_parameters": {
@@ -18154,6 +18177,7 @@
         "type": "object"
       },
       "ServerCreateResult": {
+        "additionalProperties": false,
         "description": "Create response: the server plus host-initialization outcome.",
         "properties": {
           "a2s_check_interval_seconds": {
@@ -18512,6 +18536,7 @@
         "type": "object"
       },
       "ServerDetail": {
+        "additionalProperties": false,
         "description": "Extended, still non-secret, server projection for the workspace.",
         "properties": {
           "a2s_check_interval_seconds": {
@@ -18842,6 +18867,7 @@
         "type": "object"
       },
       "ServerOperationRequest": {
+        "additionalProperties": false,
         "description": "Start a long-running server action. The HTTP request returns immediately.",
         "properties": {
           "action": {
@@ -18874,6 +18900,7 @@
         "type": "object"
       },
       "ServerOperationView": {
+        "additionalProperties": false,
         "description": "Non-secret projection of one async server operation.",
         "properties": {
           "action": {
@@ -20056,6 +20083,7 @@
         "type": "object"
       },
       "ServerSummary": {
+        "additionalProperties": false,
         "description": "Non-secret server projection for list and card views.",
         "properties": {
           "consecutive_ssh_failures": {
@@ -20726,6 +20754,7 @@
         "type": "object"
       },
       "ServerUpdateRequest": {
+        "additionalProperties": false,
         "description": "Partial server update. Secrets are write-only; omit to leave unchanged.",
         "properties": {
           "a2s_check_interval_seconds": {
@@ -21112,6 +21141,7 @@
         "type": "object"
       },
       "ServerWriteResult": {
+        "additionalProperties": false,
         "description": "Detail plus whether a running server needs a restart after the write.",
         "properties": {
           "a2s_check_interval_seconds": {
@@ -21447,6 +21477,7 @@
         "type": "object"
       },
       "SessionUser": {
+        "additionalProperties": false,
         "description": "The authenticated principal as the console needs it.",
         "properties": {
           "email": {
@@ -21502,6 +21533,7 @@
         "type": "object"
       },
       "SshPoolView": {
+        "additionalProperties": false,
         "description": "Non-secret SSH connection-pool snapshot for the console chrome.",
         "properties": {
           "connections": {
@@ -21554,6 +21586,7 @@
         "type": "object"
       },
       "StartupCommandView": {
+        "additionalProperties": false,
         "description": "Masked startup-command preview. Passwords and tokens are never returned in clear text.",
         "properties": {
           "cs2_command": {
@@ -21601,6 +21634,7 @@
         "type": "object"
       },
       "SteamLatestVersionView": {
+        "additionalProperties": false,
         "description": "Cached Steam CS2 advertised version. Never queries Steam on this request.",
         "properties": {
           "available": {
@@ -21647,6 +21681,7 @@
         "type": "object"
       },
       "SystemSettingsPatch": {
+        "additionalProperties": false,
         "description": "Partial admin update. Secret fields are write-only and never echoed.",
         "properties": {
           "clear_global_github_token": {
@@ -22109,6 +22144,7 @@
         "type": "object"
       },
       "SystemSettingsView": {
+        "additionalProperties": false,
         "description": "Admin system settings with secrets replaced by presence flags.",
         "properties": {
           "default_proxy_mode": {
@@ -22886,7 +22922,114 @@
         "title": "ValidationError",
         "type": "object"
       },
-      "api__routes__v1__schemas__BatchActionRequest": {
+      "api__contracts__v1__maps_files__MapAddRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "min_players": {
+            "default": 0,
+            "maximum": 64.0,
+            "minimum": 0.0,
+            "title": "Min Players",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "only_nominate": {
+            "default": false,
+            "title": "Only Nominate",
+            "type": "boolean"
+          },
+          "restricted_times": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Restricted Times",
+            "type": "string"
+          },
+          "workshop_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Workshop Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workshop_id"
+        ],
+        "title": "MapAddRequest",
+        "type": "object"
+      },
+      "api__contracts__v1__maps_files__MapChooserUninstallRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation"
+        ],
+        "title": "MapChooserUninstallRequest",
+        "type": "object"
+      },
+      "api__contracts__v1__maps_files__MapPresetApplyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Expected Revision",
+            "type": "string"
+          },
+          "plugin_config_expected_revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Config Expected Revision"
+          },
+          "preset": {
+            "enum": [
+              "official",
+              "kz",
+              "ze"
+            ],
+            "title": "Preset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset",
+          "expected_revision"
+        ],
+        "title": "MapPresetApplyRequest",
+        "type": "object"
+      },
+      "api__contracts__v1__plugins__BatchActionRequest": {
+        "additionalProperties": false,
         "properties": {
           "action": {
             "enum": [
@@ -22914,7 +23057,8 @@
         "title": "BatchActionRequest",
         "type": "object"
       },
-      "api__routes__v1__schemas__BatchInstallPluginsRequest": {
+      "api__contracts__v1__plugins__BatchInstallPluginsRequest": {
+        "additionalProperties": false,
         "properties": {
           "plugins": {
             "items": {
@@ -22947,7 +23091,8 @@
         "title": "BatchInstallPluginsRequest",
         "type": "object"
       },
-      "api__routes__v1__schemas__BatchSendCommandRequest": {
+      "api__contracts__v1__plugins__BatchSendCommandRequest": {
+        "additionalProperties": false,
         "properties": {
           "command": {
             "maxLength": 500,
@@ -22972,7 +23117,69 @@
         "title": "BatchSendCommandRequest",
         "type": "object"
       },
-      "api__routes__v1__schemas__EmailTestRequest": {
+      "api__contracts__v1__server__ServerConfigImportRequest": {
+        "additionalProperties": false,
+        "description": "Strict HTTP envelope for importing a portable server configuration.",
+        "properties": {
+          "conflict_strategy": {
+            "default": "skip",
+            "enum": [
+              "skip",
+              "update",
+              "rename"
+            ],
+            "title": "Conflict Strategy",
+            "type": "string"
+          },
+          "exported_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exported At"
+          },
+          "format": {
+            "const": "upkk-cs2-server-config",
+            "default": "upkk-cs2-server-config",
+            "title": "Format",
+            "type": "string"
+          },
+          "include_secrets": {
+            "default": false,
+            "title": "Include Secrets",
+            "type": "boolean"
+          },
+          "servers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Servers",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "servers"
+        ],
+        "title": "ServerConfigImportRequest",
+        "type": "object"
+      },
+      "api__contracts__v1__settings__EmailTestRequest": {
+        "additionalProperties": false,
         "description": "Send a test message through the currently saved email configuration.",
         "properties": {
           "test_email": {
@@ -22985,6 +23192,109 @@
           "test_email"
         ],
         "title": "EmailTestRequest",
+        "type": "object"
+      },
+      "api__routes__map_management__MapAddRequest": {
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "min_players": {
+            "default": 0,
+            "maximum": 64.0,
+            "minimum": 0.0,
+            "title": "Min Players",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "only_nominate": {
+            "default": false,
+            "title": "Only Nominate",
+            "type": "boolean"
+          },
+          "restricted_times": {
+            "default": "",
+            "maxLength": 512,
+            "title": "Restricted Times",
+            "type": "string"
+          },
+          "workshop_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Workshop Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workshop_id"
+        ],
+        "title": "MapAddRequest",
+        "type": "object"
+      },
+      "api__routes__map_management__MapChooserUninstallRequest": {
+        "properties": {
+          "confirmation": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation"
+        ],
+        "title": "MapChooserUninstallRequest",
+        "type": "object"
+      },
+      "api__routes__map_management__MapPresetApplyRequest": {
+        "properties": {
+          "expected_revision": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Expected Revision",
+            "type": "string"
+          },
+          "plugin_config_expected_revision": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Config Expected Revision"
+          },
+          "preset": {
+            "enum": [
+              "official",
+              "kz",
+              "ze"
+            ],
+            "title": "Preset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset",
+          "expected_revision"
+        ],
+        "title": "MapPresetApplyRequest",
         "type": "object"
       },
       "modules__schemas__servers__BatchActionRequest": {
@@ -23070,6 +23380,65 @@
           "command"
         ],
         "title": "BatchSendCommandRequest",
+        "type": "object"
+      },
+      "modules__schemas__servers__ServerConfigImportRequest": {
+        "description": "Import request with a selectable conflict strategy.",
+        "properties": {
+          "conflict_strategy": {
+            "default": "skip",
+            "enum": [
+              "skip",
+              "update",
+              "rename"
+            ],
+            "title": "Conflict Strategy",
+            "type": "string"
+          },
+          "exported_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exported At"
+          },
+          "format": {
+            "const": "upkk-cs2-server-config",
+            "default": "upkk-cs2-server-config",
+            "title": "Format",
+            "type": "string"
+          },
+          "include_secrets": {
+            "default": false,
+            "title": "Include Secrets",
+            "type": "boolean"
+          },
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/ServerConfigEntry"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Servers",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "servers"
+        ],
+        "title": "ServerConfigImportRequest",
         "type": "object"
       },
       "modules__schemas__system__EmailTestRequest": {
@@ -31007,7 +31376,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ServerConfigImportRequest"
+                "$ref": "#/components/schemas/api__contracts__v1__server__ServerConfigImportRequest"
               }
             }
           },
@@ -31176,7 +31545,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api__routes__v1__schemas__BatchActionRequest"
+                "$ref": "#/components/schemas/api__contracts__v1__plugins__BatchActionRequest"
               }
             }
           },
@@ -31317,7 +31686,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api__routes__v1__schemas__BatchInstallPluginsRequest"
+                "$ref": "#/components/schemas/api__contracts__v1__plugins__BatchInstallPluginsRequest"
               }
             }
           },
@@ -31364,7 +31733,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api__routes__v1__schemas__BatchSendCommandRequest"
+                "$ref": "#/components/schemas/api__contracts__v1__plugins__BatchSendCommandRequest"
               }
             }
           },
@@ -34454,7 +34823,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MapAddRequest"
+                "$ref": "#/components/schemas/api__contracts__v1__maps_files__MapAddRequest"
               }
             }
           },
@@ -34625,7 +34994,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MapChooserUninstallRequest"
+                "$ref": "#/components/schemas/api__contracts__v1__maps_files__MapChooserUninstallRequest"
               }
             }
           },
@@ -34739,7 +35108,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MapPresetApplyRequest"
+                "$ref": "#/components/schemas/api__contracts__v1__maps_files__MapPresetApplyRequest"
               }
             }
           },
@@ -37889,7 +38258,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api__routes__v1__schemas__EmailTestRequest"
+                "$ref": "#/components/schemas/api__contracts__v1__settings__EmailTestRequest"
               }
             }
           },
@@ -38024,9 +38393,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Delete Initialized Host Api V1 Setup Initialized Servers  Server Key  Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActionResult"
                 }
               }
             },
@@ -38965,7 +39332,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ServerConfigImportRequest"
+                "$ref": "#/components/schemas/modules__schemas__servers__ServerConfigImportRequest"
               }
             }
           },
@@ -39215,7 +39582,7 @@
     },
     "/servers/{server_id}/actions": {
       "post": {
-        "description": "Execute action on server (deploy, start, stop, restart, status)",
+        "description": "Execute action on server (deploy, start, stop, restart, status).",
         "operationId": "server_action_servers__server_id__actions_post",
         "parameters": [
           {
@@ -41845,7 +42212,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MapAddRequest"
+                "$ref": "#/components/schemas/api__routes__map_management__MapAddRequest"
               }
             }
           },
@@ -42126,7 +42493,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MapChooserUninstallRequest"
+                "$ref": "#/components/schemas/api__routes__map_management__MapChooserUninstallRequest"
               }
             }
           },
@@ -42291,7 +42658,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MapPresetApplyRequest"
+                "$ref": "#/components/schemas/api__routes__map_management__MapPresetApplyRequest"
               }
             }
           },

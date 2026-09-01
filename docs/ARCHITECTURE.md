@@ -50,3 +50,26 @@ HTTP transport、SSH 连接池和后台服务。关闭时按创建逆序释放�
 
 新拆分的 `services/ai`、`services/discord`、`services/servers` 和批量动作路由由复杂度
 门禁限制在 15 以内。历史工作流的剩余债务不再扩大，并按领域迁移逐步移除。
+
+## HTTP DTO 与模型隔离
+
+维护中的 `/api/v1` 契约按 `api/contracts/v1/<domain>.py` 组织，并提供 `requests.py` 与
+`responses.py` 索引。请求 DTO
+继承 `ApiRequest`，响应 DTO 继承 `ApiResponse`；服务通过
+`services/<domain>/types.py` 传递与 HTTP 无关的 command/result，ORM 只存在于
+`modules/models/`。路由不得直接返回 ORM，必须通过 presenter 映射并使用 `response_model` 过滤
+输出字段。旧 `modules.schemas` 和 `api.routes.v1.schemas` 仅作为兼容 facade。
+`api.routes.v1.operation_runner` 同样只保留稳定导入路径，实际 worker 按服务器、插件、主机、
+下载、清理和诊断职责拆分，并且 worker 只接收队列记录中的标量数据。
+
+进程配置通过 `modules.config.get_settings()` 缓存加载：端口、连接池、超时、日志级别、运行模式、
+HTTP URL 和 JWT/应用密钥在构造时一次性校验；测试可清空缓存或覆盖 `SettingsDependency`。
+生产是默认运行模式（`DEBUG=False`、`RUN_MODE=production`），镜像与默认 Compose 配置显式保持
+该安全默认；开发环境必须通过专用 debug Compose 或环境变量显式开启。
+
+## 质量与性能门禁
+
+生产 Python/TypeScript 模块最多 800 行、测试最多 1200 行（生成的 OpenAPI 类型与 Alembic
+revision 豁免）；所有函数复杂度不超过 15，basedpyright 不允许错误或警告。JSON 路由必须显式 response model，敏感响应字段必须通过安全 allowlist。全量测试要求
+行/分支覆盖率达到 90%，变更代码达到 95%。批量授权、Redis pipeline、有界并发、短事务和 SSE
+慢客户端隔离属于性能契约，任何重构都必须保留并补充回归测试。

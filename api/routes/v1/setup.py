@@ -10,6 +10,7 @@ from services.redis_manager import redis_manager
 from services.server_setup_script import build_manual_setup_script, validate_cs2_username
 
 from .schemas import (
+    ActionResult,
     AutoSetupRequest,
     AutoSetupResultView,
     InitializedHostCredentialsView,
@@ -76,8 +77,8 @@ async def read_initialized_host_credentials(
     )
 
 
-@router.delete("/initialized-servers/{server_key:path}")
-async def delete_initialized_host(server_key: str, current_user: ActiveUser) -> dict[str, object]:
+@router.delete("/initialized-servers/{server_key:path}", response_model=ActionResult)
+async def delete_initialized_host(server_key: str, current_user: ActiveUser) -> ActionResult:
     _require_owned_initialized(
         await redis_manager.get_initialized_server(server_key),
         current_user.id,
@@ -88,7 +89,7 @@ async def delete_initialized_host(server_key: str, current_user: ActiveUser) -> 
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete server configuration",
         )
-    return {"success": True, "message": "Initialized server deleted successfully"}
+    return ActionResult(success=True, message="Initialized server deleted successfully")
 
 
 @router.get("/manual-script", response_model=ManualSetupScriptView)

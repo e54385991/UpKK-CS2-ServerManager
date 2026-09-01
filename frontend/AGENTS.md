@@ -224,7 +224,23 @@ npm run gen:api    # regenerate OpenAPI types from ../openapi.json
 ```
 
 Before marking frontend work done, `npm run lint`, `npm run typecheck`, and
-`npm run build` must all pass.
+`npm run build` must all pass. Also run `npm run check:bundle` after a
+production build; it checks the gzip size of every route's initial client
+chunks (250 KiB per route, 150 KiB per chunk). Heavy editors and terminal
+libraries must remain in lazy chunks.
+
+## DTO and boundary rules
+
+The browser-facing API uses generated OpenAPI types only. Server Components
+call `apiFetch` from domain `api.ts`; Client Components receive serializable
+DTOs and never receive ORM/database objects, secrets, or server-only functions.
+Keep request and response types distinct, map snake_case wire DTOs to camelCase
+domain types in the module API layer, and treat `response_model` filtering on
+the FastAPI side as a security boundary.
+
+When splitting a large module, keep the public container small and move state
+into hooks, pure views, and focused dialogs. Do not bypass the app → modules →
+shared direction with path aliases or barrel files that create cycles.
 
 ## Roadmap (phased parity)
 

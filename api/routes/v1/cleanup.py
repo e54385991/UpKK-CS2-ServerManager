@@ -134,7 +134,7 @@ async def scan_server_cleanup(
     return _scan_view(await legacy.scan_server_cleanup(server_id, db, current_user))
 
 
-@router.get("/{server_id}/cleanup/scan/events")
+@router.get("/{server_id}/cleanup/scan/events", response_model=None)
 async def scan_server_cleanup_events(
     server_id: int,
     request: Request,
@@ -364,7 +364,7 @@ async def scan_system_cleanup(
             pass
 
 
-@router.get("/{server_id}/cleanup/system/events")
+@router.get("/{server_id}/cleanup/system/events", response_model=None)
 async def scan_system_cleanup_events(
     server_id: int,
     request: Request,

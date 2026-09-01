@@ -260,7 +260,7 @@ async def copy_paths(
     )
 
 
-@router.get("/download")
+@router.get("/download", response_model=None)
 async def download_file(
     server_id: int,
     path: str,

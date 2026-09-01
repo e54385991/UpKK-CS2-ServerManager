@@ -55,12 +55,18 @@ jobs:
         with:
           node-version: "26"
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
 
       - name: Install locked Python dependencies
         run: uv sync --locked --group dev
 
       - name: Verify locked frontend dependencies
         run: npm ci
+
+      - name: Verify locked Next.js dependencies
+        run: npm ci --prefix frontend
 
       - name: Run quality baseline
         run: uv run python scripts/check_baseline.py
@@ -145,3 +151,30 @@ jobs:
       - name: Tear down Compose services
         if: always()
         run: docker compose down -v
+
+  frontend-playwright-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked frontend dependencies
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run public Next.js smoke flow
+        run: npx playwright test e2e/tutorial.spec.ts --project=anon

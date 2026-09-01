@@ -37,6 +37,7 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: 8000
       DEBUG: ${DEBUG:-False}
+      RUN_MODE: ${RUN_MODE:-production}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:3000}
       CONSOLE_PUBLIC_URL: ${CONSOLE_PUBLIC_URL:-http://localhost:3000}
       LEGACY_HTML_CONSOLE: ${LEGACY_HTML_CONSOLE:-redirect}

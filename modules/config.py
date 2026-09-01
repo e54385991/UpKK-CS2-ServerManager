@@ -1,8 +1,10 @@
 """Typed application settings loaded from the project-level ``.env`` file."""
 
+from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from urllib.parse import urlparse
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -38,7 +40,7 @@ class Settings(BaseSettings):
     # Redis Configuration
     REDIS_HOST: str
     REDIS_PORT: int
-    REDIS_PASSWORD: Optional[str]
+    REDIS_PASSWORD: str | None = None
     REDIS_DB: int
     # Namespace Redis keys so two panels can share one Redis DB (operators
     # often leave REDIS_DB=0). Empty keeps the historical unprefixed keys.
@@ -57,7 +59,9 @@ class Settings(BaseSettings):
     # Application Configuration
     API_HOST: str
     API_PORT: int
-    DEBUG: bool
+    # Production is the safe default; development diagnostics must be opted in.
+    DEBUG: bool = False
+    RUN_MODE: str = "production"
     BACKEND_URL: str
     # Public Next.js origin. FastAPI leftover HTML pages 307 here by default.
     # In the Caddy three-service topology this is the public gateway origin.
@@ -79,7 +83,7 @@ class Settings(BaseSettings):
     # Optional Fernet key used only for AI provider credentials.  The
     # application can start without it, but AI provider settings cannot be
     # enabled or persisted until a valid key is configured.
-    AI_CREDENTIAL_ENCRYPTION_KEY: Optional[str] = None
+    AI_CREDENTIAL_ENCRYPTION_KEY: str | None = None
 
     # SSH Authentication Configuration
     # Options: "password", "key", "both"
@@ -89,7 +93,7 @@ class Settings(BaseSettings):
     SSH_AUTH_MODE: str
 
     # Google OAuth Configuration
-    GOOGLE_CLIENT_ID: Optional[str]
+    GOOGLE_CLIENT_ID: str | None = None
     # Google CallbackURL = https://your-domain.com/google-callback
 
     @property
@@ -111,6 +115,105 @@ class Settings(BaseSettings):
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
+    @field_validator("POSTGRES_PORT", "REDIS_PORT", "API_PORT")
+    @classmethod
+    def validate_port(cls, value: int) -> int:
+        if not 1 <= value <= 65535:
+            raise ValueError("port must be between 1 and 65535")
+        return value
 
-# Global settings instance
-settings = Settings()
+    @field_validator(
+        "DB_POOL_SIZE",
+        "DB_POOL_TIMEOUT",
+        "DB_POOL_RECYCLE",
+        "DB_MIGRATION_LOCK_TIMEOUT_SECONDS",
+        "REDIS_POOL_SIZE",
+        "REDIS_HEALTH_CHECK_INTERVAL",
+        "REDIS_SOCKET_CONNECT_TIMEOUT",
+        "REDIS_SOCKET_TIMEOUT",
+        "JWT_ACCESS_TOKEN_EXPIRE_MINUTES",
+    )
+    @classmethod
+    def validate_positive_setting(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("setting must be greater than zero")
+        return value
+
+    @field_validator("DB_MAX_OVERFLOW")
+    @classmethod
+    def validate_max_overflow(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("DB_MAX_OVERFLOW must be zero or greater")
+        return value
+
+    @field_validator("REDIS_DB")
+    @classmethod
+    def validate_redis_db(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("REDIS_DB must be zero or greater")
+        return value
+
+    @field_validator("LOG_LEVEL", "ASYNCSSH_LOG_LEVEL")
+    @classmethod
+    def validate_log_level(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ValueError("log level must be DEBUG, INFO, WARNING, ERROR, or CRITICAL")
+        return normalized
+
+    @field_validator("SSH_AUTH_MODE")
+    @classmethod
+    def validate_ssh_auth_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"password", "key", "both"}:
+            raise ValueError("SSH_AUTH_MODE must be password, key, or both")
+        return normalized
+
+    @field_validator("LEGACY_HTML_CONSOLE")
+    @classmethod
+    def validate_legacy_console_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"redirect", "serve", "gone"}:
+            raise ValueError("LEGACY_HTML_CONSOLE must be redirect, serve, or gone")
+        return normalized
+
+    @field_validator("RUN_MODE")
+    @classmethod
+    def validate_run_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"development", "production", "test"}:
+            raise ValueError("RUN_MODE must be development, production, or test")
+        return normalized
+
+    @field_validator("BACKEND_URL", "CONSOLE_PUBLIC_URL")
+    @classmethod
+    def validate_http_url(cls, value: str) -> str:
+        parsed = urlparse(value.strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("URL must include an http or https scheme and host")
+        return value.strip().rstrip("/")
+
+    @field_validator("SECRET_KEY", "JWT_SECRET_KEY")
+    @classmethod
+    def validate_secret_strength(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 32:
+            raise ValueError("secret keys must contain at least 32 characters")
+        return normalized
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Load and validate process settings exactly once.
+
+    Keeping construction behind a cache makes startup deterministic while
+    allowing tests to clear the cache or override the FastAPI dependency.
+    ``settings`` below remains a compatibility export for existing imports.
+    """
+
+    return Settings()
+
+
+# Compatibility export. New request handlers should inject ``get_settings``
+# through ``SettingsDependency`` instead of importing this module global.
+settings = get_settings()

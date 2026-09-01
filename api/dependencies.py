@@ -17,6 +17,7 @@ from modules import (
     get_db,
 )
 from modules.auth import _get_active_user_for_token, optional_oauth2_scheme, web_session_cookie_name
+from modules.config import Settings, get_settings
 from modules.database import async_session_maker
 from services.container import ServiceContainer
 from services.maintenance_lock import maintenance_lock_service
@@ -78,6 +79,19 @@ async def close_request_session(db: AsyncSession | None) -> None:
 
 
 StreamUser = Annotated[User, Depends(get_bearer_or_cookie_user)]
+
+
+def get_app_settings() -> Settings:
+    """Return the cached, validated process configuration.
+
+    Handlers receive this through dependency injection so tests can replace
+    configuration without mutating a module-level singleton.
+    """
+
+    return get_settings()
+
+
+SettingsDependency = Annotated[Settings, Depends(get_app_settings)]
 
 
 def get_service_container(request: Request) -> ServiceContainer:

@@ -102,7 +102,7 @@ async def list_operation_inbox(
     return await _build_inbox(await _accessible_servers(db, current_user))
 
 
-@router.get("/inbox/events")
+@router.get("/inbox/events", response_model=None)
 async def stream_operation_inbox(
     request: Request,
     current_user: StreamUser,

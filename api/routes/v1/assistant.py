@@ -172,7 +172,7 @@ async def get_assistant_run(
     )
 
 
-@router.get("/runs/{run_id}/events")
+@router.get("/runs/{run_id}/events", response_model=None)
 async def stream_assistant_run_events(
     run_id: str,
     request: Request,

@@ -20,6 +20,8 @@ from modules.schemas.servers import (
     ServerConfigImportResponse,
 )
 
+from .schemas import ServerConfigImportRequest as ServerConfigImportBody
+
 router = APIRouter(prefix="/api/v1/server-configs", tags=["v1-server-configs"])
 
 
@@ -41,10 +43,15 @@ async def export_server_configs(
 
 @router.post("", response_model=ServerConfigImportResponse)
 async def import_server_configs(
-    body: ServerConfigImportRequest,
+    body: ServerConfigImportBody,
     db: DatabaseSession,
     current_user: ActiveUser,
     request: Request,
 ) -> ServerConfigImportResponse:
     """Import a configuration bundle into the current user's server list."""
-    return await legacy.import_server_configs(body, db, current_user, request)
+    return await legacy.import_server_configs(
+        ServerConfigImportRequest.model_validate(body.model_dump()),
+        db,
+        current_user,
+        request,
+    )

@@ -20,7 +20,7 @@ from .auth import (
     verify_password,
     verify_password_async,
 )
-from .config import Settings, settings
+from .config import Settings, get_settings, settings
 from .database import async_session_maker, engine, get_db, init_db, migrate_db
 from .logging_config import _get_log_level, setup_logging
 from .models import (
@@ -201,6 +201,7 @@ from .utils import generate_api_key, get_current_time, verify_api_key_format
 __all__ = [
     "settings",
     "Settings",
+    "get_settings",
     "Base",
     "AISystemSettings",
     "UserAISettings",

@@ -19,6 +19,8 @@ from modules.schemas.plugins import (
 from services.audit_log_service import record_audit_event
 from services.plugin_catalog import collect_export_bundle, import_plugin_catalog
 
+from .schemas import PluginCatalogImportRequest as PluginCatalogImportBody
+
 router = APIRouter(prefix="/api/v1/plugin-catalog", tags=["v1-plugin-catalog"])
 
 
@@ -34,13 +36,16 @@ async def export_plugin_catalog(
 
 @router.post("", response_model=PluginCatalogImportResponse)
 async def import_plugin_catalog_route(
-    body: PluginCatalogImportRequest,
+    body: PluginCatalogImportBody,
     db: DatabaseSession,
     current_user: AdminUser,
     request: Request,
 ) -> PluginCatalogImportResponse:
     """Import a catalog. Non-admins receive 403, matching market create."""
-    summary = await import_plugin_catalog(db, body)
+    summary = await import_plugin_catalog(
+        db,
+        PluginCatalogImportRequest.model_validate(body.model_dump()),
+    )
     await record_audit_event(
         category="plugin",
         action="plugin.catalog.import",

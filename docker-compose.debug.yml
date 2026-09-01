@@ -2,6 +2,9 @@
 #   docker compose -f docker-compose.yml -f docker-compose.debug.yml up -d
 services:
   app:
+    environment:
+      DEBUG: "True"
+      RUN_MODE: development
     ports:
       - "${API_PORT:-8000}:8000"
   postgres:

@@ -5572,7 +5572,7 @@ export interface paths {
         put?: never;
         /**
          * Server Action
-         * @description Execute action on server (deploy, start, stop, restart, status)
+         * @description Execute action on server (deploy, start, stop, restart, status).
          */
         post: operations["server_action_servers__server_id__actions_post"];
         delete?: never;
@@ -10874,38 +10874,6 @@ export interface components {
             /** Script */
             script: string;
         };
-        /** MapAddRequest */
-        MapAddRequest: {
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /**
-             * Min Players
-             * @default 0
-             */
-            min_players: number;
-            /** Name */
-            name?: string | null;
-            /**
-             * Only Nominate
-             * @default false
-             */
-            only_nominate: boolean;
-            /**
-             * Restricted Times
-             * @default
-             */
-            restricted_times: string;
-            /** Workshop Id */
-            workshop_id: string;
-        };
-        /** MapChooserUninstallRequest */
-        MapChooserUninstallRequest: {
-            /** Confirmation */
-            confirmation: string;
-        };
         /** MapConfigUpdateRequest */
         MapConfigUpdateRequest: {
             /** Content */
@@ -11037,18 +11005,6 @@ export interface components {
              * @default
              */
             workshop_id: string;
-        };
-        /** MapPresetApplyRequest */
-        MapPresetApplyRequest: {
-            /** Expected Revision */
-            expected_revision: string;
-            /** Plugin Config Expected Revision */
-            plugin_config_expected_revision?: string | null;
-            /**
-             * Preset
-             * @enum {string}
-             */
-            preset: "official" | "kz" | "ze";
         };
         /** MapSyncRunRequest */
         MapSyncRunRequest: {
@@ -11676,7 +11632,11 @@ export interface components {
         };
         /**
          * PluginCatalogImportRequest
-         * @description Admin-only catalog import with skip/update conflict handling.
+         * @description Strict HTTP envelope for importing a portable plugin catalog.
+         *
+         *     The catalog service still receives its legacy domain model after the
+         *     adapter validates this envelope; keeping that conversion here prevents
+         *     SQLModel request classes from leaking into the versioned API boundary.
          */
         PluginCatalogImportRequest: {
             /**
@@ -11686,7 +11646,9 @@ export interface components {
              */
             conflict_strategy: "skip" | "update";
             /** Conflicts */
-            conflicts?: components["schemas"]["PluginCatalogConflict"][];
+            conflicts?: {
+                [key: string]: unknown;
+            }[];
             /** Exported At */
             exported_at?: string | null;
             /**
@@ -11696,7 +11658,9 @@ export interface components {
              */
             format: "upkk-cs2-plugin-catalog";
             /** Plugins */
-            plugins?: components["schemas"]["PluginCatalogEntry"][];
+            plugins?: {
+                [key: string]: unknown;
+            }[];
             /**
              * Version
              * @default 1
@@ -13264,38 +13228,6 @@ export interface components {
          * @description Top-level portable server configuration export document.
          */
         ServerConfigExport: {
-            /** Exported At */
-            exported_at?: string | null;
-            /**
-             * Format
-             * @default upkk-cs2-server-config
-             * @constant
-             */
-            format: "upkk-cs2-server-config";
-            /**
-             * Include Secrets
-             * @default false
-             */
-            include_secrets: boolean;
-            /** Servers */
-            servers: components["schemas"]["ServerConfigEntry"][];
-            /**
-             * Version
-             * @default 1
-             */
-            version: number;
-        };
-        /**
-         * ServerConfigImportRequest
-         * @description Import request with a selectable conflict strategy.
-         */
-        ServerConfigImportRequest: {
-            /**
-             * Conflict Strategy
-             * @default skip
-             * @enum {string}
-             */
-            conflict_strategy: "skip" | "update" | "rename";
             /** Exported At */
             exported_at?: string | null;
             /**
@@ -15291,8 +15223,52 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** MapAddRequest */
+        api__contracts__v1__maps_files__MapAddRequest: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Min Players
+             * @default 0
+             */
+            min_players: number;
+            /** Name */
+            name?: string | null;
+            /**
+             * Only Nominate
+             * @default false
+             */
+            only_nominate: boolean;
+            /**
+             * Restricted Times
+             * @default
+             */
+            restricted_times: string;
+            /** Workshop Id */
+            workshop_id: string;
+        };
+        /** MapChooserUninstallRequest */
+        api__contracts__v1__maps_files__MapChooserUninstallRequest: {
+            /** Confirmation */
+            confirmation: string;
+        };
+        /** MapPresetApplyRequest */
+        api__contracts__v1__maps_files__MapPresetApplyRequest: {
+            /** Expected Revision */
+            expected_revision: string;
+            /** Plugin Config Expected Revision */
+            plugin_config_expected_revision?: string | null;
+            /**
+             * Preset
+             * @enum {string}
+             */
+            preset: "official" | "kz" | "ze";
+        };
         /** BatchActionRequest */
-        api__routes__v1__schemas__BatchActionRequest: {
+        api__contracts__v1__plugins__BatchActionRequest: {
             /**
              * Action
              * @enum {string}
@@ -15302,29 +15278,107 @@ export interface components {
             server_ids: number[];
         };
         /** BatchInstallPluginsRequest */
-        api__routes__v1__schemas__BatchInstallPluginsRequest: {
+        api__contracts__v1__plugins__BatchInstallPluginsRequest: {
             /** Plugins */
             plugins: ("metamod" | "counterstrikesharp" | "cs2fixes")[];
             /** Server Ids */
             server_ids: number[];
         };
         /** BatchSendCommandRequest */
-        api__routes__v1__schemas__BatchSendCommandRequest: {
+        api__contracts__v1__plugins__BatchSendCommandRequest: {
             /** Command */
             command: string;
             /** Server Ids */
             server_ids: number[];
         };
         /**
+         * ServerConfigImportRequest
+         * @description Strict HTTP envelope for importing a portable server configuration.
+         */
+        api__contracts__v1__server__ServerConfigImportRequest: {
+            /**
+             * Conflict Strategy
+             * @default skip
+             * @enum {string}
+             */
+            conflict_strategy: "skip" | "update" | "rename";
+            /** Exported At */
+            exported_at?: string | null;
+            /**
+             * Format
+             * @default upkk-cs2-server-config
+             * @constant
+             */
+            format: "upkk-cs2-server-config";
+            /**
+             * Include Secrets
+             * @default false
+             */
+            include_secrets: boolean;
+            /** Servers */
+            servers: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
          * EmailTestRequest
          * @description Send a test message through the currently saved email configuration.
          */
-        api__routes__v1__schemas__EmailTestRequest: {
+        api__contracts__v1__settings__EmailTestRequest: {
             /**
              * Test Email
              * Format: email
              */
             test_email: string;
+        };
+        /** MapAddRequest */
+        api__routes__map_management__MapAddRequest: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Min Players
+             * @default 0
+             */
+            min_players: number;
+            /** Name */
+            name?: string | null;
+            /**
+             * Only Nominate
+             * @default false
+             */
+            only_nominate: boolean;
+            /**
+             * Restricted Times
+             * @default
+             */
+            restricted_times: string;
+            /** Workshop Id */
+            workshop_id: string;
+        };
+        /** MapChooserUninstallRequest */
+        api__routes__map_management__MapChooserUninstallRequest: {
+            /** Confirmation */
+            confirmation: string;
+        };
+        /** MapPresetApplyRequest */
+        api__routes__map_management__MapPresetApplyRequest: {
+            /** Expected Revision */
+            expected_revision: string;
+            /** Plugin Config Expected Revision */
+            plugin_config_expected_revision?: string | null;
+            /**
+             * Preset
+             * @enum {string}
+             */
+            preset: "official" | "kz" | "ze";
         };
         /**
          * BatchActionRequest
@@ -15373,6 +15427,38 @@ export interface components {
              * @description List of server IDs to send command to
              */
             server_ids: number[];
+        };
+        /**
+         * ServerConfigImportRequest
+         * @description Import request with a selectable conflict strategy.
+         */
+        modules__schemas__servers__ServerConfigImportRequest: {
+            /**
+             * Conflict Strategy
+             * @default skip
+             * @enum {string}
+             */
+            conflict_strategy: "skip" | "update" | "rename";
+            /** Exported At */
+            exported_at?: string | null;
+            /**
+             * Format
+             * @default upkk-cs2-server-config
+             * @constant
+             */
+            format: "upkk-cs2-server-config";
+            /**
+             * Include Secrets
+             * @default false
+             */
+            include_secrets: boolean;
+            /** Servers */
+            servers: components["schemas"]["ServerConfigEntry"][];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
         };
         /**
          * EmailTestRequest
@@ -20410,7 +20496,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ServerConfigImportRequest"];
+                "application/json": components["schemas"]["api__contracts__v1__server__ServerConfigImportRequest"];
             };
         };
         responses: {
@@ -20509,7 +20595,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__routes__v1__schemas__BatchActionRequest"];
+                "application/json": components["schemas"]["api__contracts__v1__plugins__BatchActionRequest"];
             };
         };
         responses: {
@@ -20604,7 +20690,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__routes__v1__schemas__BatchInstallPluginsRequest"];
+                "application/json": components["schemas"]["api__contracts__v1__plugins__BatchInstallPluginsRequest"];
             };
         };
         responses: {
@@ -20637,7 +20723,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__routes__v1__schemas__BatchSendCommandRequest"];
+                "application/json": components["schemas"]["api__contracts__v1__plugins__BatchSendCommandRequest"];
             };
         };
         responses: {
@@ -22415,7 +22501,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MapAddRequest"];
+                "application/json": components["schemas"]["api__contracts__v1__maps_files__MapAddRequest"];
             };
         };
         responses: {
@@ -22590,7 +22676,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MapChooserUninstallRequest"];
+                "application/json": components["schemas"]["api__contracts__v1__maps_files__MapChooserUninstallRequest"];
             };
         };
         responses: {
@@ -22660,7 +22746,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MapPresetApplyRequest"];
+                "application/json": components["schemas"]["api__contracts__v1__maps_files__MapPresetApplyRequest"];
             };
         };
         responses: {
@@ -24560,7 +24646,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["api__routes__v1__schemas__EmailTestRequest"];
+                "application/json": components["schemas"]["api__contracts__v1__settings__EmailTestRequest"];
             };
         };
         responses: {
@@ -24654,9 +24740,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ActionResult"];
                 };
             };
             /** @description Validation Error */
@@ -25363,7 +25447,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ServerConfigImportRequest"];
+                "application/json": components["schemas"]["modules__schemas__servers__ServerConfigImportRequest"];
             };
         };
         responses: {
@@ -27086,7 +27170,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MapAddRequest"];
+                "application/json": components["schemas"]["api__routes__map_management__MapAddRequest"];
             };
         };
         responses: {
@@ -27304,7 +27388,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MapChooserUninstallRequest"];
+                "application/json": components["schemas"]["api__routes__map_management__MapChooserUninstallRequest"];
             };
         };
         responses: {
@@ -27411,7 +27495,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MapPresetApplyRequest"];
+                "application/json": components["schemas"]["api__routes__map_management__MapPresetApplyRequest"];
             };
         };
         responses: {

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce the complexity budget for newly split domains and workflows.
-
-The repository still contains historical workflow functions that are being
-retired incrementally.  The gate deliberately covers every new domain module
-and the batch route now, so new code cannot add to that debt.
-"""
+"""Enforce the repository-wide function complexity budget."""
 
 from __future__ import annotations
 
@@ -14,12 +9,7 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TARGETS = (
-    "services/ai",
-    "services/discord",
-    "services/servers",
-    "api/routes/actions/batch.py",
-)
+TARGETS = ("api", "modules", "services", "scripts")
 
 
 def main() -> int:
@@ -41,7 +31,7 @@ def main() -> int:
     if result.returncode:
         print("Complexity budget exceeded: new domain/workflow functions must stay <= 15")
         return result.returncode
-    print("Complexity budget passed for newly split domains (max 15).")
+    print("Repository complexity budget passed (max 15).")
     return 0
 
 

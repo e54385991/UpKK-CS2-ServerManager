@@ -14,7 +14,9 @@ test("deployment tutorial is public and shows the illustrated steps", async ({
   await expect(
     page.locator('img[src*="/tutorial/deploy/1.webp"]'),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: /返回登录|Back to sign in/ })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /返回登录|Back to sign in/ }).first(),
+  ).toBeVisible();
 
   const lastStep = page.getByTestId("tutorial-step-10");
   await lastStep.scrollIntoViewIfNeeded();

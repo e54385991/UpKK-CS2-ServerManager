@@ -271,7 +271,7 @@ async def read_batch_action_journal(
     return await _require_batch_journal(batch_id, current_user)
 
 
-@router.get("/batch-actions/{batch_id}/events")
+@router.get("/batch-actions/{batch_id}/events", response_model=None)
 async def stream_batch_action_events(
     batch_id: str,
     request: Request,

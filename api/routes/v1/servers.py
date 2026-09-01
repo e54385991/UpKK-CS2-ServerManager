@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import select
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
+from api.presenters.servers import to_detail as _to_detail
+from api.presenters.servers import to_summary as _to_summary
 from api.routes.actions.status import reconnect_ssh as reconnect_ssh_legacy
 from api.routes.servers.configuration import get_startup_command as get_startup_command_legacy
 from api.routes.servers.crud import apply_system_defaults_to_server as apply_defaults_legacy
@@ -23,7 +25,6 @@ from services.host_initialization import host_initialization_of
 from services.maintenance_lock import maintenance_lock_service
 from services.redis_manager import redis_manager
 from services.server_operation_hub import ServerOperationConflict
-from services.ssh_connection_pool import ssh_connection_pool
 
 from .operation_runner import enqueue_apply_apt_mirror
 from .operations import to_view
@@ -52,113 +53,12 @@ from .schemas import (
 router = APIRouter(prefix="/api/v1/servers", tags=["v1-servers"])
 
 
-def _to_summary(server: Server, owner: User | None = None) -> ServerSummary:
-    return ServerSummary(
-        id=server.id,
-        name=server.name,
-        host=server.host,
-        game_port=server.game_port,
-        ssh_user=server.ssh_user,
-        status=server.status,
-        description=server.description,
-        default_map=server.default_map,
-        max_players=server.max_players,
-        owner_id=owner.id if owner is not None else None,
-        owner_username=owner.username if owner is not None else None,
-        owner_is_admin=bool(owner.is_admin) if owner is not None else None,
-        use_panel_proxy=bool(getattr(server, "use_panel_proxy", False)),
-        github_proxy=getattr(server, "github_proxy", None) or None,
-        is_ssh_down=bool(getattr(server, "is_ssh_down", False)),
-        ssh_health_status=str(getattr(server, "ssh_health_status", None) or "unknown"),
-        consecutive_ssh_failures=int(getattr(server, "consecutive_ssh_failures", 0) or 0),
-        ssh_health_failure_threshold=int(getattr(server, "ssh_health_failure_threshold", 84) or 84),
-        ssh_health_check_interval_hours=int(
-            getattr(server, "ssh_health_check_interval_hours", 2) or 2
-        ),
-        last_ssh_health_check=getattr(server, "last_ssh_health_check", None),
-    )
-
-
 async def _owners_by_id(db, servers: list[Server]) -> dict[int, User]:
     user_ids = {server.user_id for server in servers if getattr(server, "user_id", None)}
     if not user_ids:
         return {}
     result = await db.execute(select(User).where(User.id.in_(user_ids)))
     return {user.id: user for user in result.scalars().all()}
-
-
-async def _ssh_pool_fields(server: Server) -> dict:
-    try:
-        info = await ssh_connection_pool.get_connection_info(server)
-    except Exception:
-        return {
-            "ssh_pooled": False,
-            "ssh_in_use": False,
-            "ssh_active_leases": 0,
-            "ssh_idle_seconds": None,
-        }
-    idle = info.get("idle_time")
-    leases = info.get("active_leases")
-    if leases is None:
-        leases = 1 if info.get("in_use") else 0
-    return {
-        "ssh_pooled": bool(info.get("connected")),
-        "ssh_in_use": bool(info.get("in_use")),
-        "ssh_active_leases": int(leases),
-        "ssh_idle_seconds": float(idle) if idle is not None else None,
-    }
-
-
-async def _to_detail(server: Server) -> ServerDetail:
-    session_manager = getattr(server, "session_manager", "tmux") or "tmux"
-    if session_manager not in {"screen", "tmux"}:
-        session_manager = "tmux"
-    pool = await _ssh_pool_fields(server)
-    return ServerDetail(
-        id=server.id,
-        name=server.name,
-        host=server.host,
-        game_port=server.game_port,
-        ssh_user=server.ssh_user,
-        status=server.status,
-        description=server.description,
-        default_map=server.default_map,
-        max_players=server.max_players,
-        ssh_port=server.ssh_port,
-        game_directory=server.game_directory,
-        game_mode=server.game_mode,
-        game_type=server.game_type,
-        server_name=getattr(server, "server_name", None) or server.name,
-        session_manager=session_manager,
-        enable_panel_monitoring=bool(getattr(server, "enable_panel_monitoring", False)),
-        monitor_interval_seconds=int(getattr(server, "monitor_interval_seconds", 60) or 60),
-        auto_restart_on_crash=bool(getattr(server, "auto_restart_on_crash", True)),
-        enable_a2s_monitoring=bool(getattr(server, "enable_a2s_monitoring", False)),
-        a2s_failure_threshold=int(getattr(server, "a2s_failure_threshold", 3) or 3),
-        a2s_check_interval_seconds=int(getattr(server, "a2s_check_interval_seconds", 60) or 60),
-        a2s_query_host=getattr(server, "a2s_query_host", None) or None,
-        a2s_query_port=getattr(server, "a2s_query_port", None),
-        enable_auto_update=bool(getattr(server, "enable_auto_update", True)),
-        tv_enable=bool(getattr(server, "tv_enable", False)),
-        is_ssh_down=bool(getattr(server, "is_ssh_down", False)),
-        ssh_health_status=str(getattr(server, "ssh_health_status", None) or "unknown"),
-        consecutive_ssh_failures=int(getattr(server, "consecutive_ssh_failures", 0) or 0),
-        ssh_health_failure_threshold=int(getattr(server, "ssh_health_failure_threshold", 84) or 84),
-        ssh_health_check_interval_hours=int(
-            getattr(server, "ssh_health_check_interval_hours", 2) or 2
-        ),
-        last_ssh_health_check=getattr(server, "last_ssh_health_check", None),
-        last_ssh_success=getattr(server, "last_ssh_success", None),
-        created_at=server.created_at,
-        updated_at=server.updated_at,
-        last_deployed=server.last_deployed,
-        apt_mirror=getattr(server, "apt_mirror", None),
-        additional_parameters=getattr(server, "additional_parameters", None) or None,
-        has_sudo_password=bool(getattr(server, "sudo_password", None)),
-        use_panel_proxy=bool(getattr(server, "use_panel_proxy", False)),
-        github_proxy=getattr(server, "github_proxy", None) or None,
-        **pool,
-    )
 
 
 @router.post("", response_model=ServerCreateResult, status_code=status.HTTP_201_CREATED)
