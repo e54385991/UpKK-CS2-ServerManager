@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
-import { lanDevOrigins } from "./dev-origins";
-import { internalApiUrl } from "./src/shared/config/internal-api";
+// Keep the extension in the config import: Next compiles this file to ESM
+// before running it in the production Docker builder, where Node's resolver
+// does not add ``.ts`` automatically.
+import { lanDevOrigins } from "./dev-origins.ts";
+import { internalApiUrl } from "./src/shared/config/internal-api.ts";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
