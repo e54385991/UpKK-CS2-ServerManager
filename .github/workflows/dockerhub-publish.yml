@@ -50,6 +50,12 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
+      - name: Capture build metadata
+        id: build-metadata
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -60,6 +66,9 @@ jobs:
           sbom: false
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ steps.build-metadata.outputs.sha }}
+            BUILD_TIME=${{ steps.build-metadata.outputs.time }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -103,6 +112,12 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
+      - name: Capture frontend build metadata
+        id: build-metadata
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push frontend image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -114,5 +129,8 @@ jobs:
           sbom: false
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ steps.build-metadata.outputs.sha }}
+            BUILD_TIME=${{ steps.build-metadata.outputs.time }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

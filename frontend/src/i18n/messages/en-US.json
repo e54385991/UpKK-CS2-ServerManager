@@ -3,6 +3,11 @@
     "name": "UPKK CS2 Server Manager",
     "fullName": "UPKK CS2 Server Manager",
     "tagline": "Multi-server operations console for Counter-Strike 2",
+    "frontendBuild": "Frontend",
+    "backendBuild": "Backend",
+    "buildVersion": "version",
+    "buildCommit": "commit",
+    "buildTime": "built",
     "environmentProduction": "Production",
     "environmentDevelopment": "Development",
     "runtimeUnavailable": "—"

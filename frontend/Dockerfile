@@ -1,6 +1,8 @@
 # Compile Next on the build host. QEMU amd64 `next build` hangs on arm64
 # builders; the runner stage still uses the target-arch Node binary.
-# Node 26.8.1 is the current Current stable (alpine, multi-arch index).
+# Node 26.8.1 is the current stable release (alpine, multi-arch index).
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
 FROM --platform=$BUILDPLATFORM node:26.8.1-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -15,10 +17,14 @@ RUN mkdir -p public && npm run build
 
 FROM node:26.8.1-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS runner
 WORKDIR /app
+ARG GIT_SHA
+ARG BUILD_TIME
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    APP_GIT_SHA=${GIT_SHA} \
+    APP_BUILD_TIME=${BUILD_TIME}
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static

@@ -6,6 +6,11 @@ export async function RuntimeFooter() {
   const t = await getTranslations("site");
   const versions = await loadRuntimeVersions();
   const lines = formatRuntimeLines(versions, {
+    frontend: t("frontendBuild"),
+    backend: t("backendBuild"),
+    version: t("buildVersion"),
+    commit: t("buildCommit"),
+    buildTime: t("buildTime"),
     environmentProduction: t("environmentProduction"),
     environmentDevelopment: t("environmentDevelopment"),
     unavailable: t("runtimeUnavailable"),

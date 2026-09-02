@@ -23,6 +23,8 @@ USERNAME="${DOCKERHUB_USERNAME:-e54385991}"
 TAG="${IMAGE_TAG:-latest}"
 BUILDER="${DOCKER_BUILDER:-upkk-multi}"
 PLATFORMS="${DOCKER_PLATFORMS:-linux/amd64,linux/arm64}"
+GIT_SHA_VALUE="${GIT_SHA:-$(git rev-parse HEAD 2>/dev/null || printf '%s' unknown)}"
+BUILD_TIME_VALUE="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 TARGET="all"
 PUSH=1
 
@@ -84,6 +86,8 @@ publish() {
         --platform "$PLATFORMS" \
         --provenance=false \
         --sbom=false \
+        --build-arg "GIT_SHA=${GIT_SHA_VALUE}" \
+        --build-arg "BUILD_TIME=${BUILD_TIME_VALUE}" \
         -f "$file" \
         -t "$image" \
         "${extra[@]}" \

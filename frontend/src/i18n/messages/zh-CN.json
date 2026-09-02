@@ -3,6 +3,11 @@
     "name": "UPKK CS2 Server Manager",
     "fullName": "UPKK CS2 Server Manager",
     "tagline": "Counter-Strike 2 多服务器运维控制台",
+    "frontendBuild": "前端",
+    "backendBuild": "后端",
+    "buildVersion": "版本",
+    "buildCommit": "提交",
+    "buildTime": "构建",
     "environmentProduction": "生产",
     "environmentDevelopment": "开发",
     "runtimeUnavailable": "—"

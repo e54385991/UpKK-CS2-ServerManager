@@ -103,6 +103,9 @@ HTTP request.
 - 默认运行模式必须是生产：`DEBUG=False` 且 `RUN_MODE=production`。Dockerfile、默认
   Compose/1Panel Compose 和 `.env.example` 均遵循该默认；开发模式只能通过显式调试 Compose
   覆盖（`docker-compose.debug.yml`）或环境变量开启。
+- Docker 构建通过 `GIT_SHA` 与 `BUILD_TIME` 注入 `APP_GIT_SHA`、`APP_BUILD_TIME`；健康接口仅返回
+  经过校验的 7 位短哈希和构建时间。控制台页脚展示前后端应用版本、短哈希和 UTC 构建时间，未知值
+  必须显示为占位符，不能暴露任意环境变量内容。
 
 ## 模块与 I/O 边界
 

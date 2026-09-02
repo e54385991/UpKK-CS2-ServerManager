@@ -10378,6 +10378,56 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HealthResponse": {
+        "additionalProperties": false,
+        "description": "Liveness payload used by Docker and the console runtime footer.",
+        "properties": {
+          "build_time": {
+            "title": "Build Time",
+            "type": "string"
+          },
+          "fastapi": {
+            "title": "Fastapi",
+            "type": "string"
+          },
+          "git_sha": {
+            "title": "Git Sha",
+            "type": "string"
+          },
+          "python": {
+            "title": "Python",
+            "type": "string"
+          },
+          "redis": {
+            "enum": [
+              "connected",
+              "disconnected"
+            ],
+            "title": "Redis",
+            "type": "string"
+          },
+          "status": {
+            "const": "healthy",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "redis",
+          "version",
+          "python",
+          "fastapi",
+          "git_sha",
+          "build_time"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
       "InitializedHostCredentialsView": {
         "additionalProperties": false,
         "description": "Owner-only one-time reveal of a saved auto-setup host (Redis, 24h).",
@@ -38627,7 +38677,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
               }
             },
             "description": "Successful Response"

@@ -60,6 +60,15 @@ docker compose -f docker-compose.yml -f docker-compose.debug.yml up -d
 docker compose up -d --build
 ```
 
+控制台底部会显示前端/后端应用版本、7 位提交短哈希和 UTC 构建时间。使用仓库的
+`publish-docker-images.sh` 发布时会自动注入这些构建信息；源码本地构建也可以显式传入：
+
+```bash
+GIT_SHA="$(git rev-parse HEAD)" \
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+docker compose up -d --build
+```
+
 可以通过环境变量覆盖端口、数据库密码和镜像标签。公网部署仍建议在反向代理后启用 HTTPS，并设置强数据库密码。
 
 ## 本地编译并推送到 Docker Hub

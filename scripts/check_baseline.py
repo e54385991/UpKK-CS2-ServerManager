@@ -112,6 +112,10 @@ def main() -> None:
         ("Frontend module tests", [npm, "run", "test:frontend"]),
         ("Frontend syntax", [npm, "run", "check:frontend"]),
         (
+            "Next.js module tests",
+            [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "run", "test:unit"],
+        ),
+        (
             "Next.js lint",
             [npm, "--prefix", str(PROJECT_ROOT / "frontend"), "run", "lint"],
         ),

@@ -1916,23 +1916,7 @@ export interface paths {
         put?: never;
         /**
          * Auto Setup Server
-         * @description Automatically setup a server for CS2 deployment
-         *
-         *     This endpoint:
-         *     1. Connects to the target server (as root or regular user with sudo)
-         *     2. Automatically detects if sudo is needed and available
-         *     3. Installs required system dependencies
-         *     4. Creates a dedicated CS2 user
-         *     5. Sets up the game directory
-         *     6. Returns credentials for CS2 Manager to use
-         *     7. Optionally saves the initialized server configuration for reuse
-         *
-         *     Supports:
-         *     - Root user login (no sudo needed)
-         *     - Regular user with passwordless sudo
-         *     - Regular user with password sudo (requires sudo_password)
-         *
-         *     **Authentication Required**: User must be logged in to use this endpoint.
+         * @description Validate the request, run the setup workflow, and return safe credentials.
          */
         post: operations["auto_setup_server_api_setup_auto_setup_post"];
         delete?: never;
@@ -10505,6 +10489,32 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HealthResponse
+         * @description Liveness payload used by Docker and the console runtime footer.
+         */
+        HealthResponse: {
+            /** Build Time */
+            build_time: string;
+            /** Fastapi */
+            fastapi: string;
+            /** Git Sha */
+            git_sha: string;
+            /** Python */
+            python: string;
+            /**
+             * Redis
+             * @enum {string}
+             */
+            redis: "connected" | "disconnected";
+            /**
+             * Status
+             * @constant
+             */
+            status: "healthy";
+            /** Version */
+            version: string;
         };
         /**
          * InitializedHostCredentialsView
@@ -24931,7 +24941,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["HealthResponse"];
                 };
             };
         };
@@ -27589,7 +27599,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
-                event_type?: string;
+                event_type?: string | null;
             };
             header?: never;
             path: {

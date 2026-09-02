@@ -3,11 +3,16 @@
 # musllinux artifacts for every native dependency used by the application.
 FROM python:3.14.7-alpine3.24@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
 
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     DEBUG=False \
-    RUN_MODE=production
+    RUN_MODE=production \
+    APP_GIT_SHA=${GIT_SHA} \
+    APP_BUILD_TIME=${BUILD_TIME}
 
 WORKDIR /app
 

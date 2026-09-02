@@ -8,6 +8,7 @@ import type { components, paths } from "@/shared/api/schema";
 export type Schemas = components["schemas"];
 export type Paths = paths;
 
+export type HealthResponseDto = Schemas["HealthResponse"];
 export type SessionUserDto = Schemas["SessionUser"];
 export type ProfileViewDto = Schemas["ProfileView"];
 export type ProfilePatchDto = Schemas["ProfilePatch"];

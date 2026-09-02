@@ -67,6 +67,10 @@ HTTP URL 和 JWT/应用密钥在构造时一次性校验；测试可清空缓存
 生产是默认运行模式（`DEBUG=False`、`RUN_MODE=production`），镜像与默认 Compose 配置显式保持
 该安全默认；开发环境必须通过专用 debug Compose 或环境变量显式开启。
 
+镜像构建将 `GIT_SHA` 与 `BUILD_TIME` 写入 `APP_GIT_SHA`、`APP_BUILD_TIME`。后端 `/health` 通过
+Pydantic 响应模型返回安全的 7 位短哈希和 UTC 构建时间，Next.js 根页脚展示前后端版本、短哈希和
+构建时间；缺失或非法元数据统一显示为占位符。
+
 ## 质量与性能门禁
 
 生产 Python/TypeScript 模块最多 800 行、测试最多 1200 行（生成的 OpenAPI 类型与 Alembic

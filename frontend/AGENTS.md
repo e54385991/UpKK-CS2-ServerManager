@@ -210,6 +210,12 @@ Next after changing values. Key variables:
   (or set to a bind address like `0.0.0.0`), Next uses the request Host and
   port. OAuth already uses `window.location.origin`.
 
+The root footer is a Server Component and displays the frontend package version,
+backend API version, a validated seven-character commit prefix, and the UTC
+build time. Docker/release builds inject `APP_GIT_SHA` and `APP_BUILD_TIME`; a
+missing or malformed value must remain `—` rather than exposing arbitrary
+environment text.
+
 ## Commands
 
 ```bash
@@ -220,6 +226,7 @@ npm run build:start  # production build, then start
 # Repo-root ./start.sh also accepts: api | dev | build | start | build+start
 npm run lint       # ESLint (flat config)
 npm run typecheck  # tsc --noEmit
+npm run test:unit  # TypeScript module tests (Node's built-in test runner)
 npm run gen:api    # regenerate OpenAPI types from ../openapi.json
 ```
 
