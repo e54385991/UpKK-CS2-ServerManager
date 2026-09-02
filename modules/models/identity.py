@@ -8,9 +8,9 @@ from .common import *
 class User(SQLModel, table=True):
     """User model for authentication and authorization"""
 
-    __tablename__ = "users"
+    __tablename__: ClassVar[str] = "users"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     username: str = Field(max_length=100, nullable=False)
     email: str = Field(max_length=255, nullable=False)
     hashed_password: str = Field(max_length=255, nullable=False)
@@ -103,9 +103,9 @@ class User(SQLModel, table=True):
 class PasswordResetToken(SQLModel, table=True):
     """Password reset token model"""
 
-    __tablename__ = "password_reset_tokens"
+    __tablename__: ClassVar[str] = "password_reset_tokens"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     token: str = Field(max_length=64, unique=True, nullable=False, index=True)
     expires_at: datetime = Field(nullable=False)
@@ -157,5 +157,6 @@ class PasswordResetToken(SQLModel, table=True):
         return reset_token
 
 
-Index("uq_users_username_ci", func.lower(User.__table__.c.username), unique=True)
-Index("uq_users_email_ci", func.lower(User.__table__.c.email), unique=True)
+_users_table = SQLModel.metadata.tables["users"]
+Index("uq_users_username_ci", func.lower(_users_table.c.username), unique=True)
+Index("uq_users_email_ci", func.lower(_users_table.c.email), unique=True)

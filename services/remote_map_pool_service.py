@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import posixpath
 import shlex
@@ -9,7 +10,6 @@ import socket
 import uuid
 from urllib.parse import urljoin, urlsplit
 
-import anyio
 import httpx
 
 from services.map_management_service import MAX_MAPS_CONFIG_BYTES, MapConfigError, parse_maps_config
@@ -67,7 +67,7 @@ async def validate_remote_map_url(url: str) -> str:
     try:
         literal_address = ipaddress.ip_address(hostname)
     except ValueError:
-        addresses = await anyio.to_thread.run_sync(_resolve_hostname, hostname, port)
+        addresses = await asyncio.to_thread(_resolve_hostname, hostname, port)
     else:
         addresses = {str(literal_address)}
 

@@ -124,6 +124,33 @@ class _JsonToken:
     line: int
 
 
+def _json_string_token(content: str, index: int, line: int) -> tuple[_JsonToken, int]:
+    start = index
+    token_line = line
+    index += 1
+    escaped = False
+    while index < len(content):
+        current = content[index]
+        if current == "\n" and not escaped:
+            raise PluginConfigError(f"Unterminated JSON string at line {token_line}")
+        if escaped:
+            escaped = False
+        elif current == "\\":
+            escaped = True
+        elif current == '"':
+            index += 1
+            break
+        index += 1
+    else:
+        raise PluginConfigError(f"Unterminated JSON string at line {token_line}")
+    raw = content[start:index]
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise PluginConfigError(f"Invalid JSON string at line {token_line}: {exc.msg}") from exc
+    return _JsonToken("string", value, start, index, token_line), index
+
+
 class _JsoncParser:
     _number = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
 
@@ -166,32 +193,8 @@ class _JsoncParser:
                 index += 1
                 continue
             if char == '"':
-                start = index
-                token_line = line
-                index += 1
-                escaped = False
-                while index < len(content):
-                    current = content[index]
-                    if current == "\n" and not escaped:
-                        raise PluginConfigError(f"Unterminated JSON string at line {token_line}")
-                    if escaped:
-                        escaped = False
-                    elif current == "\\":
-                        escaped = True
-                    elif current == '"':
-                        index += 1
-                        break
-                    index += 1
-                else:
-                    raise PluginConfigError(f"Unterminated JSON string at line {token_line}")
-                raw = content[start:index]
-                try:
-                    value = json.loads(raw)
-                except json.JSONDecodeError as exc:
-                    raise PluginConfigError(
-                        f"Invalid JSON string at line {token_line}: {exc.msg}"
-                    ) from exc
-                tokens.append(_JsonToken("string", value, start, index, token_line))
+                token, index = _json_string_token(content, index, line)
+                tokens.append(token)
                 continue
             number = self._number.match(content, index)
             if number:

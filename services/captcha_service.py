@@ -45,8 +45,8 @@ class CaptchaService:
         code = self._generate_code()
 
         # Store code in Redis with expiration
-        await redis_manager.client.setex(
-            redis_manager.prefixed_key(f"captcha:{token}"), self.expiration_seconds, code
+        await redis_manager.client.set(
+            redis_manager.prefixed_key(f"captcha:{token}"), code, ex=self.expiration_seconds
         )
 
         # Generate CAPTCHA image

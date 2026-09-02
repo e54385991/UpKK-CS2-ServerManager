@@ -3,21 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any
 
 import discord
 from discord import app_commands
 
-
-class DiscordCommandClient(Protocol):
-    manager: Any
-    tree: app_commands.CommandTree
-
-    async def _autocomplete_server(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[app_commands.Choice[str]]: ...
+# discord.py's ``CommandTree`` is parameterized by a concrete client type,
+# which makes a structural Protocol invariant across the dynamically-created
+# managed client.  Command registration runs after all inputs are validated;
+# this adapter boundary intentionally accepts the concrete runtime object.
+DiscordCommandClient = Any
 
 
 def _core_handlers(client: DiscordCommandClient) -> dict[str, Callable[..., Any]]:

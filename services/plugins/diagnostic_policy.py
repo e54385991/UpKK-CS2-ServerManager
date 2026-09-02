@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.models import PluginDiagnosticRun
 
@@ -30,7 +30,7 @@ async def has_diagnostic_blocker(server_id: int, db: AsyncSession | None = None)
     result = await db.execute(
         select(PluginDiagnosticRun.id).where(
             PluginDiagnosticRun.server_id == server_id,
-            PluginDiagnosticRun.status.in_(ACTIVE_DIAGNOSTIC_STATUSES),
+            col(PluginDiagnosticRun.status).in_(ACTIVE_DIAGNOSTIC_STATUSES),
         )
     )
     if result is None or not hasattr(result, "first"):

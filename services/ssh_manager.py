@@ -45,10 +45,16 @@ def _compose_capabilities(*capabilities):
 
     def decorate(facade):
         for capability in capabilities:
-            for name, value in vars(capability).items():
-                if name.startswith("__") or hasattr(facade, name):
+            # Capabilities may themselves be composed from focused mixins.
+            # Walk the MRO so the legacy facade exposes every public method
+            # without requiring multiple inheritance at runtime.
+            for owner in reversed(capability.__mro__):
+                if owner is object:
                     continue
-                setattr(facade, name, value)
+                for name, value in vars(owner).items():
+                    if name.startswith("__") or hasattr(facade, name):
+                        continue
+                    setattr(facade, name, value)
         return facade
 
     return decorate

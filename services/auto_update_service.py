@@ -6,7 +6,7 @@ Periodically checks server versions against Steam API and triggers updates when 
 import asyncio
 import logging
 import math
-from typing import Optional, Set, Tuple
+from typing import Any, Optional, Set, Tuple
 
 from modules.utils import get_current_time
 from services.discord_notification_service import EVENT_AUTO_UPDATE, discord_notification_service
@@ -128,11 +128,12 @@ class AutoUpdateService:
                     logger.warning("No version available for server %s", server.id)
                     return None
                 success, result = await steam_api_service.check_version(current_version)
-                if not success:
+                if not success or result is None:
+                    error = result.get("error") if isinstance(result, dict) else None
                     logger.warning(
                         "Steam version check failed for server %s: %s",
                         server.id,
-                        result.get("error"),
+                        error,
                     )
                     return None
                 if result.get("up_to_date", True):
@@ -152,6 +153,58 @@ class AutoUpdateService:
         except Exception as e:
             logger.error(f"Error checking/updating server {server.id}: {e}")
 
+    async def _read_version_with_deadline(
+        self, server, deadline: float | None
+    ) -> tuple[bool, str | None]:
+        if deadline is None:
+            return await steam_inf_service.refresh_version_cache(server)
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            return False, None
+        return await asyncio.wait_for(
+            steam_inf_service.refresh_version_cache(server), timeout=remaining
+        )
+
+    async def _resolve_observed_version(
+        self,
+        server,
+        observed: str,
+        target_version: str | None,
+        deadline: float | None,
+        checked_versions: dict[str, dict[str, Any]],
+        log_progress,
+    ) -> tuple[bool, str | None, str | None]:
+        latest_required_version = None
+        if self._versions_match(observed, target_version):
+            return True, target_version, target_version
+        final_check = checked_versions.get(observed)
+        if final_check is None:
+            try:
+                if deadline is None:
+                    check_success, candidate = await steam_api_service.check_version(observed)
+                else:
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    if remaining <= 0:
+                        return False, target_version, latest_required_version
+                    check_success, candidate = await asyncio.wait_for(
+                        steam_api_service.check_version(observed), timeout=remaining
+                    )
+            except asyncio.TimeoutError:
+                await log_progress("Version verification window expired during the Steam API check")
+                return False, target_version, latest_required_version
+            if check_success and isinstance(candidate, dict):
+                final_check = candidate
+                checked_versions[observed] = candidate
+        if not final_check:
+            return False, target_version, latest_required_version
+        required = final_check.get("required_version")
+        if isinstance(required, str) and required:
+            latest_required_version = required
+            target_version = required
+            if self._versions_match(observed, target_version):
+                return True, target_version, latest_required_version
+        return bool(final_check.get("up_to_date", False)), target_version, latest_required_version
+
     async def _wait_for_updated_version(
         self,
         server,
@@ -168,65 +221,31 @@ class AutoUpdateService:
         observed_version = None
         target_version = required_version
         latest_required_version = None
-        checked_versions = {}
+        checked_versions: dict[str, dict[str, Any]] = {}
 
         for attempt in range(1, max_attempts + 1):
             try:
-                if deadline is None:
-                    verified_read, observed = await steam_inf_service.refresh_version_cache(server)
-                else:
-                    remaining = deadline - loop.time()
-                    if remaining <= 0:
-                        break
-                    verified_read, observed = await asyncio.wait_for(
-                        steam_inf_service.refresh_version_cache(server),
-                        timeout=remaining,
-                    )
+                verified_read, observed = await self._read_version_with_deadline(server, deadline)
             except asyncio.TimeoutError:
                 await log_progress("steam.inf verification window expired during a version read")
                 break
 
             if verified_read and observed:
                 observed_version = observed
-                if self._versions_match(observed_version, target_version):
+                (
+                    accepted,
+                    target_version,
+                    latest_required_version,
+                ) = await self._resolve_observed_version(
+                    server,
+                    observed_version,
+                    target_version,
+                    deadline,
+                    checked_versions,
+                    log_progress,
+                )
+                if accepted:
                     return True, observed_version, latest_required_version
-
-                # A new Valve release can appear while SteamCMD is running.
-                # Accept a different version only if Steam confirms that it is
-                # currently up to date. Cache successful checks for unchanged
-                # versions to avoid repeating the same API request every poll.
-                final_check = checked_versions.get(observed_version)
-                if final_check is None:
-                    try:
-                        if deadline is None:
-                            check_success, candidate = await steam_api_service.check_version(
-                                observed_version
-                            )
-                        else:
-                            remaining = deadline - loop.time()
-                            if remaining <= 0:
-                                break
-                            check_success, candidate = await asyncio.wait_for(
-                                steam_api_service.check_version(observed_version),
-                                timeout=remaining,
-                            )
-                    except asyncio.TimeoutError:
-                        await log_progress(
-                            "Version verification window expired during the Steam API check"
-                        )
-                        break
-                    if check_success:
-                        final_check = candidate
-                        checked_versions[observed_version] = candidate
-
-                if final_check:
-                    if final_check.get("required_version"):
-                        latest_required_version = final_check.get("required_version")
-                        target_version = latest_required_version
-                        if self._versions_match(observed_version, target_version):
-                            return True, observed_version, latest_required_version
-                    if final_check.get("up_to_date", False):
-                        return True, observed_version, latest_required_version
 
                 await log_progress(
                     f"steam.inf verification attempt {attempt}/{max_attempts} "
@@ -260,6 +279,24 @@ class AutoUpdateService:
         )
         return bool(observed_digits and observed_digits == required_digits)
 
+    async def _can_trigger_update(self, server) -> bool:
+        from services.plugin_diagnostic_service import has_diagnostic_blocker
+
+        if await has_diagnostic_blocker(server.id):
+            logger.warning(
+                "Skipping auto-update for server %s while plugin isolation requires attention",
+                server.id,
+            )
+            return False
+        if await maintenance_lock_service.is_locked(server.id):
+            logger.warning(
+                "Server %s (%s) update already in progress, skipping duplicate update request",
+                server.id,
+                server.name,
+            )
+            return False
+        return True
+
     async def _trigger_server_update(
         self,
         server,
@@ -268,23 +305,9 @@ class AutoUpdateService:
         version_source: Optional[str] = None,
     ):
         """Trigger update for a server and restart it"""
-        from services.plugin_diagnostic_service import has_diagnostic_blocker
-
-        if await has_diagnostic_blocker(server.id):
-            logger.warning(
-                "Skipping auto-update for server %s while plugin isolation requires attention",
-                server.id,
-            )
+        if not await self._can_trigger_update(server):
             return
         lock = maintenance_lock_service.get(server.id)
-
-        # Try to acquire lock without blocking - if already locked, skip this update
-        if await maintenance_lock_service.is_locked(server.id):
-            logger.warning(
-                f"Server {server.id} ({server.name}) update already in progress, "
-                f"skipping duplicate update request"
-            )
-            return
 
         async with lock:
             # Mark server as being updated

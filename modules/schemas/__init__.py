@@ -70,6 +70,18 @@ from .discord import (
     MessageTriggerMode,
     Snowflake,
 )
+from .legacy import (
+    AutoRestartSettings,
+    GlobalSettingsResponse,
+    GlobalSettingsUpdate,
+    InstalledPluginResponse,
+    PluginCreate,
+    PluginInstallRequest,
+    PluginListResponse,
+    PluginResponse,
+    UserSettingsResponse,
+    UserSettingsUpdate,
+)
 from .plugins import (
     ArchiveAnalysisResponse,
     ArchiveContentItem,
@@ -122,11 +134,16 @@ from .scheduled_tasks import (
     ScheduledTaskResponse,
     ScheduledTaskUpdate,
 )
-from .servers import (
+from .server_runtime import (
     A2SCachedData,
     A2SCacheResponse,
     A2SPlayerInfo,
     A2SServerInfo,
+    InitializedServerCreate,
+    InitializedServerListItem,
+    InitializedServerResponse,
+)
+from .servers import (
     ActionResponse,
     BatchActionRequest,
     BatchActionResponse,
@@ -137,9 +154,6 @@ from .servers import (
     CustomCommandResponse,
     CustomCommandUpdate,
     DeploymentLogResponse,
-    InitializedServerCreate,
-    InitializedServerListItem,
-    InitializedServerResponse,
     ServerAction,
     ServerCreate,
     ServerResponse,

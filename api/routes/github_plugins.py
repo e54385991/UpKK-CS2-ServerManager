@@ -3,6 +3,7 @@ GitHub Plugin Installation routes
 Provides endpoints for fetching GitHub releases and installing plugins from them
 """
 
+import asyncio
 import logging
 import os
 import posixpath
@@ -11,7 +12,6 @@ import shlex
 from typing import Optional
 from urllib.parse import unquote, urlsplit
 
-import anyio
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,7 +91,7 @@ async def _secure_archive_analysis(
         try:
             asset_name = unquote(posixpath.basename(urlsplit(download_url).path))
             try:
-                entries = await anyio.to_thread.run_sync(
+                entries = await asyncio.to_thread(
                     _archive_entries,
                     archive_path,
                     asset_name,
@@ -161,8 +161,9 @@ def _safe_github_error(exc: Exception) -> HTTPException:
 async def search_github_cs2_plugins(
     q: str = Query(min_length=1, max_length=120),
     limit: int = Query(default=3, ge=1, le=3),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     try:
         await enforce_agent_rate_limit(current_user.id, "github_search", limit=10)
@@ -338,8 +339,9 @@ async def get_github_releases(
     repo_url: str,
     count: int = 5,
     server_id: Optional[int] = None,
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> GitHubReleasesResponse:
     """
     Fetch recent releases from a GitHub repository.
@@ -366,7 +368,7 @@ async def get_github_releases(
 
         server = await authorized_server(db, current_user, server_id)
 
-    linux_runtime_profile = None
+    linux_runtime_profile: dict[str, object] | None = None
     if server is not None:
         from services.linux_runtime_service import detect_linux_runtime_profile
 
@@ -410,13 +412,21 @@ async def get_github_releases(
         )
 
     # Parse releases
-    releases = []
-    for release_data in data:
+    releases: list[GitHubRelease] = []
+    for raw_release in data:
+        if not isinstance(raw_release, dict):
+            continue
+        release_data: dict[str, object] = raw_release
         if release_data.get("draft") or release_data.get("prerelease"):
             continue
         asset_payloads = []
-        for asset_data in release_data.get("assets", []):
-            asset_name = asset_data.get("name", "")
+        raw_assets = release_data.get("assets", [])
+        assets_data = raw_assets if isinstance(raw_assets, list) else []
+        for raw_asset in assets_data:
+            if not isinstance(raw_asset, dict):
+                continue
+            asset_data: dict[str, object] = raw_asset
+            asset_name = str(asset_data.get("name") or "")
             asset_name_lower = asset_name.lower()
 
             # Skip Windows-specific archives (filename contains 'windows' or 'win')
@@ -463,12 +473,18 @@ async def get_github_releases(
             if len(releases) >= count:
                 break
 
+    from modules import LinuxRuntimeProfile
+
     return GitHubReleasesResponse(
         success=True,
         releases=releases,
         repo_owner=owner,
         repo_name=repo,
-        linux_runtime_profile=linux_runtime_profile,
+        linux_runtime_profile=(
+            LinuxRuntimeProfile.model_validate(linux_runtime_profile)
+            if linux_runtime_profile is not None
+            else None
+        ),
     )
 
 
@@ -495,237 +511,6 @@ async def analyze_archive(
         Analysis of archive contents
     """
     return await _secure_archive_analysis(db, current_user, server_id, download_url)
-
-    # The legacy remote analyzer is intentionally unreachable. It remains below
-    # temporarily to keep this compatibility route's historical response code
-    # easy to compare while all callers migrate to install-plan.
-    # Validate URL
-    if (
-        not download_url.startswith("https://github.com/")
-        or "/releases/download/" not in download_url
-    ):
-        return ArchiveAnalysisResponse(success=False, error="Invalid GitHub releases download URL")
-
-    # Get server
-    server = await get_server_and_verify_ownership(db, server_id, current_user)
-
-    ssh_manager = SSHManager()
-    success, msg = await ssh_manager.connect(server)
-    if not success:
-        return ArchiveAnalysisResponse(success=False, error=f"SSH connection failed: {msg}")
-
-    try:
-        # Create temp directory
-        temp_dir = f"/tmp/archive_analysis_{server_id}"
-        await ssh_manager.execute_command(f"rm -rf {temp_dir} && mkdir -p {temp_dir}")
-
-        # Detect archive type from URL (including 7z)
-        url_lower = download_url.lower()
-        if url_lower.endswith(".zip"):
-            archive_type = "zip"
-            archive_file = f"{temp_dir}/archive.zip"
-        elif url_lower.endswith(".tar.gz") or url_lower.endswith(".tgz"):
-            archive_type = "tar.gz"
-            archive_file = f"{temp_dir}/archive.tar.gz"
-        elif url_lower.endswith(".tar"):
-            archive_type = "tar"
-            archive_file = f"{temp_dir}/archive.tar"
-        elif url_lower.endswith(".7z"):
-            archive_type = "7z"
-            archive_file = f"{temp_dir}/archive.7z"
-        else:
-            # Try to detect from content-type after download
-            archive_type = "unknown"
-            archive_file = f"{temp_dir}/archive"
-
-        # Download archive (use GitHub proxy if configured)
-        actual_download_url = download_url
-        if server.github_proxy and server.github_proxy.strip():
-            # Apply GitHub proxy
-            proxy_base = server.github_proxy.strip().rstrip("/")
-            actual_download_url = f"{proxy_base}/{download_url}"
-
-        download_cmd = f"curl -fsSL -o {archive_file} '{actual_download_url}'"
-        success, _, stderr = await ssh_manager.execute_command(download_cmd, timeout=120)
-
-        if not success:
-            await ssh_manager.execute_command(f"rm -rf {temp_dir}")
-            return ArchiveAnalysisResponse(
-                success=False, error=f"Failed to download archive: {stderr}"
-            )
-
-        # List archive contents (including 7z)
-        if archive_type == "zip":
-            list_cmd = f"unzip -l {archive_file} | tail -n +4 | head -n -2"
-        elif archive_type in ["tar.gz", "tar"]:
-            list_cmd = f"tar -tzf {archive_file} 2>/dev/null || tar -tf {archive_file}"
-        elif archive_type == "7z":
-            list_cmd = f"7z l {archive_file} | grep -E '^[0-9]{{4}}-' | awk '{{print $NF}}' 2>/dev/null || 7za l {archive_file} | grep -E '^[0-9]{{4}}-' | awk '{{print $NF}}'"
-        else:
-            # Try to detect type
-            type_cmd = f"file {archive_file}"
-            _, type_output, _ = await ssh_manager.execute_command(type_cmd)
-            if "Zip" in type_output:
-                archive_type = "zip"
-                list_cmd = f"unzip -l {archive_file} | tail -n +4 | head -n -2"
-            elif "gzip" in type_output.lower() or "tar" in type_output.lower():
-                archive_type = "tar.gz"
-                list_cmd = f"tar -tzf {archive_file} 2>/dev/null || tar -tf {archive_file}"
-            elif "7-zip" in type_output.lower():
-                archive_type = "7z"
-                list_cmd = f"7z l {archive_file} | grep -E '^[0-9]{{4}}-' | awk '{{print $NF}}'"
-            else:
-                await ssh_manager.execute_command(f"rm -rf {temp_dir}")
-                return ArchiveAnalysisResponse(
-                    success=False, error=f"Unsupported archive type: {type_output}"
-                )
-
-        success, list_output, stderr = await ssh_manager.execute_command(list_cmd, timeout=30)
-
-        # Cleanup
-        await ssh_manager.execute_command(f"rm -rf {temp_dir}")
-
-        if not success:
-            return ArchiveAnalysisResponse(
-                success=False,
-                error=f"Failed to list archive contents: {stderr}",
-                archive_type=archive_type,
-            )
-
-        # Parse archive contents
-        has_addons_dir = False
-        root_dirs = set()
-        top_level_items = []
-
-        lines = list_output.strip().split("\n") if list_output.strip() else []
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Parse based on archive type
-            if archive_type == "zip":
-                # unzip -l output format: "size  date time  path"
-                parts = line.split()
-                if len(parts) >= 4:
-                    path = " ".join(parts[3:])
-                else:
-                    continue
-            else:
-                # tar output is just paths
-                path = line
-
-            # Normalize path
-            path = path.strip("/")
-            if not path:
-                continue
-
-            # Get top-level component
-            top_level = path.split("/")[0]
-
-            # Check for addons directory
-            if path == "addons" or path.startswith("addons/"):
-                has_addons_dir = True
-
-            # Track root directories
-            if "/" in path:
-                root_dirs.add(top_level)
-
-            # Add to top-level items (only first level)
-            if "/" not in path or path.endswith("/"):
-                is_dir = path.endswith("/") or any(
-                    other_path.startswith(path.rstrip("/") + "/")
-                    for other_path in [
-                        line.strip().split()[-1] if archive_type == "zip" else line
-                        for line in lines
-                    ]
-                    if other_path != path
-                )
-                if not any(item.path == path.rstrip("/") for item in top_level_items):
-                    top_level_items.append(ArchiveContentItem(path=path.rstrip("/"), is_dir=is_dir))
-
-        # Collect all directories and files from the archive for exclusion selection
-        all_dirs = set()
-        all_files = []
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Parse path and size based on archive type
-            if archive_type == "zip":
-                parts = line.split()
-                if len(parts) >= 4:
-                    path = " ".join(parts[3:])
-                    # Try to extract size (first column)
-                    try:
-                        size = int(parts[0])
-                    except ValueError, IndexError:
-                        size = 0
-                else:
-                    continue
-            else:
-                # tar output is just paths, no size info
-                path = line
-                size = 0
-
-            path = path.strip("/")
-            if not path:
-                continue
-
-            # Determine if this is a file or directory
-            is_dir = False
-
-            # If path ends with / it's definitely a directory
-            if path.endswith("/"):
-                all_dirs.add(path.rstrip("/"))
-                is_dir = True
-            else:
-                # Check if it's a directory by seeing if any other path starts with it
-                for other_line in lines:
-                    other_line = other_line.strip()
-                    if archive_type == "zip":
-                        parts = other_line.split()
-                        if len(parts) >= 4:
-                            other_path = " ".join(parts[3:]).strip("/")
-                        else:
-                            continue
-                    else:
-                        other_path = other_line.strip("/")
-
-                    if other_path.startswith(path + "/"):
-                        all_dirs.add(path)
-                        is_dir = True
-                        break
-
-                # If not a directory, it's a file
-                if not is_dir:
-                    all_files.append(ArchiveContentItem(path=path, is_dir=False, size=size))
-
-            # Also add parent directories
-            parts = path.split("/")
-            for i in range(1, len(parts)):
-                parent = "/".join(parts[:i])
-                if parent:
-                    all_dirs.add(parent)
-
-        return ArchiveAnalysisResponse(
-            success=True,
-            has_addons_dir=has_addons_dir,
-            root_dirs=sorted(list(root_dirs)),
-            all_dirs=sorted(list(all_dirs)),
-            all_files=all_files,
-            top_level_items=top_level_items,
-            archive_type=archive_type,
-        )
-
-    except Exception as e:
-        logger.error(f"Error analyzing archive: {e}")
-        return ArchiveAnalysisResponse(success=False, error=f"Error analyzing archive: {str(e)}")
-    finally:
-        await ssh_manager.disconnect()
 
 
 @router.post("/servers/{server_id}/install")
@@ -788,8 +573,9 @@ async def install_github_plugin(
 async def analyze_installed_plugins(
     server_id: int,
     directory: str = "addons",
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Analyze installed plugin files to help users select which files to uninstall.

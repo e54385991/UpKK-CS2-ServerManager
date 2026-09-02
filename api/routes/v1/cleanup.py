@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlmodel import select
+from sqlmodel import col, select
 
 from api.dependencies import ActiveUser, DatabaseSession, StreamUser
 from api.routes.servers import maintenance as legacy
@@ -220,7 +220,7 @@ async def _cleanup_task(db, server_id: int) -> ScheduledTask | None:
             ScheduledTask.server_id == server_id,
             ScheduledTask.action == LOG_CLEANUP_ACTION,
         )
-        .order_by(ScheduledTask.id.asc())
+        .order_by(col(ScheduledTask.id).asc())
     )
     return result.scalars().first()
 
@@ -384,7 +384,8 @@ async def scan_system_cleanup_events(
                     yield ": keep-alive\n\n"
                     continue
                 if kind == "done":
-                    view = _system_scan_view(event.get("data") or {})
+                    raw_data = event.get("data")
+                    view = _system_scan_view(raw_data if isinstance(raw_data, dict) else {})
                     yield _sse("done", view.model_dump(mode="json"))
                     return
                 yield _sse(kind, event)

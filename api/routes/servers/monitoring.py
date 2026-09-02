@@ -13,9 +13,10 @@ router = APIRouter(prefix="/servers", tags=["servers"])
 async def get_monitoring_logs(
     server_id: int,
     limit: int = 50,
-    event_type: str = None,
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    event_type: str | None = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Get monitoring logs for a server from Redis"""
     import logging

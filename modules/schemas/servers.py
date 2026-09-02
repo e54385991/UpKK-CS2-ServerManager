@@ -2,8 +2,6 @@
 
 # ruff: noqa: F403,F405
 
-from pydantic import ConfigDict
-
 from modules.models import AuthType
 from modules.server_startup import (
     normalize_additional_parameters,
@@ -14,6 +12,7 @@ from modules.server_startup import (
 
 from .auth import UserResponse
 from .common import *
+from .common import _unique_server_ids, _validate_custom_command_text
 
 _APT_MIRROR_ALIASES = {
     "official": "official",
@@ -573,15 +572,11 @@ class ServerResponse(SQLModel):
     # Restart required flag (set by update endpoint when startup-affecting settings change)
     restart_required: bool = False
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class ServerResponseWithUser(ServerResponse):
     """Schema for server response with user information (admin only)"""
 
     user: Optional[UserResponse] = None
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class ServerAction(SQLModel):
@@ -781,8 +776,6 @@ class CustomCommandResponse(SQLModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class ActionResponse(SQLModel):
     """Schema for action response"""
@@ -802,98 +795,3 @@ class DeploymentLogResponse(SQLModel):
     output: Optional[str] = None
     error_message: Optional[str] = None
     created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class A2SServerInfo(SQLModel):
-    """Schema for A2S server information"""
-
-    server_name: Optional[str] = None
-    map_name: Optional[str] = None
-    folder: Optional[str] = None
-    game: Optional[str] = None
-    player_count: Optional[int] = None
-    max_players: Optional[int] = None
-    bot_count: Optional[int] = None
-    server_type: Optional[str] = None
-    platform: Optional[str] = None
-    password_protected: Optional[bool] = None
-    vac_enabled: Optional[bool] = None
-    version: Optional[str] = None
-    ping: Optional[float] = None
-    keywords: Optional[str] = None
-    game_id: Optional[int] = None
-
-
-class A2SPlayerInfo(SQLModel):
-    """Schema for A2S player information"""
-
-    name: str
-    score: int
-    duration: float
-
-
-class A2SCachedData(SQLModel):
-    """Schema for cached A2S data for a single server"""
-
-    query_host: str
-    query_port: int
-    success: bool
-    server_info: Optional[A2SServerInfo] = None
-    players: List[A2SPlayerInfo] = []
-    response_time_ms: int
-    timestamp: str
-    last_updated: str
-    error: Optional[str] = None
-
-
-class A2SCacheResponse(SQLModel):
-    """Schema for A2S cache response containing all servers"""
-
-    servers: Dict[str, A2SCachedData]
-    timestamp: str
-
-
-class InitializedServerCreate(SQLModel):
-    """Schema for saving an initialized server from setup wizard"""
-
-    name: str = Field(..., min_length=1, max_length=255, description="Friendly name for the server")
-    host: str = Field(..., min_length=1, max_length=255)
-    ssh_port: int = Field(default=22, ge=1, le=65535)
-    ssh_user: str = Field(..., min_length=1, max_length=100)
-    ssh_password: str = Field(..., min_length=1, max_length=255)
-    game_directory: str = Field(default="/home/cs2server/cs2")
-
-
-class InitializedServerListItem(SQLModel):
-    """Schema for initialized server in list (without sensitive data)"""
-
-    id: int
-    user_id: int
-    name: str
-    host: str
-    ssh_port: int
-    ssh_user: str
-    game_directory: str
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class InitializedServerResponse(SQLModel):
-    """Schema for initialized server response (includes password for filling forms)"""
-
-    id: int
-    user_id: int
-    name: str
-    host: str
-    ssh_port: int
-    ssh_user: str
-    ssh_password: str
-    game_directory: str
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)

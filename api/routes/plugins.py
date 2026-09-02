@@ -49,7 +49,8 @@ async def list_plugins(
     category: Optional[str] = Query(None, description="Filter by category"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    db: DatabaseSession = None,
+    *,
+    db: DatabaseSession,
 ):
     """
     Get paginated list of available plugins
@@ -137,8 +138,9 @@ async def upload_plugin(
     config_required: bool = Form(
         default=False, description="Whether plugin requires configuration"
     ),
-    current_user: ActiveUser = None,
-    db: DatabaseSession = None,
+    *,
+    current_user: ActiveUser,
+    db: DatabaseSession,
 ):
     """
     Upload a plugin file and add it to the catalog
@@ -157,7 +159,7 @@ async def upload_plugin(
         )
 
     # Validate file type
-    if not file.filename.endswith(".tar.gz"):
+    if not file.filename or not file.filename.endswith(".tar.gz"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Plugin file must be a .tar.gz archive"
         )

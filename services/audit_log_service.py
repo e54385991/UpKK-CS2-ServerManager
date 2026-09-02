@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import Request
 from sqlalchemy import func
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.database import async_session_maker
 from modules.models import AuditLog, DiscordOperationRun, User
@@ -162,25 +162,25 @@ async def list_audit_logs(
     offset: int = 0,
 ) -> AuditLogListResponse:
     cutoff = retention_cutoff()
-    filters = [AuditLog.created_at >= cutoff]
+    filters = [col(AuditLog.created_at) >= cutoff]
     if category:
-        filters.append(AuditLog.category == category)
+        filters.append(col(AuditLog.category) == category)
     if status:
-        filters.append(AuditLog.status == status)
+        filters.append(col(AuditLog.status) == status)
     if username:
-        filters.append(AuditLog.actor_username.ilike(f"%{username.strip()}%"))
+        filters.append(col(AuditLog.actor_username).ilike(f"%{username.strip()}%"))
     if ip_address:
-        filters.append(AuditLog.ip_address == ip_address.strip())
+        filters.append(col(AuditLog.ip_address) == ip_address.strip())
     if server_id is not None:
-        filters.append(AuditLog.server_id == server_id)
+        filters.append(col(AuditLog.server_id) == server_id)
     if action:
-        filters.append(AuditLog.action == action)
+        filters.append(col(AuditLog.action) == action)
 
     total = await db.scalar(select(func.count()).select_from(AuditLog).where(*filters))
     result = await db.execute(
         select(AuditLog)
         .where(*filters)
-        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .order_by(col(AuditLog.created_at).desc(), col(AuditLog.id).desc())
         .offset(offset)
         .limit(limit)
     )

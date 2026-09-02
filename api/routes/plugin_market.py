@@ -60,6 +60,24 @@ GITHUB_REPO_PATTERN = re.compile(
 )
 
 
+def _requested_release(download_url: str | None) -> tuple[str | None, str | None, str | None]:
+    if not download_url:
+        return None, None, None
+    if (
+        not download_url.startswith("https://github.com/")
+        or "/releases/download/" not in download_url
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid download URL. Must be a GitHub releases download URL.",
+        )
+    release_parts = download_url.split("/releases/download/", 1)[1].split("/", 1)
+    if len(release_parts) != 2:
+        return None, None, None
+    tag, asset = release_parts
+    return f"tag:{tag}", tag, asset
+
+
 async def get_server_for_user(server_id: int, db: AsyncSession, current_user: User) -> Server:
     """Helper to get server and verify ownership - admins can access any server"""
     if current_user.is_admin:
@@ -72,6 +90,217 @@ async def get_server_for_user(server_id: int, db: AsyncSession, current_user: Us
     # End the read transaction before potentially long SSH/GitHub work.
     await db.commit()
     return server
+
+
+async def _install_dependencies(
+    install_plugin_fn,
+    install_plan: dict,
+    plugin_id: int,
+    server_id: int,
+    exclude_dirs: list[str],
+    exclude_files: list[str],
+    acknowledge_warning_rule_ids: list[int],
+    upgrade_mode: bool,
+    db: AsyncSession,
+    current_user: User,
+    operation_server,
+) -> tuple[list[str], GitHubPluginInstallResponse | None]:
+    installed: list[str] = []
+    if not install_plan["dependencies"]:
+        return installed, None
+    try:
+        dep_ids = [
+            item
+            for item in install_plan["installation_order"]
+            if item != plugin_id and item not in install_plan["already_installed"]
+        ]
+        dependencies = await MarketPlugin.get_by_ids(db, dep_ids)
+        dependencies_by_id = {dependency.id: dependency for dependency in dependencies}
+        for dep_id in dep_ids:
+            dep_plugin = dependencies_by_id.get(dep_id)
+            if dep_plugin is None:
+                continue
+            logger.info("Installing dependency: %s", dep_plugin.title)
+            try:
+                dep_result = await install_plugin_fn(
+                    dep_id,
+                    server_id,
+                    download_url=None,
+                    exclude_dirs=exclude_dirs,
+                    exclude_files=exclude_files,
+                    install_dependencies=False,
+                    acknowledge_warning_rule_ids=acknowledge_warning_rule_ids,
+                    upgrade_mode=upgrade_mode,
+                    db=db,
+                    current_user=current_user,
+                    _operation_server=operation_server,
+                )
+            except HTTPException as exc:
+                return installed, GitHubPluginInstallResponse(
+                    success=False,
+                    message=f"Dependency {dep_plugin.title} stopped: {exc.detail}. Completed dependencies: {', '.join(installed) or 'none'}",
+                )
+            if not dep_result.success:
+                return installed, GitHubPluginInstallResponse(
+                    success=False,
+                    message=f"Dependency {dep_plugin.title} failed: {dep_result.message}. Completed dependencies: {', '.join(installed) or 'none'}",
+                )
+            installed.append(dep_plugin.title)
+    except ValueError as exc:
+        logger.error("Error parsing dependencies: %s", exc)
+    return installed, None
+
+
+async def _check_plugin_ssh(server: Server) -> tuple[bool, str]:
+    from services import SSHManager
+
+    ssh_manager = SSHManager()
+    try:
+        return await ssh_manager.connect(server)
+    finally:
+        await ssh_manager.disconnect()
+
+
+async def _resolve_market_asset(
+    plugin: MarketPlugin,
+    server: Server,
+    db: AsyncSession,
+    current_user: User,
+    download_url: str | None,
+    selected_asset_name: str | None,
+    runtime_profile,
+) -> tuple[str | None, str | None, str | None, str | None, str | None, object]:
+    if download_url:
+        return download_url, None, None, selected_asset_name, None, runtime_profile
+
+    from services.linux_runtime_service import (
+        RuntimeSelectionRequired,
+        detect_linux_runtime_profile,
+    )
+
+    runtime_profile = await detect_linux_runtime_profile(server)
+    try:
+        asset, error = await resolve_latest_market_asset(
+            plugin, server, db, current_user, runtime_profile
+        )
+    except RuntimeSelectionRequired as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if asset is None:
+        return (
+            None,
+            None,
+            None,
+            None,
+            error or "No suitable release asset found for installation",
+            runtime_profile,
+        )
+    return (
+        asset["download_url"],
+        asset["release_id"],
+        asset["release_tag"],
+        asset["asset_name"],
+        None,
+        runtime_profile,
+    )
+
+
+async def _validate_latest_target_plan(
+    db: AsyncSession,
+    server_id: int,
+    plugin_id: int,
+    server: Server,
+    acknowledgements: list[int],
+) -> str | None:
+    try:
+        plan = await build_plugin_install_plan(
+            db, server_id, plugin_id, include_dependencies=False, server=server
+        )
+        validate_plugin_plan_acknowledgements(plan, acknowledgements)
+    except PluginPlanError as exc:
+        return str(exc)
+    return None
+
+
+async def _execute_market_install(
+    plugin: MarketPlugin,
+    server_id: int,
+    server: Server,
+    download_url: str | None,
+    selected_release_id: str | None,
+    selected_release_tag: str | None,
+    selected_asset_name: str | None,
+    exclude_dirs: list[str],
+    exclude_files: list[str],
+    upgrade_mode: bool,
+    db: AsyncSession,
+    current_user: User,
+    installed_deps: list[str],
+) -> GitHubPluginInstallResponse:
+    """Run the mutating install and persist managed-plugin metadata."""
+    try:
+        try:
+            plugin.download_count += 1
+            db.add(plugin)
+            await db.commit()
+        except Exception as exc:
+            logger.error("Failed to update download count: %s", exc)
+            await db.rollback()
+
+        await db.refresh(plugin)
+        final_exclude_files = list(exclude_files)
+        if upgrade_mode:
+            final_exclude_files = apply_upgrade_mode_exclusions(final_exclude_files)
+            logger.info(
+                "Upgrade mode enabled: auto-excluding config files with extensions %s",
+                CONFIG_FILE_EXTENSIONS,
+            )
+
+        if not download_url:
+            raise HTTPException(status_code=404, detail="No suitable release asset found")
+        install_request = GitHubPluginInstallRequest(
+            download_url=download_url,
+            exclude_dirs=exclude_dirs,
+            exclude_files=final_exclude_files,
+            custom_install_path=plugin.custom_install_path,
+        )
+        result = await install_github_plugin(server_id, install_request, db, current_user)
+        if result.success:
+            try:
+                plugin.install_count += 1
+                db.add(plugin)
+                await db.commit()
+            except Exception as exc:
+                logger.error("Failed to update install count: %s", exc)
+                await db.rollback()
+
+            from services.plugin_auto_update_service import derive_asset_glob, upsert_managed_plugin
+
+            await upsert_managed_plugin(
+                server_id=server.id,
+                source_type="market",
+                source_key=str(plugin.id),
+                display_name=plugin.title,
+                repo_url=plugin.github_url,
+                market_plugin_id=plugin.id,
+                installed_release_id=selected_release_id,
+                installed_version=selected_release_tag or plugin.version or "unknown",
+                installed_asset_name=selected_asset_name,
+                asset_glob=derive_asset_glob(selected_asset_name, selected_release_tag),
+                custom_install_path=plugin.custom_install_path,
+                exclude_dirs=exclude_dirs,
+                exclude_files=final_exclude_files,
+            )
+            if installed_deps:
+                result.message += f" (Dependencies also installed: {', '.join(installed_deps)})"
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Error installing plugin: %s", exc, exc_info=True)
+        message = f"Installation error: {exc}"
+        if installed_deps:
+            message += f" (Dependencies installed: {', '.join(installed_deps)})"
+        return GitHubPluginInstallResponse(success=False, message=message)
 
 
 def parse_github_url(url: str) -> tuple[str, str]:
@@ -236,7 +465,7 @@ async def fetch_github_repo_info(
         api_url, headers=headers, timeout=30, proxy=github_proxy, github_token=github_token
     )
 
-    if not success:
+    if not success or not isinstance(data, dict):
         return GitHubRepoInfo(success=False, error=f"Failed to fetch repository info: {error}")
 
     # Extract repo name and description
@@ -329,8 +558,9 @@ async def list_plugins(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     category: Optional[str] = Query(None, description="Filter by category"),
     search: Optional[str] = Query(None, description="Search query"),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> MarketPluginListResponse:
     """
     List plugins from the market with pagination, filtering, and search.
@@ -579,8 +809,9 @@ async def get_plugin_releases(
     plugin_id: int,
     server_id: Optional[int] = Query(None, description="Optional server ID for GitHub proxy"),
     count: int = Query(5, ge=1, le=10, description="Number of releases to fetch"),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Fetch available releases for a market plugin.
@@ -615,8 +846,9 @@ async def plugin_install_preflight(
     plugin_id: int,
     server_id: int = Query(..., description="Target server ID"),
     install_dependencies: bool = Query(default=True),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict:
     """Resolve dependencies and conflicts without changing the server."""
     server = await get_server_for_user(server_id, db, current_user)
@@ -668,18 +900,18 @@ async def replace_plugin_conflict_rules(
     other_ids = [item.other_plugin_id for item in request.rules]
     if plugin_id in other_ids:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="A plugin cannot conflict with itself",
         )
     if len(set(other_ids)) != len(other_ids):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Duplicate conflict pair",
         )
     found = await MarketPlugin.get_by_ids(db, other_ids)
     if {item.id for item in found} != set(other_ids):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="One or more conflict plugins do not exist",
         )
 
@@ -733,9 +965,10 @@ async def install_plugin(
     upgrade_mode: bool = Query(
         default=False, description="Enable upgrade mode to auto-exclude config files"
     ),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
-    _operation_server: LockedServerOperation = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    _operation_server: LockedServerOperation,
 ) -> GitHubPluginInstallResponse:
     """
     Install a plugin from the market to a server.
@@ -759,27 +992,10 @@ async def install_plugin(
     Returns:
         Installation result
     """
-    selected_release_id = None
-    selected_release_tag = None
-    selected_asset_name = None
+    selected_release_id, selected_release_tag, selected_asset_name = _requested_release(
+        download_url
+    )
     linux_runtime_profile = None
-
-    # Validate download_url if provided
-    if download_url:
-        # Ensure it's a GitHub releases download URL
-        if (
-            not download_url.startswith("https://github.com/")
-            or "/releases/download/" not in download_url
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid download URL. Must be a GitHub releases download URL.",
-            )
-        release_parts = download_url.split("/releases/download/", 1)[1].split("/", 1)
-        if len(release_parts) == 2:
-            selected_release_tag = release_parts[0]
-            selected_release_id = f"tag:{selected_release_tag}"
-            selected_asset_name = release_parts[1]
 
     # Get plugin and server (read-only, no locking)
     plugin = await MarketPlugin.get_by_id(db, plugin_id)
@@ -805,189 +1021,83 @@ async def install_plugin(
     except PluginPlanError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
-    # CRITICAL: Check SSH connectivity BEFORE any database modifications
-    # This prevents database locks when SSH connection hangs or fails
-    from services import SSHManager
-
-    ssh_manager = SSHManager()
-    ssh_success, ssh_msg = await ssh_manager.connect(server)
-    await ssh_manager.disconnect()
-
+    # Validate SSH before mutating plugin metadata.
+    ssh_success, ssh_msg = await _check_plugin_ssh(server)
     if not ssh_success:
         return GitHubPluginInstallResponse(
             success=False,
             message=f"Cannot connect to server via SSH: {ssh_msg}. Please check server connectivity before installing plugins.",
         )
 
-    if not download_url:
-        from services.linux_runtime_service import (
-            RuntimeSelectionRequired,
-            detect_linux_runtime_profile,
+    (
+        download_url,
+        selected_release_id,
+        selected_release_tag,
+        selected_asset_name,
+        resolve_error,
+        linux_runtime_profile,
+    ) = await _resolve_market_asset(
+        plugin,
+        server,
+        db,
+        current_user,
+        download_url,
+        selected_asset_name,
+        linux_runtime_profile,
+    )
+    if download_url is None:
+        return GitHubPluginInstallResponse(
+            success=False,
+            message=resolve_error or "No suitable release asset found for installation",
         )
 
-        linux_runtime_profile = await detect_linux_runtime_profile(server)
-        try:
-            resolved_asset, resolve_error = await resolve_latest_market_asset(
-                plugin,
-                server,
-                db,
-                current_user,
-                linux_runtime_profile,
-            )
-        except RuntimeSelectionRequired as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=str(exc),
-            ) from exc
-        if resolved_asset is None:
-            return GitHubPluginInstallResponse(
-                success=False,
-                message=resolve_error or "No suitable release asset found for installation",
-            )
-        download_url = resolved_asset["download_url"]
-        selected_release_id = resolved_asset["release_id"]
-        selected_release_tag = resolved_asset["release_tag"]
-        selected_asset_name = resolved_asset["asset_name"]
-
-    # Install dependencies first if requested and present
-    installed_deps = []
-    if install_dependencies and install_plan["dependencies"]:
-        try:
-            dep_ids = [
-                item
-                for item in install_plan["installation_order"]
-                if item != plugin_id and item not in install_plan["already_installed"]
-            ]
-            dependencies = await MarketPlugin.get_by_ids(db, dep_ids)
-            dependencies_by_id = {dependency.id: dependency for dependency in dependencies}
-            for dep_id in dep_ids:
-                dep_plugin = dependencies_by_id.get(dep_id)
-                if dep_plugin:
-                    logger.info(f"Installing dependency: {dep_plugin.title}")
-                    # The planner already recursively topologically sorted all
-                    # dependencies, so each item is installed exactly once.
-                    try:
-                        dep_result = await install_plugin(
-                            dep_id,
-                            server_id,
-                            download_url=None,  # Always use latest version for dependencies to avoid version conflicts
-                            exclude_dirs=exclude_dirs,
-                            exclude_files=exclude_files,
-                            install_dependencies=False,  # Don't recursively install dependencies of dependencies
-                            acknowledge_warning_rule_ids=acknowledge_warning_rule_ids,
-                            upgrade_mode=upgrade_mode,  # Preserve config files in dependencies when upgrading
-                            db=db,
-                            current_user=current_user,
-                            _operation_server=_operation_server,
-                        )
-                    except HTTPException as exc:
-                        return GitHubPluginInstallResponse(
-                            success=False,
-                            message=(
-                                f"Dependency {dep_plugin.title} stopped: {exc.detail}. "
-                                f"Completed dependencies: {', '.join(installed_deps) or 'none'}"
-                            ),
-                        )
-                    if dep_result.success:
-                        installed_deps.append(dep_plugin.title)
-                    else:
-                        return GitHubPluginInstallResponse(
-                            success=False,
-                            message=(
-                                f"Dependency {dep_plugin.title} failed: {dep_result.message}. "
-                                f"Completed dependencies: {', '.join(installed_deps) or 'none'}"
-                            ),
-                        )
-        except ValueError as e:
-            logger.error(f"Error parsing dependencies: {e}")
-
-    try:
-        latest_target_plan = await build_plugin_install_plan(
-            db, server_id, plugin_id, include_dependencies=False, server=server
+    installed_deps, dependency_error = (
+        await _install_dependencies(
+            install_plugin,
+            install_plan,
+            plugin_id,
+            server_id,
+            exclude_dirs,
+            exclude_files,
+            acknowledge_warning_rule_ids,
+            upgrade_mode,
+            db,
+            current_user,
+            _operation_server,
         )
-        validate_plugin_plan_acknowledgements(latest_target_plan, acknowledge_warning_rule_ids)
-    except PluginPlanError as exc:
+        if install_dependencies
+        else ([], None)
+    )
+    if dependency_error is not None:
+        return dependency_error
+
+    plan_error = await _validate_latest_target_plan(
+        db, server_id, plugin_id, server, acknowledge_warning_rule_ids
+    )
+    if plan_error:
         return GitHubPluginInstallResponse(
             success=False,
             message=(
-                f"Plugin rules changed before the target install: {exc}. "
+                f"Plugin rules changed before the target install: {plan_error}. "
                 f"Completed dependencies: {', '.join(installed_deps) or 'none'}"
             ),
         )
 
-    try:
-        # Increment download count in a separate short transaction to avoid locks.
-        try:
-            plugin.download_count += 1
-            db.add(plugin)
-            await db.commit()
-        except Exception as exc:
-            logger.error("Failed to update download count: %s", exc)
-            await db.rollback()
-
-        await db.refresh(plugin)
-
-        # Use existing installation logic
-        # If upgrade_mode is enabled, add config file extension patterns to exclude_files
-        final_exclude_files = list(exclude_files)
-        if upgrade_mode:
-            final_exclude_files = apply_upgrade_mode_exclusions(final_exclude_files)
-            logger.info(
-                f"Upgrade mode enabled: auto-excluding config files with extensions {CONFIG_FILE_EXTENSIONS}"
-            )
-
-        install_request = GitHubPluginInstallRequest(
-            download_url=download_url,
-            exclude_dirs=exclude_dirs,
-            exclude_files=final_exclude_files,
-            custom_install_path=plugin.custom_install_path,
-        )
-
-        result = await install_github_plugin(server_id, install_request, db, current_user)
-
-        # Increment install count if successful (separate transaction)
-        if result.success:
-            try:
-                plugin.install_count += 1
-                db.add(plugin)
-                await db.commit()
-            except Exception as e:
-                # Log but don't fail if install count update fails
-                logger.error(f"Failed to update install count: {e}")
-                await db.rollback()
-
-            from services.plugin_auto_update_service import derive_asset_glob, upsert_managed_plugin
-
-            await upsert_managed_plugin(
-                server_id=server.id,
-                source_type="market",
-                source_key=str(plugin.id),
-                display_name=plugin.title,
-                repo_url=plugin.github_url,
-                market_plugin_id=plugin.id,
-                installed_release_id=selected_release_id,
-                installed_version=selected_release_tag or plugin.version or "unknown",
-                installed_asset_name=selected_asset_name,
-                asset_glob=derive_asset_glob(selected_asset_name, selected_release_tag),
-                custom_install_path=plugin.custom_install_path,
-                exclude_dirs=exclude_dirs,
-                exclude_files=final_exclude_files,
-            )
-
-            # Add dependency info to success message
-            if installed_deps:
-                result.message += f" (Dependencies also installed: {', '.join(installed_deps)})"
-
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error installing plugin: {e}", exc_info=True)
-        message = f"Installation error: {str(e)}"
-        if installed_deps:
-            message += f" (Dependencies installed: {', '.join(installed_deps)})"
-        return GitHubPluginInstallResponse(success=False, message=message)
+    return await _execute_market_install(
+        plugin,
+        server_id,
+        server,
+        download_url,
+        selected_release_id,
+        selected_release_tag,
+        selected_asset_name,
+        exclude_dirs,
+        exclude_files,
+        upgrade_mode,
+        db,
+        current_user,
+        installed_deps,
+    )
 
 
 @router.get("/categories")
@@ -1009,8 +1119,9 @@ async def list_categories(current_user: ActiveUser) -> dict:
 async def list_plugins_for_dependencies(
     exclude_id: Optional[int] = Query(None, description="Plugin ID to exclude (for editing)"),
     search: Optional[str] = Query(None, description="Search query for filtering plugins"),
-    db: DatabaseSession = None,
-    current_user: AdminUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: AdminUser,
 ) -> dict:
     """
     Get list of plugins for dependency selection (admin only).
@@ -1047,8 +1158,9 @@ async def analyze_plugin_archive(
     download_url: Optional[str] = Query(
         None, description="Specific release download URL (if not provided, uses latest)"
     ),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Analyze a plugin archive to show its directory structure.
@@ -1091,7 +1203,7 @@ async def analyze_plugin_archive(
                 github_token=github_token,
             )
 
-            if not success:
+            if not success or not isinstance(data, dict):
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Failed to fetch latest release: {error}",
@@ -1099,8 +1211,10 @@ async def analyze_plugin_archive(
 
             # Find suitable asset
             assets = data.get("assets", [])
-            for asset in assets:
-                asset_name = asset.get("name", "").lower()
+            for asset in assets if isinstance(assets, list) else []:
+                if not isinstance(asset, dict):
+                    continue
+                asset_name = str(asset.get("name") or "").lower()
 
                 # Skip Windows assets
                 if (
@@ -1115,8 +1229,10 @@ async def analyze_plugin_archive(
                 if any(
                     asset_name.endswith(ext) for ext in [".zip", ".tar.gz", ".tgz", ".tar", ".7z"]
                 ):
-                    download_url = asset.get("browser_download_url")
-                    break
+                    candidate_url = asset.get("browser_download_url")
+                    if isinstance(candidate_url, str):
+                        download_url = candidate_url
+                        break
 
             if not download_url:
                 raise HTTPException(
@@ -1134,8 +1250,9 @@ async def analyze_plugin_archive(
 @router.post("/fetch-repo-info", response_model=GitHubRepoInfo)
 async def fetch_repo_info(
     github_url: str = Query(..., description="GitHub repository URL"),
-    db: DatabaseSession = None,
-    current_user: AdminUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: AdminUser,
 ) -> GitHubRepoInfo:
     """
     Fetch repository information from GitHub (admin only).
@@ -1185,7 +1302,7 @@ async def uninstall_market_plugin(
     # Verify server ownership; the uninstall route performs its own lookup as well.
     await get_server_for_user(server_id, db, current_user)
 
-    result = await uninstall_plugin(server_id, request, db, current_user)
+    result = await uninstall_plugin(server_id, request, db, current_user, _operation_server)
     if result.success:
         from modules.models import ManagedPlugin
 

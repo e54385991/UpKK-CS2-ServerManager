@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
+from sqlmodel import col
 
 from api.dependencies import ActiveUser, DatabaseSession
 from api.routes import ai as legacy_ai
@@ -167,7 +168,7 @@ async def update_profile(
 
     if patch.email is not None:
         result = await db.execute(
-            select(User).where(User.email == patch.email, User.id != current_user.id)
+            select(User).where(col(User.email) == patch.email, col(User.id) != current_user.id)
         )
         if result.scalar_one_or_none():
             raise HTTPException(

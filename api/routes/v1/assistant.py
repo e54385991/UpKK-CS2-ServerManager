@@ -181,7 +181,9 @@ async def stream_assistant_run_events(
     after: int = Query(default=0, ge=0),
 ):
     """Replayable SSE. Cookie or Bearer — EventSource cannot set Authorization."""
-    return await legacy.ai_run_event_stream(run_id, request, after, db, current_user)
+    return await legacy.ai_run_event_stream(
+        run_id, request, after, db=db, current_user=current_user
+    )
 
 
 @router.post("/runs/{run_id}/tools/{tool_run_id}", response_model=ActionResult)

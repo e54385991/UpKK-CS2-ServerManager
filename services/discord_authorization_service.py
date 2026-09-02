@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.models import Server, ServerDiscordBinding, User, UserDiscordBot
 from modules.schemas.discord import DiscordCapability
@@ -81,11 +81,11 @@ async def authorized_bindings(
         raise DiscordAuthorizationDenied("Discord Bot is disabled")
     result = await db.execute(
         select(ServerDiscordBinding, Server)
-        .join(Server, Server.id == ServerDiscordBinding.server_id)
+        .join(Server, col(Server.id) == col(ServerDiscordBinding.server_id))
         .where(
             ServerDiscordBinding.user_id == bot_owner_user_id,
-            ServerDiscordBinding.enabled.is_(True),
-            ServerDiscordBinding.invalid_reason.is_(None),
+            col(ServerDiscordBinding.enabled).is_(True),
+            col(ServerDiscordBinding.invalid_reason).is_(None),
             ServerDiscordBinding.guild_id == guild_id,
             Server.user_id == bot_owner_user_id,
         )

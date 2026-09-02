@@ -84,8 +84,7 @@ class PluginConfigError(ValueError):
     """Raised when a MapChooser config.json document or update is invalid."""
 
 
-def _jsonc_to_json(content: str) -> str:
-    """Remove JSONC comments and trailing commas while preserving positions."""
+def _mask_jsonc_comments(content: str) -> str:
     output = list(content)
     index = 0
     in_string = False
@@ -132,9 +131,10 @@ def _jsonc_to_json(content: str) -> str:
 
         index += 1
 
-    # Comments have become whitespace. A comma followed only by whitespace and
-    # a closing object/array delimiter is a JSONC trailing comma.
-    normalized = "".join(output)
+    return "".join(output)
+
+
+def _remove_trailing_commas(normalized: str) -> str:
     output = list(normalized)
     index = 0
     in_string = False
@@ -158,6 +158,11 @@ def _jsonc_to_json(content: str) -> str:
                 output[index] = " "
         index += 1
     return "".join(output)
+
+
+def _jsonc_to_json(content: str) -> str:
+    """Remove JSONC comments and trailing commas while preserving positions."""
+    return _remove_trailing_commas(_mask_jsonc_comments(content))
 
 
 def parse_plugin_config(content: str) -> dict[str, Any]:
@@ -254,7 +259,10 @@ def _validated_plugin_value(key: str, value: Any, kind: str, spec: dict[str, obj
     elif kind == "string":
         if not isinstance(value, str):
             raise PluginConfigError(f"{key} must be text")
-        maximum_length = int(spec.get("maxlength", 4096))
+        raw_maximum_length = spec.get("maxlength", 4096)
+        maximum_length = (
+            int(raw_maximum_length) if isinstance(raw_maximum_length, (int, float, str)) else 4096
+        )
         if len(value) > maximum_length:
             raise PluginConfigError(f"{key} cannot exceed {maximum_length} characters")
         normalized = value
@@ -264,9 +272,17 @@ def _validated_plugin_value(key: str, value: Any, kind: str, spec: dict[str, obj
     if kind in {"integer", "number"}:
         minimum = spec.get("min")
         maximum = spec.get("max")
-        if minimum is not None and normalized < minimum:
+        if (
+            isinstance(normalized, (int, float))
+            and isinstance(minimum, (int, float))
+            and normalized < minimum
+        ):
             raise PluginConfigError(f"{key} cannot be less than {minimum}")
-        if maximum is not None and normalized > maximum:
+        if (
+            isinstance(normalized, (int, float))
+            and isinstance(maximum, (int, float))
+            and normalized > maximum
+        ):
             raise PluginConfigError(f"{key} cannot be greater than {maximum}")
     return normalized
 
@@ -333,6 +349,29 @@ def content_revision(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+def _map_string_token(content: str, index: int, line: int) -> tuple[_Token, int, int]:
+    start = index
+    start_line = line
+    index += 1
+    value: list[str] = []
+    while index < len(content):
+        current = content[index]
+        if current == '"':
+            index += 1
+            return _Token("string", "".join(value), start, index, start_line), index, line
+        if current == "\\" and index + 1 < len(content):
+            escaped = content[index + 1]
+            if escaped in {'"', "\\"}:
+                value.append(escaped)
+                index += 2
+                continue
+        if current == "\n":
+            line += 1
+        value.append(current)
+        index += 1
+    raise MapConfigError(f"Unterminated quoted string at line {start_line}")
+
+
 def _tokenize(content: str) -> list[_Token]:
     tokens: list[_Token] = []
     index = 0
@@ -368,28 +407,8 @@ def _tokenize(content: str) -> list[_Token]:
             continue
 
         if char == '"':
-            start = index
-            start_line = line
-            index += 1
-            value: list[str] = []
-            while index < length:
-                current = content[index]
-                if current == '"':
-                    index += 1
-                    tokens.append(_Token("string", "".join(value), start, index, start_line))
-                    break
-                if current == "\\" and index + 1 < length:
-                    escaped = content[index + 1]
-                    if escaped in {'"', "\\"}:
-                        value.append(escaped)
-                        index += 2
-                        continue
-                if current == "\n":
-                    line += 1
-                value.append(current)
-                index += 1
-            else:
-                raise MapConfigError(f"Unterminated quoted string at line {start_line}")
+            token, index, line = _map_string_token(content, index, line)
+            tokens.append(token)
             continue
 
         start = index
@@ -466,9 +485,9 @@ def _parse_root(content: str) -> _Node:
 
     parser = _Parser(_tokenize(content))
     root = parser.parse_node()
-    if parser._peek() is not None:
-        token = parser._peek()
-        raise MapConfigError(f"Unexpected content at line {token.line}")
+    token = parser._peek()
+    if token is not None:
+        raise MapConfigError(f"Unexpected content at line {token.line or 0}")
     if root.name.lower() != "maplist" or root.children is None or root.close_offset is None:
         raise MapConfigError('maps.txt must contain one root object named "Maplist"')
     return root

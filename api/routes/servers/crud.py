@@ -5,6 +5,7 @@
 import hashlib
 
 from fastapi import Request
+from sqlmodel import col
 
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession
 from modules import ServerAgentPolicy
@@ -23,6 +24,84 @@ from .common import *
 collection_router = APIRouter(prefix="/servers", tags=["servers"])
 item_router = APIRouter(prefix="/servers", tags=["servers"])
 mutation_router = APIRouter(prefix="/servers", tags=["servers"])
+
+
+async def _validate_server_connection(server_data: ServerCreate):
+    if not server_data.ssh_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="SSH password is required"
+        )
+    conn = None
+    try:
+        try:
+            conn = await asyncssh.connect(
+                server_data.host,
+                port=server_data.ssh_port,
+                username=server_data.ssh_user,
+                password=server_data.ssh_password,
+                known_hosts=None,
+                connect_timeout=15,
+            )
+        except asyncssh.PermissionDenied:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"SSH authentication failed for {server_data.ssh_user}@{server_data.host}. Please verify your username and password.",
+            ) from None
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=f"SSH connection to {server_data.host}:{server_data.ssh_port} timed out. The server may be unreachable or too slow to respond. Please check the network connection and server status.",
+            ) from None
+        except asyncssh.ConnectionLost:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Connection to {server_data.host}:{server_data.ssh_port} was lost. Please check if the server is reachable.",
+            ) from None
+        except asyncssh.Error as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"SSH connection to {server_data.host}:{server_data.ssh_port} failed: {exc}. Please verify the host and port.",
+            ) from exc
+        result = await conn.run("echo 'SSH connection successful'", check=False)
+        if result.exit_status != 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"SSH connection succeeded but command execution failed. Please verify that user {server_data.ssh_user} has proper shell access and permissions.",
+            )
+        game_dir_quoted = shlex.quote(server_data.game_directory)
+        result = await conn.run(f"mkdir -p {game_dir_quoted}", check=False)
+        if result.exit_status != 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to create game directory {server_data.game_directory}. Please check permissions and path.",
+            )
+        result = await conn.run(f"chmod 755 {game_dir_quoted}", check=False)
+        if result.exit_status != 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to set permissions on game directory {server_data.game_directory}. Please check user permissions.",
+            )
+        sudo_password = getattr(server_data, "sudo_password", None) or server_data.ssh_password
+        preferred_mirror = normalize_apt_mirror(getattr(server_data, "apt_mirror", None))
+        host_init = await ensure_steamcmd_packages(
+            AsyncsshHostRunner(conn, sudo_password=sudo_password),
+            STEAMCMD_REQUIRED_PACKAGES,
+            preferred_mirror=preferred_mirror,
+            apply_preferred_first=preferred_mirror is not None,
+        )
+        if not host_init.architecture_supported:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=host_init.message)
+        return host_init
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to validate server connection: {exc}",
+        ) from exc
+    finally:
+        if conn:
+            conn.close()
 
 
 @collection_router.post("", response_model=ServerResponse, status_code=status.HTTP_201_CREATED)
@@ -62,101 +141,7 @@ async def create_server(
         )
 
     await db.commit()
-    # Validate SSH connection before creating server (password authentication only)
-    conn = None
-    host_init = None
-    try:
-        if not server_data.ssh_password:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="SSH password is required"
-            )
-
-        # Step 1: Attempt SSH connection
-        try:
-            conn = await asyncssh.connect(
-                server_data.host,
-                port=server_data.ssh_port,
-                username=server_data.ssh_user,
-                password=server_data.ssh_password,
-                known_hosts=None,
-                connect_timeout=15,
-            )
-        except asyncssh.PermissionDenied:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"SSH authentication failed for {server_data.ssh_user}@{server_data.host}. Please verify your username and password.",
-            ) from None
-        except asyncio.TimeoutError:
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail=f"SSH connection to {server_data.host}:{server_data.ssh_port} timed out. The server may be unreachable or too slow to respond. Please check the network connection and server status.",
-            ) from None
-        except asyncssh.ConnectionLost:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Connection to {server_data.host}:{server_data.ssh_port} was lost. Please check if the server is reachable.",
-            ) from None
-        except asyncssh.Error as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"SSH connection to {server_data.host}:{server_data.ssh_port} failed: {str(e)}. Please verify the host and port.",
-            ) from e
-
-        # Step 2: Test command execution
-        result = await conn.run("echo 'SSH connection successful'", check=False)
-
-        if result.exit_status != 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"SSH connection succeeded but command execution failed. Please verify that user {server_data.ssh_user} has proper shell access and permissions.",
-            )
-
-        # Step 3: Create game directory with proper permissions
-        # Use shlex.quote to safely escape the directory path
-        game_dir_quoted = shlex.quote(server_data.game_directory)
-        mkdir_cmd = f"mkdir -p {game_dir_quoted}"
-
-        result = await conn.run(mkdir_cmd, check=False)
-        if result.exit_status != 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to create game directory {server_data.game_directory}. Please check permissions and path.",
-            )
-
-        # Set proper permissions (755 - owner can read/write/execute, others can read/execute)
-        chmod_cmd = f"chmod 755 {game_dir_quoted}"
-        result = await conn.run(chmod_cmd, check=False)
-        if result.exit_status != 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to set permissions on game directory {server_data.game_directory}. Please check user permissions.",
-            )
-
-        sudo_password = getattr(server_data, "sudo_password", None) or server_data.ssh_password
-        preferred_mirror = normalize_apt_mirror(getattr(server_data, "apt_mirror", None))
-        host_init = await ensure_steamcmd_packages(
-            AsyncsshHostRunner(conn, sudo_password=sudo_password),
-            STEAMCMD_REQUIRED_PACKAGES,
-            preferred_mirror=preferred_mirror,
-            apply_preferred_first=preferred_mirror is not None,
-        )
-        if not host_init.architecture_supported:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=host_init.message,
-            )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to validate server connection: {str(e)}",
-        ) from e
-    finally:
-        # Ensure connection is always closed
-        if conn:
-            conn.close()
+    host_init = await _validate_server_connection(server_data)
 
     # Create server with user_id, auto-generated API key, and password auth
     # Exclude captcha fields from server creation
@@ -218,8 +203,9 @@ async def create_server(
 async def list_servers(
     skip: int = 0,
     limit: int = 100,
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """List all servers owned by current user"""
     servers = await Server.get_all_by_user(db, current_user.id, skip, limit)
@@ -230,8 +216,9 @@ async def list_servers(
 async def list_all_servers_admin(
     skip: int = 0,
     limit: int = 100,
-    db: DatabaseSession = None,
-    current_user: AdminUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: AdminUser,
 ):
     """List all servers across all users (admin only)"""
     servers = await Server.get_all(db, skip, limit)
@@ -242,7 +229,7 @@ async def list_all_servers_admin(
 
     # Fetch all unique user IDs and load users in one query to avoid N+1
     user_ids = {server.user_id for server in servers}
-    users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    users_result = await db.execute(select(User).where(col(User.id).in_(user_ids)))
     users = {user.id: user for user in users_result.scalars().all()}
 
     # Build response with user information

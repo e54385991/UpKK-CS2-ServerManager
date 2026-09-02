@@ -11,9 +11,10 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.models.plugins import MarketPlugin, PluginCategory, PluginConflictRule
 from modules.schemas.plugins import (
@@ -142,7 +143,7 @@ def conflict_to_catalog_item(
     if catalog_lookup_key(url_a) == catalog_lookup_key(url_b):
         return None
     left, right = sorted((url_a, url_b), key=str.casefold)
-    severity = rule.severity if rule.severity in {"hard", "warning"} else "hard"
+    severity: Literal["hard", "warning"] = "warning" if rule.severity == "warning" else "hard"
     return PluginCatalogConflict(
         plugin_a_url=left,
         plugin_b_url=right,
@@ -153,12 +154,12 @@ def conflict_to_catalog_item(
 
 
 async def _load_market_plugins(db: AsyncSession) -> list[MarketPlugin]:
-    result = await db.execute(select(MarketPlugin).order_by(MarketPlugin.id))
+    result = await db.execute(select(MarketPlugin).order_by(col(MarketPlugin.id)))
     return list(result.scalars().all())
 
 
 async def _load_conflict_rules(db: AsyncSession) -> list[PluginConflictRule]:
-    result = await db.execute(select(PluginConflictRule).order_by(PluginConflictRule.id))
+    result = await db.execute(select(PluginConflictRule).order_by(col(PluginConflictRule.id)))
     return list(result.scalars().all())
 
 
@@ -256,31 +257,28 @@ def _summarize(results: list[PluginCatalogImportResult]) -> PluginCatalogImportR
     )
 
 
-async def import_plugin_catalog(
+async def _import_plugin_entries(
     db: AsyncSession,
-    request: PluginCatalogImportRequest,
-) -> PluginCatalogImportResponse:
-    """Import a catalog. ``skip`` keeps existing rows; ``update`` overwrites them."""
+    entries: list[PluginCatalogEntry],
+    strategy: str,
+    by_key: dict[str, MarketPlugin],
+) -> tuple[
+    list[PluginCatalogImportResult],
+    list[tuple[MarketPlugin, PluginCatalogEntry, PluginCatalogImportResult]],
+    set[str],
+    int,
+]:
     results: list[PluginCatalogImportResult] = []
-    existing = await _load_market_plugins(db)
-    by_key = _index_plugins(existing)
-    pending_deps: list[tuple[MarketPlugin, PluginCatalogEntry, PluginCatalogImportResult]] = []
+    pending: list[tuple[MarketPlugin, PluginCatalogEntry, PluginCatalogImportResult]] = []
     seen_keys: set[str] = set()
-    index = 0
-
-    for entry in request.plugins:
-        index += 1
+    for index, entry in enumerate(entries, 1):
         try:
             url = catalog_github_url(entry.github_url)
             key = catalog_lookup_key(entry.github_url)
         except ValueError as exc:
             results.append(
                 PluginCatalogImportResult(
-                    index=index,
-                    kind="plugin",
-                    name=entry.title,
-                    action="failed",
-                    message=str(exc),
+                    index=index, kind="plugin", name=entry.title, action="failed", message=str(exc)
                 )
             )
             continue
@@ -326,15 +324,12 @@ async def import_plugin_catalog(
             db.add(plugin)
             by_key[key] = plugin
             result = PluginCatalogImportResult(
-                index=index,
-                kind="plugin",
-                name=entry.title,
-                action="imported",
+                index=index, kind="plugin", name=entry.title, action="imported"
             )
             results.append(result)
-            pending_deps.append((plugin, entry, result))
+            pending.append((plugin, entry, result))
             continue
-        if request.conflict_strategy == "skip":
+        if strategy == "skip":
             results.append(
                 PluginCatalogImportResult(
                     index=index,
@@ -348,18 +343,19 @@ async def import_plugin_catalog(
         _apply_entry_fields(current, entry, category)
         db.add(current)
         result = PluginCatalogImportResult(
-            index=index,
-            kind="plugin",
-            name=entry.title,
-            action="updated",
-            plugin_id=current.id,
+            index=index, kind="plugin", name=entry.title, action="updated", plugin_id=current.id
         )
         results.append(result)
-        pending_deps.append((current, entry, result))
+        pending.append((current, entry, result))
+    return results, pending, seen_keys, len(entries)
 
-    await db.flush()
 
-    for plugin, entry, result in pending_deps:
+def _apply_pending_dependencies(
+    db: AsyncSession,
+    pending: list[tuple[MarketPlugin, PluginCatalogEntry, PluginCatalogImportResult]],
+    by_key: dict[str, MarketPlugin],
+) -> None:
+    for plugin, entry, result in pending:
         if result.plugin_id is None:
             result.plugin_id = plugin.id
         missing = _apply_dependencies(plugin, entry, by_key)
@@ -367,14 +363,21 @@ async def import_plugin_catalog(
         if missing:
             result.message = "Unresolved dependencies: " + ", ".join(missing)
 
-    existing_rules = await _load_conflict_rules(db)
-    rules_by_pair: dict[tuple[int, int], PluginConflictRule] = {}
-    for rule in existing_rules:
-        rules_by_pair[(int(rule.plugin_a_id), int(rule.plugin_b_id))] = rule
-    seen_pairs: set[tuple[str, str]] = set()
 
-    for conflict in request.conflicts:
-        index += 1
+async def _import_conflict_entries(
+    db: AsyncSession,
+    conflicts: list[PluginCatalogConflict],
+    strategy: str,
+    by_key: dict[str, MarketPlugin],
+    start_index: int,
+) -> list[PluginCatalogImportResult]:
+    results: list[PluginCatalogImportResult] = []
+    rules_by_pair = {
+        (int(rule.plugin_a_id), int(rule.plugin_b_id)): rule
+        for rule in await _load_conflict_rules(db)
+    }
+    seen_pairs: set[tuple[str, str]] = set()
+    for offset, conflict in enumerate(conflicts, start_index + 1):
         try:
             url_a = catalog_github_url(conflict.plugin_a_url)
             url_b = catalog_github_url(conflict.plugin_b_url)
@@ -383,7 +386,7 @@ async def import_plugin_catalog(
         except ValueError as exc:
             results.append(
                 PluginCatalogImportResult(
-                    index=index,
+                    index=offset,
                     kind="conflict",
                     name=_conflict_name(conflict.plugin_a_url, conflict.plugin_b_url),
                     action="failed",
@@ -392,87 +395,77 @@ async def import_plugin_catalog(
             )
             continue
         name = _conflict_name(url_a, url_b)
+        pair_key = (min(key_a, key_b), max(key_a, key_b))
         if key_a == key_b:
-            results.append(
-                PluginCatalogImportResult(
-                    index=index,
-                    kind="conflict",
-                    name=name,
-                    action="failed",
-                    message="A plugin cannot conflict with itself",
+            message = "A plugin cannot conflict with itself"
+        elif pair_key in seen_pairs:
+            message = "Duplicate conflict pair in catalog"
+        else:
+            seen_pairs.add(pair_key)
+            plugin_a, plugin_b = by_key.get(key_a), by_key.get(key_b)
+            if plugin_a is None or plugin_a.id is None or plugin_b is None or plugin_b.id is None:
+                message = "Both plugins must exist before a conflict rule can be imported"
+            else:
+                a_id, b_id = sorted((int(plugin_a.id), int(plugin_b.id)))
+                current = rules_by_pair.get((a_id, b_id))
+                if current is None:
+                    db.add(
+                        PluginConflictRule(
+                            plugin_a_id=a_id,
+                            plugin_b_id=b_id,
+                            severity=conflict.severity,
+                            reason=_optional_text(conflict.reason),
+                            is_enabled=conflict.is_enabled,
+                        )
+                    )
+                    results.append(
+                        PluginCatalogImportResult(
+                            index=offset, kind="conflict", name=name, action="imported"
+                        )
+                    )
+                    continue
+                if strategy == "skip":
+                    results.append(
+                        PluginCatalogImportResult(
+                            index=offset, kind="conflict", name=name, action="skipped"
+                        )
+                    )
+                    continue
+                current.severity = conflict.severity
+                current.reason = _optional_text(conflict.reason)
+                current.is_enabled = conflict.is_enabled
+                db.add(current)
+                results.append(
+                    PluginCatalogImportResult(
+                        index=offset, kind="conflict", name=name, action="updated"
+                    )
                 )
-            )
-            continue
-        pair_key = tuple(sorted((key_a, key_b)))
-        if pair_key in seen_pairs:
-            results.append(
-                PluginCatalogImportResult(
-                    index=index,
-                    kind="conflict",
-                    name=name,
-                    action="failed",
-                    message="Duplicate conflict pair in catalog",
-                )
-            )
-            continue
-        seen_pairs.add(pair_key)
-        plugin_a = by_key.get(key_a)
-        plugin_b = by_key.get(key_b)
-        if plugin_a is None or plugin_a.id is None or plugin_b is None or plugin_b.id is None:
-            results.append(
-                PluginCatalogImportResult(
-                    index=index,
-                    kind="conflict",
-                    name=name,
-                    action="failed",
-                    message="Both plugins must exist before a conflict rule can be imported",
-                )
-            )
-            continue
-        a_id, b_id = sorted((int(plugin_a.id), int(plugin_b.id)))
-        current_rule = rules_by_pair.get((a_id, b_id))
-        if current_rule is None:
-            rule = PluginConflictRule(
-                plugin_a_id=a_id,
-                plugin_b_id=b_id,
-                severity=conflict.severity,
-                reason=_optional_text(conflict.reason),
-                is_enabled=conflict.is_enabled,
-            )
-            db.add(rule)
-            rules_by_pair[(a_id, b_id)] = rule
-            results.append(
-                PluginCatalogImportResult(
-                    index=index,
-                    kind="conflict",
-                    name=name,
-                    action="imported",
-                )
-            )
-            continue
-        if request.conflict_strategy == "skip":
-            results.append(
-                PluginCatalogImportResult(
-                    index=index,
-                    kind="conflict",
-                    name=name,
-                    action="skipped",
-                )
-            )
-            continue
-        current_rule.severity = conflict.severity
-        current_rule.reason = _optional_text(conflict.reason)
-        current_rule.is_enabled = conflict.is_enabled
-        db.add(current_rule)
+                continue
         results.append(
             PluginCatalogImportResult(
-                index=index,
-                kind="conflict",
-                name=name,
-                action="updated",
+                index=offset, kind="conflict", name=name, action="failed", message=message
             )
         )
+    return results
 
+
+async def import_plugin_catalog(
+    db: AsyncSession,
+    request: PluginCatalogImportRequest,
+) -> PluginCatalogImportResponse:
+    """Import a catalog. ``skip`` keeps existing rows; ``update`` overwrites them."""
+    existing = await _load_market_plugins(db)
+    by_key = _index_plugins(existing)
+    results, pending_deps, _seen_keys, index = await _import_plugin_entries(
+        db, request.plugins, request.conflict_strategy, by_key
+    )
+    await db.flush()
+    _apply_pending_dependencies(db, pending_deps, by_key)
+    results.extend(
+        await _import_conflict_entries(
+            db, request.conflicts, request.conflict_strategy, by_key, index
+        )
+    )
     await db.commit()
     return _summarize(results)
 

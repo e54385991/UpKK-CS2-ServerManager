@@ -213,7 +213,8 @@ async def get_current_active_user_for_download(
     path: str,
     ticket: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
-    db: DatabaseSession = None,
+    *,
+    db: DatabaseSession,
 ) -> User:
     """Authenticate downloads with a one-time ticket or a normal bearer token."""
     credentials_exception = HTTPException(
@@ -528,6 +529,24 @@ def _parse_github_actions_artifact_url(url: str) -> Optional[Tuple[str, str, int
     return owner, repository, int(artifact_id)
 
 
+def _github_artifact_http_error(
+    status_code: int, token: str | None, *, metadata: bool
+) -> RuntimeError:
+    if status_code in (401, 403):
+        if token:
+            return RuntimeError("GitHub token is invalid or lacks Actions artifact read access")
+        return RuntimeError(
+            "GitHub Actions artifact download requires a GitHub token with Actions read access; configure it in your profile"
+        )
+    if status_code == 404 and metadata:
+        return RuntimeError(
+            "GitHub Actions artifact was not found or is not accessible with the configured token"
+        )
+    if status_code in (404, 410):
+        return RuntimeError("GitHub Actions artifact is unavailable or has expired")
+    return RuntimeError(f"GitHub artifact request failed (HTTP {status_code})")
+
+
 async def _resolve_github_actions_artifact(
     url: str,
     github_token: Optional[str],
@@ -562,20 +581,8 @@ async def _resolve_github_actions_artifact(
         ) as client:
             metadata_response = await client.get(api_base, headers=headers)
             if metadata_response.status_code != 200:
-                if metadata_response.status_code in (401, 403):
-                    if token:
-                        raise RuntimeError(
-                            "GitHub token is invalid or lacks Actions artifact read access"
-                        )
-                    raise RuntimeError(
-                        "GitHub Actions artifact download requires a GitHub token with Actions read access; configure it in your profile"
-                    )
-                if metadata_response.status_code == 404:
-                    raise RuntimeError(
-                        "GitHub Actions artifact was not found or is not accessible with the configured token"
-                    )
-                raise RuntimeError(
-                    f"GitHub artifact metadata request failed (HTTP {metadata_response.status_code})"
+                raise _github_artifact_http_error(
+                    metadata_response.status_code, token, metadata=True
                 )
 
             try:
@@ -600,18 +607,8 @@ async def _resolve_github_actions_artifact(
 
             download_response = await client.get(f"{api_base}/zip", headers=headers)
             if download_response.status_code != 302:
-                if download_response.status_code in (401, 403):
-                    if token:
-                        raise RuntimeError(
-                            "GitHub token is invalid or lacks Actions artifact read access"
-                        )
-                    raise RuntimeError(
-                        "GitHub Actions artifact download requires a GitHub token with Actions read access; configure it in your profile"
-                    )
-                if download_response.status_code in (404, 410):
-                    raise RuntimeError("GitHub Actions artifact is unavailable or has expired")
-                raise RuntimeError(
-                    f"GitHub artifact download request failed (HTTP {download_response.status_code})"
+                raise _github_artifact_http_error(
+                    download_response.status_code, token, metadata=False
                 )
             location = download_response.headers.get("location")
             if not location:
@@ -875,4 +872,108 @@ async def _cleanup_old_extraction_tasks():
 
 
 # Export private helpers too: endpoint modules are mechanical domain slices.
-__all__ = [name for name in globals() if not name.startswith("__")]
+__all__ = [
+    "asyncio",
+    "ipaddress",
+    "logging",
+    "os",
+    "posixpath",
+    "re",
+    "socket",
+    "tempfile",
+    "time",
+    "uuid",
+    "Annotated",
+    "Any",
+    "Dict",
+    "List",
+    "Optional",
+    "Tuple",
+    "quote",
+    "unquote",
+    "urlsplit",
+    "anyio",
+    "httpx",
+    "jwt",
+    "APIRouter",
+    "Depends",
+    "File",
+    "Header",
+    "HTTPException",
+    "Query",
+    "UploadFile",
+    "status",
+    "FileResponse",
+    "StreamingResponse",
+    "InvalidTokenError",
+    "AsyncSession",
+    "SQLModel",
+    "select",
+    "BackgroundTask",
+    "DatabaseSession",
+    "require_server_access",
+    "Server",
+    "User",
+    "get_current_active_user",
+    "get_db",
+    "settings",
+    "SSHManager",
+    "KeyedConcurrencyLimiter",
+    "get_effective_github_token",
+    "file_task_registry",
+    "logger",
+    "EXTRACTION_TASK_COMPLETED_CLEANUP_SECONDS",
+    "EXTRACTION_TASK_ABANDONED_CLEANUP_SECONDS",
+    "STREAMING_DOWNLOAD_THRESHOLD_BYTES",
+    "DOWNLOAD_TICKET_TTL_SECONDS",
+    "REMOTE_NAME_MAX_BYTES",
+    "DOWNLOAD_URL_MAX_LENGTH",
+    "MAX_UPLOAD_BYTES",
+    "GITHUB_API_VERSION",
+    "GITHUB_ACTIONS_ARTIFACT_URL_RE",
+    "extraction_tasks",
+    "_extraction_task_refs",
+    "extraction_tasks_lock",
+    "download_url_tasks",
+    "_download_url_task_refs",
+    "download_url_tasks_lock",
+    "download_tickets",
+    "download_tickets_lock",
+    "_file_task_limiter",
+    "_run_bounded_file_task",
+    "shutdown_background_tasks",
+    "FileInfo",
+    "DirectoryListResponse",
+    "FileContentRequest",
+    "CreateDirectoryRequest",
+    "DownloadTicketRequest",
+    "DeleteRequest",
+    "RenameRequest",
+    "CopyPathsRequest",
+    "ExtractArchiveRequest",
+    "DownloadUrlRequest",
+    "InspectArchiveRequest",
+    "get_server_for_user",
+    "_create_download_ticket",
+    "_consume_download_ticket",
+    "get_current_active_user_for_download",
+    "DownloadUser",
+    "is_path_safe",
+    "remote_join",
+    "safe_relative_upload_path",
+    "_validate_direct_child_name",
+    "_normalize_source_folder",
+    "_HUB_FILE_STATUS",
+    "resolve_extract_paths",
+    "file_task_payload_from_hub",
+    "_validate_download_url",
+    "_download_archive_filename",
+    "_parse_github_actions_artifact_url",
+    "_resolve_github_actions_artifact",
+    "_cleanup_temp_file",
+    "_download_headers",
+    "_run_download_url_task",
+    "_cleanup_old_download_url_tasks",
+    "_run_extraction_task",
+    "_cleanup_old_extraction_tasks",
+]

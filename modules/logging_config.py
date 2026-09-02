@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 from logging.handlers import RotatingFileHandler
-from typing import Optional
+from typing import Optional, Protocol, cast
 
 # Log directory and file settings
 LOG_DIR = "logs"
@@ -16,6 +16,10 @@ MAX_LOG_SIZE = 10 * 1024 * 1024  # 10 MB
 BACKUP_COUNT = 10  # Keep 10 backup files
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+class _ReconfigurableStream(Protocol):
+    def reconfigure(self, *, line_buffering: bool) -> None: ...
 
 
 def _get_log_level(level_str: str) -> int:
@@ -68,9 +72,9 @@ def setup_logging(level: int = logging.INFO, asyncssh_level: Optional[str] = Non
 
     # Line-buffer Docker/1Panel pipes so startup lines are not lost on SIGKILL.
     if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(line_buffering=True)
+        cast(_ReconfigurableStream, sys.stdout).reconfigure(line_buffering=True)
     if hasattr(sys.stderr, "reconfigure"):
-        sys.stderr.reconfigure(line_buffering=True)
+        cast(_ReconfigurableStream, sys.stderr).reconfigure(line_buffering=True)
 
     # Create console handler for stdout
     console_handler = logging.StreamHandler()

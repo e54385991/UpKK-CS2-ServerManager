@@ -1,7 +1,7 @@
 """Versioned overview aggregates for the dashboard."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -27,10 +27,11 @@ router = APIRouter(prefix="/api/v1/overview", tags=["v1-overview"])
 _ATTENTION_STATUSES = frozenset({ServerStatus.ERROR, ServerStatus.UNKNOWN})
 
 
-def _a2s_view(server_id: int, cached: dict | None) -> A2SCacheView:
-    if not cached or not isinstance(cached, dict):
+def _a2s_view(server_id: int, cached: dict[str, Any] | None) -> A2SCacheView:
+    if not isinstance(cached, dict):
         return A2SCacheView(server_id=server_id, cached=False)
-    info = cached.get("server_info") if isinstance(cached.get("server_info"), dict) else {}
+    raw_info = cached.get("server_info")
+    info: dict[str, Any] = raw_info if isinstance(raw_info, dict) else {}
     success = bool(cached.get("success"))
     return A2SCacheView(
         server_id=server_id,
@@ -100,7 +101,7 @@ async def read_steam_latest_version(
 ) -> SteamLatestVersionView:
     """Return the Redis-cached Steam CS2 version. Does not call Steam or SSH."""
     cached = await a2s_cache_service.get_latest_steam_version()
-    if not cached:
+    if not isinstance(cached, dict):
         return SteamLatestVersionView(available=False)
     version = str(cached.get("version") or "").strip()
     return SteamLatestVersionView(

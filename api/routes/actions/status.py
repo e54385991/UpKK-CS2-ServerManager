@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from sqlmodel import col
+
 from api.dependencies import ActiveUser, DatabaseSession
 
 from .common import *
@@ -49,7 +51,7 @@ async def reconnect_ssh(
     if server.is_ssh_down:
         await db.execute(
             sql_update(Server)
-            .where(Server.id == server_id)
+            .where(col(Server.id) == server_id)
             .values(is_ssh_down=False, consecutive_ssh_failures=0)
         )
         await db.commit()
@@ -66,7 +68,7 @@ async def reconnect_ssh(
             now = get_current_time()
             await db.execute(
                 sql_update(Server)
-                .where(Server.id == server_id)
+                .where(col(Server.id) == server_id)
                 .values(
                     ssh_health_status="healthy",
                     is_ssh_down=False,
@@ -184,10 +186,10 @@ async def get_metamod_status(
 
         # Cache the result for 1 hour (3600 seconds)
         try:
-            await redis_manager.client.setex(
+            await redis_manager.client.set(
                 cache_key,
-                3600,  # 1 hour TTL
                 json.dumps(result.model_dump()),
+                ex=3600,
             )
         except Exception as e:
             import logging

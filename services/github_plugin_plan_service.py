@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -17,11 +18,10 @@ from pathlib import PurePosixPath
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-import anyio
 import httpx
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.models import (
     GitHubInstallRecipe,
@@ -375,79 +375,79 @@ def _stream_sha256(handle: Any) -> str:
     return digest.hexdigest()
 
 
-def _archive_entries(path: str, asset_name: str, compressed_size: int) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    lowered = asset_name.casefold()
-    if lowered.endswith(".zip"):
-        with zipfile.ZipFile(path) as archive:
-            for item in archive.infolist():
-                mode = item.external_attr >> 16
-                if any(
-                    predicate(mode)
-                    for predicate in (
-                        stat.S_ISLNK,
-                        stat.S_ISCHR,
-                        stat.S_ISBLK,
-                        stat.S_ISFIFO,
-                        stat.S_ISSOCK,
-                    )
-                ):
-                    raise GitHubPlanError("Archive links and special files are not allowed")
-                entries.append(
-                    {
-                        "path": _safe_entry_name(item.filename),
-                        "size": int(item.file_size),
-                        "is_dir": item.is_dir(),
-                        "sha256": (
-                            None if item.is_dir() else _stream_sha256(archive.open(item, "r"))
-                        ),
-                    }
+def _zip_entries(path: str) -> list[dict[str, Any]]:
+    entries = []
+    with zipfile.ZipFile(path) as archive:
+        for item in archive.infolist():
+            mode = item.external_attr >> 16
+            if any(
+                predicate(mode)
+                for predicate in (
+                    stat.S_ISLNK,
+                    stat.S_ISCHR,
+                    stat.S_ISBLK,
+                    stat.S_ISFIFO,
+                    stat.S_ISSOCK,
                 )
-    elif lowered.endswith((".tar.gz", ".tgz", ".tar")):
-        with tarfile.open(path, "r:*") as archive:
-            for item in archive.getmembers():
-                if item.issym() or item.islnk() or item.isdev():
-                    raise GitHubPlanError("Archive links and device entries are not allowed")
-                if not (item.isfile() or item.isdir()):
-                    raise GitHubPlanError("Unsupported archive entry type")
-                extracted = archive.extractfile(item) if item.isfile() else None
-                entries.append(
-                    {
-                        "path": _safe_entry_name(item.name),
-                        "size": int(item.size),
-                        "is_dir": item.isdir(),
-                        "sha256": _stream_sha256(extracted) if extracted is not None else None,
-                    }
-                )
-    elif lowered.endswith(".7z"):
-        try:
-            import py7zr
-        except ImportError as exc:  # pragma: no cover - dependency is explicit
-            raise GitHubPlanError("7z inspection support is unavailable") from exc
-        with py7zr.SevenZipFile(path, mode="r") as archive:
-            for item in archive.list():
-                if any(
-                    bool(getattr(item, attribute, False))
-                    for attribute in ("is_symlink", "is_junction", "is_hardlink")
-                ):
-                    raise GitHubPlanError("Archive links are not allowed")
-                if getattr(item, "is_directory", False):
-                    size = 0
-                    is_dir = True
-                else:
-                    size = int(getattr(item, "uncompressed", 0) or 0)
-                    is_dir = False
-                entries.append(
-                    {
-                        "path": _safe_entry_name(item.filename),
-                        "size": size,
-                        "is_dir": is_dir,
-                        "sha256": None,
-                    }
-                )
-    else:
-        raise GitHubPlanError("Unsupported release archive type")
+            ):
+                raise GitHubPlanError("Archive links and special files are not allowed")
+            entries.append(
+                {
+                    "path": _safe_entry_name(item.filename),
+                    "size": int(item.file_size),
+                    "is_dir": item.is_dir(),
+                    "sha256": None if item.is_dir() else _stream_sha256(archive.open(item, "r")),
+                }
+            )
+    return entries
 
+
+def _tar_entries(path: str) -> list[dict[str, Any]]:
+    entries = []
+    with tarfile.open(path, "r:*") as archive:
+        for item in archive.getmembers():
+            if item.issym() or item.islnk() or item.isdev():
+                raise GitHubPlanError("Archive links and device entries are not allowed")
+            if not (item.isfile() or item.isdir()):
+                raise GitHubPlanError("Unsupported archive entry type")
+            extracted = archive.extractfile(item) if item.isfile() else None
+            entries.append(
+                {
+                    "path": _safe_entry_name(item.name),
+                    "size": int(item.size),
+                    "is_dir": item.isdir(),
+                    "sha256": _stream_sha256(extracted) if extracted is not None else None,
+                }
+            )
+    return entries
+
+
+def _seven_entries(path: str) -> list[dict[str, Any]]:
+    try:
+        import py7zr
+    except ImportError as exc:  # pragma: no cover - dependency is explicit
+        raise GitHubPlanError("7z inspection support is unavailable") from exc
+    entries = []
+    with py7zr.SevenZipFile(path, mode="r") as archive:
+        for item in archive.list():
+            if any(
+                bool(getattr(item, attribute, False))
+                for attribute in ("is_symlink", "is_junction", "is_hardlink")
+            ):
+                raise GitHubPlanError("Archive links are not allowed")
+            is_dir = bool(getattr(item, "is_directory", False))
+            entries.append(
+                {
+                    "path": _safe_entry_name(item.filename),
+                    "size": 0 if is_dir else int(getattr(item, "uncompressed", 0) or 0),
+                    "is_dir": is_dir,
+                    "sha256": None,
+                }
+            )
+    return entries
+
+
+def _validate_archive_entries(entries: list[dict[str, Any]], compressed_size: int) -> None:
     if len(entries) > MAX_ARCHIVE_ENTRIES:
         raise GitHubPlanError("Archive contains too many entries")
     total = sum(item["size"] for item in entries if not item["is_dir"])
@@ -461,6 +461,19 @@ def _archive_entries(path: str, asset_name: str, compressed_size: int) -> list[d
         if key in folded:
             raise GitHubPlanError("Archive contains case-colliding paths")
         folded.add(key)
+
+
+def _archive_entries(path: str, asset_name: str, compressed_size: int) -> list[dict[str, Any]]:
+    lowered = asset_name.casefold()
+    if lowered.endswith(".zip"):
+        entries = _zip_entries(path)
+    elif lowered.endswith((".tar.gz", ".tgz", ".tar")):
+        entries = _tar_entries(path)
+    elif lowered.endswith(".7z"):
+        entries = _seven_entries(path)
+    else:
+        raise GitHubPlanError("Unsupported release archive type")
+    _validate_archive_entries(entries, compressed_size)
     return entries
 
 
@@ -748,7 +761,7 @@ async def _recipe_for_plan(
         select(GitHubInstallRecipe).where(
             GitHubInstallRecipe.id == recipe_id,
             GitHubInstallRecipe.repo_url == repo_url,
-            GitHubInstallRecipe.is_enabled.is_(True),
+            col(GitHubInstallRecipe.is_enabled).is_(True),
         )
     )
     recipe = result.scalar_one_or_none()
@@ -762,7 +775,7 @@ async def inspect_release_asset_layout(asset: dict[str, Any], repo_name: str) ->
     archive_path, archive_sha256, compressed_size = await _download_release_asset(asset["url"])
     try:
         try:
-            entries = await anyio.to_thread.run_sync(
+            entries = await asyncio.to_thread(
                 _archive_entries, archive_path, asset["name"], compressed_size
             )
         except GitHubPlanError:
@@ -953,19 +966,12 @@ async def execute_github_install_plan(
         )
 
 
-async def _execute_github_install_plan_locked(
-    db: AsyncSession,
-    user: User,
-    server_id: int,
-    request: GitHubPluginInstallPlanRequest,
+def _validate_github_install_plan(
+    plan: dict[str, Any],
     expected_plan_hash: str,
-    acknowledged_warning_rule_ids: set[int] | None = None,
-    acknowledge_unknown_compatibility: bool = False,
-    progress: ProgressCallback | None = None,
-    operation_id: str | None = None,
-) -> dict[str, Any]:
-    server = await authorized_server(db, user, server_id)
-    plan = await build_github_install_plan(db, user, server_id, request)
+    acknowledged_warning_rule_ids: set[int] | None,
+    acknowledge_unknown_compatibility: bool,
+) -> set[int]:
     if plan["mapping_required"]:
         raise GitHubPlanError("Archive mapping requires an administrator-approved recipe")
     if plan["plan_hash"] != expected_plan_hash:
@@ -981,6 +987,28 @@ async def _execute_github_install_plan_locked(
         raise GitHubPlanError(f"Explicit acknowledgement required for warning rule(s): {missing}")
     if plan["compatibility_unknown"] and not acknowledge_unknown_compatibility:
         raise GitHubPlanError("Explicit acknowledgement is required for unknown compatibility")
+    return acknowledged
+
+
+async def _execute_github_install_plan_locked(
+    db: AsyncSession,
+    user: User,
+    server_id: int,
+    request: GitHubPluginInstallPlanRequest,
+    expected_plan_hash: str,
+    acknowledged_warning_rule_ids: set[int] | None = None,
+    acknowledge_unknown_compatibility: bool = False,
+    progress: ProgressCallback | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    server = await authorized_server(db, user, server_id)
+    plan = await build_github_install_plan(db, user, server_id, request)
+    acknowledged = _validate_github_install_plan(
+        plan,
+        expected_plan_hash,
+        acknowledged_warning_rule_ids,
+        acknowledge_unknown_compatibility,
+    )
     completed_dependencies: list[dict[str, Any]] = []
     installed_ids = {int(item) for item in plan["already_installed"]}
     if plan["dependencies"]:

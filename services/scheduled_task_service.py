@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel import update as sql_update
 
 from modules.database import async_session_maker
@@ -97,8 +97,11 @@ class ScheduledTaskService:
                 # Get all enabled tasks that are due for execution
                 result = await db.execute(
                     select(ScheduledTask)
-                    .where(ScheduledTask.enabled.is_(True))
-                    .where((ScheduledTask.next_run.is_(None)) | (ScheduledTask.next_run <= now))
+                    .where(col(ScheduledTask.enabled).is_(True))
+                    .where(
+                        (col(ScheduledTask.next_run).is_(None))
+                        | (col(ScheduledTask.next_run) <= now)
+                    )
                 )
                 tasks = result.scalars().all()
 
@@ -280,6 +283,82 @@ class ScheduledTaskService:
             },
         )
 
+    async def _execute_restart(
+        self, ssh_manager: SSHManager, server: Server, log_progress
+    ) -> tuple[bool, str]:
+        manager_ready, preflight_message = await ssh_manager.check_session_manager_available(server)
+        if not manager_ready:
+            return False, (
+                f"Restart aborted before stopping: {preflight_message}. "
+                "The existing game session was left untouched."
+            )
+        await log_progress("Stopping server...")
+        success, message = await ssh_manager.stop_server(server)
+        if not success:
+            return False, f"Restart stopped because shutdown failed: {message}"
+        await log_progress("Server stopped successfully, starting again...")
+        await asyncio.sleep(0.5)
+        await log_progress("Starting server...")
+        return await ssh_manager.start_server(server, progress_callback=log_progress)
+
+    async def _execute_backup_plugins(
+        self, ssh_manager: SSHManager, server: Server, log_progress
+    ) -> tuple[bool, str]:
+        success, message = await ssh_manager.backup_plugins(server, progress_callback=log_progress)
+        if not success:
+            return success, message
+        async with async_session_maker() as db:
+            owner = await db.get(User, server.user_id)
+        if not owner or not s3_backup_service.is_configured(owner):
+            return True, message
+        backup_info = getattr(ssh_manager, "last_plugin_backup", None)
+        backup_path = backup_info.get("path") if backup_info else None
+        if not backup_path:
+            upload_message = "Plugin backup completed locally, but the archive path was not captured for S3 upload."
+            discord_notification_service.queue_notify(
+                server,
+                EVENT_S3_BACKUP,
+                "s3_backup_upload",
+                False,
+                upload_message,
+                title="S3 backup upload failed",
+                details={"Task": "Scheduled backup_plugins"},
+            )
+            return False, upload_message
+        upload_success, upload_message, object_key = await s3_backup_service.upload_remote_backup(
+            ssh_manager, server, owner, backup_path, progress_callback=log_progress
+        )
+        details = {"Task": "Scheduled backup_plugins", "Backup Archive": backup_path}
+        if object_key:
+            details["Object Key"] = object_key
+        discord_notification_service.queue_notify(
+            server,
+            EVENT_S3_BACKUP,
+            "s3_backup_upload",
+            upload_success,
+            upload_message,
+            title=f"S3 backup upload {'completed' if upload_success else 'failed'}",
+            details=details,
+        )
+        if not upload_success:
+            return False, f"{message}\n{upload_message}"
+        return True, f"{message}\n{upload_message}"
+
+    async def _execute_map_pool_sync(
+        self, ssh_manager: SSHManager, server: Server
+    ) -> tuple[bool, str]:
+        from services.remote_map_pool_service import RemoteMapPoolError, synchronize_remote_map_pool
+
+        if not server.map_pool_sync_url:
+            return False, "No custom MapChooser map-pool URL is configured"
+        try:
+            _, map_count = await synchronize_remote_map_pool(
+                ssh_manager, server, server.map_pool_sync_url
+            )
+        except RemoteMapPoolError as exc:
+            return False, str(exc)
+        return True, f"Synchronized {map_count} maps from the custom remote map pool"
+
     async def _execute_action(self, ssh_manager: SSHManager, server: Server, action: str):
         """Execute the specified action on the server"""
         try:
@@ -292,121 +371,24 @@ class ScheduledTaskService:
                 logger.info(f"[Server {server.id}] {msg}")
 
             if action == "restart":
-                (
-                    manager_ready,
-                    preflight_message,
-                ) = await ssh_manager.check_session_manager_available(server)
-                if not manager_ready:
-                    return False, (
-                        f"Restart aborted before stopping: {preflight_message}. "
-                        "The existing game session was left untouched."
-                    )
-
-                # Restart is implemented as stop + start sequence
-                await log_progress("Stopping server...")
-                success, message = await ssh_manager.stop_server(server)
-
-                if not success:
-                    return False, f"Restart stopped because shutdown failed: {message}"
-
-                await log_progress("Server stopped successfully, starting again...")
-                # Add small delay to ensure cleanup
-                await asyncio.sleep(0.5)
-
-                await log_progress("Starting server...")
+                return await self._execute_restart(ssh_manager, server, log_progress)
+            if action == "start":
                 return await ssh_manager.start_server(server, progress_callback=log_progress)
-
-            elif action == "start":
-                return await ssh_manager.start_server(server, progress_callback=log_progress)
-            elif action == "stop":
+            if action == "stop":
                 return await ssh_manager.stop_server(server)
-            elif action == "update":
+            if action == "update":
                 return await ssh_manager.update_server(server, progress_callback=log_progress)
-            elif action == "validate":
+            if action == "validate":
                 return await ssh_manager.validate_server(server, progress_callback=log_progress)
-            elif action == "backup_plugins":
-                success, message = await ssh_manager.backup_plugins(
-                    server, progress_callback=log_progress
-                )
-                if not success:
-                    return success, message
-
-                async with async_session_maker() as db:
-                    owner = await db.get(User, server.user_id)
-
-                if not owner or not s3_backup_service.is_configured(owner):
-                    return True, message
-
-                backup_info = getattr(ssh_manager, "last_plugin_backup", None)
-                backup_path = backup_info.get("path") if backup_info else None
-                if not backup_path:
-                    upload_message = "Plugin backup completed locally, but the archive path was not captured for S3 upload."
-                    discord_notification_service.queue_notify(
-                        server,
-                        EVENT_S3_BACKUP,
-                        "s3_backup_upload",
-                        False,
-                        upload_message,
-                        title="S3 backup upload failed",
-                        details={
-                            "Task": "Scheduled backup_plugins",
-                        },
-                    )
-                    return False, upload_message
-
-                (
-                    upload_success,
-                    upload_message,
-                    object_key,
-                ) = await s3_backup_service.upload_remote_backup(
-                    ssh_manager,
-                    server,
-                    owner,
-                    backup_path,
-                    progress_callback=log_progress,
-                )
-                details = {
-                    "Task": "Scheduled backup_plugins",
-                    "Backup Archive": backup_path,
-                }
-                if object_key:
-                    details["Object Key"] = object_key
-                discord_notification_service.queue_notify(
-                    server,
-                    EVENT_S3_BACKUP,
-                    "s3_backup_upload",
-                    upload_success,
-                    upload_message,
-                    title=f"S3 backup upload {'completed' if upload_success else 'failed'}",
-                    details=details,
-                )
-                if not upload_success:
-                    return False, f"{message}\n{upload_message}"
-
-                return True, f"{message}\n{upload_message}"
-            elif action == "map_pool_sync":
-                from services.remote_map_pool_service import (
-                    RemoteMapPoolError,
-                    synchronize_remote_map_pool,
-                )
-
-                if not server.map_pool_sync_url:
-                    return False, "No custom MapChooser map-pool URL is configured"
-                try:
-                    _, map_count = await synchronize_remote_map_pool(
-                        ssh_manager,
-                        server,
-                        server.map_pool_sync_url,
-                    )
-                except RemoteMapPoolError as exc:
-                    return False, str(exc)
-                return True, f"Synchronized {map_count} maps from the custom remote map pool"
-            elif action == "log_cleanup":
+            if action == "backup_plugins":
+                return await self._execute_backup_plugins(ssh_manager, server, log_progress)
+            if action == "map_pool_sync":
+                return await self._execute_map_pool_sync(ssh_manager, server)
+            if action == "log_cleanup":
                 from services.system_cleanup_service import system_cleanup_service
 
                 return await system_cleanup_service.run_scheduled(ssh_manager, server)
-            else:
-                return False, f"Unknown action: {action}"
+            return False, f"Unknown action: {action}"
 
         except Exception as e:
             return False, str(e)
@@ -427,7 +409,7 @@ class ScheduledTaskService:
                 # Update task
                 await db.execute(
                     sql_update(ScheduledTask)
-                    .where(ScheduledTask.id == task_id)
+                    .where(col(ScheduledTask.id) == task_id)
                     .values(
                         last_run=get_current_time(),
                         next_run=next_run,
@@ -568,7 +550,7 @@ class ScheduledTaskService:
             async with async_session_maker() as db:
                 # Get all enabled tasks
                 result = await db.execute(
-                    select(ScheduledTask).where(ScheduledTask.enabled.is_(True))
+                    select(ScheduledTask).where(col(ScheduledTask.enabled).is_(True))
                 )
                 tasks = result.scalars().all()
 
@@ -578,7 +560,7 @@ class ScheduledTaskService:
                         if next_run:
                             await db.execute(
                                 sql_update(ScheduledTask)
-                                .where(ScheduledTask.id == task.id)
+                                .where(col(ScheduledTask.id) == task.id)
                                 .values(next_run=next_run)
                             )
                             logger.info(f"Calculated next run for task {task.id}: {next_run}")
@@ -604,7 +586,7 @@ class ScheduledTaskService:
                 if next_run:
                     await db.execute(
                         sql_update(ScheduledTask)
-                        .where(ScheduledTask.id == task_id)
+                        .where(col(ScheduledTask.id) == task_id)
                         .values(next_run=next_run)
                     )
                     await db.commit()

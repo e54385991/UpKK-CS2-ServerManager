@@ -6,6 +6,7 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
+from sqlmodel import col
 
 from api.dependencies import AdminUser, DatabaseSession
 from modules import (
@@ -32,7 +33,7 @@ async def get_auto_restart_settings(db: DatabaseSession):
     # Get settings from database
     result = await db.execute(
         select(GlobalSettings).filter(
-            GlobalSettings.setting_key.in_(
+            col(GlobalSettings.setting_key).in_(
                 [
                     "auto_restart_max_restarts",
                     "auto_restart_time_window_minutes",
@@ -72,7 +73,9 @@ async def update_auto_restart_settings(
     """
     # Update max_restarts
     result = await db.execute(
-        select(GlobalSettings).filter(GlobalSettings.setting_key == "auto_restart_max_restarts")
+        select(GlobalSettings).filter(
+            col(GlobalSettings.setting_key) == "auto_restart_max_restarts"
+        )
     )
     max_restarts_setting = result.scalar_one_or_none()
     if max_restarts_setting:
@@ -88,7 +91,7 @@ async def update_auto_restart_settings(
     # Update time_window_minutes
     result = await db.execute(
         select(GlobalSettings).filter(
-            GlobalSettings.setting_key == "auto_restart_time_window_minutes"
+            col(GlobalSettings.setting_key) == "auto_restart_time_window_minutes"
         )
     )
     time_window_setting = result.scalar_one_or_none()
@@ -104,7 +107,9 @@ async def update_auto_restart_settings(
 
     # Update default_interval
     result = await db.execute(
-        select(GlobalSettings).filter(GlobalSettings.setting_key == "auto_restart_default_interval")
+        select(GlobalSettings).filter(
+            col(GlobalSettings.setting_key) == "auto_restart_default_interval"
+        )
     )
     default_interval_setting = result.scalar_one_or_none()
     if default_interval_setting:
@@ -150,7 +155,7 @@ async def get_setting(
     Get a specific global setting by key (Admin only)
     """
     result = await db.execute(
-        select(GlobalSettings).filter(GlobalSettings.setting_key == setting_key)
+        select(GlobalSettings).filter(col(GlobalSettings.setting_key) == setting_key)
     )
     setting = result.scalar_one_or_none()
 
@@ -173,7 +178,7 @@ async def update_setting(
     Update a specific global setting (Admin only)
     """
     result = await db.execute(
-        select(GlobalSettings).filter(GlobalSettings.setting_key == setting_key)
+        select(GlobalSettings).filter(col(GlobalSettings.setting_key) == setting_key)
     )
     setting = result.scalar_one_or_none()
 

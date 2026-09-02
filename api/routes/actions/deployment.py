@@ -5,6 +5,7 @@
 from fastapi import Request
 
 from api.dependencies import ActiveUser, DatabaseSession
+from api.routes.actions.common import _store_task
 from services.audit_log_service import record_audit_event
 from services.maintenance_lock import maintenance_lock_service
 from services.steamcmd_guard import (
@@ -772,8 +773,9 @@ async def get_server_logs(
     server_id: int,
     skip: int = 0,
     limit: int = 50,
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Get deployment logs for a server"""
     await get_server_and_verify_ownership(db, server_id, current_user)

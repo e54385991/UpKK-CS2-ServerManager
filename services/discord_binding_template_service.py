@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.models import Server, ServerDiscordBinding, UserDiscordBot
 
@@ -64,7 +64,7 @@ async def sync_global_discord_binding(db: AsyncSession, bot: UserDiscordBot) -> 
         return 0
     server_ids = [server.id for server in servers if server.id is not None]
     binding_result = await db.execute(
-        select(ServerDiscordBinding).where(ServerDiscordBinding.server_id.in_(server_ids))
+        select(ServerDiscordBinding).where(col(ServerDiscordBinding.server_id).in_(server_ids))
     )
     bindings = {binding.server_id: binding for binding in binding_result.scalars().all()}
     for server in servers:
@@ -84,7 +84,7 @@ async def global_binding_counts(db: AsyncSession, bot: UserDiscordBot) -> tuple[
     if not server_ids or not bot.global_binding_configured:
         return len(server_ids), 0
     binding_result = await db.execute(
-        select(ServerDiscordBinding).where(ServerDiscordBinding.server_id.in_(server_ids))
+        select(ServerDiscordBinding).where(col(ServerDiscordBinding.server_id).in_(server_ids))
     )
     matching = sum(
         binding_matches_template(binding, bot) for binding in binding_result.scalars().all()

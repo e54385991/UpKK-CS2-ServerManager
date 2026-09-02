@@ -7,7 +7,7 @@ from datetime import timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import update as sql_update
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.database import async_session_maker
 from modules.http_helper import http_helper
@@ -109,7 +109,8 @@ class PluginAutoUpdateService:
         if total is not None:
             status["total"] = total
         if log:
-            logs = list(status.get("logs") or [])
+            raw_logs = status.get("logs")
+            logs = list(raw_logs) if isinstance(raw_logs, list) else []
             logs.append({"time": get_current_time().isoformat(), "message": log})
             status["logs"] = logs[-100:]
         self._status_cache[server_id] = status
@@ -209,7 +210,7 @@ class PluginAutoUpdateService:
     async def check_all_servers(self) -> None:
         async with async_session_maker() as db:
             result = await db.execute(
-                select(Server).where(Server.enable_plugin_auto_update.is_(True))
+                select(Server).where(col(Server.enable_plugin_auto_update).is_(True))
             )
             servers = list(result.scalars().all())
         for server in servers:
@@ -585,7 +586,7 @@ class PluginAutoUpdateService:
             result = await db.execute(
                 select(CustomCommand).where(
                     CustomCommand.server_id == server.id,
-                    CustomCommand.id.in_(command_ids),
+                    col(CustomCommand.id).in_(command_ids),
                 )
             )
             by_id = {item.id: item for item in result.scalars().all()}
@@ -753,11 +754,11 @@ class PluginAutoUpdateService:
                 post_update_command_ids = self._normalize_command_ids(
                     getattr(server, "plugin_post_update_command_ids", None)
                 )
-                item_filters = [ManagedPlugin.server_id == server_id]
+                item_filters = [col(ManagedPlugin.server_id) == server_id]
                 if plugin_id is None:
-                    item_filters.append(ManagedPlugin.auto_update_enabled.is_(True))
+                    item_filters.append(col(ManagedPlugin.auto_update_enabled).is_(True))
                 else:
-                    item_filters.append(ManagedPlugin.id == plugin_id)
+                    item_filters.append(col(ManagedPlugin.id) == plugin_id)
                 result = await db.execute(select(ManagedPlugin).where(*item_filters))
                 items = list(result.scalars().all())
                 # A manual per-item test must not postpone the next scheduled
@@ -765,7 +766,7 @@ class PluginAutoUpdateService:
                 if plugin_id is None:
                     await db.execute(
                         sql_update(Server)
-                        .where(Server.id == server_id)
+                        .where(col(Server.id) == server_id)
                         .values(last_plugin_update_check=get_current_time())
                     )
                 await db.commit()
@@ -912,7 +913,7 @@ class PluginAutoUpdateService:
 
             candidates.sort(
                 key=lambda pair: {"metamod": 0, "counterstrikesharp": 1}.get(
-                    pair[0].framework_key, 2
+                    pair[0].framework_key or "", 2
                 )
             )
             # Restart is a batch-level policy for every managed item (ordinary

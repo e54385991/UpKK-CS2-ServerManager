@@ -26,7 +26,7 @@ class ServerStatus(str, enum.Enum):
 class Server(SQLModel, table=True):
     """CS2 Server model"""
 
-    __tablename__ = "servers"
+    __tablename__: ClassVar[str] = "servers"
     __table_args__ = (
         CheckConstraint(
             "auth_type IN ('PASSWORD', 'KEY_FILE')",
@@ -38,7 +38,7 @@ class Server(SQLModel, table=True):
         ),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     name: str = Field(max_length=255, nullable=False, index=True)
     host: str = Field(max_length=255, nullable=False)
@@ -252,11 +252,15 @@ class Server(SQLModel, table=True):
         # Check days since last successful connection
         if self.last_ssh_success:
             last_success = ensure_aware(self.last_ssh_success)
+            if last_success is None:
+                return False
             days_since_success = (now - last_success).days
             return days_since_success >= 3
         elif hasattr(self, "created_at") and self.created_at:
             # Never had success - check age of server
             created = ensure_aware(self.created_at)
+            if created is None:
+                return False
             days_since_creation = (now - created).days
             return days_since_creation >= 3
 
@@ -301,7 +305,7 @@ class Server(SQLModel, table=True):
         result = await session.execute(
             select(cls).where(cls.user_id == user_id).offset(skip).limit(limit)
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     @classmethod
     async def get_all(
@@ -315,7 +319,7 @@ class Server(SQLModel, table=True):
         Never call this method without proper admin authentication.
         """
         result = await session.execute(select(cls).offset(skip).limit(limit))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     @classmethod
     async def get_by_id(cls, session: AsyncSession, server_id: int) -> Optional["Server"]:
@@ -338,23 +342,25 @@ class Server(SQLModel, table=True):
     @classmethod
     async def get_all_with_panel_monitoring(cls, session: AsyncSession) -> List["Server"]:
         """Get all servers with panel monitoring enabled"""
-        result = await session.execute(select(cls).where(cls.enable_panel_monitoring.is_(True)))
-        return result.scalars().all()
+        result = await session.execute(
+            select(cls).where(col(cls.enable_panel_monitoring).is_(True))
+        )
+        return list(result.scalars().all())
 
     @classmethod
     async def get_all_with_auto_update(cls, session: AsyncSession) -> List["Server"]:
         """Get all servers with auto-update enabled"""
-        result = await session.execute(select(cls).where(cls.enable_auto_update.is_(True)))
-        return result.scalars().all()
+        result = await session.execute(select(cls).where(col(cls.enable_auto_update).is_(True)))
+        return list(result.scalars().all())
 
 
 class DeploymentLog(SQLModel, table=True):
     """Deployment log model"""
 
-    __tablename__ = "deployment_logs"
+    __tablename__: ClassVar[str] = "deployment_logs"
     __table_args__ = (Index("ix_deployment_logs_server_created", "server_id", "created_at"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     server_id: int = Field(nullable=False, index=True)
     action: str = Field(max_length=50, nullable=False)
     status: str = Field(max_length=50, nullable=False)
@@ -375,19 +381,19 @@ class DeploymentLog(SQLModel, table=True):
         result = await session.execute(
             select(cls)
             .where(cls.server_id == server_id)
-            .order_by(cls.created_at.desc())
+            .order_by(col(cls.created_at).desc())
             .offset(skip)
             .limit(limit)
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
 
 class MonitoringLog(SQLModel, table=True):
     """Panel monitoring log model - stores monitoring events and auto-restart activities"""
 
-    __tablename__ = "monitoring_logs"
+    __tablename__: ClassVar[str] = "monitoring_logs"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     server_id: int = Field(nullable=False, index=True)
     event_type: str = Field(max_length=50, nullable=False)
     status: str = Field(max_length=50, nullable=False)
@@ -403,7 +409,7 @@ class MonitoringLog(SQLModel, table=True):
 class ScheduledTask(SQLModel, table=True):
     """Scheduled task model for automated server operations"""
 
-    __tablename__ = "scheduled_tasks"
+    __tablename__: ClassVar[str] = "scheduled_tasks"
     __table_args__ = (
         Index(
             "ix_scheduled_tasks_due",
@@ -412,7 +418,7 @@ class ScheduledTask(SQLModel, table=True):
         ),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     server_id: int = Field(
         sa_column=Column(
             Integer, ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True
@@ -475,15 +481,15 @@ class ScheduledTask(SQLModel, table=True):
     ) -> List["ScheduledTask"]:
         """Get all scheduled tasks for a server"""
         result = await session.execute(
-            select(cls).where(cls.server_id == server_id).order_by(cls.id.desc())
+            select(cls).where(cls.server_id == server_id).order_by(col(cls.id).desc())
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
 
 class CustomCommand(SQLModel, table=True):
     """Saved quick command for a server"""
 
-    __tablename__ = "custom_commands"
+    __tablename__: ClassVar[str] = "custom_commands"
     __table_args__ = (
         Index(
             "ix_custom_commands_server_user_created",
@@ -494,7 +500,7 @@ class CustomCommand(SQLModel, table=True):
         ),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     user_id: int = Field(
         sa_column=Column(
             Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
@@ -526,9 +532,9 @@ class CustomCommand(SQLModel, table=True):
         result = await session.execute(
             select(cls)
             .where(cls.server_id == server_id, cls.user_id == user_id)
-            .order_by(cls.created_at.desc(), cls.id.desc())
+            .order_by(col(cls.created_at).desc(), col(cls.id).desc())
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     @classmethod
     async def get_by_id_server_and_user(
@@ -547,10 +553,10 @@ class CustomCommand(SQLModel, table=True):
 class InitializedServer(SQLModel, table=True):
     """Initialized server configuration from setup wizard"""
 
-    __tablename__ = "initialized_servers"
+    __tablename__: ClassVar[str] = "initialized_servers"
     __table_args__ = (Index("ix_initialized_servers_user_created", "user_id", "created_at"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     name: str = Field(max_length=255, nullable=False)
     host: str = Field(max_length=255, nullable=False)
@@ -575,6 +581,6 @@ class InitializedServer(SQLModel, table=True):
     ) -> List["InitializedServer"]:
         """Get all initialized servers for a user"""
         result = await session.execute(
-            select(cls).where(cls.user_id == user_id).order_by(cls.created_at.desc())
+            select(cls).where(cls.user_id == user_id).order_by(col(cls.created_at).desc())
         )
-        return result.scalars().all()
+        return list(result.scalars().all())

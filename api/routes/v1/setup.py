@@ -102,7 +102,7 @@ async def read_manual_setup_script(
         username = validate_cs2_username(cs2_username)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     password = generate_secure_password()
     return ManualSetupScriptView(

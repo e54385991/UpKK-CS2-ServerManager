@@ -11,6 +11,8 @@ import shlex
 from collections.abc import Callable
 from typing import Any, Optional, Protocol, Tuple
 
+from sqlmodel import col
+
 from modules.models import Server
 from services.redis_manager import redis_manager
 
@@ -316,7 +318,7 @@ class SteamInfService:
                     # Only update if the version is different
                     await db.execute(
                         update(ServerModel)
-                        .where(ServerModel.id == server.id)
+                        .where(col(ServerModel.id) == server.id)
                         .values(current_game_version=version)
                     )
                     await db.commit()

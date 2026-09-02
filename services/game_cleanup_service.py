@@ -13,6 +13,11 @@ import posixpath
 import shlex
 from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Tuple
 
+try:
+    from .game_cleanup_delete import CleanupDeleteMixin
+except ImportError:  # compatibility when loaded directly by legacy tests
+    from services.game_cleanup_delete import CleanupDeleteMixin
+
 ARCHIVE_EXTENSIONS = (
     ".tar.gz",
     ".tar.bz2",
@@ -43,7 +48,7 @@ SIZE_TIMEOUT_SECONDS = 15
 STREAM_CHUNK_BYTES = 65536
 
 
-class GameCleanupService:
+class GameCleanupService(CleanupDeleteMixin):
     """Scan and delete approved log, temp, archive, and workshop cleanup items."""
 
     def game_dir(self, server) -> str:
@@ -417,6 +422,45 @@ class GameCleanupService:
             "truncated": False,
         }
 
+    async def _scan_phase_events(
+        self,
+        ssh_manager,
+        server,
+        command: str,
+        category: str,
+        phase: str,
+        *,
+        timeout: int | None = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        events = (
+            self._iter_find_records(ssh_manager, server, command, timeout=timeout)
+            if timeout is not None
+            else self._iter_find_records(ssh_manager, server, command)
+        )
+        async for event in events:
+            kind = event.get("type")
+            if kind == "heartbeat":
+                yield {"type": "heartbeat"}
+            elif kind == "progress":
+                yield {
+                    "type": "batch",
+                    "category": category,
+                    "phase": phase,
+                    "found": int(event.get("found") or 0),
+                    "size": int(event.get("size") or 0),
+                }
+            elif kind == "error":
+                yield {"type": "error", "message": event.get("message")}
+                return
+            elif kind == "complete":
+                yield {
+                    "type": "complete",
+                    "listed": list(event.get("listed") or []),
+                    "found": int(event.get("found") or 0),
+                    "size": int(event.get("size") or 0),
+                    "truncated": bool(event.get("truncated")),
+                }
+
     async def iter_scan(self, ssh_manager, server) -> AsyncIterator[Dict[str, Any]]:
         if self.game_dir(server) in ("", ".", "/"):
             yield {
@@ -478,10 +522,12 @@ class GameCleanupService:
         yield {"type": "phase", "phase": "logs", "message": "Scanning leftover log files"}
         log_records: List[Dict[str, Any]] = []
         log_found = 0
-        async for event in self._iter_find_records(
+        async for event in self._scan_phase_events(
             ssh_manager,
             server,
             self._find_named_files_command(server, LOG_NAME_PATTERNS),
+            "safe",
+            "logs",
         ):
             kind = event.get("type")
             if kind == "heartbeat":
@@ -492,8 +538,8 @@ class GameCleanupService:
                     "type": "batch",
                     "category": "safe",
                     "phase": "logs",
-                    "found": len(safe_items) + int(event.get("found") or 0),
-                    "size": sum(item["size"] for item in safe_items) + int(event.get("size") or 0),
+                    "found": len(safe_items) + int(event["found"]),
+                    "size": sum(item["size"] for item in safe_items) + int(event["size"]),
                 }
                 continue
             if kind == "error":
@@ -526,10 +572,12 @@ class GameCleanupService:
         archive_records: List[Dict[str, Any]] = []
         archive_found = 0
         archive_size = 0
-        async for event in self._iter_find_records(
+        async for event in self._scan_phase_events(
             ssh_manager,
             server,
             self._find_named_files_command(server, ARCHIVE_NAME_PATTERNS),
+            "archive",
+            "archives",
         ):
             kind = event.get("type")
             if kind == "heartbeat":
@@ -540,8 +588,8 @@ class GameCleanupService:
                     "type": "batch",
                     "category": "archive",
                     "phase": "archives",
-                    "found": int(event.get("found") or 0),
-                    "size": int(event.get("size") or 0),
+                    "found": int(event["found"]),
+                    "size": int(event["size"]),
                 }
                 continue
             if kind == "error":
@@ -572,10 +620,12 @@ class GameCleanupService:
         yield {"type": "phase", "phase": "workshop", "message": "Scanning Steam Workshop"}
         workshop_records: List[Dict[str, Any]] = []
         workshop_found = 0
-        async for event in self._iter_find_records(
+        async for event in self._scan_phase_events(
             ssh_manager,
             server,
             self._find_children_command(self.workshop_dir(server)),
+            "workshop",
+            "workshop",
             timeout=CHILD_TIMEOUT_SECONDS,
         ):
             kind = event.get("type")
@@ -587,8 +637,8 @@ class GameCleanupService:
                     "type": "batch",
                     "category": "workshop",
                     "phase": "workshop",
-                    "found": int(event.get("found") or 0),
-                    "size": int(event.get("size") or 0),
+                    "found": int(event["found"]),
+                    "size": int(event["size"]),
                 }
                 continue
             if kind == "error":
@@ -638,201 +688,6 @@ class GameCleanupService:
             if event.get("type") == "done":
                 return True, event.get("data") or self._empty_scan(server), ""
         return False, {}, "Cleanup scan produced no result"
-
-    async def _delete_items(
-        self, ssh_manager, server, items: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        failed_items: List[Dict[str, str]] = []
-        deleted_count = 0
-        freed_bytes_estimate = 0
-
-        for item in self._filter_nested_items(items):
-            path = item["path"]
-            if not self.is_path_safe(server, path) or self.normalize_path(path) == self.game_dir(
-                server
-            ):
-                failed_items.append(
-                    {"path": path, "error": "Path is outside the allowed cleanup scope"}
-                )
-                continue
-            success, error = await ssh_manager.delete_path(path, server)
-            if success:
-                deleted_count += 1
-                freed_bytes_estimate += int(item.get("size") or 0)
-            else:
-                failed_items.append({"path": path, "error": error})
-
-        return {
-            "deleted_count": deleted_count,
-            "freed_bytes_estimate": freed_bytes_estimate,
-            "failed_items": failed_items,
-        }
-
-    async def _collect_safe_items(
-        self, ssh_manager, server
-    ) -> Tuple[bool, List[Dict[str, Any]], str]:
-        items: List[Dict[str, Any]] = []
-        for safe_root, reason in self.safe_roots(server):
-            ok, records, error = await self._scan_direct_children(ssh_manager, server, safe_root)
-            if not ok:
-                return False, [], error
-            items.extend(
-                self._with_category(record, "safe", reason, "safe")
-                for record in records
-                if not self.is_workshop_path(server, record["path"])
-                or self.is_workshop_temp_path(server, record["path"])
-            )
-        ok, log_records, error = await self._find_records(
-            ssh_manager,
-            server,
-            self._find_named_files_command(server, LOG_NAME_PATTERNS),
-        )
-        if not ok:
-            return False, [], error
-        safe_root_paths = [root for root, _ in self.safe_roots(server)]
-        items.extend(
-            self._with_category(record, "safe", "Game log file", "safe")
-            for record in log_records
-            if record["type"] == "file"
-            and not any(self.is_under(root, record["path"]) for root in safe_root_paths)
-            and not self.is_workshop_path(server, record["path"])
-        )
-        return True, self._filter_nested_items(items), ""
-
-    def _archive_items_from_paths(
-        self, server, paths: Iterable[str]
-    ) -> Tuple[List[Dict[str, Any]], List[str]]:
-        items: List[Dict[str, Any]] = []
-        invalid: List[str] = []
-        for raw in paths:
-            path = self.normalize_path(raw)
-            if (
-                not path
-                or not self.is_path_safe(server, path)
-                or not self.is_archive_path(path)
-                or self.is_workshop_path(server, path)
-            ):
-                invalid.append(path or raw)
-                continue
-            items.append(
-                self._with_category(
-                    {
-                        "path": path,
-                        "name": posixpath.basename(path),
-                        "type": "file",
-                        "size": 0,
-                        "modified": 0.0,
-                    },
-                    "archive",
-                    "Common leftover archive file",
-                    "confirm",
-                )
-            )
-        return items, invalid
-
-    async def delete(
-        self,
-        ssh_manager,
-        server,
-        mode: str,
-        paths: Optional[List[str]] = None,
-        confirmation_text: Optional[str] = None,
-    ) -> Tuple[bool, Dict[str, Any], str]:
-        success, message = await self._ensure_connected(ssh_manager, server)
-        if not success:
-            return False, {}, f"Connection failed: {message}"
-
-        if mode == "safe":
-            ok, items, error = await self._collect_safe_items(ssh_manager, server)
-            if not ok:
-                return False, {}, error
-        elif mode == "archives":
-            items, invalid_paths = self._archive_items_from_paths(server, paths or [])
-            if not items and not (paths or []):
-                return False, {}, "Please select at least one archive to delete."
-            if invalid_paths:
-                return (
-                    False,
-                    {},
-                    f"One or more selected archives are no longer valid cleanup candidates: {', '.join(invalid_paths[:3])}",
-                )
-        elif mode == "workshop":
-            if confirmation_text != WORKSHOP_CONFIRMATION_TEXT:
-                return False, {}, f"Confirmation text must be {WORKSHOP_CONFIRMATION_TEXT}."
-            ok, records, error = await self._scan_direct_children(
-                ssh_manager, server, self.workshop_dir(server)
-            )
-            if not ok:
-                return False, {}, error
-            items = [
-                self._with_category(record, "workshop", "Steam Workshop content", "danger")
-                for record in records
-            ]
-        else:
-            return False, {}, "Invalid cleanup mode."
-
-        result = await self._delete_items(ssh_manager, server, items)
-        failed_count = len(result["failed_items"])
-        if failed_count:
-            message = f"Deleted {result['deleted_count']} item(s), {failed_count} item(s) failed."
-        else:
-            message = f"Deleted {result['deleted_count']} item(s)."
-        result.update(
-            {
-                "success": failed_count == 0,
-                "message": message,
-            }
-        )
-        return failed_count == 0, result, ""
-
-    async def purge_old_logs(
-        self,
-        ssh_manager,
-        server,
-        retain_days: int,
-    ) -> Tuple[bool, Dict[str, Any], str]:
-        """Delete files older than ``retain_days`` under approved log roots only."""
-        days = max(1, min(int(retain_days), 90))
-        if self.game_dir(server) in ("", ".", "/"):
-            return False, {}, "Server game directory is not safe for cleanup scanning."
-
-        success, message = await self._ensure_connected(ssh_manager, server)
-        if not success:
-            return False, {}, f"Connection failed: {message}"
-
-        items: List[Dict[str, Any]] = []
-        for root, reason in self.safe_roots(server):
-            quoted = shlex.quote(root)
-            command = (
-                f"if [ -d {quoted} ]; then "
-                f"find {quoted} -type f -mtime +{days} -printf '%y\\t%s\\t%T@\\t%p\\0'; "
-                "fi"
-            )
-            ok, records, error = await self._find_records(ssh_manager, server, command)
-            if not ok:
-                return False, {}, error
-            items.extend(
-                self._with_category(record, "safe", reason, "safe")
-                for record in records
-                if record["type"] == "file" and self.is_under(root, record["path"])
-            )
-
-        result = await self._delete_items(ssh_manager, server, items)
-        failed_count = len(result["failed_items"])
-        result.update(
-            {
-                "success": failed_count == 0,
-                "message": (
-                    f"Deleted {result['deleted_count']} old log file(s)."
-                    if not failed_count
-                    else (
-                        f"Deleted {result['deleted_count']} old log file(s), "
-                        f"{failed_count} item(s) failed."
-                    )
-                ),
-            }
-        )
-        return failed_count == 0, result, ""
 
 
 game_cleanup_service = GameCleanupService()

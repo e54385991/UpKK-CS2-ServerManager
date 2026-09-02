@@ -21,7 +21,7 @@ DEFAULT_AGENT_CAPABILITIES = [
 class UserDiscordBot(SQLModel, table=True):
     """One encrypted Discord Bot credential per panel user."""
 
-    __tablename__ = "user_discord_bots"
+    __tablename__: ClassVar[str] = "user_discord_bots"
     __table_args__ = (
         CheckConstraint(
             "message_trigger_mode IN ('mention_only', 'mention_and_greetings')",
@@ -67,7 +67,7 @@ class UserDiscordBot(SQLModel, table=True):
 class ServerDiscordBinding(SQLModel, table=True):
     """Discord Guild/channel allowlist and direct command capabilities for a server."""
 
-    __tablename__ = "server_discord_bindings"
+    __tablename__: ClassVar[str] = "server_discord_bindings"
 
     server_id: int = Field(
         sa_column=Column(Integer, ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
@@ -99,7 +99,7 @@ class ServerDiscordBinding(SQLModel, table=True):
 class ServerAgentPolicy(SQLModel, table=True):
     """Effective AI capabilities shared by Web and Discord for one server."""
 
-    __tablename__ = "server_agent_policies"
+    __tablename__: ClassVar[str] = "server_agent_policies"
 
     server_id: int = Field(
         sa_column=Column(Integer, ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
@@ -121,7 +121,7 @@ class ServerAgentPolicy(SQLModel, table=True):
 class DiscordOperationRun(SQLModel, table=True):
     """Immutable Discord confirmation, idempotency, and execution audit record."""
 
-    __tablename__ = "discord_operation_runs"
+    __tablename__: ClassVar[str] = "discord_operation_runs"
     __table_args__ = (
         Index("ix_discord_operation_runs_actor_created", "actor_user_id", "created_at"),
         Index("ix_discord_operation_runs_server_created", "server_id", "created_at"),

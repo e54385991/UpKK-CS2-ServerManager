@@ -93,11 +93,30 @@ def _plugin_value(value: object) -> bool | int | float | str:
     return "" if value is None else str(value)
 
 
+def _as_dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _as_int(value: object, default: int) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float, str)):
+        try:
+            return int(value)
+        except TypeError, ValueError:
+            return default
+    return default
+
+
 def _plugin_config(raw: dict[str, object] | None) -> MapPluginConfigView | None:
     if not raw:
         return None
     fields: list[MapPluginFieldView] = []
-    for item in raw.get("fields") or []:
+    for item in _as_list(raw.get("fields")):
         if not isinstance(item, dict):
             continue
         fields.append(
@@ -109,12 +128,13 @@ def _plugin_config(raw: dict[str, object] | None) -> MapPluginConfigView | None:
                 known=bool(item.get("known", True)),
             )
         )
+    config_error = raw.get("config_error")
     return MapPluginConfigView(
         revision=str(raw.get("revision") or ""),
         file_exists=bool(raw.get("plugin_config_file_exists", raw.get("file_exists", False))),
         fields=fields,
-        unsupported_fields=[str(item) for item in raw.get("unsupported_fields") or []],
-        config_error=raw.get("config_error") if isinstance(raw.get("config_error"), str) else None,
+        unsupported_fields=[str(item) for item in _as_list(raw.get("unsupported_fields"))],
+        config_error=config_error if isinstance(config_error, str) else None,
     )
 
 
@@ -124,7 +144,7 @@ def _maybe_dt(value: object) -> datetime | None:
 
 def _sync_view(raw: dict[str, object]) -> MapSyncView:
     try:
-        interval = int(raw.get("interval_seconds") or 300)
+        interval = _as_int(raw.get("interval_seconds"), 300)
     except TypeError, ValueError:
         interval = 300
     return MapSyncView(
@@ -135,7 +155,7 @@ def _sync_view(raw: dict[str, object]) -> MapSyncView:
         next_run=_maybe_dt(raw.get("next_run")),
         last_status=str(raw["last_status"]) if raw.get("last_status") else None,
         last_error=str(raw["last_error"]) if raw.get("last_error") else None,
-        run_count=int(raw.get("run_count") or 0),
+        run_count=_as_int(raw.get("run_count"), 0),
     )
 
 
@@ -160,6 +180,7 @@ def _workspace(
     message: str | None = None,
 ) -> MapsWorkspaceView:
     data = payload or {}
+    config_error = data.get("config_error")
     return MapsWorkspaceView(
         server_id=server_id,
         ssh_ok=ssh_ok,
@@ -176,11 +197,9 @@ def _workspace(
         plugin_center_name=str(data["plugin_center_name"])
         if data.get("plugin_center_name")
         else None,
-        maps=[_entry(item) for item in data.get("maps") or [] if isinstance(item, dict)],
+        maps=[_entry(item) for item in _as_list(data.get("maps")) if isinstance(item, dict)],
         revision=str(data["revision"]) if data.get("revision") else None,
-        config_error=data.get("config_error")
-        if isinstance(data.get("config_error"), str)
-        else None,
+        config_error=config_error if isinstance(config_error, str) else None,
         plugin_config=_plugin_config(plugin_config),
         custom_sync=sync,
         message=message or (str(data["message"]) if data.get("message") else None),
@@ -530,7 +549,7 @@ async def run_custom_sync(
     await _audit_maps("config.maps.custom_sync_run", current_user, request, server_id)
     return _workspace(
         server_id,
-        sync=_sync_view(payload.get("custom_sync") or {}),
+        sync=_sync_view(_as_dict(payload.get("custom_sync"))),
         ssh_ok=True,
         payload=payload,
         message=str(payload.get("message") or ""),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json
 import logging
@@ -14,7 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-import anyio
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -238,7 +238,7 @@ async def validate_provider_endpoint(base_url: str, allowlist: list[str] | tuple
         raise AIConfigurationError("Public AI endpoints must use HTTPS")
     port = parsed.port or 443
     try:
-        addresses = await anyio.to_thread.run_sync(_host_addresses, parsed.hostname or "", port)
+        addresses = await asyncio.to_thread(_host_addresses, parsed.hostname or "", port)
     except OSError as exc:
         raise AIConfigurationError("AI endpoint hostname could not be resolved") from exc
     if not addresses or any(not address.is_global for address in addresses):

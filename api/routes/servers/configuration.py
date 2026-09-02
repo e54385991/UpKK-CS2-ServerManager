@@ -19,6 +19,35 @@ custom_commands_router = APIRouter(prefix="/servers", tags=["servers"])
 startup_router = APIRouter(prefix="/servers", tags=["servers"])
 
 
+def _apply_discord_fields(
+    server,
+    update_data: dict,
+    *,
+    clear_webhook: bool,
+    new_webhook: str | None,
+) -> None:
+    if clear_webhook:
+        server.discord_webhook_url = None
+    elif new_webhook:
+        server.discord_webhook_url = new_webhook
+    for field in (
+        "discord_notifications_enabled",
+        "discord_notify_auto_updates",
+        "discord_notify_manual_updates",
+        "discord_notify_plugin_updates",
+        "discord_notify_s3_backups",
+        "discord_notify_crash_restarts",
+    ):
+        if field in update_data:
+            setattr(server, field, bool(update_data[field]))
+    if "discord_channel_name" in update_data:
+        server.discord_channel_name = update_data["discord_channel_name"]
+    if "discord_crash_restart_min_interval_minutes" in update_data:
+        server.discord_crash_restart_min_interval_minutes = int(
+            update_data["discord_crash_restart_min_interval_minutes"] or 10
+        )
+
+
 @discord_router.get("/{server_id}/discord-settings", response_model=DiscordSettingsResponse)
 async def get_discord_settings(
     server_id: int,
@@ -64,29 +93,12 @@ async def update_discord_settings(
             detail="Discord webhook URL is required before enabling notifications",
         )
 
-    if settings_data.clear_webhook:
-        server.discord_webhook_url = None
-    elif new_webhook:
-        server.discord_webhook_url = new_webhook
-
-    if "discord_notifications_enabled" in update_data:
-        server.discord_notifications_enabled = bool(update_data["discord_notifications_enabled"])
-    if "discord_channel_name" in update_data:
-        server.discord_channel_name = update_data["discord_channel_name"]
-    if "discord_notify_auto_updates" in update_data:
-        server.discord_notify_auto_updates = bool(update_data["discord_notify_auto_updates"])
-    if "discord_notify_manual_updates" in update_data:
-        server.discord_notify_manual_updates = bool(update_data["discord_notify_manual_updates"])
-    if "discord_notify_plugin_updates" in update_data:
-        server.discord_notify_plugin_updates = bool(update_data["discord_notify_plugin_updates"])
-    if "discord_notify_s3_backups" in update_data:
-        server.discord_notify_s3_backups = bool(update_data["discord_notify_s3_backups"])
-    if "discord_notify_crash_restarts" in update_data:
-        server.discord_notify_crash_restarts = bool(update_data["discord_notify_crash_restarts"])
-    if "discord_crash_restart_min_interval_minutes" in update_data:
-        server.discord_crash_restart_min_interval_minutes = int(
-            update_data["discord_crash_restart_min_interval_minutes"] or 10
-        )
+    _apply_discord_fields(
+        server,
+        update_data,
+        clear_webhook=settings_data.clear_webhook,
+        new_webhook=new_webhook,
+    )
 
     await db.commit()
     await db.refresh(server)
@@ -288,7 +300,7 @@ async def get_startup_command(
         additional_parameters = normalize_additional_parameters(server.additional_parameters)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Invalid startup configuration: {exc}",
         ) from exc
     max_players = server.max_players or 32

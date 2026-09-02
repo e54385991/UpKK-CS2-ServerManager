@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import math
@@ -15,7 +16,7 @@ from datetime import datetime
 import discord
 from discord import app_commands
 from sqlalchemy import func
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.database import async_session_maker
 from modules.models import (
@@ -144,7 +145,9 @@ async def _edit_webhook_message(message: object, **kwargs) -> bool:
     if not callable(edit):
         return False
     try:
-        await edit(**kwargs)
+        result = edit(**kwargs)
+        if inspect.isawaitable(result):
+            await result
         return True
     except discord.HTTPException as exc:
         if not _is_unknown_discord_resource(exc):
@@ -548,7 +551,7 @@ class ManagedDiscordClient(discord.Client):
             result = await db.execute(
                 select(ServerDiscordBinding).where(
                     ServerDiscordBinding.user_id == self.owner_user_id,
-                    ServerDiscordBinding.enabled.is_(True),
+                    col(ServerDiscordBinding.enabled).is_(True),
                 )
             )
             bindings = list(result.scalars().all())
@@ -887,7 +890,7 @@ class DiscordBotManager:
                 select(ServerDiscordBinding).where(
                     ServerDiscordBinding.user_id == user_id,
                     ServerDiscordBinding.guild_id == guild_id,
-                    ServerDiscordBinding.invalid_reason.in_(
+                    col(ServerDiscordBinding.invalid_reason).in_(
                         ["bot_not_in_guild", "command_sync_failed", "bot_token_missing"]
                     ),
                 )
@@ -1048,6 +1051,8 @@ class DiscordBotManager:
         server: Server,
         prompt: str,
     ) -> None:
+        if message.guild is None:
+            return
         progress_message = await message.reply(
             embed=discord.Embed(
                 title=f"AI Agent · {server.name}",
@@ -1543,7 +1548,7 @@ class DiscordBotManager:
                 result = await db.execute(
                     select(ManagedPlugin)
                     .where(ManagedPlugin.server_id == server.id)
-                    .order_by(ManagedPlugin.display_name.asc())
+                    .order_by(col(ManagedPlugin.display_name).asc())
                 )
                 plugins = list(result.scalars().all())
             lines = [
@@ -1805,7 +1810,7 @@ class DiscordBotManager:
             result = await db.execute(
                 select(ManagedPlugin)
                 .where(ManagedPlugin.server_id == server.id)
-                .order_by(ManagedPlugin.display_name.asc(), ManagedPlugin.id.asc())
+                .order_by(col(ManagedPlugin.display_name).asc(), col(ManagedPlugin.id).asc())
                 .offset(page * PLUGIN_PAGE_SIZE)
                 .limit(PLUGIN_PAGE_SIZE)
             )

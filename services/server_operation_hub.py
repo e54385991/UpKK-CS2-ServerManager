@@ -105,7 +105,9 @@ class ServerOperationHub:
             if busy and len(pending) >= MAX_PENDING_PER_SERVER:
                 raise ServerOperationConflict(
                     "Too many queued operations on this server",
-                    operation_id=str(current.get("operation_id") or "") or None,
+                    operation_id=(str(current.get("operation_id") or "") or None)
+                    if current
+                    else None,
                 )
             operation_id = str(uuid.uuid4())
             record = {

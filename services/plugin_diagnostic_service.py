@@ -14,7 +14,7 @@ from datetime import timedelta
 from typing import Any, Awaitable, Callable, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.models import (
     ManagedPlugin,
@@ -145,6 +145,28 @@ def _plugin_alias(value: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", "", (value or "").casefold())
 
 
+def _link_managed_plugins(
+    managed: list[ManagedPlugin], candidate_aliases: dict[str, set[str]]
+) -> dict[int, str]:
+    links: dict[int, str] = {}
+    for plugin in managed:
+        if plugin.id is None or plugin.market_plugin_id is None:
+            continue
+        aliases = {
+            _plugin_alias(plugin.display_name),
+            _plugin_alias((plugin.repo_url or "").rstrip("/").rsplit("/", 1)[-1]),
+            _plugin_alias(posixpath.basename(plugin.custom_install_path or "")),
+        }
+        aliases.discard("")
+        match = next(
+            (key for key, values in candidate_aliases.items() if aliases & values),
+            None,
+        )
+        if match is not None:
+            links[plugin.market_plugin_id] = match
+    return links
+
+
 async def _group_candidates(
     db: AsyncSession, server_id: int, candidates: list[dict[str, str]]
 ) -> list[dict[str, Any]]:
@@ -173,23 +195,7 @@ async def _group_candidates(
         }
         for item in candidates
     }
-    market_to_candidate: dict[int, str] = {}
-    for plugin in managed:
-        if plugin.id is None:
-            continue
-        aliases = {
-            _plugin_alias(plugin.display_name),
-            _plugin_alias((plugin.repo_url or "").rstrip("/").rsplit("/", 1)[-1]),
-            _plugin_alias(posixpath.basename(plugin.custom_install_path or "")),
-        }
-        aliases.discard("")
-        match = next(
-            (key for key, values in candidate_aliases.items() if aliases & values),
-            None,
-        )
-        if match is not None:
-            if plugin.market_plugin_id is not None:
-                market_to_candidate[plugin.market_plugin_id] = match
+    market_to_candidate = _link_managed_plugins(managed, candidate_aliases)
 
     market_ids = sorted(market_to_candidate)
     if market_ids:
@@ -292,8 +298,8 @@ async def get_latest_diagnostic_run(db: AsyncSession, user: User, server_id: int
         select(PluginDiagnosticRun)
         .where(PluginDiagnosticRun.server_id == server_id)
         .order_by(
-            PluginDiagnosticRun.created_at.desc(),
-            PluginDiagnosticRun.id.desc(),
+            col(PluginDiagnosticRun.created_at).desc(),
+            col(PluginDiagnosticRun.id).desc(),
         )
         .limit(1)
     )
@@ -481,13 +487,151 @@ _DIAGNOSTIC_PHASE_MESSAGES = {
 async def _emit_readable_progress(progress, phase, enabled_keys):
     if progress is None:
         return
-    message = _DIAGNOSTIC_PHASE_MESSAGES.get(phase, phase)
+    message = str(_DIAGNOSTIC_PHASE_MESSAGES.get(phase, phase))
     if enabled_keys:
         message += ": " + ", ".join(enabled_keys)
     await progress(
         "diagnostic_progress",
         {"phase": phase, "enabled": enabled_keys, "message": message},
     )
+
+
+def _expand_groups(groups: dict[str, list[str]], group_keys: list[str]) -> list[str]:
+    return [candidate for group_key in group_keys for candidate in groups[group_key]]
+
+
+async def _run_group_isolation(
+    db: AsyncSession,
+    user: User,
+    server: Server,
+    manager: SSHManager,
+    run: PluginDiagnosticRun,
+    entries: dict[str, PluginQuarantineEntry],
+    groups: dict[str, list[str]],
+    started: float,
+    progress: Progress | None,
+) -> str:
+    remaining_groups = list(groups)
+    while len(remaining_groups) > 1:
+        if time.monotonic() - started > MAX_DURATION_SECONDS:
+            raise RuntimeError("Diagnostic duration limit reached")
+        group = remaining_groups[: max(1, len(remaining_groups) // 2)]
+        group_candidates = _expand_groups(groups, group)
+        await authorized_server(db, user, server.id)
+        await _set_candidates(
+            db, manager, server, user, entries, group_candidates, quarantine=False
+        )
+        healthy = await _health_attempt(
+            db, run, server, manager, "group_isolation", group_candidates, progress
+        )
+        await manager.stop_server(server)
+        await _set_candidates(db, manager, server, user, entries, group_candidates, quarantine=True)
+        remaining_groups = remaining_groups[len(group) :] if healthy else group
+    return remaining_groups[0]
+
+
+async def _run_strict_fallback(
+    db: AsyncSession,
+    user: User,
+    server: Server,
+    manager: SSHManager,
+    run: PluginDiagnosticRun,
+    entries: dict[str, PluginQuarantineEntry],
+    groups: dict[str, list[str]],
+    suspect_group: str,
+    keys: list[str],
+    started: float,
+    progress: Progress | None,
+) -> None:
+    await manager.stop_server(server)
+    await _set_candidates(db, manager, server, user, entries, keys, quarantine=True)
+    safe_groups: list[str] = []
+    additional_culprits: list[str] = []
+    for group_key, candidate_keys in groups.items():
+        if group_key == suspect_group or run.start_attempts >= MAX_START_ATTEMPTS - 1:
+            continue
+        if time.monotonic() - started > MAX_DURATION_SECONDS:
+            break
+        await authorized_server(db, user, server.id)
+        await _set_candidates(db, manager, server, user, entries, candidate_keys, quarantine=False)
+        healthy = await _health_attempt(
+            db, run, server, manager, "strict_individual_fallback", candidate_keys, progress
+        )
+        await manager.stop_server(server)
+        await _set_candidates(db, manager, server, user, entries, candidate_keys, quarantine=True)
+        if healthy:
+            safe_groups.append(group_key)
+            continue
+        additional_culprits.extend(candidate_keys)
+        for candidate_key in candidate_keys:
+            entries[candidate_key].is_culprit = True
+            db.add(entries[candidate_key])
+    restored_candidates = _expand_groups(groups, safe_groups)
+    await _set_candidates(db, manager, server, user, entries, restored_candidates, quarantine=False)
+    run.culprit_keys = sorted(set(run.culprit_keys or []) | set(additional_culprits))
+    fallback_healthy = False
+    if run.start_attempts < MAX_START_ATTEMPTS:
+        fallback_healthy = await _health_attempt(
+            db, run, server, manager, "multi_fault_final_state", restored_candidates, progress
+        )
+    if fallback_healthy and additional_culprits:
+        run.status = "completed_with_quarantine"
+        return
+    await manager.stop_server(server)
+    await _set_candidates(db, manager, server, user, entries, restored_candidates, quarantine=True)
+    if run.start_attempts < MAX_START_ATTEMPTS:
+        await _health_attempt(
+            db, run, server, manager, "safe_all_plugins_quarantined", [], progress
+        )
+    run.status = "inconclusive"
+    run.error = (
+        "The strict fallback did not produce a stable final set; all candidates remain isolated"
+    )
+
+
+async def _run_suspect_analysis(
+    db: AsyncSession,
+    user: User,
+    server: Server,
+    manager: SSHManager,
+    run: PluginDiagnosticRun,
+    entries: dict[str, PluginQuarantineEntry],
+    groups: dict[str, list[str]],
+    suspect_group: str,
+    keys: list[str],
+    started: float,
+    progress: Progress | None,
+) -> None:
+    suspect_candidates = groups[suspect_group]
+    await authorized_server(db, user, server.id)
+    await _set_candidates(db, manager, server, user, entries, suspect_candidates, quarantine=False)
+    suspect_healthy = await _health_attempt(
+        db, run, server, manager, "individual_confirmation", suspect_candidates, progress
+    )
+    await manager.stop_server(server)
+    await _set_candidates(db, manager, server, user, entries, suspect_candidates, quarantine=True)
+    if suspect_healthy:
+        run.status = "inconclusive"
+        run.error = "The suspected plugin group did not reproduce the crash by itself"
+        final_keys: list[str] = []
+    else:
+        for candidate_key in suspect_candidates:
+            entries[candidate_key].is_culprit = True
+            db.add(entries[candidate_key])
+        run.culprit_keys = list(suspect_candidates)
+        final_keys = [key for key in keys if key not in suspect_candidates]
+    await _set_candidates(db, manager, server, user, entries, final_keys, quarantine=False)
+    final_healthy = await _health_attempt(
+        db, run, server, manager, "final_restored_state", final_keys, progress
+    )
+    if final_healthy and run.culprit_keys:
+        run.status = "completed_with_quarantine"
+    elif final_healthy:
+        run.status = "inconclusive"
+    else:
+        await _run_strict_fallback(
+            db, user, server, manager, run, entries, groups, suspect_group, keys, started, progress
+        )
 
 
 async def execute_diagnostic_plan(
@@ -612,168 +756,22 @@ async def execute_diagnostic_plan(
             groups = {
                 item["key"]: list(item["candidate_keys"]) for item in plan["candidate_groups"]
             }
-
-            def expand(group_keys: list[str]) -> list[str]:
-                return [candidate for group_key in group_keys for candidate in groups[group_key]]
-
-            remaining_groups = list(groups)
-            while len(remaining_groups) > 1:
-                if time.monotonic() - started > MAX_DURATION_SECONDS:
-                    raise RuntimeError("Diagnostic duration limit reached")
-                group = remaining_groups[: max(1, len(remaining_groups) // 2)]
-                group_candidates = expand(group)
-                await authorized_server(db, user, server.id)
-                await _set_candidates(
-                    db, manager, server, user, entries, group_candidates, quarantine=False
-                )
-                healthy = await _health_attempt(
-                    db,
-                    run,
-                    server,
-                    manager,
-                    "group_isolation",
-                    group_candidates,
-                    progress,
-                )
-                await manager.stop_server(server)
-                await _set_candidates(
-                    db, manager, server, user, entries, group_candidates, quarantine=True
-                )
-                remaining_groups = remaining_groups[len(group) :] if healthy else group
-
-            suspect_group = remaining_groups[0]
-            suspect_candidates = groups[suspect_group]
-            await authorized_server(db, user, server.id)
-            await _set_candidates(
-                db, manager, server, user, entries, suspect_candidates, quarantine=False
+            suspect_group = await _run_group_isolation(
+                db, user, server, manager, run, entries, groups, started, progress
             )
-            suspect_healthy = await _health_attempt(
+            await _run_suspect_analysis(
                 db,
-                run,
+                user,
                 server,
                 manager,
-                "individual_confirmation",
-                suspect_candidates,
-                progress,
-            )
-            await manager.stop_server(server)
-            await _set_candidates(
-                db, manager, server, user, entries, suspect_candidates, quarantine=True
-            )
-            if suspect_healthy:
-                run.status = "inconclusive"
-                run.error = "The suspected plugin group did not reproduce the crash by itself"
-                final_keys: list[str] = []
-            else:
-                for candidate_key in suspect_candidates:
-                    entries[candidate_key].is_culprit = True
-                    db.add(entries[candidate_key])
-                run.culprit_keys = list(suspect_candidates)
-                final_keys = [key for key in keys if key not in suspect_candidates]
-
-            await _set_candidates(db, manager, server, user, entries, final_keys, quarantine=False)
-            final_healthy = await _health_attempt(
-                db,
                 run,
-                server,
-                manager,
-                "final_restored_state",
-                final_keys,
+                entries,
+                groups,
+                suspect_group,
+                keys,
+                started,
                 progress,
             )
-            if final_healthy and run.culprit_keys:
-                run.status = "completed_with_quarantine"
-            elif final_healthy:
-                run.status = "inconclusive"
-            else:
-                await manager.stop_server(server)
-                await _set_candidates(
-                    db, manager, server, user, entries, final_keys, quarantine=True
-                )
-                safe_groups: list[str] = []
-                additional_culprits: list[str] = []
-                for group_key, candidate_keys in groups.items():
-                    if group_key == suspect_group:
-                        continue
-                    if (
-                        run.start_attempts >= MAX_START_ATTEMPTS - 1
-                        or time.monotonic() - started > MAX_DURATION_SECONDS
-                    ):
-                        break
-                    await authorized_server(db, user, server.id)
-                    await _set_candidates(
-                        db, manager, server, user, entries, candidate_keys, quarantine=False
-                    )
-                    individually_healthy = await _health_attempt(
-                        db,
-                        run,
-                        server,
-                        manager,
-                        "strict_individual_fallback",
-                        candidate_keys,
-                        progress,
-                    )
-                    await manager.stop_server(server)
-                    await _set_candidates(
-                        db, manager, server, user, entries, candidate_keys, quarantine=True
-                    )
-                    if individually_healthy:
-                        safe_groups.append(group_key)
-                    else:
-                        additional_culprits.extend(candidate_keys)
-                        for candidate_key in candidate_keys:
-                            entries[candidate_key].is_culprit = True
-                            db.add(entries[candidate_key])
-                restored_candidates = expand(safe_groups)
-                await _set_candidates(
-                    db,
-                    manager,
-                    server,
-                    user,
-                    entries,
-                    restored_candidates,
-                    quarantine=False,
-                )
-                run.culprit_keys = sorted(set(run.culprit_keys or []) | set(additional_culprits))
-                fallback_healthy = False
-                if run.start_attempts < MAX_START_ATTEMPTS:
-                    fallback_healthy = await _health_attempt(
-                        db,
-                        run,
-                        server,
-                        manager,
-                        "multi_fault_final_state",
-                        restored_candidates,
-                        progress,
-                    )
-                if fallback_healthy and additional_culprits:
-                    run.status = "completed_with_quarantine"
-                else:
-                    await manager.stop_server(server)
-                    await _set_candidates(
-                        db,
-                        manager,
-                        server,
-                        user,
-                        entries,
-                        restored_candidates,
-                        quarantine=True,
-                    )
-                    if run.start_attempts < MAX_START_ATTEMPTS:
-                        await _health_attempt(
-                            db,
-                            run,
-                            server,
-                            manager,
-                            "safe_all_plugins_quarantined",
-                            [],
-                            progress,
-                        )
-                    run.status = "inconclusive"
-                    run.error = (
-                        "The strict fallback did not produce a stable final set; all candidates "
-                        "remain isolated"
-                    )
             run.completed_at = get_current_time()
             db.add(run)
             await db.commit()
@@ -793,12 +791,12 @@ async def diagnostic_run_payload(db: AsyncSession, run: PluginDiagnosticRun) -> 
     steps_result = await db.execute(
         select(PluginDiagnosticStep)
         .where(PluginDiagnosticStep.diagnostic_run_id == run.id)
-        .order_by(PluginDiagnosticStep.sequence.asc())
+        .order_by(col(PluginDiagnosticStep.sequence).asc())
     )
     quarantine_result = await db.execute(
         select(PluginQuarantineEntry)
         .where(PluginQuarantineEntry.diagnostic_run_id == run.id)
-        .order_by(PluginQuarantineEntry.id.asc())
+        .order_by(col(PluginQuarantineEntry.id).asc())
     )
     return {
         "id": run.id,
@@ -869,7 +867,7 @@ async def restore_diagnostic_run(
         entries_result = await db.execute(
             select(PluginQuarantineEntry).where(
                 PluginQuarantineEntry.diagnostic_run_id == run.id,
-                PluginQuarantineEntry.is_quarantined.is_(True),
+                col(PluginQuarantineEntry.is_quarantined).is_(True),
             )
         )
         entries = list(entries_result.scalars().all())
@@ -905,7 +903,7 @@ async def interrupt_active_plugin_diagnostics() -> int:
     async with async_session_maker() as db:
         result = await db.execute(
             select(PluginDiagnosticRun).where(
-                PluginDiagnosticRun.status.in_(ACTIVE_DIAGNOSTIC_STATUSES)
+                col(PluginDiagnosticRun.status).in_(ACTIVE_DIAGNOSTIC_STATUSES)
             )
         )
         runs = list(result.scalars().all())

@@ -3,6 +3,7 @@
 # ruff: noqa: F403,F405
 
 import uuid
+from typing import Self
 
 from .common import *
 
@@ -22,13 +23,13 @@ class PluginCategory(str, enum.Enum):
 class PluginConflictRule(SQLModel, table=True):
     """A symmetric compatibility rule between two market plugins."""
 
-    __tablename__ = "plugin_conflict_rules"
+    __tablename__: ClassVar[str] = "plugin_conflict_rules"
     __table_args__ = (
         UniqueConstraint("plugin_a_id", "plugin_b_id", name="uq_plugin_conflict_pair"),
         CheckConstraint("plugin_a_id < plugin_b_id", name="ck_plugin_conflict_canonical_pair"),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     plugin_a_id: int = Field(
         sa_column=Column(
             Integer,
@@ -60,7 +61,7 @@ class PluginConflictRule(SQLModel, table=True):
 class MarketPlugin(SQLModel, table=True):
     """Plugin market model - stores plugins available for installation"""
 
-    __tablename__ = "market_plugins"
+    __tablename__: ClassVar[str] = "market_plugins"
     __table_args__ = (
         CheckConstraint(
             "category IN ('GAME_MODE', 'ENTERTAINMENT', 'UTILITY', 'ADMIN', "
@@ -69,7 +70,7 @@ class MarketPlugin(SQLModel, table=True):
         ),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     github_url: str = Field(max_length=500, nullable=False, unique=True, index=True)
     title: str = Field(max_length=255, nullable=False, index=True)
     description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
@@ -121,7 +122,7 @@ class MarketPlugin(SQLModel, table=True):
         unique_ids = list(dict.fromkeys(plugin_ids))
         if not unique_ids:
             return []
-        result = await session.execute(select(cls).where(cls.id.in_(unique_ids)))
+        result = await session.execute(select(cls).where(col(cls.id).in_(unique_ids)))
         return list(result.scalars().all())
 
     @classmethod
@@ -140,7 +141,7 @@ class MarketPlugin(SQLModel, table=True):
         search_query: Optional[str] = None,
         skip: int = 0,
         limit: int = 20,
-    ) -> tuple[List["MarketPlugin"], int]:
+    ) -> tuple[list[Self], int]:
         """
         Search plugins with filters and pagination.
         Returns tuple of (plugins, total_count)
@@ -160,9 +161,9 @@ class MarketPlugin(SQLModel, table=True):
         if search_query and search_query.strip():
             search_pattern = f"%{search_query.strip()}%"
             search_condition = or_(
-                cls.title.ilike(search_pattern),
-                cls.description.ilike(search_pattern),
-                cls.author.ilike(search_pattern),
+                col(cls.title).ilike(search_pattern),
+                col(cls.description).ilike(search_pattern),
+                col(cls.author).ilike(search_pattern),
             )
             query = query.where(search_condition)
             count_query = count_query.where(search_condition)
@@ -173,7 +174,9 @@ class MarketPlugin(SQLModel, table=True):
 
         # Apply ordering (recommended first, then by install count)
         query = query.order_by(
-            cls.is_recommended.desc(), cls.install_count.desc(), cls.created_at.desc()
+            col(cls.is_recommended).desc(),
+            col(cls.install_count).desc(),
+            col(cls.created_at).desc(),
         )
 
         # Apply pagination
@@ -181,20 +184,20 @@ class MarketPlugin(SQLModel, table=True):
 
         # Execute query
         result = await session.execute(query)
-        plugins = result.scalars().all()
+        plugins = list(result.scalars().all())
 
-        return plugins, total_count
+        return plugins, int(total_count or 0)
 
 
 class ManagedPlugin(SQLModel, table=True):
     """A GitHub-backed plugin/framework managed for one game server."""
 
-    __tablename__ = "managed_plugins"
+    __tablename__: ClassVar[str] = "managed_plugins"
     __table_args__ = (
         UniqueConstraint("server_id", "source_type", "source_key", name="uq_managed_plugin_source"),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     server_id: int = Field(
         sa_column=Column(
             Integer, ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True
@@ -246,10 +249,10 @@ class ManagedPlugin(SQLModel, table=True):
 class GitHubInstallRecipe(SQLModel, table=True):
     """Admin-approved declarative mapping for an otherwise ambiguous release archive."""
 
-    __tablename__ = "github_install_recipes"
+    __tablename__: ClassVar[str] = "github_install_recipes"
     __table_args__ = (UniqueConstraint("repo_url", "revision", name="uq_github_recipe_revision"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     repo_url: str = Field(max_length=500, index=True)
     display_name: str = Field(max_length=255)
     source_prefix: str = Field(max_length=500)
@@ -278,12 +281,12 @@ class GitHubInstallRecipe(SQLModel, table=True):
 class ManagedPluginFile(SQLModel, table=True):
     """Revisioned file inventory used for safe upgrades and configuration preservation."""
 
-    __tablename__ = "managed_plugin_files"
+    __tablename__: ClassVar[str] = "managed_plugin_files"
     __table_args__ = (
         UniqueConstraint("managed_plugin_id", "path_hash", name="uq_managed_plugin_file"),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     managed_plugin_id: int = Field(
         sa_column=Column(
             Integer,
@@ -305,7 +308,7 @@ class ManagedPluginFile(SQLModel, table=True):
 class PluginDiagnosticRun(SQLModel, table=True):
     """Persistent, user-attributed plugin isolation state machine."""
 
-    __tablename__ = "plugin_diagnostic_runs"
+    __tablename__: ClassVar[str] = "plugin_diagnostic_runs"
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, max_length=36)
     server_id: int = Field(
@@ -343,12 +346,12 @@ class PluginDiagnosticRun(SQLModel, table=True):
 
 
 class PluginDiagnosticStep(SQLModel, table=True):
-    __tablename__ = "plugin_diagnostic_steps"
+    __tablename__: ClassVar[str] = "plugin_diagnostic_steps"
     __table_args__ = (
         UniqueConstraint("diagnostic_run_id", "sequence", name="uq_diagnostic_step_sequence"),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     diagnostic_run_id: str = Field(
         max_length=36,
         sa_column=Column(
@@ -369,12 +372,12 @@ class PluginDiagnosticStep(SQLModel, table=True):
 
 
 class PluginQuarantineEntry(SQLModel, table=True):
-    __tablename__ = "plugin_quarantine_entries"
+    __tablename__: ClassVar[str] = "plugin_quarantine_entries"
     __table_args__ = (
         UniqueConstraint("diagnostic_run_id", "candidate_key", name="uq_quarantine_candidate"),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     diagnostic_run_id: str = Field(
         max_length=36,
         sa_column=Column(
@@ -399,12 +402,12 @@ class PluginQuarantineEntry(SQLModel, table=True):
 class PluginConfigSource(SQLModel, table=True):
     """A file or directory exposed by the generic plugin configuration editor."""
 
-    __tablename__ = "plugin_config_sources"
+    __tablename__: ClassVar[str] = "plugin_config_sources"
     __table_args__ = (
         UniqueConstraint("server_id", "path_hash", name="uq_plugin_config_source_path"),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     server_id: int = Field(
         sa_column=Column(
             Integer,

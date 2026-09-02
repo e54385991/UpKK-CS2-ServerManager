@@ -7,7 +7,7 @@ import unicodedata
 from collections.abc import Iterable
 
 from sqlalchemy import func
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.database import async_session_maker
 from modules.models import AIConversation, AIMessage, AIRun, AIToolRun, Server, User
@@ -92,7 +92,7 @@ async def available_discord_agent_server_ids(
             return frozenset()
         result = await db.execute(
             select(Server.id).where(
-                Server.id.in_(requested_ids),
+                col(Server.id).in_(requested_ids),
                 Server.user_id == owner_user_id,
             )
         )
@@ -136,7 +136,7 @@ async def _latest_conversation(
             AIConversation.discord_guild_id == guild_id,
             AIConversation.discord_channel_id == channel_id,
         )
-        .order_by(AIConversation.created_at.desc())
+        .order_by(col(AIConversation.created_at).desc())
         .limit(1)
     )
     return result.scalar_one_or_none()
@@ -184,7 +184,7 @@ async def ask_discord_agent(
             .select_from(AIRun)
             .where(
                 AIRun.conversation_id == conversation.id,
-                AIRun.status.in_(ACTIVE_RUN_STATUSES),
+                col(AIRun.status).in_(ACTIVE_RUN_STATUSES),
             )
         )
         if int(active.scalar_one()):
@@ -224,15 +224,15 @@ async def discord_run_snapshot(run_id: str) -> dict:
             .where(
                 AIMessage.conversation_id == run.conversation_id,
                 AIMessage.role == "assistant",
-                AIMessage.visible.is_(True),
+                col(AIMessage.visible).is_(True),
             )
-            .order_by(AIMessage.id.desc())
+            .order_by(col(AIMessage.id).desc())
             .limit(1)
         )
         tool_result = await db.execute(
             select(AIToolRun)
             .where(AIToolRun.run_id == run.id, AIToolRun.status == "pending_approval")
-            .order_by(AIToolRun.created_at.asc())
+            .order_by(col(AIToolRun.created_at).asc())
             .limit(1)
         )
         message = message_result.scalar_one_or_none()
@@ -240,7 +240,7 @@ async def discord_run_snapshot(run_id: str) -> dict:
         progress_result = await db.execute(
             select(AIToolRun)
             .where(AIToolRun.run_id == run.id)
-            .order_by(AIToolRun.created_at.desc())
+            .order_by(col(AIToolRun.created_at).desc())
             .limit(1)
         )
         progress_tool = progress_result.scalar_one_or_none()
@@ -248,7 +248,9 @@ async def discord_run_snapshot(run_id: str) -> dict:
             "run_id": run.id,
             "status": run.status,
             "error": run.error,
-            "message": redact_sensitive_text(message.content, limit=3900) if message else None,
+            "message": redact_sensitive_text(message.content or "", limit=3900)
+            if message
+            else None,
             "progress": (
                 {
                     "tool": progress_tool.tool_name,

@@ -30,6 +30,18 @@ from .schemas import ConsolePaneView, ConsoleWorkspaceView
 router = APIRouter(prefix="/api/v1/servers/{server_id}/console", tags=["v1-console"])
 
 
+def _strict_session_manager(value: str) -> Literal["screen", "tmux"]:
+    return "screen" if value == "screen" else "tmux"
+
+
+def _optional_session_manager(value: str | None) -> Literal["screen", "tmux"] | None:
+    if value == "screen":
+        return "screen"
+    if value == "tmux":
+        return "tmux"
+    return None
+
+
 def _origin_allowed(websocket: WebSocket) -> bool:
     origin = websocket.headers.get("origin")
     if not origin:
@@ -79,10 +91,13 @@ def _workspace(
     steamcmd_running: bool = False,
     message: str | None = None,
 ) -> ConsoleWorkspaceView:
+    preferred_manager = _strict_session_manager(
+        normalize_session_manager(getattr(server, "session_manager", None))
+    )
     return ConsoleWorkspaceView(
         server_id=server.id,
         host=str(server.host or ""),
-        session_manager=normalize_session_manager(getattr(server, "session_manager", None)),
+        session_manager=preferred_manager,
         ssh_ok=ssh_ok,
         ssh_error=ssh_error,
         game_running=game_running,
@@ -101,7 +116,8 @@ async def _capture_session_pane(
     kind: Literal["game", "steamcmd"],
 ) -> ConsolePaneView:
     name = _session_name_for(kind, int(server.id))
-    preferred = getattr(server, "session_manager", None)
+    preferred_value = normalize_session_manager(getattr(server, "session_manager", None))
+    preferred = _optional_session_manager(preferred_value)
     manager = await find_running_session_manager(ssh.execute_command, preferred, name)
     if not manager:
         return ConsolePaneView(
@@ -114,15 +130,13 @@ async def _capture_session_pane(
             text="",
             heartbeat=None,
         )
+    resolved = _strict_session_manager(normalize_session_manager(manager))
     success, stdout, stderr = await ssh.execute_command(
-        capture_console_command(manager, name, lines=200),
+        capture_console_command(resolved, name, lines=200),
         timeout=15,
     )
     text = stdout or ""
     heartbeat = latest_console_heartbeat(text)
-    resolved = normalize_session_manager(manager)
-    if resolved not in {"screen", "tmux"}:
-        resolved = "tmux"
     if not success:
         return ConsolePaneView(
             server_id=int(server.id),
@@ -248,6 +262,82 @@ async def game_console_websocket(websocket: WebSocket, server_id: int) -> None:
     await _run_console(websocket, server, kind="game")
 
 
+async def _start_console_session(websocket: WebSocket, ssh: SSHManager, server: Server, kind: str):
+    success, error = await ssh.connect(server)
+    if not success:
+        await websocket.send_json({"type": "error", "message": f"SSH connection failed: {error}"})
+        await websocket.close()
+        return None
+    if ssh.conn is None:
+        await websocket.send_json({"type": "error", "message": "SSH connection failed: no session"})
+        await websocket.close()
+        return None
+    if kind == "game":
+        name = session_name(server.id)
+        try:
+            active_manager = await find_running_session_manager(
+                ssh.execute_command, getattr(server, "session_manager", None), name
+            )
+        except Exception as exc:
+            await websocket.send_json(
+                {"type": "error", "message": f"Failed to check server status: {exc}"}
+            )
+            await websocket.close()
+            return None
+        if not active_manager:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "message": "Game server is not running. Please start the server first.",
+                }
+            )
+            await websocket.close()
+            return None
+        process = await ssh.create_interactive_process(attach_command(active_manager, name))
+        message = f"Connected to CS2 server console on {server.host}"
+    else:
+        process = await ssh.create_interactive_process()
+        message = f"Connected to {server.host}"
+    await websocket.send_json({"type": "connected", "message": message})
+    return process
+
+
+async def _relay_console_input(websocket: WebSocket, process) -> None:
+    async def read_output() -> None:
+        try:
+            while True:
+                output = await process.stdout.read(1024)
+                if not output:
+                    return
+                await websocket.send_json({"type": "output", "data": decode_remote_text(output)})
+        except Exception:
+            return
+
+    output_task = asyncio.create_task(read_output())
+    try:
+        while True:
+            try:
+                message = json.loads(await websocket.receive_text())
+            except json.JSONDecodeError:
+                continue
+            msg_type = message.get("type")
+            if msg_type == "input":
+                process.stdin.write(encode_console_input(str(message.get("data") or "")))
+                await process.stdin.drain()
+            elif msg_type == "resize":
+                process.change_terminal_size(
+                    int(message.get("cols") or 80), int(message.get("rows") or 24)
+                )
+            elif msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+            elif msg_type == "disconnect":
+                return
+    finally:
+        output_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await output_task
+
+
 async def _run_console(
     websocket: WebSocket,
     server: Server,
@@ -256,101 +346,17 @@ async def _run_console(
 ) -> None:
     ssh = SSHManager()
     process = None
-    output_task = None
     try:
-        success, error = await ssh.connect(server)
-        if not success:
-            await websocket.send_json(
-                {"type": "error", "message": f"SSH connection failed: {error}"}
-            )
-            await websocket.close()
+        process = await _start_console_session(websocket, ssh, server, kind)
+        if process is None:
             return
-
-        if ssh.conn is None:
-            await websocket.send_json(
-                {"type": "error", "message": "SSH connection failed: no session"}
-            )
-            await websocket.close()
-            return
-
-        if kind == "game":
-            name = session_name(server.id)
-            try:
-                active_manager = await find_running_session_manager(
-                    ssh.execute_command,
-                    getattr(server, "session_manager", None),
-                    name,
-                )
-            except Exception as exc:
-                await websocket.send_json(
-                    {"type": "error", "message": f"Failed to check server status: {exc}"}
-                )
-                await websocket.close()
-                return
-            if not active_manager:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": "Game server is not running. Please start the server first.",
-                    }
-                )
-                await websocket.close()
-                return
-            process = await ssh.create_interactive_process(attach_command(active_manager, name))
-            await websocket.send_json(
-                {
-                    "type": "connected",
-                    "message": f"Connected to CS2 server console on {server.host}",
-                }
-            )
-        else:
-            process = await ssh.create_interactive_process()
-            await websocket.send_json(
-                {"type": "connected", "message": f"Connected to {server.host}"}
-            )
-
-        async def read_output() -> None:
-            try:
-                while True:
-                    output = await process.stdout.read(1024)
-                    if output:
-                        await websocket.send_json(
-                            {"type": "output", "data": decode_remote_text(output)}
-                        )
-                    else:
-                        break
-            except Exception:
-                pass
-
-        output_task = asyncio.create_task(read_output())
-        while True:
-            raw = await websocket.receive_text()
-            try:
-                message = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            msg_type = message.get("type")
-            if msg_type == "input":
-                process.stdin.write(encode_console_input(str(message.get("data") or "")))
-                await process.stdin.drain()
-            elif msg_type == "resize":
-                cols = int(message.get("cols") or 80)
-                rows = int(message.get("rows") or 24)
-                process.change_terminal_size(cols, rows)
-            elif msg_type == "ping":
-                await websocket.send_json({"type": "pong"})
-            elif msg_type == "disconnect":
-                break
+        await _relay_console_input(websocket, process)
     except WebSocketDisconnect:
         pass
     except Exception as exc:
         with suppress(Exception):
             await websocket.send_json({"type": "error", "message": f"Console error: {exc}"})
     finally:
-        if output_task is not None:
-            output_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await output_task
         if process is not None:
             with suppress(Exception):
                 process.terminate()

@@ -209,7 +209,7 @@ async def start_batch_install_plugins(
     http_request: Request,
 ) -> BatchActionView:
     """Install framework plugins on owned servers. Authorization matches legacy batch."""
-    plugins = list(body.plugins)
+    plugins: list[str] = [str(plugin) for plugin in body.plugins]
     return await _start_batch(
         db=db,
         current_user=current_user,

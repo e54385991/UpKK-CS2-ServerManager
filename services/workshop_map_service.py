@@ -325,6 +325,166 @@ async def _replace_with_backup(
     return backup
 
 
+async def _install_workshop_prerequisites(
+    db: AsyncSession,
+    current_server: Server,
+    user: User,
+    plan: dict[str, Any],
+    report: ProgressCallback,
+    acknowledged: set[int],
+    operation_id: str | None,
+) -> list[dict[str, Any]]:
+    completed: list[dict[str, Any]] = []
+    if not plan["current"].get("metamod"):
+        await report("install_metamod", "running", "Installing Metamod")
+        success, message = await SSHManager().install_metamod(current_server)
+        if not success:
+            raise WorkshopPlanError(message)
+        await record_framework_installation(current_server, user, "metamod")
+        completed.append({"action": "install_metamod", "success": True})
+        await report("install_metamod", "completed", "Installed Metamod")
+    if not plan["current"].get("css"):
+        await report("install_counterstrikesharp", "running", "Installing CounterStrikeSharp")
+        success, message = await SSHManager().install_counterstrikesharp(current_server)
+        if not success:
+            raise WorkshopPlanError(message)
+        await record_framework_installation(current_server, user, "counterstrikesharp")
+        completed.append({"action": "install_counterstrikesharp", "success": True})
+        await report("install_counterstrikesharp", "completed", "Installed CounterStrikeSharp")
+    if not plan["current"].get("mapchooser"):
+        plugin_id = plan["plugin_plan"]["plugin"]["id"]
+
+        async def mapchooser_progress(
+            message: str, message_type: str, metadata: dict[str, Any] | None = None
+        ) -> None:
+            del message_type, metadata
+            await report("install_mapchooser", "running", message)
+
+        await report("install_mapchooser", "running", "Installing MapChooser")
+        plugin_result = await execute_plugin_install_plan(
+            db,
+            current_server,
+            user,
+            plugin_id,
+            acknowledged,
+            expected_plan_hash=plan["plugin_plan"]["plan_hash"],
+            progress=mapchooser_progress,
+            acquire_lock=False,
+            operation_id=operation_id,
+        )
+        completed.append({"action": "install_mapchooser", "result": plugin_result})
+        if not plugin_result["success"]:
+            raise WorkshopPlanError(plugin_result["message"])
+        await report("install_mapchooser", "completed", "Installed MapChooser")
+    if any(step.get("action") == "restart_server" for step in plan["steps"]):
+        await report(
+            "restart_server",
+            "running",
+            "Restarting server to load plugins and generate configuration files",
+        )
+
+        async def restart_progress(message: str) -> None:
+            await report("restart_server", "running", message)
+
+        restart_manager = SSHManager()
+        stopped, stop_message = await restart_manager.stop_server(current_server)
+        if not stopped:
+            current_server.status = ServerStatus.ERROR
+            db.add(current_server)
+            await db.commit()
+            raise WorkshopPlanError(
+                f"Unable to stop server before plugin initialization: {stop_message}"
+            )
+        started, start_message = await restart_manager.start_server(
+            current_server, restart_progress
+        )
+        if not started:
+            current_server.status = ServerStatus.ERROR
+            db.add(current_server)
+            await db.commit()
+            raise WorkshopPlanError(
+                f"Unable to start server after plugin installation: {start_message}"
+            )
+        current_server.status = ServerStatus.RUNNING
+        db.add(current_server)
+        await db.commit()
+        completed.append({"action": "restart_server", "success": True})
+        await report(
+            "restart_server", "completed", "Restarted server and completed initial plugin load"
+        )
+    return completed
+
+
+async def _configure_workshop_map(
+    manager: SSHManager,
+    current_server: Server,
+    plan: dict[str, Any],
+    report: ProgressCallback,
+) -> list[dict[str, Any]]:
+    state = await _inspect(manager, current_server)
+    if not state.get("css") or not state.get("mapchooser"):
+        raise WorkshopPlanError("Prerequisite verification failed after installation")
+    maps_content, config_content = await _read_configs(manager, current_server, state)
+    if plan["current"].get("maps") and content_revision(maps_content) != plan["revisions"]["maps"]:
+        raise WorkshopPlanError("maps.txt changed after planning; review the current file")
+    if (
+        plan["current"].get("config")
+        and content_revision(config_content) != plan["revisions"]["plugin_config"]
+    ):
+        raise WorkshopPlanError("MapChooser config changed after planning; review the current file")
+    completed: list[dict[str, Any]] = []
+    if parse_plugin_config(config_content).get("ChangeMapUse_host_workshop_map") is not True:
+        await report("patch_plugin_config", "running", "Updating MapChooser configuration")
+        updated_config = update_plugin_config(
+            config_content,
+            {"ChangeMapUse_host_workshop_map": True},
+            allow_missing_known_fields=True,
+        )
+        backup = await _replace_with_backup(
+            manager,
+            current_server,
+            _paths(current_server)["config"],
+            updated_config,
+            existed=state.get("config", False),
+        )
+        config_content = updated_config
+        completed.append({"action": "patch_plugin_config", "success": True, "backup": backup})
+        await report("patch_plugin_config", "completed", "Updated MapChooser configuration")
+    await report("append_map", "running", "Adding map to MapChooser")
+    updated_maps = append_map_to_config(
+        maps_content,
+        name=plan["workshop"]["name"],
+        workshop_id=plan["workshop"]["workshop_id"],
+        **plan["settings"],
+    )
+    maps_backup = await _replace_with_backup(
+        manager,
+        current_server,
+        _paths(current_server)["maps"],
+        updated_maps,
+        existed=state.get("maps", False),
+    )
+    completed.append({"action": "append_map", "success": True, "backup": maps_backup})
+    await report("append_map", "completed", "Added map to MapChooser")
+    await report("verify", "running", "Verifying Workshop map configuration")
+    verified_state = await _inspect(manager, current_server)
+    verified_maps, verified_config = await _read_configs(manager, current_server, verified_state)
+    entries = parse_maps_config(verified_maps).maps
+    matching = [
+        entry
+        for entry in entries
+        if str(entry.get("workshop_id")) == plan["workshop"]["workshop_id"]
+    ]
+    config_enabled = (
+        parse_plugin_config(verified_config).get("ChangeMapUse_host_workshop_map") is True
+    )
+    if not matching or not config_enabled:
+        raise WorkshopPlanError("Final Workshop map verification failed")
+    completed.append({"action": "verify", "success": True})
+    await report("verify", "completed", "Verified Workshop map configuration")
+    return completed
+
+
 async def execute_workshop_map_plan(
     db: AsyncSession,
     server: Server,
@@ -379,179 +539,17 @@ async def execute_workshop_map_plan(
             )
 
         try:
-            if not plan["current"].get("metamod"):
-                await report("install_metamod", "running", "Installing Metamod")
-                success, message = await SSHManager().install_metamod(current_server)
-                if not success:
-                    raise WorkshopPlanError(message)
-                await record_framework_installation(current_server, user, "metamod")
-                completed.append({"action": "install_metamod", "success": True})
-                await report("install_metamod", "completed", "Installed Metamod")
-
-            if not plan["current"].get("css"):
-                await report(
-                    "install_counterstrikesharp", "running", "Installing CounterStrikeSharp"
+            completed.extend(
+                await _install_workshop_prerequisites(
+                    db, current_server, user, plan, report, acknowledged, operation_id
                 )
-                success, message = await SSHManager().install_counterstrikesharp(current_server)
-                if not success:
-                    raise WorkshopPlanError(message)
-                await record_framework_installation(current_server, user, "counterstrikesharp")
-                completed.append({"action": "install_counterstrikesharp", "success": True})
-                await report(
-                    "install_counterstrikesharp", "completed", "Installed CounterStrikeSharp"
-                )
-
-            if not plan["current"].get("mapchooser"):
-                plugin_id = plan["plugin_plan"]["plugin"]["id"]
-                await report("install_mapchooser", "running", "Installing MapChooser")
-
-                async def mapchooser_progress(
-                    message: str, message_type: str, metadata: dict[str, Any] | None = None
-                ) -> None:
-                    del message_type, metadata
-                    await report("install_mapchooser", "running", message)
-
-                plugin_result = await execute_plugin_install_plan(
-                    db,
-                    current_server,
-                    user,
-                    plugin_id,
-                    acknowledged,
-                    expected_plan_hash=plan["plugin_plan"]["plan_hash"],
-                    progress=mapchooser_progress,
-                    acquire_lock=False,
-                    operation_id=operation_id,
-                )
-                completed.append({"action": "install_mapchooser", "result": plugin_result})
-                if not plugin_result["success"]:
-                    raise WorkshopPlanError(plugin_result["message"])
-                await report("install_mapchooser", "completed", "Installed MapChooser")
-
-            if any(step.get("action") == "restart_server" for step in plan["steps"]):
-                await report(
-                    "restart_server",
-                    "running",
-                    "Restarting server to load plugins and generate configuration files",
-                )
-
-                async def restart_progress(message: str) -> None:
-                    await report("restart_server", "running", message)
-
-                restart_manager = SSHManager()
-                stopped, stop_message = await restart_manager.stop_server(current_server)
-                if not stopped:
-                    current_server.status = ServerStatus.ERROR
-                    db.add(current_server)
-                    await db.commit()
-                    raise WorkshopPlanError(
-                        f"Unable to stop server before plugin initialization: {stop_message}"
-                    )
-                started, start_message = await restart_manager.start_server(
-                    current_server, restart_progress
-                )
-                if not started:
-                    current_server.status = ServerStatus.ERROR
-                    db.add(current_server)
-                    await db.commit()
-                    raise WorkshopPlanError(
-                        f"Unable to start server after plugin installation: {start_message}"
-                    )
-                current_server.status = ServerStatus.RUNNING
-                db.add(current_server)
-                await db.commit()
-                completed.append({"action": "restart_server", "success": True})
-                await report(
-                    "restart_server",
-                    "completed",
-                    "Restarted server and completed initial plugin load",
-                )
+            )
 
             manager = await _connect(current_server)
             try:
-                state = await _inspect(manager, current_server)
-                if not state.get("css") or not state.get("mapchooser"):
-                    raise WorkshopPlanError("Prerequisite verification failed after installation")
-                maps_content, config_content = await _read_configs(manager, current_server, state)
-                if plan["current"].get("maps") and (
-                    content_revision(maps_content) != plan["revisions"]["maps"]
-                ):
-                    raise WorkshopPlanError(
-                        "maps.txt changed after planning; review the current file"
-                    )
-                if plan["current"].get("config") and (
-                    content_revision(config_content) != plan["revisions"]["plugin_config"]
-                ):
-                    raise WorkshopPlanError(
-                        "MapChooser config changed after planning; review the current file"
-                    )
-
-                if (
-                    parse_plugin_config(config_content).get("ChangeMapUse_host_workshop_map")
-                    is not True
-                ):
-                    await report(
-                        "patch_plugin_config", "running", "Updating MapChooser configuration"
-                    )
-                    updated_config = update_plugin_config(
-                        config_content,
-                        {"ChangeMapUse_host_workshop_map": True},
-                        allow_missing_known_fields=True,
-                    )
-                    backup = await _replace_with_backup(
-                        manager,
-                        current_server,
-                        _paths(current_server)["config"],
-                        updated_config,
-                        existed=state.get("config", False),
-                    )
-                    config_content = updated_config
-                    completed.append(
-                        {
-                            "action": "patch_plugin_config",
-                            "success": True,
-                            "backup": backup,
-                        }
-                    )
-                    await report(
-                        "patch_plugin_config", "completed", "Updated MapChooser configuration"
-                    )
-
-                await report("append_map", "running", "Adding map to MapChooser")
-                updated_maps = append_map_to_config(
-                    maps_content,
-                    name=plan["workshop"]["name"],
-                    workshop_id=plan["workshop"]["workshop_id"],
-                    **plan["settings"],
+                completed.extend(
+                    await _configure_workshop_map(manager, current_server, plan, report)
                 )
-                maps_backup = await _replace_with_backup(
-                    manager,
-                    current_server,
-                    _paths(current_server)["maps"],
-                    updated_maps,
-                    existed=state.get("maps", False),
-                )
-                completed.append({"action": "append_map", "success": True, "backup": maps_backup})
-                await report("append_map", "completed", "Added map to MapChooser")
-
-                # Final read-after-write verification checks both the exact ID
-                # and the setting required for host_workshop_map downloads.
-                await report("verify", "running", "Verifying Workshop map configuration")
-                state = await _inspect(manager, current_server)
-                verified_maps, verified_config = await _read_configs(manager, current_server, state)
-                entries = parse_maps_config(verified_maps).maps
-                matching = [
-                    entry
-                    for entry in entries
-                    if str(entry.get("workshop_id")) == plan["workshop"]["workshop_id"]
-                ]
-                config_enabled = (
-                    parse_plugin_config(verified_config).get("ChangeMapUse_host_workshop_map")
-                    is True
-                )
-                if not matching or not config_enabled:
-                    raise WorkshopPlanError("Final Workshop map verification failed")
-                completed.append({"action": "verify", "success": True})
-                await report("verify", "completed", "Verified Workshop map configuration")
             finally:
                 await manager.disconnect()
         except Exception as exc:

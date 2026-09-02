@@ -7,7 +7,7 @@ import logging
 from contextlib import suppress
 from datetime import timedelta
 
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.database import async_session_maker
 from modules.models import AIConversation, AISystemSettings
@@ -75,7 +75,7 @@ class AIRetentionService:
             )
             cutoff = get_current_time() - timedelta(days=retention_days)
             result = await db.execute(
-                select(AIConversation).where(AIConversation.updated_at < cutoff)
+                select(AIConversation).where(col(AIConversation.updated_at) < cutoff)
             )
             conversations = list(result.scalars().all())
             for conversation in conversations:

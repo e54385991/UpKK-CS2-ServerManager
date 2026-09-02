@@ -321,7 +321,10 @@ class ToolContext:
     enforce_agent_policy: bool = True
 
 
-ToolHandler = Callable[[ToolContext, ToolInput], Awaitable[dict[str, Any]]]
+# The registry intentionally stores handlers for different Pydantic input
+# models.  Validation happens immediately before dispatch; ``Any`` is limited
+# to this heterogeneous adapter boundary rather than business logic.
+ToolHandler = Callable[[ToolContext, Any], Awaitable[dict[str, Any]]]
 CapabilityResolver = Callable[[dict[str, Any]], frozenset[AgentCapability]]
 
 
@@ -966,7 +969,7 @@ async def plan_plugin_install(ctx: ToolContext, data: PluginPlanInput) -> dict[s
 
     plugin = await MarketPlugin.get_by_id(ctx.db, data.plugin_id)
     framework_key = _panel_framework_key(plugin) if plugin is not None else None
-    if framework_key is not None:
+    if plugin is not None and framework_key is not None:
         operation = (
             "install_metamod" if framework_key == "metamod" else "install_counterstrikesharp"
         )

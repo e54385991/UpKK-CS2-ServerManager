@@ -13,7 +13,7 @@ from typing import Any, AsyncIterator
 
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules import (
     GitHubPluginInstallRequest,
@@ -72,7 +72,8 @@ def _panel_framework_key(plugin: MarketPlugin) -> str | None:
     """Identify frameworks that must use the panel's dedicated installers."""
     match = _GITHUB_REPOSITORY.fullmatch((plugin.github_url or "").strip().rstrip("/"))
     if match:
-        repository_key = tuple(part.casefold() for part in match.groups())
+        groups = match.groups()
+        repository_key = (str(groups[0]).casefold(), str(groups[1]).casefold())
         if repository_key in _PANEL_FRAMEWORK_REPOSITORIES:
             return _PANEL_FRAMEWORK_REPOSITORIES[repository_key]
     normalized_title = re.sub(r"[^a-z0-9]+", "", (plugin.title or "").casefold())
@@ -277,10 +278,10 @@ async def build_plugin_install_plan(
     if relevant_ids:
         rule_result = await db.execute(
             select(PluginConflictRule).where(
-                PluginConflictRule.is_enabled.is_(True),
+                col(PluginConflictRule.is_enabled).is_(True),
                 or_(
-                    PluginConflictRule.plugin_a_id.in_(relevant_ids),
-                    PluginConflictRule.plugin_b_id.in_(relevant_ids),
+                    col(PluginConflictRule.plugin_a_id).in_(relevant_ids),
+                    col(PluginConflictRule.plugin_b_id).in_(relevant_ids),
                 ),
             )
         )
@@ -700,6 +701,59 @@ def _restart_payload(completed: Iterable[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+async def _prepare_plugin_execution(
+    db: AsyncSession,
+    refreshed_server: Server,
+    user: User,
+    plugin_id: int,
+    acknowledged_warning_rule_ids: Iterable[int],
+    expected_plan_hash: str | None,
+    include_dependencies: bool,
+    download_url: str | None,
+) -> tuple[
+    dict[str, Any], set[int], dict[int, MarketPlugin], dict[int, dict[str, Any]], dict | None
+]:
+    refreshed_plan = await build_plugin_install_plan(
+        db,
+        refreshed_server.id,
+        plugin_id,
+        include_dependencies=include_dependencies,
+        server=refreshed_server,
+    )
+    if expected_plan_hash and refreshed_plan["plan_hash"] != expected_plan_hash:
+        raise PluginPlanError("Plugin plan changed; review and approve the new plan")
+    validate_plugin_plan_acknowledgements(refreshed_plan, acknowledged_warning_rule_ids)
+    installed = set(refreshed_plan["already_installed"])
+    plugins = await MarketPlugin.get_by_ids(db, refreshed_plan["installation_order"])
+    by_id = {plugin.id: plugin for plugin in plugins}
+    ordinary_plugin_ids = [
+        current_id
+        for current_id in refreshed_plan["installation_order"]
+        if current_id not in installed
+        and (plugin := by_id.get(current_id)) is not None
+        and _panel_framework_key(plugin) is None
+    ]
+    linux_runtime_profile = None
+    if ordinary_plugin_ids:
+        from services.linux_runtime_service import detect_linux_runtime_profile
+
+        linux_runtime_profile = await detect_linux_runtime_profile(refreshed_server)
+    resolved_assets: dict[int, dict[str, Any]] = {}
+    for current_id in refreshed_plan["installation_order"]:
+        if current_id in installed:
+            continue
+        plugin = by_id.get(current_id)
+        if plugin is None:
+            raise PluginPlanError(f"Plugin {current_id} disappeared before execution")
+        if current_id == plugin_id and download_url:
+            resolved_assets[current_id] = _asset_from_download_url(plugin, download_url)
+        elif current_id in ordinary_plugin_ids:
+            resolved_assets[current_id] = await _latest_release_asset(
+                db, plugin, refreshed_server, user, linux_runtime_profile
+            )
+    return refreshed_plan, installed, by_id, resolved_assets, linux_runtime_profile
+
+
 async def execute_plugin_install_plan(
     db: AsyncSession,
     server: Server,
@@ -741,51 +795,22 @@ async def execute_plugin_install_plan(
         )
         if refreshed_server is None:
             raise PluginPlanError("Server permission changed before execution")
-        refreshed_plan = await build_plugin_install_plan(
+        (
+            refreshed_plan,
+            installed,
+            by_id,
+            resolved_assets,
+            linux_runtime_profile,
+        ) = await _prepare_plugin_execution(
             db,
-            server.id,
+            refreshed_server,
+            user,
             plugin_id,
-            include_dependencies=include_dependencies,
-            server=refreshed_server,
+            acknowledged_warning_rule_ids,
+            expected_plan_hash,
+            include_dependencies,
+            download_url,
         )
-        if expected_plan_hash and refreshed_plan["plan_hash"] != expected_plan_hash:
-            raise PluginPlanError("Plugin plan changed; review and approve the new plan")
-        validate_plugin_plan_acknowledgements(refreshed_plan, acknowledged_warning_rule_ids)
-        installed = set(refreshed_plan["already_installed"])
-        plugins = await MarketPlugin.get_by_ids(db, refreshed_plan["installation_order"])
-        by_id = {plugin.id: plugin for plugin in plugins}
-
-        resolved_assets: dict[int, dict[str, Any]] = {}
-        ordinary_plugin_ids = [
-            current_id
-            for current_id in refreshed_plan["installation_order"]
-            if current_id not in installed
-            and (plugin := by_id.get(current_id)) is not None
-            and _panel_framework_key(plugin) is None
-        ]
-        linux_runtime_profile = None
-        if ordinary_plugin_ids:
-            from services.linux_runtime_service import detect_linux_runtime_profile
-
-            linux_runtime_profile = await detect_linux_runtime_profile(refreshed_server)
-        # Resolve every ordinary asset before installing the first dependency.
-        # This guarantees an unknown RT3/RT4 choice cannot leave partial changes.
-        for current_id in refreshed_plan["installation_order"]:
-            if current_id in installed:
-                continue
-            plugin = by_id.get(current_id)
-            if plugin is None:
-                raise PluginPlanError(f"Plugin {current_id} disappeared before execution")
-            if current_id == plugin_id and download_url:
-                resolved_assets[current_id] = _asset_from_download_url(plugin, download_url)
-            elif current_id in ordinary_plugin_ids:
-                resolved_assets[current_id] = await _latest_release_asset(
-                    db,
-                    plugin,
-                    refreshed_server,
-                    user,
-                    linux_runtime_profile,
-                )
 
         for current_id in refreshed_plan["installation_order"]:
             step_id = f"plugin:{current_id}"

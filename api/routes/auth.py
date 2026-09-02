@@ -535,11 +535,17 @@ async def generate_server_token(
         steam_api_key=current_user.steam_api_key, memo=memo
     )
 
-    if not success or not result.get("success"):
-        error_msg = result.get("error", "Unknown error") if result else "Failed to generate token"
+    if not success or result is None or not result.get("success"):
+        error_msg = (
+            result.get("error", "Unknown error")
+            if result is not None
+            else "Failed to generate token"
+        )
         return GenerateServerTokenResponse(success=False, error=error_msg)
 
-    return GenerateServerTokenResponse(success=True, login_token=result.get("login_token"))
+    return GenerateServerTokenResponse(
+        success=True, login_token=result.get("login_token") if result is not None else None
+    )
 
 
 @router.post("/forgot-password")

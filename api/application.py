@@ -64,7 +64,7 @@ API_ROUTERS = (
 
 async def operation_busy_handler(
     _request: Request,
-    exc: OperationBusyError,
+    exc: Exception,
 ) -> JSONResponse:
     """Return a stable conflict response for distributed operation locks."""
     return JSONResponse(status_code=409, content={"detail": str(exc)})

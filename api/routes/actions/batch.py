@@ -5,6 +5,11 @@
 from fastapi import Request
 
 from api.dependencies import ActiveUser, DatabaseSession
+from api.routes.actions.common import (
+    _reserve_batch_capacity,
+    _run_bounded_batch_operation,
+    _store_task,
+)
 from services.audit_log_service import record_audit_event
 from services.servers.batch import authorized_server_ids
 

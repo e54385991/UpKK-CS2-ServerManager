@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from pydantic import field_validator
@@ -94,6 +95,9 @@ class Settings(BaseSettings):
 
     # Google OAuth Configuration
     GOOGLE_CLIENT_ID: str | None = None
+    # Legacy mirror presets retained for the unversioned compatibility API.
+    STEAMCMD_MIRRORS: list[str] = []
+    GITHUB_API_MIRRORS: list[str] = []
     # Google CallbackURL = https://your-domain.com/google-callback
 
     @property
@@ -211,7 +215,8 @@ def get_settings() -> Settings:
     ``settings`` below remains a compatibility export for existing imports.
     """
 
-    return Settings()
+    options: dict[str, Any] = {"_env_file": ENV_FILE}
+    return Settings(**options)
 
 
 # Compatibility export. New request handlers should inject ``get_settings``

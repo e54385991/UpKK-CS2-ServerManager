@@ -8,6 +8,12 @@ from api.dependencies import ActiveUser, DatabaseSession
 from services.audit_log_service import record_audit_event
 
 from .common import *
+from .common import (
+    _cleanup_temp_file,
+    _create_download_ticket,
+    _download_headers,
+    _validate_direct_child_name,
+)
 
 transfer_router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 mutation_router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
@@ -17,8 +23,9 @@ mutation_router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-man
 async def list_directory(
     server_id: int,
     path: Optional[str] = None,
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """List directory contents"""
     server = await get_server_for_user(server_id, db, current_user)
@@ -41,7 +48,10 @@ async def list_directory(
     if not success:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
 
-    return DirectoryListResponse(path=path, files=files)
+    return DirectoryListResponse(
+        path=path,
+        files=[FileInfo.model_validate(item) for item in files],
+    )
 
 
 @transfer_router.get("/content")
@@ -114,10 +124,11 @@ async def upload_file(
     server_id: int,
     path: str,
     file: UploadFile = File(...),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
     relative_path: Optional[str] = Query(default=None, max_length=1500),
-    http_request: Request = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    http_request: Request,
 ):
     """Upload file to server"""
     server = await get_server_for_user(server_id, db, current_user)

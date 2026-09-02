@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import ConfigDict, field_validator, model_validator
+from pydantic import field_validator, model_validator
 from sqlmodel import Field, SQLModel
 
 ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
@@ -131,8 +131,6 @@ class AIConversationResponse(SQLModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class AIMessageResponse(SQLModel):
     id: int
@@ -141,8 +139,6 @@ class AIMessageResponse(SQLModel):
     tool_name: Optional[str] = None
     visible: bool
     created_at: Optional[datetime] = None
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class AIConversationDetail(AIConversationResponse):
@@ -170,8 +166,6 @@ class AIRunResponse(SQLModel):
     updated_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class AIToolDecisionRequest(SQLModel):
     decision: Literal["approve", "reject"]
@@ -193,8 +187,6 @@ class AIToolRunResponse(SQLModel):
     error: Optional[str] = None
     approval_expires_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class AIBackgroundTaskToolResponse(SQLModel):
     id: str
@@ -208,8 +200,6 @@ class AIBackgroundTaskToolResponse(SQLModel):
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class AIBackgroundTaskResponse(SQLModel):
     id: str
@@ -221,5 +211,3 @@ class AIBackgroundTaskResponse(SQLModel):
     updated_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     tools: list[AIBackgroundTaskToolResponse] = Field(default_factory=list)
-
-    model_config = ConfigDict(from_attributes=True)

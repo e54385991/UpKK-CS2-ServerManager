@@ -198,8 +198,8 @@ async def get_current_user(
 
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        user_id_str: str = payload.get("sub")
-        if user_id_str is None:
+        user_id_str = payload.get("sub")
+        if not isinstance(user_id_str, str):
             raise credentials_exception
         user_id = int(user_id_str)
         token_data = TokenData(user_id=user_id)
@@ -235,8 +235,8 @@ async def get_optional_current_user(
     try:
         token = credentials.credentials
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        user_id_str: str = payload.get("sub")
-        if user_id_str is None:
+        user_id_str = payload.get("sub")
+        if not isinstance(user_id_str, str):
             return None
         user_id = int(user_id_str)
     except InvalidTokenError, ValueError:
@@ -262,7 +262,8 @@ async def get_current_admin_user(
 
 async def get_user_from_api_key(
     x_api_key: Optional[str] = Header(None, description="User API key for authentication"),
-    db: Annotated[AsyncSession, Depends(get_db)] = None,
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Optional[User]:
     """
     Get user from API key in header.
@@ -288,7 +289,8 @@ async def get_user_from_api_key(
 async def get_current_user_flexible(
     token: Annotated[Optional[str], Depends(oauth2_scheme)],
     x_api_key: Optional[str] = Header(None, description="User API key for authentication"),
-    db: Annotated[AsyncSession, Depends(get_db)] = None,
+    *,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     """
     Get the current authenticated user from either JWT token or API key.
@@ -311,8 +313,8 @@ async def get_current_user_flexible(
             payload = jwt.decode(
                 token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
             )
-            user_id_str: str = payload.get("sub")
-            if user_id_str:
+            user_id_str = payload.get("sub")
+            if isinstance(user_id_str, str) and user_id_str:
                 user_id = int(user_id_str)
                 user = await db.get(User, user_id)
                 if user and user.is_active:

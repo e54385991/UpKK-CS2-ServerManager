@@ -14,7 +14,7 @@ def _uuid() -> str:
 class AuditLog(SQLModel, table=True):
     """Metadata-only audit event retained for the last 30 days."""
 
-    __tablename__ = "audit_logs"
+    __tablename__: ClassVar[str] = "audit_logs"
     __table_args__ = (
         Index("ix_audit_logs_category_created", "category", "created_at"),
         Index("ix_audit_logs_actor_created", "actor_user_id", "created_at"),

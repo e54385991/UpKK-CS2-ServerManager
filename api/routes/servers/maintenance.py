@@ -14,8 +14,9 @@ diagnostics_router = APIRouter(prefix="/servers", tags=["servers"])
 @global_router.get("/disk-space-all")
 async def get_all_servers_disk_space(
     force_refresh: bool = False,
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Get cached disk space information for all servers owned by current user.
@@ -256,8 +257,9 @@ async def get_server_cpu_count(
 async def get_server_disk_space(
     server_id: int,
     force_refresh: bool = False,
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """
     Get disk space information for server directory

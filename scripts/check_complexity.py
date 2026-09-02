@@ -29,7 +29,7 @@ def main() -> int:
     ]
     result = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
     if result.returncode:
-        print("Complexity budget exceeded: new domain/workflow functions must stay <= 15")
+        print("Complexity budget exceeded: all functions must stay <= 15")
         return result.returncode
     print("Repository complexity budget passed (max 15).")
     return 0

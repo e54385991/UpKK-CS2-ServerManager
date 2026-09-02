@@ -52,6 +52,16 @@ from .schemas import (
 
 router = APIRouter(prefix="/api/v1/servers/{server_id}/files", tags=["v1-files"])
 
+
+def _as_float(value: object) -> float:
+    if isinstance(value, (int, float, str)):
+        try:
+            return float(value)
+        except ValueError:
+            pass
+    return 0.0
+
+
 _MISSING_PATH_MARKERS = (
     "no such file",
     "no such path",
@@ -84,8 +94,8 @@ def _entry(raw: dict[str, object]) -> FileEntryView:
         name=str(raw.get("name") or ""),
         path=str(raw.get("path") or ""),
         type="directory" if kind == "directory" else "file",
-        size=int(raw.get("size") or 0),
-        modified=float(raw.get("modified") or 0),
+        size=int(_as_float(raw.get("size"))),
+        modified=_as_float(raw.get("modified")),
         permissions=str(raw.get("permissions") or "000"),
         is_symlink=bool(raw.get("is_symlink", False)),
     )
@@ -106,7 +116,7 @@ def _task(
         destination=destination
         or (str(payload["destination"]) if payload.get("destination") else None)
         or (str(payload["destination_path"]) if payload.get("destination_path") else None),
-        elapsed_seconds=float(payload["elapsed_seconds"])
+        elapsed_seconds=_as_float(payload["elapsed_seconds"])
         if payload.get("elapsed_seconds") is not None
         else None,
     )
@@ -225,10 +235,10 @@ async def upload_file(
         server_id,
         path,
         file,
-        db,
-        current_user,
         relative_path,
-        request,
+        db=db,
+        current_user=current_user,
+        http_request=request,
     )
     return FileMutationResult(
         success=bool(payload.get("success", True)),

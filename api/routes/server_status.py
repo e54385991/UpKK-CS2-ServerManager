@@ -27,7 +27,8 @@ class ServerStatusReport(SQLModel):
 
 async def verify_server_api_key(
     x_api_key: str = Header(..., description="Server API key for authentication"),
-    db: DatabaseSession = None,
+    *,
+    db: DatabaseSession,
 ) -> Server:
     """
     Verify server API key and return the server instance.
@@ -58,7 +59,8 @@ async def report_server_status(
     server_id: int,
     report: ServerStatusReport,
     server: VerifiedServer,
-    db: DatabaseSession = None,
+    *,
+    db: DatabaseSession,
 ):
     """
     Receive status reports from CS2 servers.
@@ -135,7 +137,8 @@ async def report_server_status(
 async def get_server_config(
     server_id: int,
     server: VerifiedServer,
-    db: DatabaseSession = None,
+    *,
+    db: DatabaseSession,
 ):
     """
     Get server configuration for the startup script.

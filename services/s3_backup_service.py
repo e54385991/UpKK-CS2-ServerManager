@@ -66,7 +66,9 @@ class S3BackupService:
         return "".join(safe_chars)[:255] or "backup.tar.gz"
 
     def get_retention_count(self, user: User) -> int:
-        count = getattr(user, "s3_retention_count", None)
+        count: object = getattr(user, "s3_retention_count", None)
+        if not isinstance(count, (int, float, str)):
+            return DEFAULT_S3_RETENTION_COUNT
         try:
             count = int(count)
         except TypeError, ValueError:

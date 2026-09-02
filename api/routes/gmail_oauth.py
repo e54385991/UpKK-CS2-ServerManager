@@ -94,7 +94,8 @@ async def gmail_oauth_callback(
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
-    db: DatabaseSession = None,
+    *,
+    db: DatabaseSession,
 ):
     """
     Handle OAuth2 callback from Google
@@ -147,7 +148,7 @@ async def gmail_oauth_callback(
         token_data = {
             "token": credentials.token,
             "refresh_token": credentials.refresh_token,
-            "token_uri": credentials.token_uri,
+            "token_uri": getattr(credentials, "token_uri", None),
             "client_id": credentials.client_id,
             "client_secret": credentials.client_secret,
             "scopes": credentials.scopes,

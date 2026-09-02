@@ -51,6 +51,8 @@ def clamp_steamcmd_max_retries(value: object) -> int:
     """Coerce a stored or submitted retry budget to ``0..100``, default 20."""
     if value is None:
         return STEAMCMD_DEFAULT_MAX_RETRIES
+    if not isinstance(value, (int, float, str)):
+        return STEAMCMD_DEFAULT_MAX_RETRIES
     try:
         parsed = int(value)
     except TypeError, ValueError:

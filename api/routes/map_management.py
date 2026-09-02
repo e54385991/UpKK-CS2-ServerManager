@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from api.dependencies import ActiveUser, DatabaseSession
 from api.routes.servers import get_server_with_permission
@@ -362,6 +362,12 @@ def _config_payload(
     }
 
 
+def _map_count(payload: dict[str, object]) -> int:
+    """Return the number of parsed maps without trusting unvalidated payload data."""
+    maps = payload.get("maps")
+    return len(maps) if isinstance(maps, list) else 0
+
+
 def _plugin_config_payload(
     content: str,
     *,
@@ -452,7 +458,7 @@ async def _get_map_sync_tasks(
             ScheduledTask.server_id == server_id,
             ScheduledTask.action == MAP_POOL_SYNC_ACTION,
         )
-        .order_by(ScheduledTask.id.asc())
+        .order_by(col(ScheduledTask.id).asc())
     )
     return list(result.scalars().all())
 
@@ -638,7 +644,7 @@ async def run_custom_map_sync(
             )
             return {
                 **payload,
-                "map_count": len(payload["maps"]),
+                "map_count": _map_count(payload),
                 "custom_sync": _map_sync_payload(server, task),
                 "message": "Custom remote map pool synchronized successfully",
             }
@@ -949,7 +955,7 @@ async def apply_map_preset(
             return {
                 **maps_payload,
                 "preset": request.preset,
-                "map_count": len(maps_payload["maps"]),
+                "map_count": _map_count(maps_payload),
                 "plugin_config": plugin_config_payload,
                 "message": f"Applied the {request.preset.upper()} map preset",
             }

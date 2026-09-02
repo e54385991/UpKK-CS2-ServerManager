@@ -351,6 +351,182 @@ async def _update_and_install(
     return install_code, install_out, install_err, "install"
 
 
+async def _finish_package_install(
+    runner: HostCommandRunner,
+    packages: Sequence[str],
+    missing: Sequence[str],
+    *,
+    architecture: str,
+    privilege: Privilege,
+    active_mirror: str | None,
+    failed_mirrors: list[str],
+    logs: list[str],
+    progress: ProgressCallback | None,
+) -> HostDependencyResult:
+    leftover = await _probe_missing(runner, packages)
+    if leftover:
+        return _failed(
+            architecture=architecture,
+            architecture_supported=True,
+            missing_before=tuple(missing),
+            missing_after=leftover,
+            installed=True,
+            privilege=privilege,
+            reason="Automatic package installation failed.",
+            logs=logs,
+            apt_mirror=active_mirror,
+            failed_mirrors=failed_mirrors,
+        )
+    await _emit(progress, logs, f"✓ Installed and verified: {', '.join(missing)}")
+    if active_mirror:
+        await _emit(progress, logs, f"Active apt mirror: {mirror_label(active_mirror)}")
+    return HostDependencyResult(
+        success=True,
+        architecture_supported=True,
+        architecture=architecture,
+        missing_before=tuple(missing),
+        missing_after=(),
+        installed=True,
+        privilege=privilege,
+        message=(
+            "SteamCMD host dependencies were missing; they are now installed and verified."
+            + (f" Apt mirror: {mirror_label(active_mirror)}." if active_mirror else "")
+        ),
+        manual_install_command=None,
+        logs=tuple(logs),
+        apt_mirror=active_mirror,
+        failed_mirrors=tuple(failed_mirrors),
+    )
+
+
+async def _install_packages_with_fallback(
+    runner: HostCommandRunner,
+    packages: Sequence[str],
+    missing: Sequence[str],
+    *,
+    architecture: str,
+    privilege: Privilege,
+    preferred: str | None,
+    active_mirror: str | None,
+    os_release,
+    apply_preferred_first: bool,
+    logs: list[str],
+    progress: ProgressCallback | None,
+) -> HostDependencyResult:
+    failed_mirrors: list[str] = []
+    tried: list[str] = []
+
+    async def attempt(mirror: str | None) -> tuple[int, str, str, str]:
+        if mirror and os_release is not None:
+            applied, _ = await _apply_apt_mirror(
+                runner, os_release, mirror, progress=progress, logs=logs
+            )
+            tried.append(mirror)
+            if not applied:
+                failed_mirrors.append(mirror)
+                return 1, "", "mirror apply failed", "update"
+        return await _update_and_install(runner, missing, progress=progress, logs=logs)
+
+    if preferred and (apply_preferred_first or preferred) and os_release is not None:
+        active_mirror = preferred
+        applied, _ = await _apply_apt_mirror(
+            runner, os_release, preferred, progress=progress, logs=logs
+        )
+        tried.append(preferred)
+        if not applied:
+            failed_mirrors.append(preferred)
+
+    action_code, action_out, action_err, action = await _update_and_install(
+        runner, missing, progress=progress, logs=logs
+    )
+    if action_code == 0:
+        return await _finish_package_install(
+            runner,
+            packages,
+            missing,
+            architecture=architecture,
+            privilege=privilege,
+            active_mirror=active_mirror,
+            failed_mirrors=failed_mirrors,
+            logs=logs,
+            progress=progress,
+        )
+    leftover = await _probe_missing(runner, packages)
+    if not is_apt_source_failure(action_out, action_err) or os_release is None:
+        return _failed(
+            architecture=architecture,
+            architecture_supported=True,
+            missing_before=missing,
+            missing_after=leftover or missing,
+            installed=False,
+            privilege=privilege,
+            reason=(
+                "Automatic apt-get update failed."
+                if action == "update"
+                else "Automatic package installation failed."
+            ),
+            logs=logs,
+            apt_mirror=active_mirror,
+            failed_mirrors=failed_mirrors,
+        )
+    if active_mirror and active_mirror not in failed_mirrors:
+        failed_mirrors.append(active_mirror)
+    for candidate in mirror_order(preferred):
+        if candidate in tried:
+            continue
+        action_code, action_out, action_err, action = await attempt(candidate)
+        active_mirror = candidate
+        if action_code == 0:
+            return await _finish_package_install(
+                runner,
+                packages,
+                missing,
+                architecture=architecture,
+                privilege=privilege,
+                active_mirror=active_mirror,
+                failed_mirrors=failed_mirrors,
+                logs=logs,
+                progress=progress,
+            )
+        leftover = await _probe_missing(runner, packages)
+        if not is_apt_source_failure(action_out, action_err):
+            return _failed(
+                architecture=architecture,
+                architecture_supported=True,
+                missing_before=missing,
+                missing_after=leftover or missing,
+                installed=False,
+                privilege=privilege,
+                reason=(
+                    "Automatic apt-get update failed."
+                    if action == "update"
+                    else "Automatic package installation failed."
+                ),
+                logs=logs,
+                apt_mirror=active_mirror,
+                failed_mirrors=failed_mirrors,
+            )
+        failed_mirrors.append(candidate)
+        await _emit(
+            progress,
+            logs,
+            f"⚠ {mirror_label(candidate)} also failed apt {action}. Trying the next catalog entry...",
+        )
+    leftover = await _probe_missing(runner, packages)
+    return _failed(
+        architecture=architecture,
+        architecture_supported=True,
+        missing_before=missing,
+        missing_after=leftover or missing,
+        installed=False,
+        privilege=privilege,
+        reason="Automatic apt-get update/install failed after trying Official, USTC, and Tsinghua.",
+        logs=logs,
+        apt_mirror=active_mirror,
+        failed_mirrors=failed_mirrors,
+    )
+
+
 async def ensure_steamcmd_packages(
     runner: HostCommandRunner,
     packages: Sequence[str] = STEAMCMD_REQUIRED_PACKAGES,
@@ -362,7 +538,6 @@ async def ensure_steamcmd_packages(
     """Probe the host and install any missing SteamCMD/CS2 runtime packages."""
     logs: list[str] = []
     preferred = normalize_apt_mirror(preferred_mirror)
-    failed_mirrors: list[str] = []
     active_mirror = preferred
     code, stdout, stderr = await runner.run("dpkg --print-architecture 2>/dev/null || uname -m")
     architecture = normalize_debian_architecture(stdout)
@@ -458,146 +633,18 @@ async def ensure_steamcmd_packages(
             "Official / USTC (中科大) / Tsinghua (清华) can be switched from the operations center.",
         )
 
-    async def finish_success(*, installed: bool) -> HostDependencyResult:
-        leftover = await _probe_missing(runner, packages)
-        if leftover:
-            return _failed(
-                architecture=architecture,
-                architecture_supported=True,
-                missing_before=missing,
-                missing_after=leftover,
-                installed=installed,
-                privilege=privilege,
-                reason="Automatic package installation failed.",
-                logs=logs,
-                apt_mirror=active_mirror,
-                failed_mirrors=failed_mirrors,
-            )
-        await _emit(progress, logs, f"✓ Installed and verified: {', '.join(missing)}")
-        if active_mirror:
-            await _emit(progress, logs, f"Active apt mirror: {mirror_label(active_mirror)}")
-        return HostDependencyResult(
-            success=True,
-            architecture_supported=True,
-            architecture=architecture,
-            missing_before=tuple(missing),
-            missing_after=(),
-            installed=True,
-            privilege=privilege,
-            message=(
-                "SteamCMD host dependencies were missing; they are now installed and verified."
-                + (f" Apt mirror: {mirror_label(active_mirror)}." if active_mirror else "")
-            ),
-            manual_install_command=None,
-            logs=tuple(logs),
-            apt_mirror=active_mirror,
-            failed_mirrors=tuple(failed_mirrors),
-        )
-
-    tried: list[str] = []
-    if preferred and (apply_preferred_first or preferred) and os_release is not None:
-        applied, _ = await _apply_apt_mirror(
-            runner, os_release, preferred, progress=progress, logs=logs
-        )
-        tried.append(preferred)
-        active_mirror = preferred
-        if not applied:
-            failed_mirrors.append(preferred)
-
-    action_code, action_out, action_err, action = await _update_and_install(
-        runner, missing, progress=progress, logs=logs
-    )
-    if action_code == 0:
-        return await finish_success(installed=True)
-
-    leftover = await _probe_missing(runner, packages)
-    source_failed = is_apt_source_failure(action_out, action_err)
-    if not source_failed or os_release is None:
-        reason = (
-            "Automatic apt-get update failed."
-            if action == "update"
-            else "Automatic package installation failed."
-        )
-        if source_failed:
-            reason = f"{reason} {switch_hint(failed_mirrors, active_mirror)}"
-        return _failed(
-            architecture=architecture,
-            architecture_supported=True,
-            missing_before=missing,
-            missing_after=leftover or missing,
-            installed=action == "install" and action_code == 0,
-            privilege=privilege,
-            reason=reason,
-            logs=logs,
-            apt_mirror=active_mirror,
-            failed_mirrors=failed_mirrors,
-        )
-
-    if active_mirror and active_mirror not in failed_mirrors:
-        failed_mirrors.append(active_mirror)
-    await _emit(
-        progress,
-        logs,
-        f"Apt {action} failed on "
-        f"{mirror_label(active_mirror) if active_mirror else 'the current sources'} "
-        "because of a software-source or network error. "
-        f"{switch_hint(failed_mirrors, active_mirror)}",
-    )
-
-    for candidate in mirror_order(preferred):
-        if candidate in tried:
-            continue
-        applied, _ = await _apply_apt_mirror(
-            runner, os_release, candidate, progress=progress, logs=logs
-        )
-        tried.append(candidate)
-        active_mirror = candidate
-        if not applied:
-            failed_mirrors.append(candidate)
-            continue
-        action_code, action_out, action_err, action = await _update_and_install(
-            runner, missing, progress=progress, logs=logs
-        )
-        if action_code == 0:
-            return await finish_success(installed=True)
-        leftover = await _probe_missing(runner, packages)
-        if not is_apt_source_failure(action_out, action_err):
-            reason = (
-                "Automatic apt-get update failed."
-                if action == "update"
-                else "Automatic package installation failed."
-            )
-            return _failed(
-                architecture=architecture,
-                architecture_supported=True,
-                missing_before=missing,
-                missing_after=leftover or missing,
-                installed=action == "install" and action_code == 0,
-                privilege=privilege,
-                reason=reason,
-                logs=logs,
-                apt_mirror=active_mirror,
-                failed_mirrors=failed_mirrors,
-            )
-        failed_mirrors.append(candidate)
-        await _emit(
-            progress,
-            logs,
-            f"⚠ {mirror_label(candidate)} also failed apt {action}. Trying the next catalog entry...",
-        )
-
-    leftover = await _probe_missing(runner, packages)
-    return _failed(
+    return await _install_packages_with_fallback(
+        runner,
+        packages,
+        missing,
         architecture=architecture,
-        architecture_supported=True,
-        missing_before=missing,
-        missing_after=leftover or missing,
-        installed=False,
         privilege=privilege,
-        reason="Automatic apt-get update/install failed after trying Official, USTC, and Tsinghua.",
+        preferred=preferred,
+        active_mirror=active_mirror,
+        os_release=os_release,
+        apply_preferred_first=apply_preferred_first,
         logs=logs,
-        apt_mirror=active_mirror,
-        failed_mirrors=failed_mirrors,
+        progress=progress,
     )
 
 

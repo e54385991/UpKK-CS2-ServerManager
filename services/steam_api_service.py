@@ -250,7 +250,7 @@ class SteamAPIService:
         return version if version else None
 
     @staticmethod
-    def should_check_version(last_check: Optional[datetime], interval_hours: int = 1) -> bool:
+    def should_check_version(last_check: Optional[datetime], interval_hours: float = 1) -> bool:
         """
         Determine if version should be checked based on last check time
 
@@ -334,11 +334,13 @@ class SteamAPIService:
             #   }
             # }
 
-            if "response" not in response_data:
+            if not isinstance(response_data, dict) or "response" not in response_data:
                 logger.error(f"Unexpected Steam API response format: {response_data}")
                 return False, {"success": False, "error": "Unexpected API response format"}
 
             api_response = response_data["response"]
+            if not isinstance(api_response, dict):
+                return False, {"success": False, "error": "Unexpected API response format"}
 
             # Check if login_token exists in response
             if "login_token" not in api_response:

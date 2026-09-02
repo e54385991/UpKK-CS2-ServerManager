@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from api.dependencies import ActiveUser, DatabaseSession
 from api.routes.servers import get_server_with_permission
@@ -87,7 +87,7 @@ async def _source_for_server(
         select(PluginConfigSource).where(
             PluginConfigSource.id == source_id,
             PluginConfigSource.server_id == server_id,
-            PluginConfigSource.is_enabled.is_(True),
+            col(PluginConfigSource.is_enabled).is_(True),
         )
     )
     source = result.scalar_one_or_none()
@@ -163,9 +163,9 @@ async def list_sources(
         select(PluginConfigSource)
         .where(
             PluginConfigSource.server_id == server_id,
-            PluginConfigSource.is_enabled.is_(True),
+            col(PluginConfigSource.is_enabled).is_(True),
         )
-        .order_by(PluginConfigSource.is_default.desc(), PluginConfigSource.relative_path)
+        .order_by(col(PluginConfigSource.is_default).desc(), col(PluginConfigSource.relative_path))
     )
     return {
         "game_directory": server.game_directory,
@@ -292,8 +292,9 @@ async def restore_default_source(
 async def browse_source_path(
     server_id: int,
     path: str = Query("."),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> dict[str, Any]:
     server = await get_server_with_permission(server_id, current_user, db)
     try:

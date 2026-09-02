@@ -4,6 +4,7 @@ User settings routes for customizable mirror URLs
 
 from fastapi import APIRouter
 from sqlalchemy import select
+from sqlmodel import col
 
 from api.dependencies import ActiveUser, DatabaseSession
 from modules import (
@@ -29,7 +30,9 @@ async def get_mirror_presets():
 async def get_user_settings(current_user: ActiveUser, db: DatabaseSession):
     """Get current user's settings"""
     # Query user settings
-    result = await db.execute(select(UserSettings).filter(UserSettings.user_id == current_user.id))
+    result = await db.execute(
+        select(UserSettings).filter(col(UserSettings.user_id) == current_user.id)
+    )
     user_settings = result.scalar_one_or_none()
 
     if not user_settings:
@@ -47,7 +50,9 @@ async def update_user_settings(
 ):
     """Update user settings"""
     # Query existing settings
-    result = await db.execute(select(UserSettings).filter(UserSettings.user_id == current_user.id))
+    result = await db.execute(
+        select(UserSettings).filter(col(UserSettings.user_id) == current_user.id)
+    )
     user_settings = result.scalar_one_or_none()
 
     if not user_settings:
@@ -75,7 +80,9 @@ async def update_user_settings(
 async def reset_user_settings(current_user: ActiveUser, db: DatabaseSession):
     """Reset user settings to default (delete custom settings)"""
     # Query existing settings
-    result = await db.execute(select(UserSettings).filter(UserSettings.user_id == current_user.id))
+    result = await db.execute(
+        select(UserSettings).filter(col(UserSettings.user_id) == current_user.id)
+    )
     user_settings = result.scalar_one_or_none()
 
     if user_settings:

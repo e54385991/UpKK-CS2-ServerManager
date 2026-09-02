@@ -346,7 +346,10 @@ class SystemCleanupService:
             if event.get("type") == "error":
                 raise RuntimeError(str(event.get("message") or "System cleanup scan failed"))
             if event.get("type") == "done":
-                return event["data"]
+                data = event.get("data")
+                if isinstance(data, dict):
+                    return data
+                raise RuntimeError("System cleanup scan returned invalid data")
         raise RuntimeError("System cleanup scan produced no result")
 
     async def apply(

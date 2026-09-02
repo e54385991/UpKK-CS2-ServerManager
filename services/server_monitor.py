@@ -478,7 +478,6 @@ class ServerMonitor:
                             except Exception as e:
                                 logger.error(f"Failed to log restart trigger to Redis: {e}")
 
-                            # Update server status in database in a separate quick session
                             async with async_session_maker() as db:
                                 server_to_update = await db.get(Server, server_id)
                                 if server_to_update:
@@ -505,11 +504,6 @@ class ServerMonitor:
                                         "Health Check": check_message,
                                     },
                                 )
-                                # Keep the attempt in the rolling window. A start command can
-                                # succeed immediately before the game crashes again; clearing
-                                # here would defeat restart-loop protection after game updates.
-
-                                # Log successful restart to Redis
                                 try:
                                     await redis_manager.append_monitoring_log(
                                         server_id=server_id,
@@ -530,7 +524,6 @@ class ServerMonitor:
                                         "Health Check": check_message,
                                     },
                                 )
-                                # Log failed restart to Redis
                                 try:
                                     await redis_manager.append_monitoring_log(
                                         server_id=server_id,
@@ -555,14 +548,12 @@ class ServerMonitor:
                                 },
                             )
 
-                            # Update server status in database
                             async with async_session_maker() as db:
                                 server_to_update = await db.get(Server, server_id)
                                 if server_to_update:
                                     server_to_update.status = ServerStatus.ERROR
                                     await db.commit()
 
-                            # Log restart exception to Redis
                             try:
                                 await redis_manager.append_monitoring_log(
                                     server_id=server_id,
@@ -585,14 +576,12 @@ class ServerMonitor:
                             },
                         )
 
-                        # Update server status in database
                         async with async_session_maker() as db:
                             server_to_update = await db.get(Server, server_id)
                             if server_to_update:
                                 server_to_update.status = ServerStatus.ERROR
                                 await db.commit()
 
-                        # Log blocked restart to Redis
                         try:
                             await redis_manager.append_monitoring_log(
                                 server_id=server_id,
@@ -617,14 +606,12 @@ class ServerMonitor:
                             else "Panel process check",
                         },
                     )
-                    # Update server status in database
                     async with async_session_maker() as db:
                         server_to_update = await db.get(Server, server_id)
                         if server_to_update:
                             server_to_update.status = ServerStatus.STOPPED
                             await db.commit()
                 else:
-                    # Server is running - update status and last check time in database
                     async with async_session_maker() as db:
                         server_to_update = await db.get(Server, server_id)
                         if server_to_update:
@@ -633,7 +620,6 @@ class ServerMonitor:
                             server_to_update.last_status_check = get_current_time()
                             await db.commit()
 
-                # Wait before next check
                 await asyncio.sleep(check_interval)
 
         except asyncio.CancelledError:

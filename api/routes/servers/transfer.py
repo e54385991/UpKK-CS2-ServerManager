@@ -122,8 +122,9 @@ async def export_server_configs(
         default=False,
         description="Include SSH, game, Steam, and Discord credentials in the downloaded bundle",
     ),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ):
     """Download one or more portable server configuration entries."""
     bundle = await collect_export_bundle(db, current_user, server_ids, include_secrets)

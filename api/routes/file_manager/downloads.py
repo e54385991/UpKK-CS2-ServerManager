@@ -8,6 +8,7 @@ from api.routes.v1.operation_runner import enqueue_url_download
 from services.server_operation_hub import ServerOperationConflict, server_operation_hub
 
 from .common import *
+from .common import _download_archive_filename, _validate_download_url
 
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 

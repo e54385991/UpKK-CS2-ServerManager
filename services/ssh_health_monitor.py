@@ -74,7 +74,7 @@ class SSHHealthMonitor:
 
     async def _check_all_servers(self):
         """Check all servers that need SSH health monitoring"""
-        from sqlmodel import select
+        from sqlmodel import col, select
 
         from modules.database import async_session_maker
         from modules.models import Server
@@ -83,7 +83,7 @@ class SSHHealthMonitor:
             async with async_session_maker() as db:
                 # Get all servers with SSH health monitoring enabled
                 result = await db.execute(
-                    select(Server).where(Server.enable_ssh_health_monitoring.is_(True))
+                    select(Server).where(col(Server.enable_ssh_health_monitoring).is_(True))
                 )
                 servers = list(result.scalars().all())
 
@@ -114,6 +114,24 @@ class SSHHealthMonitor:
         except Exception as e:
             logger.error(f"Error getting servers for SSH health check: {e}")
 
+    def _check_due(self, server, now: datetime) -> bool:
+        interval = timedelta(hours=server.ssh_health_check_interval_hours or 2)
+        if server.last_ssh_health_check:
+            last_check = server.last_ssh_health_check
+            if last_check.tzinfo is None:
+                last_check = last_check.replace(tzinfo=now.tzinfo)
+            if now < last_check + interval:
+                return False
+        last_check = self.last_check_times.get(server.id)
+        if last_check is not None:
+            if last_check.tzinfo is None and now.tzinfo is not None:
+                last_check = last_check.replace(tzinfo=now.tzinfo)
+            elif last_check.tzinfo is not None and now.tzinfo is None:
+                now = now.replace(tzinfo=last_check.tzinfo)
+            if (now - last_check).total_seconds() < 30:
+                return False
+        return server.ssh_health_status != "completely_down"
+
     async def _check_server_health(self, server):
         """Check SSH health for a single server"""
         from sqlalchemy import update as sql_update
@@ -123,38 +141,7 @@ class SSHHealthMonitor:
 
         now = get_current_time()
 
-        # Calculate when the next check should occur
-        check_interval_hours = server.ssh_health_check_interval_hours or 2
-        check_interval = timedelta(hours=check_interval_hours)
-
-        # Determine if it's time to check this server
-        if server.last_ssh_health_check:
-            # Make sure we can compare datetimes (handle timezone-naive from DB)
-            last_check = server.last_ssh_health_check
-            if last_check.tzinfo is None:
-                # Database datetime is naive, make it aware using the same timezone as 'now'
-                last_check = last_check.replace(tzinfo=now.tzinfo)
-
-            next_check_time = last_check + check_interval
-            if now < next_check_time:
-                # Not time yet
-                return
-
-        # Avoid checking if we just checked recently (within last 30 seconds)
-        # This prevents duplicate checks when multiple monitor cycles run
-        if server.id in self.last_check_times:
-            last_check = self.last_check_times[server.id]
-            # Ensure both datetimes are comparable
-            if last_check.tzinfo is None and now.tzinfo is not None:
-                last_check = last_check.replace(tzinfo=now.tzinfo)
-            elif last_check.tzinfo is not None and now.tzinfo is None:
-                now = now.replace(tzinfo=last_check.tzinfo)
-
-            if (now - last_check).total_seconds() < 30:
-                return
-
-        # Skip completely down servers (they need manual reconnect)
-        if server.ssh_health_status == "completely_down":
+        if not self._check_due(server, now):
             logger.debug(f"Server {server.id} is completely down, skipping automatic check")
             return
 
@@ -311,6 +298,7 @@ class SSHHealthMonitor:
             tuple[bool, str]: (success, message)
         """
         from sqlalchemy import update as sql_update
+        from sqlmodel import col
 
         from modules.database import async_session_maker
         from modules.models import Server
@@ -330,7 +318,7 @@ class SSHHealthMonitor:
                 # Reset health status to healthy
                 await db.execute(
                     sql_update(Server)
-                    .where(Server.id == server_id)
+                    .where(col(Server.id) == server_id)
                     .values(
                         last_ssh_success=now,
                         last_ssh_health_check=now,

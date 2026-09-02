@@ -179,7 +179,7 @@ async def browse_source_path(
     current_user: ActiveUser,
     path: str = Query("."),
 ) -> PluginConfigBrowseView:
-    payload = await legacy.browse_source_path(server_id, path, db, current_user)
+    payload = await legacy.browse_source_path(server_id, path, db=db, current_user=current_user)
     return PluginConfigBrowseView(
         path=str(payload.get("path") or "."),
         items=[_browse_item(item) for item in payload.get("items") or [] if isinstance(item, dict)],

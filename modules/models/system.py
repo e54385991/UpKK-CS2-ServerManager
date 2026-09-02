@@ -8,9 +8,9 @@ from .common import *
 class SSHServerSudo(SQLModel, table=True):
     """SSH Server Sudo Configuration model for setup wizard"""
 
-    __tablename__ = "ssh_servers_sudo"
+    __tablename__: ClassVar[str] = "ssh_servers_sudo"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     host: str = Field(max_length=255, nullable=False)
     ssh_port: int = Field(default=22, nullable=False)
@@ -81,9 +81,9 @@ class SSHServerSudo(SQLModel, table=True):
 class SystemSettings(SQLModel, table=True):
     """System settings model for global configuration"""
 
-    __tablename__ = "system_settings"
+    __tablename__: ClassVar[str] = "system_settings"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     # Proxy configuration
     default_proxy_mode: str = Field(default="panel", max_length=50)  # direct, panel, github_url
     github_proxy_url: Optional[str] = Field(default=None, max_length=500)
@@ -128,9 +128,10 @@ class SystemSettings(SQLModel, table=True):
     @property
     def global_github_token_prefix(self) -> Optional[str]:
         """Return a safe preview for the admin UI without exposing the token."""
-        if not self.has_global_github_token:
+        token = self.global_github_token
+        if not token or not token.strip():
             return None
-        return f"{self.global_github_token.strip()[:12]}..."
+        return f"{token.strip()[:12]}..."
 
     @classmethod
     async def get_settings(cls, session: AsyncSession) -> Optional["SystemSettings"]:

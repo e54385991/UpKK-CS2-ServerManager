@@ -46,6 +46,28 @@ from services.ssh_connection_pool import ssh_connection_pool
 
 logger = logging.getLogger(__name__)
 
+
+class SSHMixinBase:
+    """Typed boundary for capabilities composed onto the SSH facade."""
+
+    REMOTE_DOWNLOAD_TIMEOUT = 1800
+    REMOTE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024 * 1024
+    REMOTE_DOWNLOAD_METADATA_MAX_BYTES = 256 * 1024
+    REMOTE_DOWNLOAD_FILENAME_MAX_BYTES = 255
+    REMOTE_DOWNLOAD_URL_MAX_LENGTH = 4096
+    REMOTE_DOWNLOAD_MAX_REDIRECTS = 10
+    REMOTE_DOWNLOAD_REDIRECT_CODES = frozenset((301, 302, 303, 307, 308))
+    ARCHIVE_LISTING_STOP_TIMEOUT = 5
+    ARCHIVE_MAX_MEMBER_PATH_BYTES = 4096
+    ARCHIVE_MAX_ENTRIES = 10000
+    ARCHIVE_MAX_FOLDERS = 2000
+    CS2_EXECUTABLE_RELATIVE_PATH = "game/bin/linuxsteamrt64/cs2"
+
+    def __getattr__(self, name: str) -> Any:
+        """Expose dynamically composed sibling capabilities to the type checker."""
+        raise AttributeError(name)
+
+
 _status_update_tasks: set[asyncio.Task] = set()
 
 
@@ -80,7 +102,7 @@ async def _cleanup_local_download_dir(download_dir: str, panel_temp_dir: str) ->
         return True, parent_removed
 
     try:
-        download_removed, parent_removed = await anyio.to_thread.run_sync(cleanup)
+        download_removed, parent_removed = await asyncio.to_thread(cleanup)
         if download_removed:
             logger.info("Cleaned up panel temp directory: %s", download_dir)
         if parent_removed:
@@ -101,6 +123,7 @@ async def update_ssh_connection_status(server_id: int, success: bool):
         success: Whether the SSH connection was successful
     """
     from sqlalchemy import update as sql_update
+    from sqlmodel import col
 
     from modules.database import async_session_maker
     from modules.models import Server as ServerModel
@@ -121,7 +144,7 @@ async def update_ssh_connection_status(server_id: int, success: bool):
                     # Reset failure tracking on successful connection
                     await db.execute(
                         sql_update(ServerModel)
-                        .where(ServerModel.id == server_id)
+                        .where(col(ServerModel.id) == server_id)
                         .values(last_ssh_success=now, consecutive_ssh_failures=0, is_ssh_down=False)
                     )
                     logger.debug(
@@ -137,7 +160,7 @@ async def update_ssh_connection_status(server_id: int, success: bool):
 
                     await db.execute(
                         sql_update(ServerModel)
-                        .where(ServerModel.id == server_id)
+                        .where(col(ServerModel.id) == server_id)
                         .values(
                             last_ssh_failure=now,
                             consecutive_ssh_failures=new_failure_count,
@@ -156,4 +179,58 @@ async def update_ssh_connection_status(server_id: int, success: bool):
         logger.error(f"Failed to update SSH connection status for server {server_id}: {e}")
 
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+__all__ = [
+    "asyncio",
+    "contextlib",
+    "inspect",
+    "ipaddress",
+    "logging",
+    "os",
+    "posixpath",
+    "re",
+    "shlex",
+    "shutil",
+    "socket",
+    "tempfile",
+    "time",
+    "uuid",
+    "datetime",
+    "Message",
+    "collapse_rfc2231_value",
+    "Any",
+    "AsyncIterator",
+    "Awaitable",
+    "Callable",
+    "Dict",
+    "List",
+    "Optional",
+    "Tuple",
+    "unquote",
+    "urljoin",
+    "urlsplit",
+    "anyio",
+    "asyncssh",
+    "Server",
+    "availability_command",
+    "capture_console_command",
+    "cleanup_command",
+    "find_running_session_manager",
+    "find_running_session_managers",
+    "force_stop_session_command",
+    "gslt_startup_parameter",
+    "normalize_session_manager",
+    "session_manager_order",
+    "session_name",
+    "start_session_command",
+    "steamcmd_session_name",
+    "stop_session_command",
+    "server_monitor",
+    "ssh_connection_pool",
+    "logger",
+    "_status_update_tasks",
+    "_schedule_status_update",
+    "shutdown_background_tasks",
+    "_cleanup_local_download_dir",
+    "update_ssh_connection_status",
+    "SSHMixinBase",
+]

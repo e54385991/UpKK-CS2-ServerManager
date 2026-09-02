@@ -2,25 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 from typing import Any
 
 from fastapi import (
     APIRouter,
     HTTPException,
     Query,
-    Request,
-    WebSocket,
-    WebSocketDisconnect,
     status,
 )
-from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
-from api.dependencies import ActiveUser, AdminUser, DatabaseSession, close_request_session
+from api.dependencies import ActiveUser, AdminUser, DatabaseSession
 from modules import (
     AIConversation,
     AIConversationCreate,
@@ -41,11 +35,8 @@ from modules import (
     AIToolRunResponse,
     Server,
     User,
-    UserAISettings,
     UserAISettingsResponse,
     UserAISettingsUpdate,
-    async_session_maker,
-    authenticate_websocket,
 )
 from modules.schemas.ai import AIBackgroundTaskResponse, AIBackgroundTaskToolResponse
 from modules.utils import get_current_time
@@ -55,7 +46,6 @@ from services.agent_policy_service import (
     require_agent_capabilities,
 )
 from services.ai_access import audit_security_event
-from services.ai_events import ai_event_hub
 from services.ai_orchestrator import (
     ACTIVE_RUN_STATUSES,
     cleanup_expired_ai_runs,
@@ -68,182 +58,31 @@ from services.ai_provider import test_provider
 from services.ai_security import (
     AIConfigurationError,
     AIProviderConfig,
-    credential_encryption_available,
+    credential_encryption_available,  # noqa: F401
     decrypt_credential,
     encrypt_credential,
     get_effective_provider,
-    normalize_allowlist,
     normalize_base_url,
 )
 from services.task_registry import ai_task_registry
 
-router = APIRouter(tags=["ai-assistant"])
-
-_MODEL_PARAMETER_NAMES = (
-    "reasoning_effort",
-    "temperature",
-    "top_p",
-    "max_completion_tokens",
-    "token_limit_parameter",
-    "frequency_penalty",
-    "presence_penalty",
-    "verbosity",
-    "parallel_tool_calls",
+from .ai_helpers import (  # noqa: F401
+    _MODEL_PARAMETER_NAMES,
+    _apply_model_parameters,
+    _apply_saved_provider_test_flags,
+    _apply_system_enabled,
+    _apply_system_provider_fields,
+    _apply_system_runtime_limits,
+    _configuration_error,
+    _get_user_settings,
+    _is_saved_provider_test,
+    _system_ready_to_enable,
+    _system_response,
+    _test_model_parameters,
+    _user_response,
 )
 
-
-def _model_parameters(item: AISystemSettings | UserAISettings) -> dict[str, Any]:
-    return {name: getattr(item, name) for name in _MODEL_PARAMETER_NAMES}
-
-
-def _validate_sampling_parameters(parameters: dict[str, Any]) -> None:
-    if parameters["temperature"] is not None and parameters["top_p"] is not None:
-        raise AIConfigurationError("Set temperature or top_p, not both")
-
-
-def _apply_model_parameters(
-    request: AISystemSettingsUpdate | UserAISettingsUpdate,
-    item: AISystemSettings | UserAISettings,
-) -> bool:
-    parameters = _model_parameters(item)
-    for name in _MODEL_PARAMETER_NAMES:
-        if name in request.model_fields_set:
-            value = getattr(request, name)
-            if name == "max_completion_tokens" and value is None:
-                value = 2048
-            elif name == "token_limit_parameter" and value is None:
-                value = "max_completion_tokens"
-            parameters[name] = value
-    _validate_sampling_parameters(parameters)
-    changed = False
-    for name, value in parameters.items():
-        changed |= value != getattr(item, name)
-        setattr(item, name, value)
-    return changed
-
-
-def _test_model_parameters(
-    request: AIProviderTestRequest,
-    item: AISystemSettings | UserAISettings,
-) -> dict[str, Any]:
-    parameters = _model_parameters(item)
-    for name in _MODEL_PARAMETER_NAMES:
-        if name in request.model_fields_set and getattr(request, name) is not None:
-            parameters[name] = getattr(request, name)
-    _validate_sampling_parameters(parameters)
-    return parameters
-
-
-def _system_response(item: AISystemSettings) -> AISystemSettingsResponse:
-    return AISystemSettingsResponse(
-        enabled=item.enabled,
-        base_url=item.base_url,
-        model=item.model,
-        api_protocol=item.api_protocol,
-        api_key_configured=bool(item.api_key_encrypted),
-        admin_prompt=item.admin_prompt,
-        private_endpoint_allowlist=item.private_endpoint_allowlist or [],
-        **_model_parameters(item),
-        request_timeout_seconds=item.request_timeout_seconds,
-        history_retention_days=item.history_retention_days,
-        max_provider_rounds=item.max_provider_rounds,
-        max_tool_calls_per_round=getattr(item, "max_tool_calls_per_round", 200),
-        provider_tested=item.provider_tested,
-        tool_calling_tested=item.tool_calling_tested,
-        streaming_tested=item.streaming_tested,
-    )
-
-
-async def _user_response(
-    db: AsyncSession, user: User, item: UserAISettings
-) -> UserAISettingsResponse:
-    source = "none"
-    enabled = False
-    try:
-        effective = await get_effective_provider(db, user)
-    except AIConfigurationError:
-        effective = None
-    if effective is not None:
-        source = effective.source
-        enabled = True
-    return UserAISettingsResponse(
-        mode=item.mode,
-        base_url=item.base_url,
-        model=item.model,
-        api_protocol=item.api_protocol,
-        api_key_configured=bool(item.api_key_encrypted),
-        **_model_parameters(item),
-        provider_tested=item.provider_tested,
-        tool_calling_tested=item.tool_calling_tested,
-        streaming_tested=item.streaming_tested,
-        effective_enabled=enabled,
-        effective_source=source,
-    )
-
-
-async def _get_user_settings(db: AsyncSession, user_id: int) -> UserAISettings:
-    item = await db.get(UserAISettings, user_id)
-    if item is None:
-        item = UserAISettings(user_id=user_id)
-        db.add(item)
-        await db.commit()
-        await db.refresh(item)
-    return item
-
-
-def _configuration_error(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-
-
-def _is_saved_provider_test(
-    request: AIProviderTestRequest,
-    item: AISystemSettings | UserAISettings,
-) -> bool:
-    """Persist probe flags only when the caller is testing the stored provider.
-
-    The Jinja UI posts ``{}``. The Next console used to post null placeholders
-    for URL / model / key; those must still record the saved configuration.
-    An explicit API key or a different URL / model / protocol is a dry-run.
-    """
-    if request.api_key:
-        return False
-    if request.base_url:
-        try:
-            if normalize_base_url(request.base_url) != item.base_url:
-                return False
-        except AIConfigurationError, ValueError:
-            return False
-    posted_model = (request.model or "").strip()
-    if posted_model and posted_model != (item.model or ""):
-        return False
-    if (
-        "api_protocol" in request.model_fields_set
-        and request.api_protocol is not None
-        and request.api_protocol != item.api_protocol
-    ):
-        return False
-    return True
-
-
-def _system_ready_to_enable(item: AISystemSettings) -> bool:
-    return bool(
-        item.base_url
-        and item.model
-        and item.api_key_encrypted
-        and credential_encryption_available()
-    )
-
-
-def _apply_saved_provider_test_flags(
-    item: AISystemSettings | UserAISettings,
-    *,
-    text_ok: bool,
-    tool_ok: bool,
-    streaming_ok: bool,
-) -> None:
-    item.provider_tested = text_ok
-    item.tool_calling_tested = tool_ok
-    item.streaming_tested = streaming_ok
+router = APIRouter(tags=["ai-assistant"])
 
 
 @router.get("/api/system/ai-settings", response_model=AISystemSettingsResponse)
@@ -261,54 +100,13 @@ async def update_system_ai_settings(
     current_user: AdminUser,
 ) -> AISystemSettingsResponse:
     item = await AISystemSettings.get_or_create(db)
-    changed_provider = False
-    try:
-        if "base_url" in request.model_fields_set:
-            normalized = normalize_base_url(request.base_url) if request.base_url else None
-            changed_provider |= normalized != item.base_url
-            item.base_url = normalized
-        if "model" in request.model_fields_set:
-            model = (request.model or "").strip() or None
-            changed_provider |= model != item.model
-            item.model = model
-        if "api_protocol" in request.model_fields_set and request.api_protocol is not None:
-            changed_provider |= request.api_protocol != item.api_protocol
-            item.api_protocol = request.api_protocol
-        if request.api_key:
-            item.api_key_encrypted = encrypt_credential(request.api_key)
-            changed_provider = True
-        elif request.clear_api_key:
-            item.api_key_encrypted = None
-            changed_provider = True
-        if request.private_endpoint_allowlist is not None:
-            allowlist = normalize_allowlist(request.private_endpoint_allowlist)
-            changed_provider |= allowlist != item.private_endpoint_allowlist
-            item.private_endpoint_allowlist = allowlist
-        changed_provider |= _apply_model_parameters(request, item)
-    except (AIConfigurationError, ValueError) as exc:
-        raise _configuration_error(exc) from exc
-
-    if request.admin_prompt is not None:
-        item.admin_prompt = request.admin_prompt.strip() or None
-    if request.request_timeout_seconds is not None:
-        item.request_timeout_seconds = request.request_timeout_seconds
-    if request.max_provider_rounds is not None:
-        item.max_provider_rounds = request.max_provider_rounds
-    if request.max_tool_calls_per_round is not None:
-        item.max_tool_calls_per_round = request.max_tool_calls_per_round
-    if request.history_retention_days is not None:
-        item.history_retention_days = request.history_retention_days
+    changed_provider = _apply_system_provider_fields(item, request)
+    _apply_system_runtime_limits(item, request)
     if changed_provider:
         item.provider_tested = False
         item.tool_calling_tested = False
         item.streaming_tested = False
-    if request.enabled is not None:
-        if request.enabled and not _system_ready_to_enable(item):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Configure encryption, URL, model, and API key before enabling AI",
-            )
-        item.enabled = request.enabled
+    _apply_system_enabled(item, request)
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -526,7 +324,7 @@ async def list_ai_conversations(
     result = await db.execute(
         select(AIConversation)
         .where(AIConversation.user_id == current_user.id, AIConversation.source == "web")
-        .order_by(AIConversation.updated_at.desc())
+        .order_by(col(AIConversation.updated_at).desc())
         .limit(100)
     )
     return list(result.scalars().all())
@@ -543,9 +341,9 @@ async def get_ai_conversation(
         select(AIMessage)
         .where(
             AIMessage.conversation_id == conversation.id,
-            AIMessage.visible.is_(True),
+            col(AIMessage.visible).is_(True),
         )
-        .order_by(AIMessage.id.asc())
+        .order_by(col(AIMessage.id).asc())
     )
     return AIConversationDetail(
         **AIConversationResponse.model_validate(conversation).model_dump(),
@@ -566,7 +364,7 @@ async def delete_ai_conversation(
         .select_from(AIRun)
         .where(
             AIRun.conversation_id == conversation.id,
-            AIRun.status.in_(ACTIVE_RUN_STATUSES),
+            col(AIRun.status).in_(ACTIVE_RUN_STATUSES),
         )
     )
     if int(active_result.scalar_one()):
@@ -607,7 +405,7 @@ async def send_ai_message(
         .select_from(AIRun)
         .where(
             AIRun.conversation_id == conversation.id,
-            AIRun.status.in_(ACTIVE_RUN_STATUSES),
+            col(AIRun.status).in_(ACTIVE_RUN_STATUSES),
         )
     )
     if int(active_result.scalar_one()):
@@ -679,7 +477,7 @@ async def get_ai_run(
     result = await db.execute(
         select(AIToolRun)
         .where(AIToolRun.run_id == run.id)
-        .order_by(AIToolRun.created_at.asc(), AIToolRun.id.asc())
+        .order_by(col(AIToolRun.created_at).asc(), col(AIToolRun.id).asc())
     )
     return {
         **AIRunResponse.model_validate(run).model_dump(mode="json"),
@@ -690,19 +488,34 @@ async def get_ai_run(
     }
 
 
-@router.get("/api/ai/tasks", response_model=list[AIBackgroundTaskResponse])
-async def list_ai_background_tasks(
+@router.get(
+    "/api/ai/tasks",
+    response_model=list[AIBackgroundTaskResponse],
+    name="list_ai_background_tasks",
+)
+async def _list_ai_background_tasks_endpoint(
     limit: int = Query(default=20, ge=1, le=100),
     conversation_id: str = Query(min_length=36, max_length=36),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> list[AIBackgroundTaskResponse]:
     """Return active and recent AI tasks belonging to one caller conversation."""
+    return await _list_ai_background_tasks(db, current_user, limit, conversation_id)
+
+
+async def _list_ai_background_tasks(
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    limit: int,
+    conversation_id: str,
+) -> list[AIBackgroundTaskResponse]:
+    """Load task rows and map only write-tool progress to public DTOs."""
     await reconcile_waiting_approval_runs(db, user_id=current_user.id)
     await cleanup_expired_ai_runs(db, user_id=current_user.id)
     run_result = await db.execute(
         select(AIRun)
-        .join(AIToolRun, AIToolRun.run_id == AIRun.id)
+        .join(AIToolRun, col(AIToolRun.run_id) == col(AIRun.id))
         .where(
             AIRun.user_id == current_user.id,
             AIRun.conversation_id == conversation_id,
@@ -710,7 +523,7 @@ async def list_ai_background_tasks(
             AIToolRun.risk == "write",
         )
         .distinct()
-        .order_by(AIRun.updated_at.desc(), AIRun.created_at.desc())
+        .order_by(col(AIRun.updated_at).desc(), col(AIRun.created_at).desc())
         .limit(limit)
     )
     runs = list(run_result.scalars().all())
@@ -720,10 +533,10 @@ async def list_ai_background_tasks(
     tool_result = await db.execute(
         select(AIToolRun)
         .where(
-            AIToolRun.run_id.in_(run_ids),
+            col(AIToolRun.run_id).in_(run_ids),
             AIToolRun.risk == "write",
         )
-        .order_by(AIToolRun.created_at.asc(), AIToolRun.id.asc())
+        .order_by(col(AIToolRun.created_at).asc(), col(AIToolRun.id).asc())
     )
     tools_by_run: dict[str, list[AIBackgroundTaskToolResponse]] = {}
     for tool in tool_result.scalars().all():
@@ -758,6 +571,17 @@ async def list_ai_background_tasks(
         for run in runs
         if run.id in tools_by_run
     ]
+
+
+# Keep the old Python-call signature available to integrations and tests. The
+# decorated endpoint above retains the stable OpenAPI operation name.
+async def list_ai_background_tasks(
+    limit: int,
+    conversation_id: str,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> list[AIBackgroundTaskResponse]:
+    return await _list_ai_background_tasks(db, current_user, limit, conversation_id)
 
 
 @router.delete("/api/ai/tasks/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -879,103 +703,9 @@ async def decide_ai_tool(
     return {"status": item.status}
 
 
-def _encode_sse_event(event: dict[str, Any]) -> str:
-    sequence = str(event.get("sequence") or "0")
-    event_type = str(event.get("type") or "message").replace("\r", "").replace("\n", "")
-    data = json.dumps(event, ensure_ascii=False, separators=(",", ":"), default=str)
-    return f"id: {sequence}\nevent: {event_type}\ndata: {data}\n\n"
-
-
-@router.get("/api/ai/runs/{run_id}/events/stream")
-async def ai_run_event_stream(
-    run_id: str,
-    request: Request,
-    after: int = Query(default=0, ge=0),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
-) -> StreamingResponse:
-    await _run_for_user(db, current_user, run_id)
-    await close_request_session(db)
-
-    async def event_source():
-        queue = await ai_event_hub.subscribe_queue(run_id)
-        latest_sequence = after
-        try:
-            yield ": connected\n\n"
-            for event in await ai_event_hub.replay(run_id, latest_sequence):
-                sequence = int(event.get("sequence") or 0)
-                if sequence <= latest_sequence:
-                    continue
-                latest_sequence = sequence
-                yield _encode_sse_event(event)
-            idle_ticks = 0
-            while not await request.is_disconnected():
-                pending_events: list[dict[str, Any]] = []
-                try:
-                    pending_events.append(await asyncio.wait_for(queue.get(), timeout=1))
-                except TimeoutError:
-                    idle_ticks += 1
-                    if idle_ticks >= 15:
-                        idle_ticks = 0
-                        yield ": keep-alive\n\n"
-                else:
-                    idle_ticks = 0
-                # A run task and its SSE client may live in different workers.
-                # Redis replay turns the local queue into a low-latency wake-up,
-                # while still delivering cross-process events within one second.
-                pending_events.extend(await ai_event_hub.replay(run_id, latest_sequence))
-                pending_events.sort(key=lambda item: int(item.get("sequence") or 0))
-                for event in pending_events:
-                    sequence = int(event.get("sequence") or 0)
-                    if sequence <= latest_sequence:
-                        continue
-                    latest_sequence = sequence
-                    yield _encode_sse_event(event)
-                    if event.get("type") in {"run_completed", "run_failed", "run_interrupted"}:
-                        return
-        finally:
-            await ai_event_hub.unsubscribe_queue(run_id, queue)
-
-    return StreamingResponse(
-        event_source(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-@router.websocket("/api/ai/runs/{run_id}/events")
-async def ai_run_events(
-    websocket: WebSocket,
-    run_id: str,
-    after: int = Query(default=0, ge=0),
-) -> None:
-    user, _ = await authenticate_websocket(websocket)
-    if user is None:
-        return
-    async with async_session_maker() as db:
-        run_result = await db.execute(
-            select(AIRun).where(
-                AIRun.id == run_id,
-                AIRun.user_id == user.id,
-                AIRun.source == "web",
-            )
-        )
-        run = run_result.scalar_one_or_none()
-        if run is None:
-            await websocket.close(code=4404, reason="Run not found")
-            return
-    await websocket.accept()
-    await ai_event_hub.subscribe(run_id, websocket)
-    try:
-        for event in await ai_event_hub.replay(run_id, after):
-            await websocket.send_json(event)
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await ai_event_hub.unsubscribe(run_id, websocket)
+from . import ai_stream_routes as _ai_stream_routes  # noqa: E402,F401
+from .ai_stream_routes import (  # noqa: E402,F401
+    _encode_sse_event,
+    ai_run_event_stream,
+    ai_run_events,
+)

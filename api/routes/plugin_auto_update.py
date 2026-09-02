@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from api.dependencies import ActiveUser, DatabaseSession
 from api.routes.v1.operation_locks import reject_stuck_lock_unless_active
@@ -62,7 +62,7 @@ async def validate_post_update_commands(
         select(CustomCommand).where(
             CustomCommand.server_id == server.id,
             CustomCommand.user_id == current_user.id,
-            CustomCommand.id.in_(command_ids),
+            col(CustomCommand.id).in_(command_ids),
         )
     )
     found = {item.id for item in result.scalars().all()}
@@ -184,7 +184,9 @@ async def register_plugin(
         raise HTTPException(
             status_code=400, detail="repo_url and asset_glob are required for GitHub plugins"
         )
-    source_key = source_key or (repo_url.lower() if repo_url else None)
+    source_key = source_key or (repo_url or "").lower()
+    if not source_key:
+        raise HTTPException(status_code=400, detail="source_key cannot be empty")
     existing = await db.execute(
         select(ManagedPlugin).where(
             ManagedPlugin.server_id == server_id,

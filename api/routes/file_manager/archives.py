@@ -8,6 +8,7 @@ from api.routes.v1.operation_runner import enqueue_extract_archive
 from services.server_operation_hub import ServerOperationConflict, server_operation_hub
 
 from .common import *
+from .common import _normalize_source_folder
 
 router = APIRouter(prefix="/servers/{server_id}/files", tags=["file-manager"])
 

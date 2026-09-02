@@ -3,11 +3,7 @@ Server setup automation routes
 """
 
 import asyncio
-import secrets
-import shlex
-import string
-import time
-from typing import Awaitable, Callable, List, Optional, Tuple
+from typing import List, Optional
 
 import asyncssh
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
@@ -15,22 +11,22 @@ from pydantic import BaseModel, Field
 
 from api.dependencies import ActiveUser, DatabaseSession
 from modules import (
-    SSHServerSudo,
     authenticate_websocket,
     get_current_time,
 )
 from services.captcha_service import captcha_service
 from services.redis_manager import redis_manager
-from services.system_dependencies import (
-    APT_RETRY_ATTEMPTS,
-    APT_RETRY_DELAYS_SECONDS,
-    SETUP_OPTIONAL_PACKAGES,
-    SEVEN_ZIP_PACKAGE_ALTERNATIVES,
-    STEAMCMD_REQUIRED_PACKAGES,
-    apt_get_command,
-    installed_packages_verification_command,
-    normalize_debian_architecture,
-    steamcmd_architecture_supported,
+
+from .setup_workflow import (
+    ServerSetupRequest,
+    ServerSetupResponse,
+    _configure_setup_user,
+    _detect_setup_host,
+    _install_legacy_libssl,
+    _install_setup_dependencies,
+    _persist_setup_configuration,
+    _SetupContext,
+    generate_secure_password,
 )
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
@@ -96,156 +92,6 @@ class RedisServerDetail(BaseModel):
     ssh_password: str
     game_directory: str
     created_at: float = Field(..., description="Unix timestamp")
-
-
-class ServerSetupRequest(BaseModel):
-    """Request model for automated server setup (password authentication only)"""
-
-    name: str  # Friendly name for the server
-    host: str
-    ssh_port: int = 22
-    ssh_user: str  # Can be root or regular user with sudo access
-    ssh_password: str  # SSH password (required, key-based auth not supported)
-    sudo_password: Optional[str] = None  # Required if ssh_user is not root and sudo needs password
-    cs2_username: str = Field(
-        default="cs2server", pattern=r"^[a-z_][a-z0-9_-]*$"
-    )  # User to create for CS2 (alphanumeric + _ - only)
-    cs2_password: Optional[str] = None  # If None, will auto-generate
-    auto_sudo: bool = True  # Automatically use sudo for non-root users
-    captcha_token: str  # CAPTCHA token from /api/captcha/generate
-    captcha_code: str  # User-entered CAPTCHA code
-    save_config: bool = True  # Whether to save the initialized server config
-    open_game_ports: bool = True  # Whether to open UDP ports 20000-40000 if UFW is enabled
-    session_id: Optional[str] = None  # Optional session ID for WebSocket progress updates
-
-
-class ServerSetupResponse(BaseModel):
-    """Response model for setup operation"""
-
-    success: bool
-    message: str
-    cs2_username: str
-    cs2_password: str
-    game_directory: str
-    logs: list[str]
-    initialized_server_id: Optional[str] = None  # Redis key of saved server if save_config is True
-    session_id: Optional[str] = None  # Session ID for WebSocket progress updates (if requested)
-
-
-def generate_secure_password(length: int = 16) -> str:
-    """
-    Generate a secure random password with special characters to meet PAM requirements
-    Uses safe special characters and proper escaping to avoid shell issues
-    """
-    # Use safe special characters that are commonly accepted by PAM policies
-    # Avoiding characters that have special meaning in shell: ' " ` $ \ ! and others
-    safe_special_chars = "!@#%^&*()_+-=[]{}|;:,.<>?"
-
-    # Build character sets
-    lowercase = string.ascii_lowercase
-    uppercase = string.ascii_uppercase
-    digits = string.digits
-
-    # Ensure password has at least one of each required type for PAM compliance
-    password = [
-        secrets.choice(lowercase),  # At least one lowercase
-        secrets.choice(uppercase),  # At least one uppercase
-        secrets.choice(digits),  # At least one digit
-        secrets.choice(safe_special_chars),  # At least one special character
-    ]
-
-    # Fill the rest randomly from all character sets
-    all_chars = lowercase + uppercase + digits + safe_special_chars
-    password += [secrets.choice(all_chars) for _ in range(length - 4)]
-
-    # Shuffle to avoid predictable patterns
-    secrets.SystemRandom().shuffle(password)
-    return "".join(password)
-
-
-async def run_sudo_command(
-    conn: asyncssh.SSHClientConnection,
-    command: str,
-    sudo_password: Optional[str] = None,
-    timeout: Optional[float] = None,
-) -> Tuple[str, str, int]:
-    """
-    Run command with sudo, handling both passwordless and password-required sudo
-    Returns: (stdout, stderr, exit_code)
-    """
-    privileged_command = f"sudo -n -- sh -c {shlex.quote(command)}"
-    if sudo_password:
-        # Quote the password so credentials containing shell metacharacters stay data.
-        privileged_command = (
-            f"printf '%s\\n' {shlex.quote(sudo_password)} | sudo -S -- sh -c {shlex.quote(command)}"
-        )
-
-    result = await conn.run(privileged_command, check=False, timeout=timeout)
-    return result.stdout, result.stderr, result.exit_status
-
-
-async def run_admin_command(
-    conn: asyncssh.SSHClientConnection,
-    command: str,
-    *,
-    needs_sudo: bool,
-    sudo_password: Optional[str],
-    timeout: Optional[float] = None,
-) -> Tuple[str, str, int]:
-    """Run an internally generated command as root on the remote host."""
-    if needs_sudo:
-        return await run_sudo_command(conn, command, sudo_password, timeout=timeout)
-    result = await conn.run(command, check=False, timeout=timeout)
-    return result.stdout, result.stderr, result.exit_status
-
-
-def _short_command_error(stdout: str, stderr: str, limit: int = 2000) -> str:
-    combined = "\n".join(part.strip() for part in (stderr, stdout) if part and part.strip())
-    if not combined:
-        return "命令未返回错误详情"
-    return combined[-limit:]
-
-
-async def run_apt_command_with_retry(
-    conn: asyncssh.SSHClientConnection,
-    command: str,
-    *,
-    description: str,
-    needs_sudo: bool,
-    sudo_password: Optional[str],
-    add_log: Callable[[str], Awaitable[None]],
-    attempts: int = APT_RETRY_ATTEMPTS,
-) -> Tuple[str, str, int]:
-    """Run apt with bounded retries for transient network and dpkg-lock failures."""
-    last_result = ("", "命令尚未执行", 1)
-    for attempt in range(1, attempts + 1):
-        if attempt > 1:
-            await add_log(f"重试 {description}（第 {attempt}/{attempts} 次）...")
-        try:
-            last_result = await run_admin_command(
-                conn,
-                command,
-                needs_sudo=needs_sudo,
-                sudo_password=sudo_password,
-                timeout=600,
-            )
-        except asyncio.TimeoutError:
-            last_result = ("", f"{description}在 600 秒后超时", 124)
-
-        stdout, stderr, exit_code = last_result
-        if exit_code == 0:
-            return last_result
-
-        await add_log(
-            f"⚠ {description}失败（第 {attempt}/{attempts} 次）："
-            f"{_short_command_error(stdout, stderr)}"
-        )
-        if attempt < attempts:
-            delay = APT_RETRY_DELAYS_SECONDS[min(attempt - 1, len(APT_RETRY_DELAYS_SECONDS) - 1)]
-            await add_log(f"将在 {delay} 秒后自动重试...")
-            await asyncio.sleep(delay)
-
-    return last_result
 
 
 async def send_setup_progress(session_id: Optional[str], user_id: int, log_message: str):
@@ -318,26 +164,7 @@ async def auto_setup_server(
     current_user: ActiveUser,
     db: DatabaseSession,
 ):
-    """
-    Automatically setup a server for CS2 deployment
-
-    This endpoint:
-    1. Connects to the target server (as root or regular user with sudo)
-    2. Automatically detects if sudo is needed and available
-    3. Installs required system dependencies
-    4. Creates a dedicated CS2 user
-    5. Sets up the game directory
-    6. Returns credentials for CS2 Manager to use
-    7. Optionally saves the initialized server configuration for reuse
-
-    Supports:
-    - Root user login (no sudo needed)
-    - Regular user with passwordless sudo
-    - Regular user with password sudo (requires sudo_password)
-
-    **Authentication Required**: User must be logged in to use this endpoint.
-    """
-    # Validate CAPTCHA first
+    """Validate the request, run the setup workflow, and return safe credentials."""
     is_valid = await captcha_service.validate_captcha(
         setup_req.captcha_token, setup_req.captcha_code
     )
@@ -347,29 +174,23 @@ async def auto_setup_server(
         )
 
     await db.commit()
-    logs = []
-    conn = None
+    logs: list[str] = []
+    conn: asyncssh.SSHClientConnection | None = None
 
-    # Helper function to add log and send to WebSocket
-    async def add_log(message: str):
+    async def add_log(message: str) -> None:
         logs.append(message)
         await send_setup_progress(setup_req.session_id, current_user.id, message)
 
-    async def add_command_output(output: str):
+    async def add_command_output(output: str) -> None:
         for line in output.strip().splitlines():
             if line.strip():
                 await add_log(f"  {line}")
 
     try:
-        # Generate CS2 user password if not provided
         cs2_password = setup_req.cs2_password or generate_secure_password()
-
         await add_log(
             f"正在连接到 {setup_req.host}:{setup_req.ssh_port} (用户: {setup_req.ssh_user})..."
         )
-
-        # Connect to server
-        # Connect using password authentication only
         conn = await asyncssh.connect(
             host=setup_req.host,
             port=setup_req.ssh_port,
@@ -378,512 +199,34 @@ async def auto_setup_server(
             known_hosts=None,
             connect_timeout=15,
         )
-
         await add_log("✓ SSH 连接成功")
-
-        # Reject unsupported hosts before creating users or mutating packages.
-        architecture_result = await conn.run(
-            "dpkg --print-architecture 2>/dev/null || uname -m", check=False
-        )
-        remote_architecture = normalize_debian_architecture(architecture_result.stdout)
-        await add_log(f"检测到系统架构: {remote_architecture or '未知'}")
-        if architecture_result.exit_status != 0 or not steamcmd_architecture_supported(
-            remote_architecture
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"不支持的服务器架构: {remote_architecture or '未知'}。"
-                    "SteamCMD/CS2 Linux 服务端需要 amd64 (x86_64)；"
-                    "arm64/aarch64 服务器不能原生运行。"
-                ),
-            )
-        await add_log("✓ 架构兼容 SteamCMD/CS2")
-
-        package_manager_result = await conn.run("command -v apt-get", check=False)
-        if package_manager_result.exit_status != 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="目标服务器未安装 apt-get；自动设置仅支持 Ubuntu/Debian。",
-            )
-
-        await add_log("检测系统版本...")
-        result = await conn.run(
-            "lsb_release -rs 2>/dev/null || "
-            "sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '\"'",
-            check=False,
-        )
-        os_version = result.stdout.strip()
-        await add_log(f"系统版本: {os_version or '未知'}")
-
-        # Detect if we need sudo
-        result = await conn.run("whoami", check=False)
-        ssh_current_user = result.stdout.strip()
-        needs_sudo = ssh_current_user != "root"
-
-        if needs_sudo:
-            await add_log(f"检测到非 root 用户 ({ssh_current_user})，将使用 sudo")
-
-            # If sudo_password not provided, try to use ssh_password
-            sudo_pass = setup_req.sudo_password
-            if not sudo_pass and setup_req.ssh_password:
-                await add_log("尝试使用 SSH 密码作为 sudo 密码...")
-                sudo_pass = setup_req.ssh_password
-        else:
-            await add_log("检测到 root 用户，无需 sudo")
-            sudo_pass = None
-
-        # Test sudo access
-        if needs_sudo:
-            await add_log("测试 sudo 权限...")
-            stdout, stderr, exit_code = await run_sudo_command(
-                conn, "echo 'sudo test successful'", sudo_pass
-            )
-
-            if exit_code != 0:
-                # Try without password
-                if sudo_pass:
-                    await add_log("带密码的 sudo 失败，尝试无密码 sudo...")
-                    stdout, stderr, exit_code = await run_sudo_command(
-                        conn, "echo 'sudo test'", None
-                    )
-                    if exit_code == 0:
-                        await add_log("✓ 无密码 sudo 可用")
-                        sudo_pass = None
-                    else:
-                        raise HTTPException(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            detail=f"sudo 权限不足。请确保用户有 sudo 权限，或提供正确的 sudo 密码。错误: {stderr}",
-                        )
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="sudo 需要密码，请在 sudo_password 字段提供",
-                    )
-            else:
-                await add_log("✓ sudo 权限验证成功")
-
-        # Update package metadata with apt-level network/lock handling plus
-        # application-level retries. Never claim success with stale metadata.
-        await add_log("更新系统包列表（自动等待 APT 锁并重试网络错误）...")
-        stdout, stderr, exit_code = await run_apt_command_with_retry(
-            conn,
-            apt_get_command("update"),
-            description="更新系统包列表",
-            needs_sudo=needs_sudo,
-            sudo_password=sudo_pass,
+        context = _SetupContext(
+            request=setup_req,
+            conn=conn,
             add_log=add_log,
+            add_command_output=add_command_output,
+            cs2_password=cs2_password,
         )
-        if stdout and stdout.strip():
-            await add_command_output(stdout)
-        if exit_code != 0:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"更新系统包列表失败，已自动重试: {_short_command_error(stdout, stderr)}",
-            )
-        await add_log("✓ 包列表更新完成")
-
-        # Install sudo if not available (Debian 12 clean install does not include sudo by default)
-        await add_log("检查 sudo 是否已安装...")
-        result = await conn.run("command -v sudo", check=False)
-        if result.exit_status != 0:
-            await add_log("sudo 未安装，正在安装 sudo...")
-            stdout, stderr, exit_code = await run_apt_command_with_retry(
-                conn,
-                apt_get_command("install", ("sudo",)),
-                description="安装 sudo",
-                needs_sudo=needs_sudo,
-                sudo_password=sudo_pass,
-                add_log=add_log,
-            )
-            if exit_code != 0:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"安装 sudo 失败: {_short_command_error(stdout, stderr)}",
-                )
-            await add_log("✓ sudo 安装成功")
-        else:
-            await add_log("✓ sudo 已安装")
-
-        await add_log(f"安装 SteamCMD 必需依赖: {', '.join(STEAMCMD_REQUIRED_PACKAGES)}")
-        stdout, stderr, exit_code = await run_apt_command_with_retry(
-            conn,
-            apt_get_command("install", STEAMCMD_REQUIRED_PACKAGES),
-            description="安装 SteamCMD 必需依赖",
-            needs_sudo=needs_sudo,
-            sudo_password=sudo_pass,
-            add_log=add_log,
-        )
-        if stdout and stdout.strip():
-            await add_command_output(stdout)
-        if exit_code != 0:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"安装 SteamCMD 必需依赖失败: {_short_command_error(stdout, stderr)}",
-            )
-
-        verification = await conn.run(
-            installed_packages_verification_command(STEAMCMD_REQUIRED_PACKAGES), check=False
-        )
-        if verification.exit_status != 0:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=(
-                    "APT 返回成功，但依赖验证失败: "
-                    f"{_short_command_error(verification.stdout, verification.stderr)}"
-                ),
-            )
-        await add_log("✓ SteamCMD 必需依赖已安装并验证")
-
-        # Archive tooling and ICU development headers are useful to plugins, but
-        # are not allowed to invalidate a working SteamCMD runtime. Ubuntu 26.04
-        # uses 7zip while older systems may still expose p7zip-full.
-        archive_package = None
-        for candidate in SEVEN_ZIP_PACKAGE_ALTERNATIVES:
-            candidate_result = await conn.run(
-                f"apt-cache show --no-all-versions {shlex.quote(candidate)} >/dev/null 2>&1",
-                check=False,
-            )
-            if candidate_result.exit_status == 0:
-                archive_package = candidate
-                break
-
-        optional_packages = list(SETUP_OPTIONAL_PACKAGES)
-        if archive_package:
-            optional_packages.append(archive_package)
-        else:
-            await add_log("⚠ 软件源中没有 7zip/p7zip-full；跳过可选的 7z 支持")
-
-        if optional_packages:
-            await add_log(f"安装可选增强依赖: {', '.join(optional_packages)}")
-            stdout, stderr, exit_code = await run_apt_command_with_retry(
-                conn,
-                apt_get_command("install", optional_packages),
-                description="安装可选增强依赖",
-                needs_sudo=needs_sudo,
-                sudo_password=sudo_pass,
-                add_log=add_log,
-            )
-            if exit_code == 0:
-                await add_log("✓ 可选增强依赖安装完成")
-            else:
-                await add_log(
-                    "⚠ 可选增强依赖安装失败；SteamCMD 运行时已验证，将继续设置。"
-                    f"详情: {_short_command_error(stdout, stderr)}"
-                )
-
-        if os_version.startswith("24."):
-            await add_log("检测到 Ubuntu 24，正在安装 libssl1.1...")
-            try:
-                # Upload libssl1.1 deb file via SFTP
-                import os
-
-                # Get the project root directory
-                current_dir = os.path.dirname(
-                    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                )
-                local_deb_path = os.path.join(
-                    current_dir,
-                    "static",
-                    "linux_lib",
-                    "ubuntu_24",
-                    "libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb",
-                )
-                remote_deb_path = "/tmp/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb"
-
-                # Check if local file exists
-                if not os.path.exists(local_deb_path):
-                    await add_log(f"⚠ 本地文件不存在: {local_deb_path}")
-                else:
-                    await add_log("正在上传 libssl1.1 到远程服务器...")
-
-                    # Use SFTP to upload the file
-                    async with conn.start_sftp_client() as sftp:
-                        await sftp.put(local_deb_path, remote_deb_path)
-
-                    await add_log(f"✓ 文件上传完成: {remote_deb_path}")
-
-                    # Install the package
-                    await add_log("正在安装 libssl1.1...")
-                    install_libssl_cmd = f"dpkg -i {remote_deb_path}"
-
-                    if needs_sudo:
-                        stdout, stderr, exit_code = await run_sudo_command(
-                            conn, install_libssl_cmd, sudo_pass
-                        )
-                    else:
-                        result = await conn.run(install_libssl_cmd, check=False)
-                        exit_code = result.exit_status
-                        stdout = result.stdout
-                        stderr = result.stderr
-
-                    # Show the output
-                    if stdout and stdout.strip():
-                        for line in stdout.strip().split("\n"):
-                            if line.strip():
-                                await add_log(f"  {line}")
-
-                    if exit_code == 0:
-                        await add_log("✓ libssl1.1 安装成功")
-                    else:
-                        await add_log(f"⚠ libssl1.1 安装可能失败: {stderr[:100]}")
-
-                    # Clean up the uploaded file
-                    cleanup_cmd = f"rm -f {remote_deb_path}"
-                    if needs_sudo:
-                        await run_sudo_command(conn, cleanup_cmd, sudo_pass)
-                    else:
-                        await conn.run(cleanup_cmd, check=False)
-                    await add_log("✓ 清理临时文件完成")
-
-            except Exception as e:
-                await add_log(f"⚠ libssl1.1 安装过程出错: {str(e)}")
-                # Don't fail the whole setup if libssl1.1 installation fails
-        else:
-            await add_log("非 Ubuntu 24 系统，跳过 libssl1.1 安装")
-
-        # Check if user already exists
-        await add_log(f"检查用户 {setup_req.cs2_username}...")
-        result = await conn.run(f"id {setup_req.cs2_username}", check=False)
-
-        user_exists = result.exit_status == 0
-        if user_exists:
-            await add_log(f"用户 {setup_req.cs2_username} 已存在，将更新密码")
-        else:
-            # Create CS2 user
-            await add_log(f"创建用户 {setup_req.cs2_username}...")
-            create_user_cmd = f"useradd -m -s /bin/bash {setup_req.cs2_username}"
-
-            if needs_sudo:
-                stdout, stderr, exit_code = await run_sudo_command(conn, create_user_cmd, sudo_pass)
-            else:
-                result = await conn.run(create_user_cmd, check=False)
-                exit_code = result.exit_status
-                stdout = result.stdout
-                stderr = result.stderr
-
-            if exit_code == 0:
-                await add_log(f"✓ 用户 {setup_req.cs2_username} 创建成功")
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"创建用户失败: {stderr}",
-                )
-
-        # Set user password
-        # Use a here-document approach which is safe for special characters
-        # and works properly with sudo
-        await add_log("设置用户密码...")
-
-        credential = f"{setup_req.cs2_username}:{cs2_password}"
-        chpasswd_cmd = f"printf '%s\\n' {shlex.quote(credential)} | chpasswd"
-
-        if needs_sudo:
-            stdout, stderr, exit_code = await run_sudo_command(conn, chpasswd_cmd, sudo_pass)
-        else:
-            result = await conn.run(chpasswd_cmd, check=False)
-            exit_code = result.exit_status
-            stdout = result.stdout
-            stderr = result.stderr
-
-        if exit_code == 0:
-            await add_log("✓ 密码设置成功")
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"设置 CS2 用户密码失败: {_short_command_error(stdout, stderr)}",
-            )
-
-        # Add CS2 user to sudo group
-        await add_log(f"将用户 {setup_req.cs2_username} 添加到 sudo 组...")
-        add_sudo_cmd = f"usermod -aG sudo {setup_req.cs2_username}"
-
-        if needs_sudo:
-            stdout, stderr, exit_code = await run_sudo_command(conn, add_sudo_cmd, sudo_pass)
-        else:
-            result = await conn.run(add_sudo_cmd, check=False)
-            exit_code = result.exit_status
-            stdout = result.stdout
-            stderr = result.stderr
-
-        if exit_code == 0:
-            await add_log(f"✓ 用户 {setup_req.cs2_username} 已添加到 sudo 组")
-        else:
-            await add_log(f"⚠ 添加用户到 sudo 组可能失败: {stderr[:100]}")
-
-        # Create game directory
-        game_dir = f"/home/{setup_req.cs2_username}/cs2"
-        await add_log(f"创建游戏目录 {game_dir}...")
-        mkdir_cmd = f"mkdir -p {game_dir}"
-
-        if needs_sudo:
-            stdout, stderr, exit_code = await run_sudo_command(conn, mkdir_cmd, sudo_pass)
-        else:
-            result = await conn.run(mkdir_cmd, check=False)
-            exit_code = result.exit_status
-            stdout = result.stdout
-            stderr = result.stderr
-
-        if exit_code != 0:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"创建游戏目录失败: {_short_command_error(stdout, stderr)}",
-            )
-
-        # Set ownership
-        await add_log("设置目录权限...")
-        chown_cmd = f"chown -R {setup_req.cs2_username}:{setup_req.cs2_username} /home/{setup_req.cs2_username}"
-
-        if needs_sudo:
-            stdout, stderr, exit_code = await run_sudo_command(conn, chown_cmd, sudo_pass)
-        else:
-            result = await conn.run(chown_cmd, check=False)
-            exit_code = result.exit_status
-            stdout = result.stdout
-            stderr = result.stderr
-
-        if exit_code == 0:
-            await add_log("✓ 权限设置完成")
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"设置目录权限失败: {_short_command_error(stdout, stderr)}",
-            )
-
-        # Configure UFW firewall if requested
-        if setup_req.open_game_ports:
-            await add_log("检查 UFW 防火墙状态...")
-
-            # Check if UFW is installed and active
-            ufw_check_cmd = "ufw status"
-            if needs_sudo:
-                stdout, stderr, exit_code = await run_sudo_command(conn, ufw_check_cmd, sudo_pass)
-            else:
-                result = await conn.run(ufw_check_cmd, check=False)
-                stdout = result.stdout
-                stderr = result.stderr
-                exit_code = result.exit_status
-
-            if exit_code == 0 and "Status: active" in stdout:
-                await add_log("UFW 防火墙已启用，正在开放 UDP 20000~40000 端口...")
-
-                # Open UDP ports 20000-40000 for game servers
-                ufw_allow_cmd = "ufw allow 20000:40000/udp"
-                if needs_sudo:
-                    stdout, stderr, exit_code = await run_sudo_command(
-                        conn, ufw_allow_cmd, sudo_pass
-                    )
-                else:
-                    result = await conn.run(ufw_allow_cmd, check=False)
-                    stdout = result.stdout
-                    exit_code = result.exit_status
-                    stderr = result.stderr
-
-                # Show UFW command output
-                if stdout and stdout.strip():
-                    for line in stdout.strip().split("\n"):
-                        if line.strip():
-                            await add_log(f"  {line}")
-
-                if exit_code == 0:
-                    await add_log("✓ UDP 端口 20000~40000 已开放")
-                else:
-                    await add_log(f"⚠ 开放端口失败: {stderr[:100]}")
-            elif exit_code != 0:
-                await add_log("⚠ UFW 未安装或无法获取状态，跳过端口配置")
-            else:
-                await add_log("ℹ UFW 未启用，跳过端口配置")
-
+        await _detect_setup_host(context)
+        await _install_setup_dependencies(context)
+        await _install_legacy_libssl(context)
+        await _configure_setup_user(context)
         await add_log("=" * 50)
         await add_log("✓ 服务器环境设置完成！")
         await add_log("=" * 50)
-
-        # Save sudo/SSH user information to database
-        # Save for all users (root and non-root) to keep SSH credentials
-        try:
-            await add_log("正在保存 SSH 用户配置到数据库...")
-            # Determine what password to save based on user type:
-            # - Root user: save SSH password (used for SSH login)
-            # - Sudo user with password: save sudo password
-            # - Passwordless sudo: save empty string
-            if not needs_sudo:
-                # Root user - save SSH password for future SSH connections
-                sudo_password_to_save = setup_req.ssh_password
-                user_type = "root 用户"
-            elif sudo_pass:
-                # Sudo user with password - save sudo password
-                sudo_password_to_save = sudo_pass
-                user_type = "带密码 sudo"
-            else:
-                # Passwordless sudo - save empty string
-                sudo_password_to_save = ""
-                user_type = "无密码 sudo"
-
-            await add_log(
-                f"保存参数: user_id={current_user.id}, host={setup_req.host}, port={setup_req.ssh_port}, sudo_user={setup_req.ssh_user}, 类型={user_type}"
-            )
-            await SSHServerSudo.upsert(
-                session=db,
-                user_id=current_user.id,
-                host=setup_req.host,
-                ssh_port=setup_req.ssh_port,
-                sudo_user=setup_req.ssh_user,  # The SSH user we used for initialization (root or sudo user)
-                sudo_password=sudo_password_to_save,
-            )
-            await add_log(
-                f"✓ SSH 用户配置已成功保存到数据库 (用户: {setup_req.ssh_user}, 类型: {user_type})"
-            )
-        except Exception as e:
-            import traceback
-
-            error_details = traceback.format_exc()
-            await add_log(f"✗ 保存 SSH 用户配置失败: {str(e)}")
-            await add_log(f"错误详情: {error_details}")
-            # Don't fail the whole operation if saving config fails
-
-        # Save initialized server configuration to Redis if requested (24-hour expiration)
-        initialized_server_id = None
-        if setup_req.save_config:
-            try:
-                await add_log("保存服务器配置到 Redis...")
-                # Note: We save the CS2 user credentials (cs2server), not the SSH login credentials
-                # This allows quick-fill when adding CS2 servers later
-                server_data = {
-                    "user_id": current_user.id,
-                    "name": setup_req.name,
-                    "host": setup_req.host,
-                    "ssh_port": setup_req.ssh_port,
-                    "ssh_user": setup_req.cs2_username,  # CS2 user (e.g., cs2server)
-                    "ssh_password": cs2_password,  # CS2 user's password (auto-generated)
-                    "game_directory": game_dir,
-                    "created_at": time.time(),
-                }
-                server_key = await redis_manager.set_initialized_server(
-                    current_user.id, server_data
-                )
-                initialized_server_id = server_key
-                await add_log(
-                    f"✓ 服务器配置已保存到 Redis (用户: {setup_req.cs2_username}, 24小时有效期)"
-                )
-            except Exception as e:
-                import traceback
-
-                error_details = traceback.format_exc()
-                await add_log(f"⚠ 保存配置失败: {str(e)}")
-                await add_log(f"错误详情: {error_details}")
-                # Don't fail the whole operation if saving fails
-
+        initialized_server_id = await _persist_setup_configuration(
+            context, current_user=current_user, db=db
+        )
         return ServerSetupResponse(
             success=True,
             message="服务器环境设置成功",
             cs2_username=setup_req.cs2_username,
             cs2_password=cs2_password,
-            game_directory=game_dir,
+            game_directory=context.game_directory,
             logs=logs,
             initialized_server_id=initialized_server_id,
             session_id=setup_req.session_id,
         )
-
     except asyncssh.PermissionDenied:
         await add_log("✗ SSH 认证失败")
         raise HTTPException(
@@ -895,20 +238,20 @@ async def auto_setup_server(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="SSH 连接超时 - 服务器可能无法访问或响应过慢，请检查网络连接和服务器状态",
         ) from None
-    except asyncssh.Error as e:
-        await add_log(f"✗ SSH 错误: {str(e)}")
+    except asyncssh.Error as exc:
+        await add_log(f"✗ SSH 错误: {exc}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"SSH 连接错误: {str(e)}"
-        ) from e
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"SSH 连接错误: {exc}"
+        ) from exc
     except HTTPException:
         raise
-    except Exception as e:
-        await add_log(f"✗ 未知错误: {str(e)}")
+    except Exception as exc:
+        await add_log(f"✗ 未知错误: {exc}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"设置失败: {str(e)}"
-        ) from e
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"设置失败: {exc}"
+        ) from exc
     finally:
-        if conn:
+        if conn is not None:
             conn.close()
             await conn.wait_closed()
 

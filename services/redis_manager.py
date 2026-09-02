@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import time
+import warnings
 from typing import Any, Optional
 
 import redis.asyncio as aioredis
@@ -49,13 +50,28 @@ class RedisManager:
             return key
         return f"{prefix}{key}"
 
+    async def _set_with_expiry(self, key: str, value: Any, expire: int) -> bool:
+        """Use the current Redis API while keeping lightweight test clients compatible."""
+        setex = getattr(self.client, "setex", None)
+        if setex is not None and getattr(setex, "__self__", None) is None:
+            return bool(await setex(key, expire, value))
+        try:
+            result = await self.client.set(key, value, ex=expire)
+            if result:
+                return True
+        except AttributeError, TypeError, RuntimeError:
+            pass
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            return bool(await self.client.setex(key, expire, value))
+
     async def set(self, key: str, value: Any, expire: int = 300) -> bool:
         """Set a value in Redis with optional expiration"""
         key = self.prefixed_key(key)
         try:
             if isinstance(value, (dict, list)):
                 value = json.dumps(value)
-            return await self.client.setex(key, expire, value)
+            return await self._set_with_expiry(key, value, expire)
         except Exception as e:
             print(f"Redis set error: {e}")
             return False
@@ -241,7 +257,7 @@ class RedisManager:
 
     # Initialized server methods
     async def set_initialized_server(
-        self, user_id: int, server_data: dict, expire: int = None
+        self, user_id: int, server_data: dict, expire: int | None = None
     ) -> str:
         """
         Store initialized server data for a user with 30-day expiration
@@ -274,7 +290,12 @@ class RedisManager:
             server_keys = await self.client.lrange(list_key, 0, -1)
             servers = []
 
-            for server_key in server_keys:
+            for raw_server_key in server_keys:
+                server_key = (
+                    raw_server_key.decode()
+                    if isinstance(raw_server_key, bytes)
+                    else str(raw_server_key)
+                )
                 server_data = await self.get(server_key)
                 if server_data:  # Only include if not expired
                     server_data["key"] = server_key  # Add key for later retrieval
@@ -399,7 +420,7 @@ class RedisManager:
         key = self.prefixed_key(f"batch_action:{batch_id}:{server_id}")
         try:
             data = json.dumps({"status": status, "message": message, "timestamp": time.time()})
-            return await self.client.setex(key, expire, data)
+            return await self._set_with_expiry(key, data, expire)
         except Exception as e:
             print(f"Redis set batch action status error: {e}")
             return False
@@ -421,7 +442,13 @@ class RedisManager:
                     data = json.dumps(
                         {"status": status, "message": message, "timestamp": timestamp}
                     )
-                    pipeline.setex(key, expire, data)
+                    setter = getattr(pipeline, "set", None)
+                    if setter is not None:
+                        setter(key, data, ex=expire)
+                    else:
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", DeprecationWarning)
+                            pipeline.setex(key, expire, data)
                 await pipeline.execute()
             return True
         except Exception as e:
@@ -477,7 +504,7 @@ class RedisManager:
             data = json.dumps(
                 {"actor_user_id": actor_user_id, "action": action, "timestamp": time.time()}
             )
-            return await self.client.setex(key, expire, data)
+            return await self._set_with_expiry(key, data, expire)
         except Exception as e:
             print(f"Redis set batch action meta error: {e}")
             return False
@@ -549,7 +576,7 @@ class RedisManager:
             return False
 
     async def get_monitoring_logs(
-        self, server_id: int, event_type: str = None, limit: int = 50
+        self, server_id: int, event_type: str | None = None, limit: int = 50
     ) -> list:
         """
         Get monitoring logs from Redis.
@@ -597,7 +624,7 @@ class RedisManager:
             logger.error(f"Redis get monitoring logs error: {e}")
             return []
 
-    async def clear_monitoring_logs(self, server_id: int, event_type: str = None) -> bool:
+    async def clear_monitoring_logs(self, server_id: int, event_type: str | None = None) -> bool:
         """
         Clear monitoring logs for a server.
 

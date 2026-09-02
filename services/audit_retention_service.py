@@ -6,7 +6,7 @@ import asyncio
 import logging
 from contextlib import suppress
 
-from sqlmodel import delete, select
+from sqlmodel import col, delete, select
 
 from modules.database import async_session_maker
 from modules.models import AuditLog, DiscordOperationRun
@@ -75,12 +75,16 @@ class AuditRetentionService:
     async def delete_expired_rows(self) -> tuple[int, int]:
         cutoff = retention_cutoff()
         async with async_session_maker() as db:
-            audit_result = await db.execute(delete(AuditLog).where(AuditLog.created_at < cutoff))
+            audit_result = await db.execute(
+                delete(AuditLog).where(col(AuditLog.created_at) < cutoff)
+            )
             operation_result = await db.execute(
-                delete(DiscordOperationRun).where(DiscordOperationRun.created_at < cutoff)
+                delete(DiscordOperationRun).where(col(DiscordOperationRun.created_at) < cutoff)
             )
             await db.commit()
-        return int(audit_result.rowcount or 0), int(operation_result.rowcount or 0)
+        return int(getattr(audit_result, "rowcount", 0) or 0), int(
+            getattr(operation_result, "rowcount", 0) or 0
+        )
 
     async def cleanup_once(self) -> dict[str, int]:
         expired = await self.expire_pending_discord_operations()

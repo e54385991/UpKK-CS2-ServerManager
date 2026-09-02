@@ -9,7 +9,6 @@ import logging
 from typing import Dict, Optional, Tuple
 
 import a2s
-from anyio import to_thread
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ class A2SQueryService:
             address = (host, port)
 
             # Query server info
-            info = await to_thread.run_sync(lambda: a2s.info(address, timeout=timeout))
+            info = await asyncio.to_thread(a2s.info, address, timeout, "utf-8")
 
             if info:
                 # Convert the info object to a dictionary
@@ -52,15 +51,15 @@ class A2SQueryService:
                     "platform": info.platform,
                     "password_protected": info.password_protected,
                     "vac_enabled": info.vac_enabled,
-                    "version": info.version,
+                    "version": getattr(info, "version", None),
                     "ping": getattr(info, "ping", None),
                 }
 
                 # Add optional fields if they exist
                 if hasattr(info, "keywords"):
-                    server_info["keywords"] = info.keywords
+                    server_info["keywords"] = getattr(info, "keywords", None)
                 if hasattr(info, "game_id"):
-                    server_info["game_id"] = info.game_id
+                    server_info["game_id"] = getattr(info, "game_id", None)
 
                 logger.debug(f"A2S query successful for {host}:{port} - {info.server_name}")
                 return True, server_info
@@ -94,7 +93,7 @@ class A2SQueryService:
             address = (host, port)
 
             # Query player info
-            players = await to_thread.run_sync(lambda: a2s.players(address, timeout=timeout))
+            players = await asyncio.to_thread(a2s.players, address, timeout, "utf-8")
 
             if players is not None:
                 player_list = []
@@ -140,7 +139,7 @@ class A2SQueryService:
             address = (host, port)
 
             # Query rules
-            rules = await to_thread.run_sync(lambda: a2s.rules(address, timeout=timeout))
+            rules = await asyncio.to_thread(a2s.rules, address, timeout, "utf-8")
 
             if rules:
                 logger.debug(f"A2S rules query successful for {host}:{port} - {len(rules)} rules")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Request, status
 
 from api.dependencies import AdminUser, DatabaseSession
@@ -37,12 +39,13 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
     """Project the ORM row to the browser-facing, non-secret view."""
     has_gmail_credentials = bool((settings.gmail_credentials_json or "").strip())
     has_gmail_token = bool((settings.gmail_token_json or "").strip())
-    provider = settings.email_provider if settings.email_provider in {"gmail", "smtp"} else "smtp"
-    proxy_mode = (
-        settings.default_proxy_mode
-        if settings.default_proxy_mode in {"direct", "panel", "github_url"}
-        else "panel"
-    )
+    provider: Literal["gmail", "smtp"] = "gmail" if settings.email_provider == "gmail" else "smtp"
+    if settings.default_proxy_mode == "direct":
+        proxy_mode: Literal["direct", "panel", "github_url"] = "direct"
+    elif settings.default_proxy_mode == "github_url":
+        proxy_mode = "github_url"
+    else:
+        proxy_mode = "panel"
     return SystemSettingsView(
         default_proxy_mode=proxy_mode,
         github_proxy_url=settings.github_proxy_url,

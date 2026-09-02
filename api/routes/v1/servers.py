@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import select
+from sqlmodel import col
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from api.presenters.servers import to_detail as _to_detail
@@ -53,11 +54,23 @@ from .schemas import (
 router = APIRouter(prefix="/api/v1/servers", tags=["v1-servers"])
 
 
+def _updated_server_model(value: object) -> Server:
+    """Normalize legacy update results into the ORM-shaped presenter input."""
+    if isinstance(value, Server):
+        return value
+    if hasattr(value, "__dict__"):
+        payload = vars(value)
+    else:
+        raise TypeError("Legacy update returned an unsupported server value")
+    payload.setdefault("auth_type", "password")
+    return Server.model_validate(payload)
+
+
 async def _owners_by_id(db, servers: list[Server]) -> dict[int, User]:
     user_ids = {server.user_id for server in servers if getattr(server, "user_id", None)}
     if not user_ids:
         return {}
-    result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    result = await db.execute(select(User).where(col(User.id).in_(user_ids)))
     return {user.id: user for user in result.scalars().all()}
 
 
@@ -137,12 +150,12 @@ async def update_server(
     """Patch non-secret settings. Omitted secrets stay unchanged."""
     updated = await update_legacy_server(
         server_id,
-        ServerUpdate(**body.model_dump(exclude_unset=True)),
+        ServerUpdate.model_validate(body.model_dump(exclude_unset=True)),
         db,
         current_user,
         request,
     )
-    detail = await _to_detail(updated)
+    detail = await _to_detail(_updated_server_model(updated))
     return ServerWriteResult(
         **detail.model_dump(),
         restart_required=bool(getattr(updated, "restart_required", False)),

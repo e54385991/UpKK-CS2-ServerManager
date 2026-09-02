@@ -23,6 +23,7 @@ from .identity import (
     PasswordResetToken,
     User,
 )
+from .legacy import GlobalSettings, InstalledPlugin, Plugin, UserSettings
 from .plugins import (
     GitHubInstallRecipe,
     ManagedPlugin,

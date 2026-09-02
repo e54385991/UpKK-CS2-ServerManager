@@ -28431,7 +28431,7 @@
     },
     "/api/setup/auto-setup": {
       "post": {
-        "description": "Automatically setup a server for CS2 deployment\n\nThis endpoint:\n1. Connects to the target server (as root or regular user with sudo)\n2. Automatically detects if sudo is needed and available\n3. Installs required system dependencies\n4. Creates a dedicated CS2 user\n5. Sets up the game directory\n6. Returns credentials for CS2 Manager to use\n7. Optionally saves the initialized server configuration for reuse\n\nSupports:\n- Root user login (no sudo needed)\n- Regular user with passwordless sudo\n- Regular user with password sudo (requires sudo_password)\n\n**Authentication Required**: User must be logged in to use this endpoint.",
+        "description": "Validate the request, run the setup workflow, and return safe credentials.",
         "operationId": "auto_setup_server_api_setup_auto_setup_post",
         "requestBody": {
           "content": {
@@ -42823,8 +42823,15 @@
             "name": "event_type",
             "required": false,
             "schema": {
-              "title": "Event Type",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
             }
           }
         ],

@@ -186,7 +186,7 @@ async def clear_deployment_lock(
     current_user: ActiveUser,
 ) -> ActionResult:
     response = await cancel_deployment(server_id, db, current_user)
-    payload = json.loads(response.body)
+    payload = json.loads(bytes(response.body))
     if response.status_code >= 400:
         raise HTTPException(
             status_code=response.status_code,
@@ -246,68 +246,8 @@ async def stream_server_operation_events(
     if record is None or int(record["server_id"]) != server_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operation not found")
 
-    async def event_source():
-        queue = await server_operation_hub.subscribe_queue(op_id)
-        sequence = after
-        try:
-            yield ": connected\n\n"
-            replayed = await server_operation_hub.replay(op_id, sequence)
-            if not replayed:
-                current = await server_operation_hub.get(op_id)
-                if current and current.get("status") in ACTIVE_STATUSES:
-                    await server_operation_hub.emit(
-                        op_id,
-                        "progress",
-                        kind="status",
-                        message="Live log connected; waiting for worker output…",
-                    )
-                    replayed = await server_operation_hub.replay(op_id, sequence)
-            for event in replayed:
-                try:
-                    event_sequence = int(event.get("sequence") or 0)
-                except TypeError, ValueError:
-                    continue
-                if event_sequence <= sequence:
-                    continue
-                sequence = event_sequence
-                yield _encode_sse_event(event)
-                if event.get("type") in TERMINAL_EVENT_TYPES:
-                    return
-            idle_ticks = 0
-            while not await request.is_disconnected():
-                pending: list[dict[str, Any]] = []
-                try:
-                    pending.append(await asyncio.wait_for(queue.get(), timeout=1))
-                except TimeoutError:
-                    idle_ticks += 1
-                    if idle_ticks >= 15:
-                        idle_ticks = 0
-                        yield ": keep-alive\n\n"
-                    current = await server_operation_hub.get(op_id)
-                    if current and current.get("status") in {"completed", "failed"}:
-                        for event in await server_operation_hub.replay(op_id, sequence):
-                            yield _encode_sse_event(event)
-                        return
-                else:
-                    idle_ticks = 0
-                pending.extend(await server_operation_hub.replay(op_id, sequence))
-                pending.sort(key=lambda item: int(item.get("sequence") or 0))
-                for event in pending:
-                    try:
-                        event_sequence = int(event.get("sequence") or 0)
-                    except TypeError, ValueError:
-                        continue
-                    if event_sequence <= sequence:
-                        continue
-                    sequence = event_sequence
-                    yield _encode_sse_event(event)
-                    if event.get("type") in TERMINAL_EVENT_TYPES:
-                        return
-        finally:
-            await server_operation_hub.unsubscribe_queue(op_id, queue)
-
     return StreamingResponse(
-        event_source(),
+        _operation_event_source(request, op_id, after),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -315,3 +255,64 @@ async def stream_server_operation_events(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+async def _operation_event_source(request: Request, op_id: str, after: int):
+    queue = await server_operation_hub.subscribe_queue(op_id)
+    sequence = after
+    try:
+        yield ": connected\n\n"
+        replayed = await server_operation_hub.replay(op_id, sequence)
+        if not replayed:
+            current = await server_operation_hub.get(op_id)
+            if current and current.get("status") in ACTIVE_STATUSES:
+                await server_operation_hub.emit(
+                    op_id,
+                    "progress",
+                    kind="status",
+                    message="Live log connected; waiting for worker output…",
+                )
+                replayed = await server_operation_hub.replay(op_id, sequence)
+        for event in replayed:
+            event_sequence = _event_sequence(event)
+            if event_sequence <= sequence:
+                continue
+            sequence = event_sequence
+            yield _encode_sse_event(event)
+            if event.get("type") in TERMINAL_EVENT_TYPES:
+                return
+        idle_ticks = 0
+        while not await request.is_disconnected():
+            try:
+                pending = [await asyncio.wait_for(queue.get(), timeout=1)]
+            except TimeoutError:
+                idle_ticks += 1
+                if idle_ticks >= 15:
+                    idle_ticks = 0
+                    yield ": keep-alive\n\n"
+                current = await server_operation_hub.get(op_id)
+                if current and current.get("status") in {"completed", "failed"}:
+                    for replay_event in await server_operation_hub.replay(op_id, sequence):
+                        yield _encode_sse_event(replay_event)
+                    return
+            else:
+                idle_ticks = 0
+            pending.extend(await server_operation_hub.replay(op_id, sequence))
+            pending.sort(key=lambda item: int(item.get("sequence") or 0))
+            for event in pending:
+                event_sequence = _event_sequence(event)
+                if event_sequence <= sequence:
+                    continue
+                sequence = event_sequence
+                yield _encode_sse_event(event)
+                if event.get("type") in TERMINAL_EVENT_TYPES:
+                    return
+    finally:
+        await server_operation_hub.unsubscribe_queue(op_id, queue)
+
+
+def _event_sequence(event: dict[str, Any]) -> int:
+    try:
+        return int(event.get("sequence") or 0)
+    except TypeError, ValueError:
+        return 0

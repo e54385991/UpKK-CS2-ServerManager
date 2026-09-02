@@ -10,7 +10,7 @@ import shutil
 import tempfile
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Optional
+from typing import Any, Optional
 
 from anyio import to_thread
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -198,7 +198,7 @@ async def install_github_plugin(
     ) -> None:
         if request.suppress_notification:
             return
-        details = {
+        details: dict[str, Any] = {
             "Download URL": request.download_url,
         }
         if installed_files is not None:
@@ -305,7 +305,10 @@ async def install_github_plugin(
                 request.download_url
             )
             try:
-                if local_digest.casefold() != request.expected_archive_sha256.casefold():
+                if (
+                    request.expected_archive_sha256
+                    and local_digest.casefold() != request.expected_archive_sha256.casefold()
+                ):
                     error_msg = "Release archive digest changed after approval"
                     await progress(error_msg, "error")
                     await notify_install_result(False, error_msg)

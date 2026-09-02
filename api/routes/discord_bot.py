@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import or_
-from sqlmodel import select
+from sqlmodel import col, select
 
 from api.dependencies import ActiveUser, DatabaseSession, require_server_access
 from modules import (
@@ -57,6 +59,18 @@ from services.task_registry import discord_menu_task_registry
 router = APIRouter(tags=["discord-bot"])
 
 
+def _discord_capability(value: str) -> DiscordCapability | None:
+    """Convert persisted strings to the strict response enum."""
+    try:
+        return DiscordCapability(value)
+    except ValueError:
+        return None
+
+
+def _trigger_mode(value: str | None) -> Literal["mention_only", "mention_and_greetings"]:
+    return "mention_and_greetings" if value == "mention_and_greetings" else "mention_only"
+
+
 async def _notify_manager(user_id: int) -> None:
     from services.discord_bot_manager import discord_bot_manager
 
@@ -83,10 +97,11 @@ async def _load_discord_options(
 
 
 def _bot_response(bot: UserDiscordBot | None) -> DiscordBotSettingsResponse:
+    mode = _trigger_mode(bot.message_trigger_mode if bot is not None else None)
     return DiscordBotSettingsResponse(
         enabled=bool(bot and bot.enabled),
         token_configured=bool(bot and bot.token_encrypted),
-        message_trigger_mode=bot.message_trigger_mode if bot else "mention_only",
+        message_trigger_mode=mode,
         application_id=bot.application_id if bot else None,
         bot_user_id=bot.bot_user_id if bot else None,
         username=bot.username if bot else None,
@@ -121,10 +136,10 @@ async def _connected_bot_token(db: DatabaseSession, user_id: int) -> tuple[UserD
 async def _bound_menu_push_channels(db: DatabaseSession, user_id: int) -> dict[str, set[str]]:
     result = await db.execute(
         select(ServerDiscordBinding, Server)
-        .join(Server, Server.id == ServerDiscordBinding.server_id)
+        .join(Server, col(Server.id) == col(ServerDiscordBinding.server_id))
         .where(
             ServerDiscordBinding.user_id == user_id,
-            ServerDiscordBinding.enabled.is_(True),
+            col(ServerDiscordBinding.enabled).is_(True),
             Server.user_id == user_id,
         )
     )
@@ -237,7 +252,11 @@ async def _global_binding_response(
         user_ids=list(bot.global_user_ids or []),
         allow_channel_managers=bot.global_allow_channel_managers,
         allow_server_administrators=bot.global_allow_server_administrators,
-        capabilities=list(bot.global_capabilities or []),
+        capabilities=[
+            capability
+            for value in bot.global_capabilities or []
+            if (capability := _discord_capability(value)) is not None
+        ],
         server_count=server_count,
         matching_server_count=matching_server_count,
         synced_server_count=synced_server_count,
@@ -270,8 +289,8 @@ async def update_discord_bot(
             select(UserDiscordBot).where(
                 UserDiscordBot.user_id != current_user.id,
                 or_(
-                    UserDiscordBot.application_id == identity.application_id,
-                    UserDiscordBot.bot_user_id == identity.bot_user_id,
+                    col(UserDiscordBot.application_id) == identity.application_id,
+                    col(UserDiscordBot.bot_user_id) == identity.bot_user_id,
                 ),
             )
         )
@@ -597,7 +616,15 @@ async def _binding_response(
         user_ids=list(binding.user_ids or []) if binding else [],
         allow_channel_managers=binding.allow_channel_managers if binding else False,
         allow_server_administrators=binding.allow_server_administrators if binding else False,
-        capabilities=list(binding.capabilities or []) if binding else [],
+        capabilities=(
+            [
+                capability
+                for value in binding.capabilities or []
+                if (capability := _discord_capability(value)) is not None
+            ]
+            if binding
+            else []
+        ),
         response_visibility="public",
     )
 

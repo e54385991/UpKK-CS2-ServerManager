@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.database import async_session_maker
 from modules.models import (
@@ -313,6 +313,8 @@ def _provider_token_usage(response: dict[str, Any]) -> tuple[int, int] | None:
             value = usage.get(key)
             if isinstance(value, bool):
                 continue
+            if not isinstance(value, (int, float, str)):
+                continue
             try:
                 parsed = int(value)
             except TypeError, ValueError:
@@ -455,8 +457,8 @@ async def reconcile_waiting_approval_runs(
     tool_result = await db.execute(
         select(AIToolRun)
         .where(
-            AIToolRun.run_id.in_([run.id for run in runs]),
-            AIToolRun.status.in_(("pending_approval", "approved", "queued")),
+            col(AIToolRun.run_id).in_([run.id for run in runs]),
+            col(AIToolRun.status).in_(("pending_approval", "approved", "queued")),
         )
         .with_for_update()
     )
@@ -510,7 +512,7 @@ async def cleanup_expired_ai_runs(
     """Delete terminal run metadata after the background-task visibility window."""
     cutoff = get_current_time() - timedelta(minutes=AI_BACKGROUND_TASK_RETENTION_MINUTES)
     filters = [
-        AIRun.status.in_(TERMINAL_RUN_STATUSES),
+        col(AIRun.status).in_(TERMINAL_RUN_STATUSES),
         func.coalesce(AIRun.completed_at, AIRun.updated_at, AIRun.created_at) < cutoff,
     ]
     if user_id is not None:
@@ -532,7 +534,7 @@ async def reconcile_stale_ai_server_lock(db, server_id: int | None) -> bool:
         select(AIRun.id)
         .where(
             AIRun.server_id == server_id,
-            AIRun.status.in_(ACTIVE_RUN_STATUSES),
+            col(AIRun.status).in_(ACTIVE_RUN_STATUSES),
         )
         .limit(1)
     )
@@ -541,11 +543,11 @@ async def reconcile_stale_ai_server_lock(db, server_id: int | None) -> bool:
     legacy_cutoff = get_current_time() - timedelta(minutes=AI_BACKGROUND_TASK_RETENTION_MINUTES)
     legacy_result = await db.execute(
         select(AIToolRun.id)
-        .join(AIRun, AIToolRun.run_id == AIRun.id)
+        .join(AIRun, col(AIToolRun.run_id) == col(AIRun.id))
         .where(
             AIRun.server_id == server_id,
-            AIRun.status.in_(TERMINAL_RUN_STATUSES),
-            AIToolRun.tool_name.in_(AI_LEGACY_WRITE_TOOLS),
+            col(AIRun.status).in_(TERMINAL_RUN_STATUSES),
+            col(AIToolRun.tool_name).in_(AI_LEGACY_WRITE_TOOLS),
             func.coalesce(AIToolRun.completed_at, AIToolRun.created_at) >= legacy_cutoff,
         )
         .limit(1)
@@ -578,7 +580,7 @@ async def _load_provider_messages(
     result = await db.execute(
         select(AIMessage)
         .where(AIMessage.conversation_id == conversation.id)
-        .order_by(AIMessage.id.desc())
+        .order_by(col(AIMessage.id).desc())
         .limit(120)
     )
     stored = list(reversed(result.scalars().all()))
@@ -739,9 +741,9 @@ async def _resume_decided_tools(db, run: AIRun, user: User, server: Server | Non
         select(AIToolRun)
         .where(
             AIToolRun.run_id == run.id,
-            AIToolRun.status.in_(("approved", "queued", "rejected", "pending_approval")),
+            col(AIToolRun.status).in_(("approved", "queued", "rejected", "pending_approval")),
         )
-        .order_by(AIToolRun.created_at.asc(), AIToolRun.id.asc())
+        .order_by(col(AIToolRun.created_at).asc(), col(AIToolRun.id).asc())
     )
     items = list(result.scalars().all())
     for item in items:
@@ -1133,7 +1135,10 @@ async def process_ai_run(run_id: str) -> None:
                         signature = duplicate_read_calls.get(item.tool_call_id)
                         if signature is None:
                             await _execute_tool_run(db, run, item, user, server)
-                            previous_results[(item.tool_name, item.arguments_hash)] = item.result
+                            if isinstance(item.result, dict):
+                                previous_results[(item.tool_name, item.arguments_hash)] = (
+                                    item.result
+                                )
                             continue
                         reused_result = {
                             "success": True,
@@ -1174,15 +1179,15 @@ async def process_ai_run(run_id: str) -> None:
 async def interrupt_active_ai_runs() -> int:
     """Mark non-terminal work interrupted after an application restart."""
     async with async_session_maker() as db:
-        result = await db.execute(select(AIRun).where(AIRun.status.in_(ACTIVE_RUN_STATUSES)))
+        result = await db.execute(select(AIRun).where(col(AIRun.status).in_(ACTIVE_RUN_STATUSES)))
         runs = list(result.scalars().all())
         user_ids = {run.user_id for run in runs}
         server_ids = {run.server_id for run in runs if run.server_id is not None}
         if runs:
             tool_result = await db.execute(
                 select(AIToolRun).where(
-                    AIToolRun.run_id.in_([run.id for run in runs]),
-                    AIToolRun.status.in_(
+                    col(AIToolRun.run_id).in_([run.id for run in runs]),
+                    col(AIToolRun.status).in_(
                         ("pending", "pending_approval", "approved", "queued", "running")
                     ),
                 )
@@ -1225,7 +1230,7 @@ async def interrupt_conversation_run(
     result = await db.execute(
         select(AIRun).where(
             AIRun.conversation_id == conversation_id,
-            AIRun.status.in_(ACTIVE_RUN_STATUSES),
+            col(AIRun.status).in_(ACTIVE_RUN_STATUSES),
         )
     )
     run = result.scalar_one_or_none()
@@ -1237,7 +1242,7 @@ async def interrupt_conversation_run(
         tool_result = await db.execute(
             select(AIToolRun).where(
                 AIToolRun.run_id == run.id,
-                AIToolRun.status.in_(("pending_approval", "approved", "queued")),
+                col(AIToolRun.status).in_(("pending_approval", "approved", "queued")),
             )
         )
         await _close_unexecuted_tools(

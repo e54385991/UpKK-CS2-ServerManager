@@ -6,7 +6,7 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import delete
+from sqlmodel import col, delete
 
 from api.dependencies import CurrentUser, DatabaseSession
 from modules import (
@@ -183,11 +183,11 @@ async def delete_scheduled_task(
     _require_user_managed_task(existing_task)
     result = await db.execute(
         delete(ScheduledTask).where(
-            ScheduledTask.id == task_id, ScheduledTask.server_id == server_id
+            col(ScheduledTask.id) == task_id, col(ScheduledTask.server_id) == server_id
         )
     )
 
-    if result.rowcount == 0:
+    if int(getattr(result, "rowcount", 0) or 0) == 0:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
     await db.commit()

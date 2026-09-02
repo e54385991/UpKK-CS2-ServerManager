@@ -9,7 +9,11 @@ import shlex
 import uuid
 from typing import Any, AsyncIterator, Optional
 
-import asyncssh
+from asyncssh.constants import (
+    FILEXFER_TYPE_DIRECTORY,
+    FILEXFER_TYPE_REGULAR,
+    FILEXFER_TYPE_SYMLINK,
+)
 
 from modules import Server
 from services.ssh_manager import SSHManager
@@ -44,14 +48,17 @@ async def _sftp_root(
     )
     if not valid:
         raise PluginConfigError(error)
-    sftp = await ssh_manager.conn.start_sftp_client()
+    conn = ssh_manager.conn
+    if conn is None:
+        raise PluginConfigError("SSH connection is not established")
+    sftp = await conn.start_sftp_client()
     try:
         attrs = await sftp.lstat(target)
     except Exception:
         sftp.exit()
         await sftp.wait_closed()
         raise
-    if attrs.type == asyncssh.FILEXFER_TYPE_SYMLINK:
+    if attrs.type == FILEXFER_TYPE_SYMLINK:
         sftp.exit()
         await sftp.wait_closed()
         raise PluginConfigError("Symbolic links cannot be used as configuration sources")
@@ -65,9 +72,9 @@ async def inspect_source(
 ) -> str:
     sftp, _, attrs = await _sftp_root(ssh_manager, server, relative_path)
     try:
-        if attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY:
+        if attrs.type == FILEXFER_TYPE_DIRECTORY:
             return "directory"
-        if attrs.type == asyncssh.FILEXFER_TYPE_REGULAR:
+        if attrs.type == FILEXFER_TYPE_REGULAR:
             return "file"
         raise PluginConfigError("Configuration source must be a regular file or directory")
     finally:
@@ -82,19 +89,19 @@ async def browse_directory(
 ) -> list[dict[str, Any]]:
     sftp, target, attrs = await _sftp_root(ssh_manager, server, relative_path)
     try:
-        if attrs.type != asyncssh.FILEXFER_TYPE_DIRECTORY:
+        if attrs.type != FILEXFER_TYPE_DIRECTORY:
             raise PluginConfigError("Browse path is not a directory")
         items: list[dict[str, Any]] = []
         async for entry in sftp.scandir(target):
             if entry.filename in {".", ".."}:
                 continue
             entry_type = entry.attrs.type
-            if entry_type == asyncssh.FILEXFER_TYPE_SYMLINK:
+            if entry_type == FILEXFER_TYPE_SYMLINK:
                 items.append({"name": entry.filename, "type": "symlink", "selectable": False})
                 continue
             if entry_type not in {
-                asyncssh.FILEXFER_TYPE_DIRECTORY,
-                asyncssh.FILEXFER_TYPE_REGULAR,
+                FILEXFER_TYPE_DIRECTORY,
+                FILEXFER_TYPE_REGULAR,
             }:
                 continue
             child_relative = posixpath.normpath(posixpath.join(relative_path, entry.filename))
@@ -102,9 +109,7 @@ async def browse_directory(
                 {
                     "name": entry.filename,
                     "path": child_relative,
-                    "type": "directory"
-                    if entry_type == asyncssh.FILEXFER_TYPE_DIRECTORY
-                    else "file",
+                    "type": "directory" if entry_type == FILEXFER_TYPE_DIRECTORY else "file",
                     "selectable": True,
                     "size": entry.attrs.size or 0,
                 }
@@ -145,9 +150,12 @@ async def iter_source_scan(
         process_finished = True
 
     async def read_stderr() -> str:
+        active_process = process
+        if active_process is None:
+            return ""
         retained = bytearray()
         while True:
-            chunk = await process.stderr.read(SCAN_READ_BYTES)
+            chunk = await active_process.stderr.read(SCAN_READ_BYTES)
             if not chunk:
                 break
             if isinstance(chunk, str):
@@ -160,9 +168,9 @@ async def iter_source_scan(
     try:
         actual_type = (
             "directory"
-            if attrs.type == asyncssh.FILEXFER_TYPE_DIRECTORY
+            if attrs.type == FILEXFER_TYPE_DIRECTORY
             else "file"
-            if attrs.type == asyncssh.FILEXFER_TYPE_REGULAR
+            if attrs.type == FILEXFER_TYPE_REGULAR
             else "unsupported"
         )
         if actual_type != source_type:
@@ -201,7 +209,10 @@ async def iter_source_scan(
                 rf"\( -type f \( {extension_expression} \) "
                 r"-printf 'F\0%P\0%s\0%T@\0' \)"
             )
-            process = await ssh_manager.conn.create_process(command, encoding=None)
+            conn = ssh_manager.conn
+            if conn is None:
+                raise PluginConfigError("SSH connection is not established")
+            process = await conn.create_process(command, encoding=None)
             stderr_task = asyncio.create_task(read_stderr())
             buffer = bytearray()
             record_type: Optional[str] = None
@@ -350,7 +361,10 @@ async def read_text_file(
     )
     if not valid:
         raise PluginConfigError(error)
-    async with ssh_manager.conn.start_sftp_client() as sftp:
+    conn = ssh_manager.conn
+    if conn is None:
+        raise PluginConfigError("SSH connection is not established")
+    async with conn.start_sftp_client() as sftp:
         attrs = await sftp.lstat(target)
         if (attrs.size or 0) > MAX_CONFIG_BYTES:
             raise PluginConfigError("Configuration exceeds the 10 MiB size limit")
@@ -379,8 +393,11 @@ async def atomic_write_text_file(
     if not valid:
         raise PluginConfigError(error)
     temporary = f"{target}.upkk-{uuid.uuid4().hex}.tmp"
+    conn = ssh_manager.conn
+    if conn is None:
+        raise PluginConfigError("SSH connection is not established")
     try:
-        async with ssh_manager.conn.start_sftp_client() as sftp:
+        async with conn.start_sftp_client() as sftp:
             original_attrs = await sftp.lstat(target)
             async with sftp.open(temporary, "wb") as remote_file:
                 await remote_file.write(content.encode("utf-8"))

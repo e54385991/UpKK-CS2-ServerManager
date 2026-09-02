@@ -86,7 +86,7 @@ class A2SCacheService:
 
             success, result = await steam_api_service.check_version("1")
 
-            if success and result.get("success"):
+            if success and result is not None and result.get("success"):
                 steam_version = result.get("required_version")
                 if steam_version:
                     cache_data = {
@@ -189,7 +189,7 @@ class A2SCacheService:
             # Query players if server info was successful
             players_success = False
             player_list = None
-            if info_success:
+            if info_success and server_info is not None:
                 players_success, player_list = await a2s_service.query_players(
                     query_host, query_port, timeout=3.0
                 )
@@ -237,7 +237,7 @@ class A2SCacheService:
                     except Exception as e:
                         logger.error(f"Failed to update server version in DB: {e}")
 
-            if info_success:
+            if info_success and server_info is not None:
                 logger.debug(
                     f"Cached A2S info for server {server.id} ({server.name}): "
                     f"{server_info.get('server_name', 'N/A')} - "

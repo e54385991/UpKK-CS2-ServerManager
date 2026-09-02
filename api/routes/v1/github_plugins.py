@@ -92,8 +92,11 @@ def _dependency_refs(items: list) -> list[PluginRef]:
 
 
 def to_plan_view(plan: dict) -> GitHubInstallPlanView:
-    release = plan.get("release") if isinstance(plan.get("release"), dict) else {}
-    asset = plan.get("asset") if isinstance(plan.get("asset"), dict) else {}
+    def mapping(value: object) -> dict[str, object]:
+        return value if isinstance(value, dict) else {}
+
+    release = mapping(plan.get("release"))
+    asset = mapping(plan.get("asset"))
     return GitHubInstallPlanView(
         server_id=int(plan["server_id"]),
         repo_url=str(plan.get("repo_url") or ""),
@@ -146,8 +149,9 @@ async def list_github_releases(
     repo_url: str = Query(min_length=1, max_length=500),
     count: int = Query(default=5, ge=1, le=10),
     server_id: int | None = Query(default=None),
-    db: DatabaseSession = None,
-    current_user: ActiveUser = None,
+    *,
+    db: DatabaseSession,
+    current_user: ActiveUser,
 ) -> GitHubReleasesView:
     """Fetch public GitHub release archives. Optional server_id adds runtime hints."""
     if server_id is not None:

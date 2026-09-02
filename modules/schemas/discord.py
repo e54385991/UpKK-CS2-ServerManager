@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, ConfigDict, field_validator, model_validator
+from pydantic import AfterValidator, field_validator, model_validator
 from sqlmodel import Field, SQLModel
 
 
@@ -95,8 +95,6 @@ class DiscordBotSettingsResponse(SQLModel):
     last_connected_at: datetime | None = None
     last_error: str | None = None
     invite_url: str | None = None
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class DiscordBotTestRequest(SQLModel):
@@ -214,8 +212,6 @@ class DiscordBindingResponse(SQLModel):
     capabilities: list[DiscordCapability] = Field(default_factory=list)
     response_visibility: Literal["public"] = "public"
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class DiscordGlobalBindingUpdate(DiscordBindingUpdate):
     sync_existing_servers: bool = False
@@ -236,8 +232,6 @@ class DiscordGlobalBindingResponse(SQLModel):
     synced_server_count: int = 0
     inherited_by_new_servers: bool = True
 
-    model_config = ConfigDict(from_attributes=True)
-
 
 class AgentPolicyUpdate(SQLModel):
     enabled: bool = True
@@ -257,5 +251,3 @@ class AgentPolicyResponse(SQLModel):
     effective_enabled: bool
     disabled_reason: str | None = None
     capabilities: list[AgentCapability]
-
-    model_config = ConfigDict(from_attributes=True)

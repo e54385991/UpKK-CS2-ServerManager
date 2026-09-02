@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from modules.models import Server
 
@@ -16,7 +16,7 @@ async def authorized_server_ids(
     """Resolve a request with one SQL query while preserving request order."""
     result = await db.execute(
         select(Server.id).where(
-            Server.id.in_(requested_ids),
+            col(Server.id).in_(requested_ids),
             Server.user_id == owner_user_id,
         )
     )

@@ -2,25 +2,34 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
-from modules import ManagedPlugin, MarketPlugin, Server, ServerStatus, User
+from modules import ManagedPlugin, Server, ServerStatus, User
 from services.game_mode_launch import upsert_additional_parameters
+from services.game_mode_planning import (
+    GameModePlanError,
+    _config_needs_patch,
+    _jsonable_dict,
+    _map_already_present,
+    _market_restart_required,
+    _plan_hash,
+    _read_text,
+    find_market_plugin_by_title,
+)
+from services.game_mode_planning import (
+    catalog_for_server as _catalog_for_server,
+)
 from services.game_mode_recipes import (
     GameModeRecipe,
     UnknownGameModeError,
     get_recipe,
-    list_recipes,
 )
 from services.game_mode_remote import (
-    GameModeRemoteError,
     connect,
     inspect_game_mode_state,
     remote_paths,
@@ -36,9 +45,7 @@ from services.map_management_service import (
     DEFAULT_PLUGIN_CONFIG_CONTENT,
     MAX_MAPS_CONFIG_BYTES,
     MAX_PLUGIN_CONFIG_BYTES,
-    MapConfigError,
     append_map_to_config,
-    parse_maps_config,
     parse_plugin_config,
     update_plugin_config,
 )
@@ -55,124 +62,17 @@ from services.ssh_manager import SSHManager
 
 ProgressCallback = Callable[..., Awaitable[None]]
 
-
-class GameModePlanError(ValueError):
-    """Raised when a game-mode plan cannot be built or executed."""
-
-
-def _plan_hash(plan: dict[str, Any]) -> str:
-    payload = {key: value for key, value in plan.items() if key != "plan_hash"}
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(encoded.encode()).hexdigest()
-
-
-def _jsonable(value: object) -> object:
-    if isinstance(value, dict):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
-
-
-async def find_market_plugin_by_title(db: AsyncSession, title: str) -> MarketPlugin | None:
-    plugins, _ = await MarketPlugin.search_plugins(db, search_query=title, limit=20)
-    return next(
-        (item for item in plugins if item.title.casefold() == title.casefold()),
-        None,
-    )
-
-
-async def _read_text(
-    manager: SSHManager,
-    server: Server,
-    path: str,
-    *,
-    exists: bool,
-    default: str,
-    max_size: int,
-    label: str,
-) -> str:
-    if not exists:
-        return default
-    success, content, error = await manager.read_file(path, server, max_size=max_size)
-    if not success:
-        raise GameModePlanError(f"Unable to read {label}: {error}")
-    return content
-
-
-def _map_already_present(maps_content: str, workshop_id: str, name: str) -> bool:
-    try:
-        entries = parse_maps_config(maps_content).maps
-    except MapConfigError:
-        return False
-    return any(
-        str(item.get("workshop_id")) == workshop_id
-        or str(item.get("name") or "").casefold() == name.casefold()
-        for item in entries
-    )
-
-
-def _config_needs_patch(config_content: str, desired: dict[str, object]) -> bool:
-    parsed = parse_plugin_config(config_content)
-    return any(parsed.get(key) is not desired_value for key, desired_value in desired.items())
+__all__ = [
+    "GameModePlanError",
+    "catalog_for_server",
+    "build_game_mode_plan",
+    "execute_game_mode_plan",
+]
 
 
 async def catalog_for_server(db: AsyncSession, server: Server) -> dict[str, Any]:
-    """Return recipe metadata plus a best-effort live presence snapshot."""
-    addons_path = resolve_addons_directory(server.game_directory)
-    state: dict[str, bool] | None = None
-    reachable = True
-    if getattr(server, "is_ssh_down", False):
-        reachable = False
-    else:
-        try:
-            manager = await connect(server)
-            try:
-                state = await inspect_game_mode_state(manager, server)
-            finally:
-                await manager.disconnect()
-        except GameModeRemoteError, GameModePlanError:
-            reachable = False
-
-    modes: list[dict[str, Any]] = []
-    for recipe in list_recipes():
-        present = {
-            "counterstrikesharp": None if state is None else bool(state.get("css")),
-            "cs2kz-metamod": None if state is None else bool(state.get("cs2kz")),
-            "mapchooser": None if state is None else bool(state.get("mapchooser")),
-        }
-        missing = [
-            title
-            for title in recipe.market_plugin_titles
-            if await find_market_plugin_by_title(db, title) is None
-        ]
-        modes.append(
-            {
-                "id": recipe.id,
-                "launch_upsert": dict(recipe.launch_upsert),
-                "frameworks": list(recipe.frameworks),
-                "market_plugin_titles": list(recipe.market_plugin_titles),
-                "maps": [
-                    {"name": item.name, "workshop_id": item.workshop_id}
-                    for item in recipe.maps_append
-                ],
-                "plugin_config": dict(recipe.plugin_config),
-                "startup_workshop_map": recipe.startup_workshop_map,
-                "present": present,
-                "missing_market_plugins": missing,
-            }
-        )
-    return {
-        "server_id": server.id,
-        "reachable": reachable,
-        "additional_parameters": server.additional_parameters,
-        "addons_path": addons_path,
-        "addons_present": None if state is None else bool(state.get("addons")),
-        "swiftly_installed": None if state is None else bool(state.get("swiftly")),
-        "modes": modes,
-    }
+    """Compatibility wrapper that keeps monkeypatchable module-level finder."""
+    return await _catalog_for_server(db, server, plugin_finder=find_market_plugin_by_title)
 
 
 async def build_game_mode_plan(
@@ -325,13 +225,15 @@ async def build_game_mode_plan(
             }
         )
 
-    need_restart = treat_as_missing or need_css or not state.get("config") or not state.get("maps")
-    if not treat_as_missing:
-        for title in recipe.market_plugin_titles:
-            if not title_presence.get(title, False):
-                need_restart = True
-    if launch_changed:
-        need_restart = True
+    need_restart = _market_restart_required(
+        recipe.market_plugin_titles,
+        title_presence,
+        treat_as_missing=treat_as_missing,
+        base_required=need_css
+        or not state.get("config")
+        or not state.get("maps")
+        or launch_changed,
+    )
     steps.append(
         {
             "id": "restart_and_wait",
@@ -432,18 +334,20 @@ async def build_game_mode_plan(
         "blocked": bool(blocking_reasons),
         "blocking_reasons": blocking_reasons,
     }
-    plan["plan_hash"] = _plan_hash(_jsonable(plan))
+    plan["plan_hash"] = _plan_hash(_jsonable_dict(plan))
     return plan
 
 
 async def _clear_managed_plugins(db: AsyncSession, server_id: int) -> int:
-    result = await db.execute(select(ManagedPlugin).where(ManagedPlugin.server_id == server_id))
+    result = await db.execute(
+        select(ManagedPlugin).where(col(ManagedPlugin.server_id) == server_id)
+    )
     rows = list(result.scalars().all())
     if not rows:
-        await db.execute(delete(ManagedPlugin).where(ManagedPlugin.server_id == server_id))
+        await db.execute(delete(ManagedPlugin).where(col(ManagedPlugin.server_id) == server_id))
         await db.commit()
         return 0
-    await db.execute(delete(ManagedPlugin).where(ManagedPlugin.server_id == server_id))
+    await db.execute(delete(ManagedPlugin).where(col(ManagedPlugin.server_id) == server_id))
     await db.commit()
     return len(rows)
 

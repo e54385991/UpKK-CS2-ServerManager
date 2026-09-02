@@ -4,7 +4,7 @@
 
 import enum
 from datetime import datetime
-from typing import List, Optional
+from typing import ClassVar, List, Optional
 
 from sqlalchemy import (
     CheckConstraint,
@@ -20,7 +20,7 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
-from sqlmodel import Column, Field, SQLModel, select
+from sqlmodel import Column, Field, SQLModel, col, select
 
 # PostgreSQL is the only supported runtime database. Keep the historical
 # ``JSON`` name used by model modules while emitting the queryable binary type.
@@ -57,4 +57,32 @@ DEFAULT_PLUGIN_CONFIG_SOURCE_PATH = DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS[0]
 
 Base = SQLModel
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+__all__ = [
+    "enum",
+    "datetime",
+    "List",
+    "Optional",
+    "ClassVar",
+    "CheckConstraint",
+    "ForeignKey",
+    "Index",
+    "Integer",
+    "String",
+    "Text",
+    "UniqueConstraint",
+    "text",
+    "SQLEnum",
+    "JSONB",
+    "AsyncSession",
+    "func",
+    "Column",
+    "Field",
+    "SQLModel",
+    "select",
+    "col",
+    "JSON",
+    "portable_enum",
+    "DEFAULT_PLUGIN_CONFIG_SOURCE_PATHS",
+    "DEFAULT_PLUGIN_CONFIG_SOURCE_PATH",
+    "Base",
+]

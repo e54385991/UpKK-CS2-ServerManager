@@ -110,9 +110,11 @@ async def update_game_updates(
 ) -> GameUpdatesView:
     updated = await update_legacy_server(
         server_id,
-        ServerUpdate(
-            enable_auto_update=body.enable_auto_update,
-            update_check_interval_hours=body.update_check_interval_hours,
+        ServerUpdate.model_validate(
+            {
+                "enable_auto_update": body.enable_auto_update,
+                "update_check_interval_hours": body.update_check_interval_hours,
+            }
         ),
         db,
         current_user,

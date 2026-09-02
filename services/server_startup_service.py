@@ -161,6 +161,43 @@ async def _verify_process(server: Server) -> tuple[bool, str]:
     return True, f"CS2 process is running in the {expected} session"
 
 
+async def _validate_startup_approval(plan: dict[str, Any], expected_plan_hash: str, report) -> None:
+    if plan["plan_hash"] != expected_plan_hash:
+        await report(
+            "validate_startup_revision",
+            "failed",
+            "Startup configuration changed before approval execution",
+        )
+        raise StartupPlanError(
+            "Startup configuration changed before approval; review and approve a new plan"
+        )
+    if plan["blocked"]:
+        message = "; ".join(plan["blocking_reasons"])
+        await report("validate_startup_revision", "failed", message)
+        raise StartupPlanError(message)
+
+
+async def _validate_restart_preflight(manager: SSHManager, server: Server, report) -> None:
+    preflight_ok, preflight_message = await manager.check_session_manager_available(server)
+    if not preflight_ok:
+        await report("validate_startup_revision", "failed", preflight_message)
+        raise StartupPlanError(
+            f"Restart preflight failed before settings were saved: {preflight_message}"
+        )
+
+
+async def _commit_server_status(
+    db: AsyncSession, server: Server, status: ServerStatus
+) -> str | None:
+    server.status = status
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        return f"Panel status could not be saved: {exc}"
+    return None
+
+
 async def execute_server_startup_plan(
     db: AsyncSession,
     user: User,
@@ -194,30 +231,10 @@ async def execute_server_startup_plan(
             "running",
             "Validating the approved startup configuration revision",
         )
-        if plan["plan_hash"] != expected_plan_hash:
-            await report(
-                "validate_startup_revision",
-                "failed",
-                "Startup configuration changed before approval execution",
-            )
-            raise StartupPlanError(
-                "Startup configuration changed before approval; review and approve a new plan"
-            )
-        if plan["blocked"]:
-            await report(
-                "validate_startup_revision",
-                "failed",
-                "; ".join(plan["blocking_reasons"]),
-            )
-            raise StartupPlanError("; ".join(plan["blocking_reasons"]))
+        await _validate_startup_approval(plan, expected_plan_hash, report)
 
         manager = SSHManager()
-        preflight_ok, preflight_message = await manager.check_session_manager_available(server)
-        if not preflight_ok:
-            await report("validate_startup_revision", "failed", preflight_message)
-            raise StartupPlanError(
-                f"Restart preflight failed before settings were saved: {preflight_message}"
-            )
+        await _validate_restart_preflight(manager, server, report)
         await report(
             "validate_startup_revision",
             "completed",
@@ -242,17 +259,8 @@ async def execute_server_startup_plan(
         cache_cleared = await redis_manager.clear_server_cache(server_id)
         await report("save_startup_settings", "completed", "Startup settings saved")
 
-        async def commit_status(status: ServerStatus) -> str | None:
-            server.status = status
-            try:
-                await db.commit()
-            except Exception as exc:
-                await db.rollback()
-                return f"Panel status could not be saved: {exc}"
-            return None
-
         async def restart_failure(message: str) -> dict[str, Any]:
-            status_warning = await commit_status(ServerStatus.ERROR)
+            status_warning = await _commit_server_status(db, server, ServerStatus.ERROR)
             await report("restart_server", "failed", message)
             await report(
                 "verify_server",
@@ -283,10 +291,9 @@ async def execute_server_startup_plan(
             return await restart_failure(f"Restart stop failed unexpectedly: {exc}")
         if not stopped:
             return await restart_failure(f"Restart stopped before start: {stop_message}")
-        start_progress = None
-        if progress is not None:
 
-            async def start_progress(message: str) -> None:
+        async def start_progress(message: str) -> None:
+            if progress is not None:
                 await progress(message, "info", None)
 
         try:
@@ -311,7 +318,9 @@ async def execute_server_startup_plan(
             "a2s_info": a2s_info,
         }
         if not process_ok:
-            verification_status_warning = await commit_status(ServerStatus.ERROR)
+            verification_status_warning = await _commit_server_status(
+                db, server, ServerStatus.ERROR
+            )
             await report("verify_server", "failed", process_message)
             return {
                 "success": False,
@@ -330,7 +339,7 @@ async def execute_server_startup_plan(
             verification_message += "; A2S responded successfully"
         else:
             verification_message += "; A2S is not responding yet"
-        status_warning = await commit_status(ServerStatus.RUNNING)
+        status_warning = await _commit_server_status(db, server, ServerStatus.RUNNING)
         await report("verify_server", "completed", verification_message)
         return {
             "success": True,

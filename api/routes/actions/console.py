@@ -9,6 +9,60 @@ from .common import *
 router = APIRouter(tags=["actions"])
 
 
+async def _active_game_session(ssh_manager, server_id: int, server) -> str | None:
+    try:
+        return await find_running_session_manager(
+            ssh_manager.execute_command,
+            server.session_manager,
+            session_name(server_id),
+        )
+    except Exception:
+        return None
+
+
+async def _relay_console(websocket: WebSocket, process, *, allow_ping: bool) -> None:
+    async def read_output():
+        try:
+            while True:
+                output = await process.stdout.read(1024)
+                if not output:
+                    break
+                await websocket.send_json({"type": "output", "data": decode_remote_text(output)})
+        except Exception:
+            pass
+
+    output_task = asyncio.create_task(read_output())
+    try:
+        while True:
+            message = json.loads(await websocket.receive_text())
+            message_type = message.get("type")
+            if message_type == "input":
+                process.stdin.write(encode_console_input(str(message.get("data", ""))))
+                await process.stdin.drain()
+            elif message_type == "resize":
+                process.change_terminal_size(message.get("cols", 80), message.get("rows", 24))
+            elif message_type == "ping" and allow_ping:
+                await websocket.send_json({"type": "pong"})
+            elif message_type == "disconnect":
+                return
+    finally:
+        output_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await output_task
+
+
+async def _close_console_process(process) -> None:
+    if process is None:
+        return
+    try:
+        process.terminate()
+        await asyncio.wait_for(process.wait_closed(), timeout=2)
+    except Exception:
+        with suppress(Exception):
+            process.kill()
+            await asyncio.wait_for(process.wait_closed(), timeout=2)
+
+
 @router.websocket("/servers/{server_id}/ssh-console")
 async def ssh_console_websocket(websocket: WebSocket, server_id: int):
     """
@@ -115,25 +169,13 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
 
         # Check both the configured and legacy manager to support safe switches.
         name = session_name(server_id)
-        try:
-            active_manager = await find_running_session_manager(
-                ssh_manager.execute_command,
-                server.session_manager,
-                name,
-            )
-            if not active_manager:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": "Game server is not running. Please start the server first.",
-                    }
-                )
-                await websocket.close()
-                await ssh_manager.disconnect()
-                return
-        except Exception as e:
+        active_manager = await _active_game_session(ssh_manager, server_id, server)
+        if not active_manager:
             await websocket.send_json(
-                {"type": "error", "message": f"Failed to check server status: {str(e)}"}
+                {
+                    "type": "error",
+                    "message": "Game server is not running. Please start the server first.",
+                }
             )
             await websocket.close()
             await ssh_manager.disconnect()
@@ -146,52 +188,11 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
         # Attach to the live session with a PTY (screen and tmux both support
         # multiple clients without disconnecting the game process).
         process = None
-        output_task = None
         try:
             process = await ssh_manager.create_interactive_process(
                 attach_command(active_manager, name)
             )
-
-            async def read_output():
-                """Read output from the game session and send it to WebSocket."""
-                try:
-                    while True:
-                        output = await process.stdout.read(1024)
-                        if output:
-                            await websocket.send_json(
-                                {"type": "output", "data": decode_remote_text(output)}
-                            )
-                        else:
-                            break
-                except Exception:
-                    pass
-
-            # Start reading output
-            output_task = asyncio.create_task(read_output())
-
-            # Handle input from WebSocket
-            while True:
-                data = await websocket.receive_text()
-                message = json.loads(data)
-
-                if message.get("type") == "input":
-                    # Send input directly to the attached session via stdin.
-                    input_data = message.get("data", "")
-                    process.stdin.write(encode_console_input(str(input_data)))
-                    await process.stdin.drain()
-                elif message.get("type") == "resize":
-                    # Handle terminal resize
-                    cols = message.get("cols", 80)
-                    rows = message.get("rows", 24)
-                    process.change_terminal_size(cols, rows)
-                elif message.get("type") == "ping":
-                    # Respond to ping to keep connection alive
-                    try:
-                        await websocket.send_json({"type": "pong"})
-                    except Exception:
-                        break
-                elif message.get("type") == "disconnect":
-                    break
+            await _relay_console(websocket, process, allow_ping=True)
 
         except WebSocketDisconnect:
             pass
@@ -201,20 +202,7 @@ async def game_console_websocket(websocket: WebSocket, server_id: int):
             # A pooled SSH connection remains open after disconnect(), so the
             # attached screen/tmux client must be closed explicitly.  This
             # detaches only the console client; it does not stop the session.
-            if output_task is not None:
-                output_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await output_task
-
-            if process is not None:
-                try:
-                    process.terminate()
-                    await asyncio.wait_for(process.wait_closed(), timeout=2)
-                except Exception:
-                    with suppress(Exception):
-                        process.kill()
-                        await asyncio.wait_for(process.wait_closed(), timeout=2)
-
+            await _close_console_process(process)
             await ssh_manager.disconnect()
 
     except WebSocketDisconnect:
