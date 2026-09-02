@@ -1,5 +1,10 @@
 import type { AssistantSystemSettingsViewDto } from "@/shared/api/types";
-import type { AiProtocol, AiSystemPatch, AiSystemSettings } from "@/modules/settings/types";
+import {
+  toAiContextWindowTokens,
+  type AiProtocol,
+  type AiSystemPatch,
+  type AiSystemSettings,
+} from "@/modules/settings/types";
 
 export const EMPTY_AI_SYSTEM_SETTINGS: AiSystemSettings = {
   enabled: false,
@@ -18,6 +23,7 @@ export const EMPTY_AI_SYSTEM_SETTINGS: AiSystemSettings = {
   presencePenalty: null,
   verbosity: null,
   parallelToolCalls: null,
+  contextWindowTokens: 262144,
   requestTimeoutSeconds: 60,
   historyRetentionDays: 7,
   maxProviderRounds: 200,
@@ -49,6 +55,7 @@ export function toAiSettings(raw: AssistantSystemSettingsViewDto): AiSystemSetti
     presencePenalty: raw.presence_penalty ?? null,
     verbosity: raw.verbosity ?? null,
     parallelToolCalls: raw.parallel_tool_calls ?? null,
+    contextWindowTokens: toAiContextWindowTokens(raw.context_window_tokens),
     requestTimeoutSeconds: raw.request_timeout_seconds,
     historyRetentionDays: raw.history_retention_days,
     maxProviderRounds: raw.max_provider_rounds,
@@ -91,6 +98,9 @@ export function toAiSettingsWire(patch: AiSystemPatch): Record<string, unknown> 
     ...(patch.verbosity !== undefined ? { verbosity: patch.verbosity } : {}),
     ...(patch.parallelToolCalls !== undefined
       ? { parallel_tool_calls: patch.parallelToolCalls }
+      : {}),
+    ...(patch.contextWindowTokens !== undefined
+      ? { context_window_tokens: patch.contextWindowTokens }
       : {}),
     ...(patch.requestTimeoutSeconds !== undefined
       ? { request_timeout_seconds: patch.requestTimeoutSeconds }

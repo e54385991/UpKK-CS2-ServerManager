@@ -177,6 +177,10 @@ def test_ai_reasoning_and_tool_call_limits_are_configurable():
     assert "max_tool_calls_per_round: Optional[int] = Field(default=None, ge=1, le=1000)" in schema
     assert 'id="ai-admin-rounds" type="number" min="1" max="1000" value="200"' in template
     assert 'id="ai-admin-tool-calls" type="number" min="1" max="1000" value="200"' in template
+    assert 'id="ai-admin-context-window"' in template
+    assert 'value="262144"' in template
+    assert 'value="393216"' in template
+    assert 'value="1048576"' in template
     assert '"maxToolCallsPerRound": "每轮最大工具调用数"' in chinese
 
 

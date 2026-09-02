@@ -49,6 +49,14 @@ export function isEmailProvider(value: string): value is EmailProvider {
 }
 
 export type AiProtocol = "chat_completions" | "responses";
+export const AI_CONTEXT_WINDOW_OPTIONS = [262144, 393216, 1048576] as const;
+export type AiContextWindowTokens = (typeof AI_CONTEXT_WINDOW_OPTIONS)[number];
+
+export function toAiContextWindowTokens(value: number): AiContextWindowTokens {
+  if (value === 393216) return 393216;
+  if (value === 1048576) return 1048576;
+  return 262144;
+}
 
 export type AiSystemSettings = {
   readonly enabled: boolean;
@@ -67,6 +75,7 @@ export type AiSystemSettings = {
   readonly presencePenalty: number | null;
   readonly verbosity: string | null;
   readonly parallelToolCalls: boolean | null;
+  readonly contextWindowTokens: AiContextWindowTokens;
   readonly requestTimeoutSeconds: number;
   readonly historyRetentionDays: number;
   readonly maxProviderRounds: number;
@@ -94,6 +103,7 @@ export type AiSystemPatch = {
   readonly presencePenalty?: number | null;
   readonly verbosity?: string | null;
   readonly parallelToolCalls?: boolean | null;
+  readonly contextWindowTokens?: AiContextWindowTokens;
   readonly requestTimeoutSeconds?: number;
   readonly historyRetentionDays?: number;
   readonly maxProviderRounds?: number;

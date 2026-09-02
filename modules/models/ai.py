@@ -35,6 +35,10 @@ class AISystemSettings(SQLModel, table=True):
     presence_penalty: Optional[float] = Field(default=None)
     verbosity: Optional[str] = Field(default=None, max_length=16)
     parallel_tool_calls: Optional[bool] = Field(default=None)
+    # Input context budget used by the provider request compactor.  Keep this
+    # as a small, audited preset rather than accepting arbitrary values from
+    # the admin UI (256K is the safe default for existing installations).
+    context_window_tokens: int = Field(default=262_144)
     request_timeout_seconds: int = Field(default=60)
     history_retention_days: int = Field(default=7)
     max_provider_rounds: int = Field(default=200, ge=1, le=1000)

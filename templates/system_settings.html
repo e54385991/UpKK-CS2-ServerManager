@@ -368,6 +368,15 @@
                                         <input class="form-control" id="ai-admin-max-tokens" type="number" min="256" max="32768" value="2048">
                                     </div>
                                     <div class="col-md-4">
+                                        <label class="form-label" for="ai-admin-context-window" data-i18n="ai.contextWindow">Context window</label>
+                                        <select class="form-select" id="ai-admin-context-window">
+                                            <option value="262144">256K</option>
+                                            <option value="393216">384K</option>
+                                            <option value="1048576">1M</option>
+                                        </select>
+                                        <div class="form-text" data-i18n="ai.contextWindowHint">Default 256K; choose a larger window only when the provider supports it.</div>
+                                    </div>
+                                    <div class="col-md-4">
                                         <label class="form-label" for="ai-admin-token-field" data-i18n="ai.tokenLimitParameter">Token limit field</label>
                                         <select class="form-select" id="ai-admin-token-field">
                                             <option value="max_completion_tokens">max_completion_tokens</option>
@@ -558,6 +567,7 @@ async function loadAISettings() {
     document.getElementById('ai-admin-temperature').value = data.temperature ?? '';
     document.getElementById('ai-admin-top-p').value = data.top_p ?? '';
     document.getElementById('ai-admin-max-tokens').value = data.max_completion_tokens || 2048;
+    document.getElementById('ai-admin-context-window').value = String(data.context_window_tokens || 262144);
     document.getElementById('ai-admin-token-field').value = data.token_limit_parameter || 'max_completion_tokens';
     document.getElementById('ai-admin-frequency-penalty').value = data.frequency_penalty ?? '';
     document.getElementById('ai-admin-presence-penalty').value = data.presence_penalty ?? '';
@@ -590,6 +600,7 @@ document.getElementById('ai-admin-form').addEventListener('submit', async (event
         temperature: aiAdminOptionalNumber('ai-admin-temperature'),
         top_p: aiAdminOptionalNumber('ai-admin-top-p'),
         max_completion_tokens: Number(document.getElementById('ai-admin-max-tokens').value),
+        context_window_tokens: Number(document.getElementById('ai-admin-context-window').value),
         token_limit_parameter: document.getElementById('ai-admin-token-field').value,
         frequency_penalty: aiAdminOptionalNumber('ai-admin-frequency-penalty'),
         presence_penalty: aiAdminOptionalNumber('ai-admin-presence-penalty'),

@@ -7126,6 +7126,12 @@ export interface components {
             api_protocol: "chat_completions" | "responses";
             /** Base Url */
             base_url?: string | null;
+            /**
+             * Context Window Tokens
+             * @default 262144
+             * @enum {integer}
+             */
+            context_window_tokens: 262144 | 393216 | 1048576;
             /** Enabled */
             enabled: boolean;
             /** Frequency Penalty */
@@ -7183,6 +7189,8 @@ export interface components {
              * @default false
              */
             clear_api_key: boolean;
+            /** Context Window Tokens */
+            context_window_tokens?: (262144 | 393216 | 1048576) | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Frequency Penalty */
@@ -7525,6 +7533,8 @@ export interface components {
              * @default false
              */
             clear_api_key: boolean;
+            /** Context Window Tokens */
+            context_window_tokens?: (262144 | 393216 | 1048576) | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Frequency Penalty */
@@ -7574,6 +7584,12 @@ export interface components {
             api_protocol: "chat_completions" | "responses";
             /** Base Url */
             base_url?: string | null;
+            /**
+             * Context Window Tokens
+             * @default 262144
+             * @enum {integer}
+             */
+            context_window_tokens: 262144 | 393216 | 1048576;
             /** Enabled */
             enabled: boolean;
             /** Frequency Penalty */

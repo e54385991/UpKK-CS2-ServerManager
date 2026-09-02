@@ -31,6 +31,7 @@ from services.agent_policy_service import (
     get_effective_agent_policy,
     require_agent_capabilities,
 )
+from services.ai.errors import AIPayloadTooLargeError
 from services.ai_access import audit_security_event, authorized_server
 from services.ai_events import ai_event_hub
 from services.ai_prompt import build_system_prompt
@@ -254,14 +255,17 @@ def _finalize_progress_snapshot(
 class _AssistantDeltaEmitter:
     """Coalesce provider tokens into bounded, responsive browser events."""
 
-    def __init__(self, run_id: str, round_index: int) -> None:
+    def __init__(self, run_id: str, round_index: int, input_tokens: int = 0) -> None:
         self.run_id = run_id
         self.round_index = round_index
+        self.input_tokens = max(input_tokens, 0)
         self.buffer = ""
+        self.output_chars = 0
         self.last_emit = time.monotonic()
 
     async def add(self, delta: str) -> None:
         self.buffer += delta
+        self.output_chars += len(delta)
         now = time.monotonic()
         if len(self.buffer) >= AI_DELTA_EVENT_CHARS or now - self.last_emit >= 0.1:
             await self.flush()
@@ -275,6 +279,19 @@ class _AssistantDeltaEmitter:
             self.run_id,
             "assistant_delta",
             {"round": self.round_index, "delta": delta},
+        )
+        output_tokens = max(1, (self.output_chars + 3) // 4)
+        await _emit(
+            self.run_id,
+            "token_usage",
+            {
+                "round": self.round_index,
+                "input_tokens": self.input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": self.input_tokens + output_tokens,
+                "estimated": True,
+                "streaming": True,
+            },
         )
 
 
@@ -342,9 +359,10 @@ async def _create_provider_response_with_retry(
     round_index: int,
     server_selected: bool,
     allowed_capabilities=None,
+    estimated_input_tokens: int = 0,
 ) -> dict[str, Any]:
     for retry_attempt in range(AI_RETRY_MAX_ATTEMPTS + 1):
-        delta_emitter = _AssistantDeltaEmitter(run_id, round_index)
+        delta_emitter = _AssistantDeltaEmitter(run_id, round_index, estimated_input_tokens)
         try:
             response = await create_chat_completion(
                 provider,
@@ -362,6 +380,8 @@ async def _create_provider_response_with_retry(
             await delta_emitter.flush()
         except AIProviderError as exc:
             delta_emitter.buffer = ""
+            if isinstance(exc, AIPayloadTooLargeError):
+                raise
             if retry_attempt >= AI_RETRY_MAX_ATTEMPTS:
                 raise
             next_attempt = retry_attempt + 1
@@ -910,6 +930,7 @@ async def process_ai_run(run_id: str) -> None:
                     round_index=round_index,
                     server_selected=server is not None,
                     allowed_capabilities=allowed_capabilities,
+                    estimated_input_tokens=estimated_input_tokens,
                 )
                 rounds_used += 1
                 provider_usage = _provider_token_usage(response)

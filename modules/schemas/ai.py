@@ -12,6 +12,7 @@ ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "
 Verbosity = Literal["low", "medium", "high"]
 TokenLimitParameter = Literal["max_completion_tokens", "max_tokens", "omit"]
 AIAPIProtocol = Literal["chat_completions", "responses"]
+AIContextWindowTokens = Literal[262_144, 393_216, 1_048_576]
 
 
 class AIModelParameters(SQLModel):
@@ -49,6 +50,7 @@ class AISystemSettingsResponse(SQLModel):
     presence_penalty: Optional[float] = None
     verbosity: Optional[Verbosity] = None
     parallel_tool_calls: Optional[bool] = None
+    context_window_tokens: AIContextWindowTokens = 262_144
     request_timeout_seconds: int
     history_retention_days: int
     max_provider_rounds: int
@@ -71,6 +73,7 @@ class AISystemSettingsUpdate(AIModelParameters):
     history_retention_days: Optional[int] = Field(default=None, ge=1, le=7)
     max_provider_rounds: Optional[int] = Field(default=None, ge=1, le=1000)
     max_tool_calls_per_round: Optional[int] = Field(default=None, ge=1, le=1000)
+    context_window_tokens: Optional[AIContextWindowTokens] = None
 
 
 class UserAISettingsResponse(SQLModel):

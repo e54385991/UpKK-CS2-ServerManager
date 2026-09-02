@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
 
-from services.ai.errors import AIProviderError
+from services.ai.errors import AIPayloadTooLargeError, AIProviderError
 from services.ai.streaming import (
     consume_chat_completion_stream,
     consume_responses_stream,
@@ -26,6 +27,11 @@ from services.ai_security import (
 )
 
 TextDeltaCallback = Callable[[str], Awaitable[None]]
+DEFAULT_CONTEXT_WINDOW_TOKENS = 262_144
+CONTEXT_WINDOW_TOKEN_PRESETS = (262_144, 393_216, 1_048_576)
+MAX_PROVIDER_REQUEST_BYTES = 96 * 1024
+MAX_PROVIDER_MESSAGE_CONTENT_BYTES = 32 * 1024
+logger = logging.getLogger(__name__)
 
 # Preserve private imports used by existing tests and extensions.
 _consume_chat_completion_stream = consume_chat_completion_stream
@@ -38,6 +44,133 @@ def _validate_message_payload(message: dict[str, Any]) -> dict[str, Any]:
     if not message.get("tool_calls") and not str(message.get("content") or "").strip():
         raise AIProviderError("AI provider returned neither text nor tool calls")
     return message
+
+
+def _json_size(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str).encode())
+
+
+def _estimated_tokens(value: Any) -> int:
+    """Estimate provider tokens without adding a tokenizer dependency.
+
+    Four UTF-8 bytes per token is intentionally conservative for mixed
+    Chinese/English tool payloads.  The estimate is used only for local
+    compaction; providers remain the source of truth for actual usage.
+    """
+    return max(1, (_json_size(value) + 3) // 4)
+
+
+def _normalized_context_window_tokens(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        return DEFAULT_CONTEXT_WINDOW_TOKENS
+    try:
+        candidate = int(value)
+    except TypeError, ValueError:
+        return DEFAULT_CONTEXT_WINDOW_TOKENS
+    return candidate if candidate in CONTEXT_WINDOW_TOKEN_PRESETS else DEFAULT_CONTEXT_WINDOW_TOKENS
+
+
+def _truncate_text(value: str, limit: int) -> str:
+    encoded = value.encode("utf-8")
+    if len(encoded) <= limit:
+        return value
+    marker = "\n[… earlier content truncated …]\n"
+    marker_bytes = len(marker.encode())
+    if marker_bytes >= limit:
+        return encoded[:limit].decode("utf-8", errors="ignore")
+    remaining = limit - marker_bytes
+    head_bytes = remaining // 2
+    tail_bytes = remaining - head_bytes
+    head = encoded[:head_bytes].decode("utf-8", errors="ignore")
+    tail = encoded[-tail_bytes:].decode("utf-8", errors="ignore")
+    return f"{head}{marker}{tail}"
+
+
+def _compact_message(message: dict[str, Any]) -> dict[str, Any]:
+    content = message.get("content")
+    if not isinstance(content, str):
+        return message
+    compacted = dict(message)
+    compacted["content"] = _truncate_text(content, MAX_PROVIDER_MESSAGE_CONTENT_BYTES)
+    return compacted
+
+
+def _message_groups(
+    messages: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    prefix: list[dict[str, Any]] = []
+    index = 0
+    while index < len(messages) and messages[index].get("role") == "system":
+        prefix.append(messages[index])
+        index += 1
+
+    groups: list[list[dict[str, Any]]] = []
+    while index < len(messages):
+        message = messages[index]
+        group = [message]
+        index += 1
+        if message.get("role") == "assistant" and message.get("tool_calls"):
+            while index < len(messages) and messages[index].get("role") == "tool":
+                group.append(messages[index])
+                index += 1
+        groups.append(group)
+    return prefix, groups
+
+
+def _compact_messages(
+    messages: list[dict[str, Any]],
+    payload_factory: Callable[[list[dict[str, Any]]], dict[str, Any]],
+    *,
+    context_window_tokens: int = DEFAULT_CONTEXT_WINDOW_TOKENS,
+    max_completion_tokens: int = 0,
+) -> tuple[list[dict[str, Any]], bool]:
+    context_limit = _normalized_context_window_tokens(context_window_tokens)
+    output_reserve = max(int(max_completion_tokens or 0), 0)
+    input_token_limit = max(context_limit - output_reserve, 1)
+    original_payload = payload_factory(messages)
+    original_size = _json_size(original_payload)
+    if (
+        original_size <= MAX_PROVIDER_REQUEST_BYTES
+        and _estimated_tokens(original_payload) <= input_token_limit
+    ):
+        return messages, False
+
+    prefix, groups = _message_groups(messages)
+    kept = list(groups)
+    while len(kept) > 1:
+        candidate = prefix + [message for group in kept for message in group]
+        candidate_payload = payload_factory(candidate)
+        if (
+            _json_size(candidate_payload) <= MAX_PROVIDER_REQUEST_BYTES
+            and _estimated_tokens(candidate_payload) <= input_token_limit
+        ):
+            logger.warning(
+                "Compacted oversized AI provider request from %d bytes to %d bytes (%d messages)",
+                original_size,
+                _json_size(payload_factory(candidate)),
+                len(candidate),
+            )
+            return candidate, True
+        kept.pop(0)
+
+    candidate = prefix + [message for group in kept for message in group]
+    compacted = [_compact_message(message) for message in candidate]
+    compacted_payload = payload_factory(compacted)
+    compacted_size = _json_size(compacted_payload)
+    if (
+        compacted_size > MAX_PROVIDER_REQUEST_BYTES
+        or _estimated_tokens(compacted_payload) > input_token_limit
+    ):
+        raise AIPayloadTooLargeError(
+            "AI provider request remains too large after history compaction; "
+            "reduce tool output or start a new conversation"
+        )
+    logger.warning(
+        "Truncated oversized AI provider message from %d bytes to %d bytes",
+        _json_size(payload_factory(candidate)),
+        compacted_size,
+    )
+    return compacted, True
 
 
 def _chat_completions_payload(
@@ -194,6 +327,11 @@ def _status_error(response: httpx.Response, content: bytes) -> AIProviderError |
         return AIProviderError("AI provider redirects are not allowed")
     if response.status_code < 200 or response.status_code >= 300:
         detail = redact_sensitive_text(content.decode(errors="replace"), limit=500)
+        if response.status_code == 413:
+            return AIPayloadTooLargeError(
+                "AI provider returned HTTP 413 (request payload is too large). "
+                "Conversation history was compacted; reduce tool output or start a new conversation."
+            )
         return AIProviderError(f"AI provider returned HTTP {response.status_code}: {detail}")
     return None
 
@@ -280,6 +418,18 @@ async def create_chat_completion(
     on_text_delta: TextDeltaCallback | None = None,
 ) -> dict[str, Any]:
     base_url = await validate_provider_endpoint(config.base_url, config.allowlist)
+
+    def payload_factory(candidate: list[dict[str, Any]]) -> dict[str, Any]:
+        return _provider_request(config, candidate, tools, tool_choice, stream, base_url)[1]
+
+    messages, _compacted = _compact_messages(
+        messages,
+        payload_factory,
+        context_window_tokens=getattr(
+            config, "context_window_tokens", DEFAULT_CONTEXT_WINDOW_TOKENS
+        ),
+        max_completion_tokens=config.max_completion_tokens,
+    )
     endpoint, payload = _provider_request(config, messages, tools, tool_choice, stream, base_url)
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     if config.api_key:

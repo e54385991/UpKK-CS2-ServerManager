@@ -35,6 +35,14 @@ from .schemas import (
 router = APIRouter(prefix="/api/v1/settings", tags=["v1-settings"])
 
 
+def _context_window_tokens(value: object) -> Literal[262144, 393216, 1048576]:
+    if value == 393216:
+        return 393216
+    if value == 1048576:
+        return 1048576
+    return 262144
+
+
 def to_view(settings: SystemSettings) -> SystemSettingsView:
     """Project the ORM row to the browser-facing, non-secret view."""
     has_gmail_credentials = bool((settings.gmail_credentials_json or "").strip())
@@ -222,6 +230,9 @@ def _ai_view(payload) -> AssistantSystemSettingsView:
         history_retention_days=int(payload.history_retention_days),
         max_provider_rounds=int(payload.max_provider_rounds),
         max_tool_calls_per_round=int(payload.max_tool_calls_per_round),
+        context_window_tokens=_context_window_tokens(
+            getattr(payload, "context_window_tokens", 262_144)
+        ),
         provider_tested=bool(payload.provider_tested),
         tool_calling_tested=bool(payload.tool_calling_tested),
         streaming_tested=bool(payload.streaming_tested),

@@ -1569,6 +1569,53 @@ async def test_provider_failures_retry_five_times_with_exponential_backoff(monke
 
 
 @pytest.mark.asyncio
+async def test_stream_delta_emits_live_token_usage(monkeypatch):
+    emit = AsyncMock()
+    monkeypatch.setattr(ai_orchestrator, "_emit", emit)
+    emitter = ai_orchestrator._AssistantDeltaEmitter("run-live", 2, input_tokens=123)
+
+    await emitter.add("x" * ai_orchestrator.AI_DELTA_EVENT_CHARS)
+
+    token_events = [call for call in emit.await_args_list if call.args[1] == "token_usage"]
+    assert token_events
+    payload = token_events[-1].args[2]
+    assert payload["input_tokens"] == 123
+    assert payload["output_tokens"] >= 24
+    assert payload["streaming"] is True
+
+
+@pytest.mark.asyncio
+async def test_oversized_provider_request_is_not_retried(monkeypatch):
+    attempts = 0
+
+    async def completion(*_args, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        raise ai_orchestrator.AIPayloadTooLargeError(
+            "AI provider returned HTTP 413 (request payload is too large)"
+        )
+
+    emit = AsyncMock()
+    sleep = AsyncMock()
+    monkeypatch.setattr(ai_orchestrator, "create_chat_completion", completion)
+    monkeypatch.setattr(ai_orchestrator, "_emit", emit)
+    monkeypatch.setattr(ai_orchestrator.asyncio, "sleep", sleep)
+
+    with pytest.raises(ai_orchestrator.AIPayloadTooLargeError, match="413"):
+        await ai_orchestrator._create_provider_response_with_retry(
+            object(),
+            [{"role": "user", "content": "status"}],
+            run_id="run-payload-too-large",
+            round_index=1,
+            server_selected=True,
+        )
+
+    assert attempts == 1
+    sleep.assert_not_awaited()
+    assert not [call for call in emit.await_args_list if call.args[1] == "run_retrying"]
+
+
+@pytest.mark.asyncio
 async def test_empty_provider_response_is_retried_inside_provider_retry_loop(monkeypatch):
     attempts = 0
 

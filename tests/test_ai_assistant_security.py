@@ -18,6 +18,8 @@ from modules.models import AISystemSettings, MarketPlugin, UserAISettings
 from modules.schemas.ai import AISystemSettingsUpdate
 from services import ai_provider, ai_security
 from services.ai_provider import (
+    MAX_PROVIDER_REQUEST_BYTES,
+    AIPayloadTooLargeError,
     AIProviderError,
     create_chat_completion,
 )
@@ -66,6 +68,18 @@ def test_credentials_are_encrypted_and_never_round_trip_as_plaintext(monkeypatch
     assert encrypted != "sk-private-value"
     assert "sk-private-value" not in encrypted
     assert decrypt_credential(encrypted) == "sk-private-value"
+
+
+def test_context_window_defaults_to_256k_and_accepts_only_supported_presets():
+    from pydantic import ValidationError
+
+    assert AISystemSettings().context_window_tokens == 262_144
+    assert AISystemSettingsUpdate(context_window_tokens=393_216).context_window_tokens == 393_216
+    assert (
+        AISystemSettingsUpdate(context_window_tokens=1_048_576).context_window_tokens == 1_048_576
+    )
+    with pytest.raises(ValidationError):
+        AISystemSettingsUpdate(context_window_tokens=512_000)
 
 
 def test_missing_ai_key_is_generated_once_in_persistent_data_file(monkeypatch, tmp_path):
@@ -405,6 +419,86 @@ async def test_provider_sends_validated_optional_model_parameters(monkeypatch):
     assert captured["parallel_tool_calls"] is False
     assert "top_p" not in captured
     assert "max_tokens" not in captured
+
+
+@pytest.mark.asyncio
+async def test_provider_compacts_oversized_history_before_sending(monkeypatch):
+    original_client = httpx.AsyncClient
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"role": "assistant", "content": "OK"}}]},
+        )
+
+    def client_factory(**kwargs):
+        return original_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(ai_provider.httpx, "AsyncClient", client_factory)
+    monkeypatch.setattr(
+        ai_provider,
+        "validate_provider_endpoint",
+        AsyncMock(return_value="https://provider.example/v1"),
+    )
+    messages = [{"role": "system", "content": "Follow the system rules."}]
+    messages.extend(
+        {"role": "user", "content": f"old-{index} " + "x" * 10_000} for index in range(12)
+    )
+    messages.append({"role": "user", "content": "latest request"})
+
+    await create_chat_completion(
+        AIProviderConfig(
+            base_url="https://provider.example/v1",
+            model="test-model",
+            api_key=None,
+            timeout_seconds=10,
+            allowlist=(),
+            source="global",
+        ),
+        messages,
+        tools=[{"type": "function", "function": {"name": "probe", "parameters": {}}}],
+    )
+
+    assert len(json.dumps(captured, ensure_ascii=False, separators=(",", ":")).encode()) <= (
+        MAX_PROVIDER_REQUEST_BYTES
+    )
+    assert captured["messages"][-1]["content"] == "latest request"
+    assert all("old-0" not in str(message) for message in captured["messages"])
+
+
+@pytest.mark.asyncio
+async def test_provider_413_is_classified_as_non_retryable_payload_error(monkeypatch):
+    original_client = httpx.AsyncClient
+
+    def client_factory(**kwargs):
+        return original_client(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(413, json={"error": "too large"})
+            ),
+            **kwargs,
+        )
+
+    monkeypatch.setattr(ai_provider.httpx, "AsyncClient", client_factory)
+    monkeypatch.setattr(
+        ai_provider,
+        "validate_provider_endpoint",
+        AsyncMock(return_value="https://provider.example/v1"),
+    )
+
+    with pytest.raises(AIPayloadTooLargeError, match="HTTP 413"):
+        await create_chat_completion(
+            AIProviderConfig(
+                base_url="https://provider.example/v1",
+                model="test-model",
+                api_key=None,
+                timeout_seconds=10,
+                allowlist=(),
+                source="global",
+            ),
+            [{"role": "user", "content": "hello"}],
+        )
 
 
 @pytest.mark.asyncio

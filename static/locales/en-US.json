@@ -123,6 +123,8 @@
     "providerDefault": "Provider/model default",
     "temperature": "Temperature",
     "maxCompletionTokens": "Maximum completion tokens",
+    "contextWindow": "Context window",
+    "contextWindowHint": "Default 256K; choose a larger window only when the provider supports it.",
     "tokenLimitParameter": "Token limit field",
     "omitParameter": "Do not send",
     "frequencyPenalty": "Frequency penalty",

@@ -123,6 +123,8 @@
     "providerDefault": "跟随提供商/模型默认值",
     "temperature": "温度",
     "maxCompletionTokens": "最大输出 Token",
+    "contextWindow": "上下文窗口",
+    "contextWindowHint": "默认 256K；仅在供应商支持时选择更大窗口。",
     "tokenLimitParameter": "Token 限制字段",
     "omitParameter": "不发送",
     "frequencyPenalty": "频率惩罚",

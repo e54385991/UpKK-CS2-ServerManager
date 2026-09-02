@@ -1151,6 +1151,16 @@
             ],
             "title": "Base Url"
           },
+          "context_window_tokens": {
+            "default": 262144,
+            "enum": [
+              262144,
+              393216,
+              1048576
+            ],
+            "title": "Context Window Tokens",
+            "type": "integer"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -1381,6 +1391,22 @@
             "default": false,
             "title": "Clear Api Key",
             "type": "boolean"
+          },
+          "context_window_tokens": {
+            "anyOf": [
+              {
+                "enum": [
+                  262144,
+                  393216,
+                  1048576
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Window Tokens"
           },
           "enabled": {
             "anyOf": [
@@ -2476,6 +2502,22 @@
             "title": "Clear Api Key",
             "type": "boolean"
           },
+          "context_window_tokens": {
+            "anyOf": [
+              {
+                "enum": [
+                  262144,
+                  393216,
+                  1048576
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Window Tokens"
+          },
           "enabled": {
             "anyOf": [
               {
@@ -2720,6 +2762,16 @@
               }
             ],
             "title": "Base Url"
+          },
+          "context_window_tokens": {
+            "default": 262144,
+            "enum": [
+              262144,
+              393216,
+              1048576
+            ],
+            "title": "Context Window Tokens",
+            "type": "integer"
           },
           "enabled": {
             "title": "Enabled",

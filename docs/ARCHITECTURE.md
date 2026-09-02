@@ -61,6 +61,10 @@ HTTP transport、SSH 连接池和后台服务。关闭时按创建逆序释放�
 输出字段。旧 `modules.schemas` 和 `api.routes.v1.schemas` 仅作为兼容 facade。
 `api.routes.v1.operation_runner` 同样只保留稳定导入路径，实际 worker 按服务器、插件、主机、
 下载、清理和诊断职责拆分，并且 worker 只接收队列记录中的标量数据。
+AI provider 请求使用 256K token 的默认上下文预算，管理员可将系统预设调为 384K 或 1M；该预算与
+供应商 HTTP body 上限分离。发送前会按 system 前缀、完整工具调用组和最新消息做有界压缩，收到 413
+立即记录安全错误并停止重试。助手 SSE 的 token_usage 只包含估算/计量数字和安全阶段，绝不下发私有
+思维链文本。
 
 进程配置通过 `modules.config.get_settings()` 缓存加载：端口、连接池、超时、日志级别、运行模式、
 HTTP URL 和 JWT/应用密钥在构造时一次性校验；测试可清空缓存或覆盖 `SettingsDependency`。

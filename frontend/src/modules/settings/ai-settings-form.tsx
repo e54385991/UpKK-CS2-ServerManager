@@ -8,7 +8,13 @@ import {
   testSystemAiProvider,
 } from "@/modules/settings/ai-settings-client";
 import { EMPTY_AI_SYSTEM_SETTINGS } from "@/modules/settings/ai-wire";
-import type { AiProtocol, AiSystemPatch, AiSystemSettings } from "@/modules/settings/types";
+import {
+  AI_CONTEXT_WINDOW_OPTIONS,
+  type AiProtocol,
+  type AiSystemPatch,
+  type AiSystemSettings,
+  toAiContextWindowTokens,
+} from "@/modules/settings/types";
 import { alertDialog, notify } from "@/shared/feedback";
 import { providerTestAlert, providerTestErrorAlert } from "@/modules/settings/ai-test-result";
 import { Badge } from "@/shared/ui/badge";
@@ -69,6 +75,7 @@ export function AiSettingsForm({
   const [parallelTools, setParallelTools] = useState(
     seed.parallelToolCalls == null ? "" : String(seed.parallelToolCalls),
   );
+  const [contextWindow, setContextWindow] = useState(String(seed.contextWindowTokens));
   const [timeout, setTimeoutSeconds] = useState(String(seed.requestTimeoutSeconds));
   const [retention, setRetention] = useState(String(seed.historyRetentionDays));
   const [rounds, setRounds] = useState(String(seed.maxProviderRounds));
@@ -100,6 +107,7 @@ export function AiSettingsForm({
       presencePenalty: optionalNumber(presence),
       verbosity: verbosity || null,
       parallelToolCalls: parallelTools === "" ? null : parallelTools === "true",
+      contextWindowTokens: toAiContextWindowTokens(Number(contextWindow)),
       requestTimeoutSeconds: Number(timeout) || settings.requestTimeoutSeconds,
       historyRetentionDays: Number(retention) || settings.historyRetentionDays,
       maxProviderRounds: Number(rounds) || settings.maxProviderRounds,
@@ -126,6 +134,7 @@ export function AiSettingsForm({
     setFrequency(next.frequencyPenalty == null ? "" : String(next.frequencyPenalty));
     setPresence(next.presencePenalty == null ? "" : String(next.presencePenalty));
     setParallelTools(next.parallelToolCalls == null ? "" : String(next.parallelToolCalls));
+    setContextWindow(String(next.contextWindowTokens));
     setTimeoutSeconds(String(next.requestTimeoutSeconds));
     setRetention(String(next.historyRetentionDays));
     setRounds(String(next.maxProviderRounds));
@@ -333,6 +342,21 @@ export function AiSettingsForm({
                 value={maxTokens}
                 onChange={(event) => setMaxTokens(event.target.value)}
               />
+            </div>
+            <div>
+              <Label htmlFor="ai-context-window">{t("contextWindow")}</Label>
+              <Select
+                id="ai-context-window"
+                value={contextWindow}
+                onChange={(event) => setContextWindow(event.target.value)}
+              >
+                {AI_CONTEXT_WINDOW_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {value === 262144 ? "256K" : value === 393216 ? "384K" : "1M"}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1 text-xs text-fg-subtle">{t("contextWindowHint")}</p>
             </div>
             <div>
               <Label htmlFor="ai-token-field">{t("tokenField")}</Label>

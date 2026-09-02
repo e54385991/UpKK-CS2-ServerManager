@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import Link from "next/link";
-import { Bot, Plus, TriangleAlert } from "lucide-react";
+import { Bot, LoaderCircle, Plus, TriangleAlert } from "lucide-react";
 import {
   createAssistantConversationClient,
   decideAssistantToolClient,
@@ -42,6 +42,25 @@ import { cn } from "@/shared/lib/cn";
 
 const TERMINAL_RUN = new Set(["completed", "failed", "interrupted", "expired", "cancelled"]);
 
+type TokenUsage = {
+  readonly input: number;
+  readonly output: number;
+  readonly total: number;
+  readonly estimated: boolean;
+};
+
+const EMPTY_TOKEN_USAGE: TokenUsage = { input: 0, output: 0, total: 0, estimated: true };
+
+function tokenCount(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+  return 0;
+}
+
+function formatTokenCount(value: number): string {
+  return new Intl.NumberFormat().format(value);
+}
+
 export function AssistantChat({
   initial,
   initialDetail,
@@ -66,6 +85,7 @@ export function AssistantChat({
   const [status, setStatus] = useState<string | null>(null);
   const [streamText, setStreamText] = useState("");
   const [pendingTools, setPendingTools] = useState<AssistantTool[]>([]);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage>(EMPTY_TOKEN_USAGE);
   const [error, setError] = useState<string | null>(null);
   const detailIdRef = useRef(initialDetail?.id ?? null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -103,6 +123,23 @@ export function AssistantChat({
     function onEvent(raw: MessageEvent<string>) {
       const event = parseAssistantSseData(raw.data);
       if (!event) return;
+      if (event.type === "token_usage") {
+        const input = tokenCount(event.payload.input_tokens);
+        const output = tokenCount(event.payload.output_tokens);
+        const total = tokenCount(event.payload.total_tokens) || input + output;
+        const streaming = event.payload.streaming === true;
+        setTokenUsage((current) => ({
+          input: streaming ? Math.max(current.input, input) : input,
+          output: streaming ? Math.max(current.output, output) : output,
+          total: streaming ? Math.max(current.total, total) : total,
+          estimated: event.payload.estimated !== false,
+        }));
+        return;
+      }
+      if (event.type === "run_started") {
+        setStatus(t("thinking"));
+        return;
+      }
       if (event.type === "assistant_delta") {
         const delta = typeof event.payload.delta === "string" ? event.payload.delta : "";
         if (delta) setStreamText((current) => current + delta);
@@ -130,6 +167,16 @@ export function AssistantChat({
       if (event.type === "tool_started" || event.type === "tool_queued") {
         const name = typeof event.payload.tool_name === "string" ? event.payload.tool_name : "";
         setStatus(name ? t("runningTool", { name }) : t("running"));
+        return;
+      }
+      if (event.type === "run_retrying") {
+        const attempt = tokenCount(event.payload.attempt);
+        const maxAttempts = tokenCount(event.payload.max_attempts);
+        setStatus(
+          attempt && maxAttempts
+            ? t("retrying", { attempt, maxAttempts })
+            : t("thinking"),
+        );
         return;
       }
       if (event.type === "tool_progress" || event.type === "diagnostic_progress") {
@@ -164,12 +211,15 @@ export function AssistantChat({
     }
 
     const named = [
+      "run_started",
       "assistant_delta",
+      "token_usage",
       "assistant_message",
       "tool_approval_required",
       "run_waiting_approval",
       "tool_started",
       "tool_queued",
+      "run_retrying",
       "tool_progress",
       "diagnostic_progress",
       "run_completed",
@@ -239,6 +289,7 @@ export function AssistantChat({
     setStatus(null);
     setStreamText("");
     setPendingTools([]);
+    setTokenUsage(EMPTY_TOKEN_USAGE);
     setRunId(null);
     router.replace(`/assistant?conversation=${id}` as Route);
   }
@@ -316,6 +367,7 @@ export function AssistantChat({
       setDraft("");
       setStreamText("");
       setPendingTools([]);
+      setTokenUsage(EMPTY_TOKEN_USAGE);
       setRunId(result.data.id);
       setStatus(t("running"));
       const next = await loadAssistantConversationClient(conversationId);
@@ -559,7 +611,25 @@ export function AssistantChat({
               </div>
             ) : null}
 
-            {status ? <p className="text-xs text-fg-subtle">{status}</p> : null}
+            {busy || tokenUsage.total > 0 ? (
+              <div
+                className="rounded-md border border-primary/30 bg-primary-muted/20 px-3 py-2 text-xs text-fg-muted"
+                aria-live="polite"
+                data-testid="assistant-token-activity"
+              >
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {busy ? <LoaderCircle className="size-3.5 animate-spin text-primary" /> : null}
+                  <span className={cn(busy && "font-medium text-fg")}>{status || t("thinking")}</span>
+                  <span>{t("inputTokens", { count: formatTokenCount(tokenUsage.input) })}</span>
+                  <span>{t("outputTokens", { count: formatTokenCount(tokenUsage.output) })}</span>
+                  <span>{t("totalTokens", { count: formatTokenCount(tokenUsage.total) })}</span>
+                  {tokenUsage.estimated ? <span className="text-fg-subtle">{t("estimated")}</span> : null}
+                </div>
+                {busy ? <p className="mt-1 text-fg-subtle">{t("thinkingHint")}</p> : null}
+              </div>
+            ) : status ? (
+              <p className="text-xs text-fg-subtle">{status}</p>
+            ) : null}
 
             <div className="flex flex-wrap gap-1">
               {ASSISTANT_EXAMPLE_KEYS.map((key) => (
@@ -600,6 +670,7 @@ export function AssistantChat({
                   setRunId(null);
                   setStreamText("");
                   setPendingTools([]);
+                  setTokenUsage(EMPTY_TOKEN_USAGE);
                   setStatus(t("interrupt"));
                 }}
               >

@@ -51,6 +51,7 @@ class AIProviderConfig:
     presence_penalty: float | None = None
     verbosity: str | None = None
     parallel_tool_calls: bool | None = None
+    context_window_tokens: int = 262_144
 
 
 def _read_key_file(path: Path) -> str:
@@ -357,6 +358,7 @@ async def get_effective_provider(
             presence_penalty=personal.presence_penalty,
             verbosity=personal.verbosity,
             parallel_tool_calls=personal.parallel_tool_calls,
+            context_window_tokens=int(getattr(system, "context_window_tokens", 262_144) or 262_144),
         )
     if not system.enabled:
         return None
@@ -384,4 +386,5 @@ async def get_effective_provider(
         presence_penalty=system.presence_penalty,
         verbosity=system.verbosity,
         parallel_tool_calls=system.parallel_tool_calls,
+        context_window_tokens=int(getattr(system, "context_window_tokens", 262_144) or 262_144),
     )

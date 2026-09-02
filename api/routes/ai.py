@@ -135,6 +135,7 @@ async def test_system_ai_settings(
             source="global",
             api_protocol=request.api_protocol or item.api_protocol,
             admin_prompt=item.admin_prompt or "",
+            context_window_tokens=getattr(item, "context_window_tokens", 262_144),
             **_test_model_parameters(request, item),
         )
         text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
@@ -237,6 +238,7 @@ async def test_user_ai_settings(
             source="custom",
             api_protocol=request.api_protocol or item.api_protocol,
             admin_prompt=system.admin_prompt or "",
+            context_window_tokens=getattr(system, "context_window_tokens", 262_144),
             **_test_model_parameters(request, item),
         )
         text_ok, tool_ok, streaming_ok, message = await test_provider(candidate)
