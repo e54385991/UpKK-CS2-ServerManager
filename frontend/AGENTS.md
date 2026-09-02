@@ -209,6 +209,16 @@ Next after changing values. Key variables:
 - `PUBLIC_APP_URL` — optional public origin for absolute URLs. When unset
   (or set to a bind address like `0.0.0.0`), Next uses the request Host and
   port. OAuth already uses `window.location.origin`.
+- `NEXT_DEPLOYMENT_ID` — optional immutable release identifier. Docker builds
+  default it to `GIT_SHA`; Next uses it to detect stale browser bundles during
+  rolling deployments and trigger a hard refresh.
+- `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` — optional build-time Base64 AES key
+  (decoded length 16, 24, or 32 bytes). Set one stable value for independently
+  built or multi-instance deployments so every instance can decrypt the same
+  Server Action references. Pass it as a CI/build secret; never commit it or
+  expose it as runtime/browser configuration. A single image shared by all
+  replicas uses the key embedded in that build. The Dockerfile consumes it via
+  a BuildKit secret mount; do not convert it back to an `ARG`/`ENV`.
 
 The root footer is a Server Component and displays the frontend package version,
 backend API version, a validated seven-character commit prefix, and the UTC

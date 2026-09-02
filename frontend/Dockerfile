@@ -3,6 +3,7 @@
 # Node 26.8.1 is the current stable release (alpine, multi-arch index).
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
+ARG DEPLOYMENT_ID=unknown
 FROM --platform=$BUILDPLATFORM node:26.8.1-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -10,17 +11,24 @@ RUN npm ci
 
 FROM --platform=$BUILDPLATFORM node:26.8.1-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS builder
 WORKDIR /app
+ARG GIT_SHA
+ARG DEPLOYMENT_ID
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN mkdir -p public && npm run build
+RUN --mount=type=secret,id=next_server_actions_key \
+    NEXT_DEPLOYMENT_ID="${DEPLOYMENT_ID}" \
+    NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$(cat /run/secrets/next_server_actions_key 2>/dev/null || true)" \
+    mkdir -p public && npm run build
 
 FROM node:26.8.1-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS runner
 WORKDIR /app
 ARG GIT_SHA
 ARG BUILD_TIME
+ARG DEPLOYMENT_ID
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_DEPLOYMENT_ID=${DEPLOYMENT_ID} \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     APP_GIT_SHA=${GIT_SHA} \

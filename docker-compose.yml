@@ -12,6 +12,10 @@
 
 name: cs2-server-manager
 
+secrets:
+  next_server_actions_key:
+    environment: NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
+
 services:
   app:
     image: ${CS2_MANAGER_IMAGE:-docker.io/e54385991/upkk-cs2-server-manager:latest}
@@ -141,6 +145,9 @@ services:
       args:
         GIT_SHA: ${GIT_SHA:-unknown}
         BUILD_TIME: ${BUILD_TIME:-unknown}
+        DEPLOYMENT_ID: ${DEPLOYMENT_ID:-unknown}
+      secrets:
+        - next_server_actions_key
     container_name: cs2_frontend
     restart: unless-stopped
     environment:

@@ -12,6 +12,10 @@
 #   IMAGE_TAG            default latest
 #   DOCKER_BUILDER       default upkk-multi
 #   DOCKER_PLATFORMS     default linux/amd64,linux/arm64
+#   DEPLOYMENT_ID        optional frontend release id (defaults to GIT_SHA;
+#                        dirty worktrees get a unique suffix)
+#   NEXT_SERVER_ACTIONS_ENCRYPTION_KEY  optional stable Base64 AES key for
+#                                      independently built/multi-instance web
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +29,14 @@ BUILDER="${DOCKER_BUILDER:-upkk-multi}"
 PLATFORMS="${DOCKER_PLATFORMS:-linux/amd64,linux/arm64}"
 GIT_SHA_VALUE="${GIT_SHA:-$(git rev-parse HEAD 2>/dev/null || printf '%s' unknown)}"
 BUILD_TIME_VALUE="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+if [ -n "${DEPLOYMENT_ID:-}" ]; then
+    DEPLOYMENT_ID_VALUE="$DEPLOYMENT_ID"
+else
+    DEPLOYMENT_ID_VALUE="$GIT_SHA_VALUE"
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        DEPLOYMENT_ID_VALUE="${GIT_SHA_VALUE}-dirty-$(date -u +%Y%m%d%H%M%S)"
+    fi
+fi
 TARGET="all"
 PUSH=1
 
@@ -80,18 +92,32 @@ publish() {
     if [ "$PUSH" -eq 1 ]; then
         extra+=(--push)
     fi
+    local build_secrets=()
+    local build_args=(--build-arg "GIT_SHA=${GIT_SHA_VALUE}" --build-arg "BUILD_TIME=${BUILD_TIME_VALUE}")
+    if [ "$name" = "$WEB_REPO" ]; then
+        build_args+=(--build-arg "DEPLOYMENT_ID=${DEPLOYMENT_ID_VALUE}")
+    fi
+    if [ -n "${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:-}" ] && [ "$name" = "$WEB_REPO" ]; then
+        build_secrets+=(--secret "id=next_server_actions_key,env=NEXT_SERVER_ACTIONS_ENCRYPTION_KEY")
+    fi
     log "building ${image} (${PLATFORMS})"
-    docker buildx build \
+    local command=(
+        docker buildx build
         --builder "$BUILDER" \
         --platform "$PLATFORMS" \
         --provenance=false \
         --sbom=false \
-        --build-arg "GIT_SHA=${GIT_SHA_VALUE}" \
-        --build-arg "BUILD_TIME=${BUILD_TIME_VALUE}" \
-        -f "$file" \
-        -t "$image" \
-        "${extra[@]}" \
-        "$context"
+        "${build_args[@]}"
+    )
+    if ((${#build_secrets[@]})); then
+        command+=("${build_secrets[@]}")
+    fi
+    command+=( -f "$file" -t "$image" )
+    if ((${#extra[@]})); then
+        command+=("${extra[@]}")
+    fi
+    command+=("$context")
+    "${command[@]}"
     if [ "$PUSH" -eq 1 ]; then
         docker buildx imagetools inspect "$image" --format "{{.Manifest.Digest}}"
     fi

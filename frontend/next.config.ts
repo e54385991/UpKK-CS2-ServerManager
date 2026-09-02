@@ -18,8 +18,16 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
  */
 const INTERNAL_API_URL = internalApiUrl();
 
+// A deployment id lets Next detect a stale browser bundle during rolling
+// deployments and perform a hard refresh before it keeps submitting old
+// Server Action references. Docker/release builds set this to the immutable
+// commit SHA; local development may override it explicitly.
+const DEPLOYMENT_ID =
+  process.env.NEXT_DEPLOYMENT_ID || process.env.GIT_SHA || undefined;
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  deploymentId: DEPLOYMENT_ID,
   reactStrictMode: true,
   poweredByHeader: false,
   typedRoutes: true,

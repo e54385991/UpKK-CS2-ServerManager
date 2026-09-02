@@ -117,5 +117,8 @@ jobs:
           build-args: |
             GIT_SHA=${{ steps.build-metadata.outputs.sha }}
             BUILD_TIME=${{ steps.build-metadata.outputs.time }}
+            DEPLOYMENT_ID=${{ steps.build-metadata.outputs.sha }}
+          secrets: |
+            next_server_actions_key=${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

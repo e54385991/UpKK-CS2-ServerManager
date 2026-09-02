@@ -60,6 +60,16 @@ docker compose -f docker-compose.yml -f docker-compose.debug.yml up -d
 docker compose up -d --build
 ```
 
+源码工作区有未提交修改时，建议同时传入唯一的 `DEPLOYMENT_ID`；否则多个本地构建
+可能共用同一版本标识而继续使用旧浏览器资源：
+
+```bash
+GIT_SHA="$(git rev-parse HEAD)" \
+DEPLOYMENT_ID="local-$(date -u +%Y%m%d%H%M%S)" \
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+docker compose up -d --build
+```
+
 控制台底部会显示前端/后端应用版本、7 位提交短哈希和 UTC 构建时间。使用仓库的
 `publish-docker-images.sh` 发布时会自动注入这些构建信息；源码本地构建也可以显式传入：
 
@@ -68,6 +78,24 @@ GIT_SHA="$(git rev-parse HEAD)" \
 BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 docker compose up -d --build
 ```
+
+### 滚动发布与 Server Action 密钥
+
+Next.js Server Action 引用属于某次构建。`deploymentId` 已绑定到不可变提交
+SHA，浏览器发现版本不一致时会自动硬刷新，避免旧页面持续提交已失效的 Action。
+如果有多个独立构建、滚动发布或多个 Next 实例，还必须让它们共享同一个稳定的
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`（构建参数，值为 16/24/32 字节 AES 密钥的
+Base64 表示）。不要把密钥写入镜像运行时环境、Compose 文件或 Git；通过 CI Secret
+传入 `SERVER_ACTIONS_ENCRYPTION_KEY`。只使用同一镜像扩容时无需额外设置。
+
+例如生成 32 字节密钥（仅将输出保存到 Secret 管理器）：
+
+```bash
+openssl rand -base64 32
+```
+
+升级后仍看到旧页面产生的 `Failed to find Server Action`，先重新加载浏览器并确认
+所有 Next 实例已经切换到同一镜像；该错误通常不会损坏后端数据，但对应提交会失败。
 
 可以通过环境变量覆盖端口、数据库密码和镜像标签。公网部署仍建议在反向代理后启用 HTTPS，并设置强数据库密码。
 

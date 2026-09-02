@@ -2,28 +2,10 @@ import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { sessionTokenFrom } from "@/modules/auth/session";
 import { internalApiUrl } from "@/shared/config/internal-api";
+import { pipeUnbuffered } from "@/shared/server/stream-proxy";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-function pipeUnbuffered(
-  body: ReadableStream<Uint8Array>,
-): ReadableStream<Uint8Array> {
-  const reader = body.getReader();
-  return new ReadableStream({
-    async pull(controller) {
-      const { done, value } = await reader.read();
-      if (done) {
-        controller.close();
-        return;
-      }
-      controller.enqueue(value);
-    },
-    cancel(reason) {
-      return reader.cancel(reason);
-    },
-  });
-}
 
 /**
  * Cookie → Bearer SSE proxy. EventSource cannot set Authorization, and the

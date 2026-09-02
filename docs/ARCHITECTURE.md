@@ -71,6 +71,13 @@ HTTP URL 和 JWT/应用密钥在构造时一次性校验；测试可清空缓存
 Pydantic 响应模型返回安全的 7 位短哈希和 UTC 构建时间，Next.js 根页脚展示前后端版本、短哈希和
 构建时间；缺失或非法元数据统一显示为占位符。
 
+Next.js 的 `deploymentId` 绑定镜像构建的不可变提交 SHA，用于在滚动发布时识别旧浏览器资源并
+触发硬刷新。Server Action 加密密钥通过 BuildKit secret 仅在构建阶段提供；单一镜像扩容可直接
+复用构建内置密钥，独立构建或多版本并行运行时必须设置同一个稳定的
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`。该值不得写入 Compose 的运行时 `environment`、镜像
+`ARG/ENV` 或仓库。升级期间旧页面偶发的 `Failed to find Server Action` 仍可能在刷新前出现，
+但不应持续存在；SSE 客户端主动断开导致的 `context canceled` 属于正常取消，不应按业务异常告警。
+
 ## 质量与性能门禁
 
 生产 Python/TypeScript 模块最多 800 行、测试最多 1200 行（生成的 OpenAPI 类型与 Alembic

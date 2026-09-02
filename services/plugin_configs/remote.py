@@ -120,6 +120,164 @@ async def browse_directory(
         await sftp.wait_closed()
 
 
+def _source_kind(file_type: int) -> str:
+    if file_type == FILEXFER_TYPE_DIRECTORY:
+        return "directory"
+    if file_type == FILEXFER_TYPE_REGULAR:
+        return "file"
+    return "unsupported"
+
+
+def _decode_scan_token(raw_token: bytes) -> str:
+    try:
+        value = raw_token.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise PluginConfigError("Configuration source contains a non-UTF-8 path") from exc
+    if "\\" in value or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise PluginConfigError("Configuration source contains an unsafe path")
+    return value
+
+
+def _append_scan_token(
+    raw_token: bytes,
+    record_type: Optional[str],
+    record: list[str],
+) -> tuple[Optional[str], list[str], Optional[tuple[str, list[str]]]]:
+    """Append one NUL-delimited token and return a completed record when ready."""
+    token = _decode_scan_token(raw_token)
+    if record_type is None:
+        if token not in {"D", "F"}:
+            raise PluginConfigError("Remote scan returned an invalid record")
+        return token, [], None
+
+    next_record = [*record, token]
+    required = 1 if record_type == "D" else 3
+    if len(next_record) < required:
+        return record_type, next_record, None
+    return None, [], (record_type, next_record)
+
+
+def _scan_record_event(
+    record_type: str,
+    values: list[str],
+    relative_path: str,
+    count: int,
+) -> tuple[dict[str, Any], int]:
+    tree_path = values[0]
+    if record_type == "D":
+        return {"type": "progress", "directory": tree_path or ".", "count": count}, count
+    try:
+        size = int(values[1])
+        modified = float(values[2])
+    except ValueError as exc:
+        raise PluginConfigError("Remote scan returned invalid file metadata") from exc
+    game_relative = posixpath.normpath(posixpath.join(relative_path, tree_path))
+    next_count = count + 1
+    return {
+        "type": "file",
+        "file": {
+            "name": posixpath.basename(tree_path),
+            "path": game_relative,
+            "tree_path": tree_path,
+            "size": size,
+            "modified": modified,
+            "format": format_for_filename(tree_path),
+            "too_large": size > MAX_CONFIG_BYTES,
+        },
+    }, next_count
+
+
+def _scan_command(target: str) -> str:
+    extension_expression = " -o ".join(
+        f"-iname {shlex.quote('*' + extension)}"
+        for extension in sorted(SUPPORTED_DIRECTORY_EXTENSIONS)
+    )
+    return (
+        f"LC_ALL=C find -P {shlex.quote(target)} "
+        r"\( -type d -printf 'D\0%P\0' \) -o "
+        rf"\( -type f \( {extension_expression} \) "
+        r"-printf 'F\0%P\0%s\0%T@\0' \)"
+    )
+
+
+async def _stop_scan_process(process: Any) -> None:
+    with contextlib.suppress(Exception):
+        process.terminate()
+    try:
+        await asyncio.wait_for(process.wait(), timeout=SCAN_STOP_TIMEOUT)
+    except asyncio.TimeoutError:
+        with contextlib.suppress(Exception):
+            process.kill()
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(process.wait(), timeout=SCAN_STOP_TIMEOUT)
+    except Exception:
+        pass
+
+
+async def _read_scan_stderr(process: Any) -> str:
+    retained = bytearray()
+    while True:
+        chunk = await process.stderr.read(SCAN_READ_BYTES)
+        if not chunk:
+            break
+        if isinstance(chunk, str):
+            chunk = chunk.encode("utf-8", errors="replace")
+        remaining = SCAN_ERROR_BYTES - len(retained)
+        if remaining > 0:
+            retained.extend(chunk[:remaining])
+    return retained.decode("utf-8", errors="replace").strip()
+
+
+async def _iter_directory_scan(
+    process: Any,
+    relative_path: str,
+    stop_process,
+) -> AsyncIterator[dict[str, Any]]:
+    """Decode the bounded NUL-delimited output emitted by the remote find."""
+    buffer = bytearray()
+    record_type: Optional[str] = None
+    record: list[str] = []
+    count = 0
+    truncated = False
+
+    while not truncated:
+        try:
+            chunk = await asyncio.wait_for(
+                process.stdout.read(SCAN_READ_BYTES),
+                timeout=SCAN_IDLE_TIMEOUT,
+            )
+        except asyncio.TimeoutError as exc:
+            raise PluginConfigError("Remote configuration scan timed out") from exc
+        if not chunk:
+            break
+        if isinstance(chunk, str):
+            chunk = chunk.encode("utf-8")
+        buffer.extend(chunk)
+        while True:
+            delimiter = buffer.find(b"\0")
+            if delimiter < 0:
+                break
+            raw_token = bytes(buffer[:delimiter])
+            del buffer[: delimiter + 1]
+            record_type, record, completed = _append_scan_token(raw_token, record_type, record)
+            if completed is None:
+                continue
+            if completed[0] == "F" and count >= MAX_SOURCE_FILES:
+                truncated = True
+                await stop_process()
+                break
+            event, count = _scan_record_event(*completed, relative_path, count)
+            yield event
+        if len(buffer) > SCAN_MAX_TOKEN_BYTES:
+            raise PluginConfigError("Configuration source path is too long")
+
+    if not truncated:
+        if buffer or record_type is not None:
+            raise PluginConfigError("Remote scan returned an incomplete record")
+        await asyncio.wait_for(process.wait(), timeout=SCAN_IDLE_TIMEOUT)
+    yield {"type": "complete", "truncated": truncated, "count": count}
+
+
 async def iter_source_scan(
     ssh_manager: SSHManager,
     server: Server,
@@ -132,53 +290,10 @@ async def iter_source_scan(
     process_finished = False
     stderr_task = None
 
-    async def stop_process() -> None:
-        nonlocal process_finished
-        if process is None or process_finished:
-            return
-        with contextlib.suppress(Exception):
-            process.terminate()
-        try:
-            await asyncio.wait_for(process.wait(), timeout=SCAN_STOP_TIMEOUT)
-        except asyncio.TimeoutError:
-            with contextlib.suppress(Exception):
-                process.kill()
-            with contextlib.suppress(Exception):
-                await asyncio.wait_for(process.wait(), timeout=SCAN_STOP_TIMEOUT)
-        except Exception:
-            pass
-        process_finished = True
-
-    async def read_stderr() -> str:
-        active_process = process
-        if active_process is None:
-            return ""
-        retained = bytearray()
-        while True:
-            chunk = await active_process.stderr.read(SCAN_READ_BYTES)
-            if not chunk:
-                break
-            if isinstance(chunk, str):
-                chunk = chunk.encode("utf-8", errors="replace")
-            remaining = SCAN_ERROR_BYTES - len(retained)
-            if remaining > 0:
-                retained.extend(chunk[:remaining])
-        return retained.decode("utf-8", errors="replace").strip()
-
     try:
-        actual_type = (
-            "directory"
-            if attrs.type == FILEXFER_TYPE_DIRECTORY
-            else "file"
-            if attrs.type == FILEXFER_TYPE_REGULAR
-            else "unsupported"
-        )
-        if actual_type != source_type:
+        if _source_kind(attrs.type) != source_type:
             raise PluginConfigError("Configuration source type changed on the remote server")
-        truncated = False
-        count = 0
         if source_type == "file":
-            count = 1
             yield {
                 "type": "file",
                 "file": {
@@ -192,132 +307,28 @@ async def iter_source_scan(
                 },
             }
         else:
-            # Validation above deliberately uses SFTP/lstat. Close that channel
-            # before starting the scan so a large tree still consumes only one
-            # SSH channel and one remote traversal.
+            # Close the validation channel before starting the single remote traversal.
             sftp.exit()
             await sftp.wait_closed()
             sftp = None
-
-            extension_expression = " -o ".join(
-                f"-iname {shlex.quote('*' + extension)}"
-                for extension in sorted(SUPPORTED_DIRECTORY_EXTENSIONS)
-            )
-            command = (
-                f"LC_ALL=C find -P {shlex.quote(target)} "
-                r"\( -type d -printf 'D\0%P\0' \) -o "
-                rf"\( -type f \( {extension_expression} \) "
-                r"-printf 'F\0%P\0%s\0%T@\0' \)"
-            )
             conn = ssh_manager.conn
             if conn is None:
                 raise PluginConfigError("SSH connection is not established")
-            process = await conn.create_process(command, encoding=None)
-            stderr_task = asyncio.create_task(read_stderr())
-            buffer = bytearray()
-            record_type: Optional[str] = None
-            record: list[str] = []
-
-            def decode_token(raw_token: bytes) -> str:
-                try:
-                    value = raw_token.decode("utf-8", errors="strict")
-                except UnicodeDecodeError as exc:
-                    raise PluginConfigError(
-                        "Configuration source contains a non-UTF-8 path"
-                    ) from exc
-                if "\\" in value or any(ord(char) < 32 or ord(char) == 127 for char in value):
-                    raise PluginConfigError("Configuration source contains an unsafe path")
-                return value
-
-            async def handle_token(raw_token: bytes) -> AsyncIterator[dict[str, Any]]:
-                nonlocal record_type, record, count, truncated
-                token = decode_token(raw_token)
-                if record_type is None:
-                    if token not in {"D", "F"}:
-                        raise PluginConfigError("Remote scan returned an invalid record")
-                    record_type = token
-                    record = []
-                    return
-                record.append(token)
-                required = 1 if record_type == "D" else 3
-                if len(record) < required:
-                    return
-
-                current_type = record_type
-                values = record
-                record_type = None
-                record = []
-                tree_path = values[0]
-                if current_type == "D":
-                    yield {
-                        "type": "progress",
-                        "directory": tree_path or ".",
-                        "count": count,
-                    }
-                    return
-
-                if count >= MAX_SOURCE_FILES:
-                    truncated = True
-                    await stop_process()
-                    return
-                try:
-                    size = int(values[1])
-                    modified = float(values[2])
-                except ValueError as exc:
-                    raise PluginConfigError("Remote scan returned invalid file metadata") from exc
-                game_relative = posixpath.normpath(posixpath.join(relative_path, tree_path))
-                count += 1
-                yield {
-                    "type": "file",
-                    "file": {
-                        "name": posixpath.basename(tree_path),
-                        "path": game_relative,
-                        "tree_path": tree_path,
-                        "size": size,
-                        "modified": modified,
-                        "format": format_for_filename(tree_path),
-                        "too_large": size > MAX_CONFIG_BYTES,
-                    },
-                }
-
-            while not truncated:
-                try:
-                    chunk = await asyncio.wait_for(
-                        process.stdout.read(SCAN_READ_BYTES),
-                        timeout=SCAN_IDLE_TIMEOUT,
-                    )
-                except asyncio.TimeoutError as exc:
-                    raise PluginConfigError("Remote configuration scan timed out") from exc
-                if not chunk:
-                    break
-                if isinstance(chunk, str):
-                    chunk = chunk.encode("utf-8")
-                buffer.extend(chunk)
-                while True:
-                    delimiter = buffer.find(b"\0")
-                    if delimiter < 0:
-                        break
-                    raw_token = bytes(buffer[:delimiter])
-                    del buffer[: delimiter + 1]
-                    async for event in handle_token(raw_token):
-                        yield event
-                    if truncated:
-                        break
-                if len(buffer) > SCAN_MAX_TOKEN_BYTES:
-                    raise PluginConfigError("Configuration source path is too long")
-
-            if not truncated:
-                if buffer or record_type is not None:
-                    raise PluginConfigError("Remote scan returned an incomplete record")
-                result = await asyncio.wait_for(process.wait(), timeout=SCAN_IDLE_TIMEOUT)
-                process_finished = True
-                stderr = await stderr_task
-                if result.exit_status != 0:
-                    raise PluginConfigError(stderr or "Remote configuration scan failed")
-        yield {"type": "complete", "truncated": truncated, "count": count}
+            process = await conn.create_process(_scan_command(target), encoding=None)
+            stderr_task = asyncio.create_task(_read_scan_stderr(process))
+            async for event in _iter_directory_scan(
+                process,
+                relative_path,
+                lambda: _stop_scan_process(process),
+            ):
+                yield event
+            process_finished = True
+            stderr = await stderr_task
+            if process.exit_status != 0:
+                raise PluginConfigError(stderr or "Remote configuration scan failed")
     finally:
         if process is not None and not process_finished:
-            await stop_process()
+            await _stop_scan_process(process)
         if stderr_task is not None:
             if not stderr_task.done():
                 stderr_task.cancel()
