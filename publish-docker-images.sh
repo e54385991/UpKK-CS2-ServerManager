@@ -15,7 +15,8 @@
 #   DEPLOYMENT_ID        optional frontend release id (defaults to GIT_SHA;
 #                        dirty worktrees get a unique suffix)
 #   NEXT_SERVER_ACTIONS_ENCRYPTION_KEY  optional stable Base64 AES key for
-#                                      independently built/multi-instance web
+#                                      independently built/multi-instance web;
+#                                      a per-publish key is generated when omitted
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,6 +67,13 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if { [ "$TARGET" = "web" ] || [ "$TARGET" = "all" ]; } && [ -z "${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:-}" ]; then
+    command -v openssl >/dev/null 2>&1 || fail "openssl is required to generate the frontend Server Actions key (or set NEXT_SERVER_ACTIONS_ENCRYPTION_KEY)"
+    NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr -d '\r\n')"
+    export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
+    log "generated one frontend Server Actions key shared by all target platforms for this publish"
+fi
 
 [ -f "$ROOT/Dockerfile" ] || fail "run this from the repository root (missing Dockerfile)"
 [ -f "$ROOT/frontend/Dockerfile" ] || fail "missing frontend/Dockerfile"

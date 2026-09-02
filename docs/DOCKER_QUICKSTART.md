@@ -86,7 +86,9 @@ SHA，浏览器发现版本不一致时会自动硬刷新，避免旧页面持�
 如果有多个独立构建、滚动发布或多个 Next 实例，还必须让它们共享同一个稳定的
 `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`（构建参数，值为 16/24/32 字节 AES 密钥的
 Base64 表示）。不要把密钥写入镜像运行时环境、Compose 文件或 Git；通过 CI Secret
-传入 `SERVER_ACTIONS_ENCRYPTION_KEY`。只使用同一镜像扩容时无需额外设置。
+传入 `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`。`publish-docker-images.sh` 未显式提供密钥时，
+会在本次发布开始时生成一个随机密钥，并让所有目标架构共用它；独立的后续发布仍应使用
+Secret 管理器中的稳定值。只使用同一镜像扩容时无需额外设置。
 
 例如生成 32 字节密钥（仅将输出保存到 Secret 管理器）：
 
