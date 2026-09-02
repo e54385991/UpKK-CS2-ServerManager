@@ -7131,7 +7131,7 @@ export interface components {
              * @default 262144
              * @enum {integer}
              */
-            context_window_tokens: 262144 | 393216 | 1048576;
+            context_window_tokens: 8192 | 16384 | 32768 | 65536 | 131072 | 262144 | 393216 | 1048576;
             /** Enabled */
             enabled: boolean;
             /** Frequency Penalty */
@@ -7190,7 +7190,7 @@ export interface components {
              */
             clear_api_key: boolean;
             /** Context Window Tokens */
-            context_window_tokens?: (262144 | 393216 | 1048576) | null;
+            context_window_tokens?: (8192 | 16384 | 32768 | 65536 | 131072 | 262144 | 393216 | 1048576) | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Frequency Penalty */
@@ -7534,7 +7534,7 @@ export interface components {
              */
             clear_api_key: boolean;
             /** Context Window Tokens */
-            context_window_tokens?: (262144 | 393216 | 1048576) | null;
+            context_window_tokens?: (8192 | 16384 | 32768 | 65536 | 131072 | 262144 | 393216 | 1048576) | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Frequency Penalty */
@@ -7589,7 +7589,7 @@ export interface components {
              * @default 262144
              * @enum {integer}
              */
-            context_window_tokens: 262144 | 393216 | 1048576;
+            context_window_tokens: 8192 | 16384 | 32768 | 65536 | 131072 | 262144 | 393216 | 1048576;
             /** Enabled */
             enabled: boolean;
             /** Frequency Penalty */

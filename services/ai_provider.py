@@ -6,6 +6,7 @@ import json
 import logging
 import secrets
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -29,9 +30,27 @@ from services.ai_security import (
 
 TextDeltaCallback = Callable[[str], Awaitable[None]]
 DEFAULT_CONTEXT_WINDOW_TOKENS = 262_144
-CONTEXT_WINDOW_TOKEN_PRESETS = (262_144, 393_216, 1_048_576)
+CONTEXT_WINDOW_TOKEN_PRESETS = (
+    8_192,
+    16_384,
+    32_768,
+    65_536,
+    131_072,
+    262_144,
+    393_216,
+    1_048_576,
+)
 MAX_PROVIDER_REQUEST_BYTES = 48 * 1024
+# Some OpenAI-compatible gateways enforce a much smaller per-request limit than
+# the model advertises.  This is deliberately only used after a real 413 so
+# normal providers keep the full schema and history on the first attempt.
+# 16 KiB fits the common gateway ceiling while leaving enough room for the
+# authenticated system prompt and the complete compact tool registry.
+ADAPTIVE_PROVIDER_REQUEST_BYTES = 16 * 1024
 MAX_PROVIDER_MESSAGE_CONTENT_BYTES = 32 * 1024
+ADAPTIVE_MAX_COMPLETION_TOKENS = 512
+ADAPTIVE_TOOL_DESCRIPTION_BYTES = 0
+_SCHEMA_METADATA_KEYS = frozenset({"title", "default", "examples", "$schema"})
 logger = logging.getLogger(__name__)
 
 # Preserve private imports used by existing tests and extensions.
@@ -103,6 +122,33 @@ def _compact_message(
     return compacted
 
 
+def _compact_schema(value: Any) -> Any:
+    """Keep tool validation semantics while removing verbose schema metadata."""
+    if isinstance(value, list):
+        return [_compact_schema(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    compacted: dict[str, Any] = {}
+    for key, item in value.items():
+        if key in _SCHEMA_METADATA_KEYS:
+            continue
+        if key == "description" and isinstance(item, str):
+            if ADAPTIVE_TOOL_DESCRIPTION_BYTES <= 0:
+                continue
+            compacted[key] = _truncate_text(item, ADAPTIVE_TOOL_DESCRIPTION_BYTES)
+            continue
+        compacted[key] = _compact_schema(item)
+    return compacted
+
+
+def _compact_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+    """Return a provider-safe tool representation for a 413 recovery attempt."""
+    if not tools:
+        return tools
+    compacted = _compact_schema(tools)
+    return compacted if isinstance(compacted, list) else tools
+
+
 def _compact_messages_to_budget(
     messages: list[dict[str, Any]],
     payload_factory: Callable[[list[dict[str, Any]]], dict[str, Any]],
@@ -152,16 +198,14 @@ def _compact_messages(
     *,
     context_window_tokens: int = DEFAULT_CONTEXT_WINDOW_TOKENS,
     max_completion_tokens: int = 0,
+    byte_limit: int = MAX_PROVIDER_REQUEST_BYTES,
 ) -> tuple[list[dict[str, Any]], bool]:
     context_limit = _normalized_context_window_tokens(context_window_tokens)
     output_reserve = max(int(max_completion_tokens or 0), 0)
     input_token_limit = max(context_limit - output_reserve, 1)
     original_payload = payload_factory(messages)
     original_size = _json_size(original_payload)
-    if (
-        original_size <= MAX_PROVIDER_REQUEST_BYTES
-        and _estimated_tokens(original_payload) <= input_token_limit
-    ):
+    if original_size <= byte_limit and _estimated_tokens(original_payload) <= input_token_limit:
         return messages, False
 
     prefix, groups = _message_groups(messages)
@@ -170,7 +214,7 @@ def _compact_messages(
         candidate = prefix + [message for group in kept for message in group]
         candidate_payload = payload_factory(candidate)
         if (
-            _json_size(candidate_payload) <= MAX_PROVIDER_REQUEST_BYTES
+            _json_size(candidate_payload) <= byte_limit
             and _estimated_tokens(candidate_payload) <= input_token_limit
         ):
             logger.warning(
@@ -186,13 +230,10 @@ def _compact_messages(
     compacted, compacted_size = _compact_messages_to_budget(
         candidate,
         payload_factory,
-        byte_limit=MAX_PROVIDER_REQUEST_BYTES,
+        byte_limit=byte_limit,
     )
     compacted_payload = payload_factory(compacted)
-    if (
-        compacted_size > MAX_PROVIDER_REQUEST_BYTES
-        or _estimated_tokens(compacted_payload) > input_token_limit
-    ):
+    if compacted_size > byte_limit or _estimated_tokens(compacted_payload) > input_token_limit:
         raise AIPayloadTooLargeError(
             "AI provider request remains too large after history compaction; "
             "reduce tool output or start a new conversation"
@@ -390,9 +431,26 @@ def _status_error(response: httpx.Response, content: bytes) -> AIProviderError |
     if response.status_code < 200 or response.status_code >= 300:
         detail = redact_sensitive_text(content.decode(errors="replace"), limit=500)
         if response.status_code == 413:
+            provider_detail = ""
+            try:
+                decoded = json.loads(content)
+            except TypeError, ValueError:
+                decoded = None
+            if isinstance(decoded, dict):
+                error = decoded.get("error")
+                if isinstance(error, dict):
+                    message = error.get("message")
+                    if isinstance(message, str) and message.strip():
+                        provider_detail = redact_sensitive_text(message, limit=240)
+                elif isinstance(error, str) and error.strip():
+                    provider_detail = redact_sensitive_text(error, limit=240)
+            if not provider_detail and detail and detail != "{}":
+                provider_detail = detail
+            suffix = f" Provider detail: {provider_detail}." if provider_detail else ""
             return AIPayloadTooLargeError(
                 "AI provider returned HTTP 413 (request payload is too large). "
                 "Conversation history was compacted; reduce tool output or start a new conversation."
+                + suffix
             )
         return AIProviderError(f"AI provider returned HTTP {response.status_code}: {detail}")
     return None
@@ -481,63 +539,140 @@ async def create_chat_completion(
 ) -> dict[str, Any]:
     base_url = await validate_provider_endpoint(config.base_url, config.allowlist)
 
-    def payload_factory(candidate: list[dict[str, Any]]) -> dict[str, Any]:
-        return _provider_request(config, candidate, tools, tool_choice, stream, base_url)[1]
-
-    messages, _compacted = _compact_messages(
-        messages,
-        payload_factory,
-        context_window_tokens=getattr(
-            config, "context_window_tokens", DEFAULT_CONTEXT_WINDOW_TOKENS
-        ),
-        max_completion_tokens=config.max_completion_tokens,
-    )
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
 
     endpoint_bases = _provider_base_urls(base_url, config.api_protocol)
-    for index, endpoint_base in enumerate(endpoint_bases):
-        endpoint, payload = _provider_request(
-            config, messages, tools, tool_choice, stream, endpoint_base
+    # A 413 is commonly emitted when a gateway's model-specific context/body
+    # limit is smaller than the advertised model window.  Retry once with a
+    # compact schema, shorter history and a bounded output reserve.  We never
+    # send the original oversized request twice.
+    request_variants: list[
+        tuple[str, AIProviderConfig, list[dict[str, Any]], list[dict[str, Any]] | None]
+    ] = []
+
+    def add_variant(
+        name: str,
+        variant_config: AIProviderConfig,
+        variant_tools: list[dict[str, Any]] | None,
+        *,
+        byte_limit: int,
+    ) -> None:
+        def payload_factory(candidate: list[dict[str, Any]]) -> dict[str, Any]:
+            return _provider_request(
+                variant_config,
+                candidate,
+                variant_tools,
+                tool_choice,
+                stream,
+                base_url,
+            )[1]
+
+        variant_messages, _compacted = _compact_messages(
+            messages,
+            payload_factory,
+            context_window_tokens=getattr(
+                variant_config, "context_window_tokens", DEFAULT_CONTEXT_WINDOW_TOKENS
+            ),
+            max_completion_tokens=variant_config.max_completion_tokens,
+            byte_limit=byte_limit,
         )
-        request_size = _json_size(payload)
-        logger.info(
-            "AI provider request endpoint=%s bytes=%d estimated_tokens=%d messages=%d tools=%d",
-            endpoint,
-            request_size,
-            _estimated_tokens(payload),
-            len(messages),
-            len(tools or []),
+        request_variants.append((name, variant_config, variant_messages, variant_tools))
+
+    add_variant("normal", config, tools, byte_limit=MAX_PROVIDER_REQUEST_BYTES)
+    adaptive_config = replace(
+        config,
+        max_completion_tokens=min(config.max_completion_tokens, ADAPTIVE_MAX_COMPLETION_TOKENS),
+        # Optional sampling/reasoning extensions are the least portable part
+        # of OpenAI-compatible gateways.  Remove them on the recovery request
+        # so a small-context model receives the smallest standard payload.
+        reasoning_effort=None,
+        temperature=None,
+        top_p=None,
+        frequency_penalty=None,
+        presence_penalty=None,
+        verbosity=None,
+        parallel_tool_calls=None,
+    )
+    try:
+        add_variant(
+            "adaptive-413",
+            adaptive_config,
+            _compact_tools(tools),
+            byte_limit=ADAPTIVE_PROVIDER_REQUEST_BYTES,
         )
-        try:
-            async with ai_provider_transport.stream(
-                "POST",
+    except AIPayloadTooLargeError:
+        # A very large administrator prompt can leave no room for even the
+        # compact registry. Keep the normal request usable and report the
+        # precise local limit if the provider also rejects it.
+        logger.warning("Unable to prepare adaptive AI provider payload within the byte budget")
+
+    for variant_index, (variant_name, variant_config, variant_messages, variant_tools) in enumerate(
+        request_variants
+    ):
+        for index, endpoint_base in enumerate(endpoint_bases):
+            endpoint, payload = _provider_request(
+                variant_config,
+                variant_messages,
+                variant_tools,
+                tool_choice,
+                stream,
+                endpoint_base,
+            )
+            request_size = _json_size(payload)
+            message_size = _json_size(variant_messages)
+            tool_size = _json_size(variant_tools or [])
+            logger.info(
+                "AI provider request variant=%s endpoint=%s bytes=%d message_bytes=%d "
+                "tool_bytes=%d estimated_tokens=%d messages=%d tools=%d max_completion_tokens=%d",
+                variant_name,
                 endpoint,
-                headers=headers,
-                json=payload,
-                timeout=httpx.Timeout(config.timeout_seconds),
-            ) as response:
-                message, response_content = await _provider_message(
-                    config,
-                    response,
-                    stream=stream,
-                    on_text_delta=on_text_delta,
-                )
-            if message is None:
-                assert response_content is not None
-                message = _decode_provider_message(config, response_content)
-            return _validate_message_payload(message)
-        except httpx.HTTPError as exc:
-            raise AIProviderError(f"AI provider request failed: {type(exc).__name__}") from exc
-        except AIProviderError as exc:
-            if isinstance(exc, AIPayloadTooLargeError) and "HTTP 413" in str(exc):
-                raise AIPayloadTooLargeError(
-                    f"{exc} Outbound request was {request_size} bytes after compaction."
-                ) from exc
-            if index == len(endpoint_bases) - 1 or not _can_try_endpoint_fallback(exc):
-                raise
-            logger.info("Configured AI origin did not expose the API; trying /v1 endpoint")
+                request_size,
+                message_size,
+                tool_size,
+                _estimated_tokens(payload),
+                len(variant_messages),
+                len(variant_tools or []),
+                variant_config.max_completion_tokens,
+            )
+            try:
+                async with ai_provider_transport.stream(
+                    "POST",
+                    endpoint,
+                    headers=headers,
+                    json=payload,
+                    timeout=httpx.Timeout(variant_config.timeout_seconds),
+                ) as response:
+                    message, response_content = await _provider_message(
+                        variant_config,
+                        response,
+                        stream=stream,
+                        on_text_delta=on_text_delta,
+                    )
+                if message is None:
+                    assert response_content is not None
+                    message = _decode_provider_message(variant_config, response_content)
+                return _validate_message_payload(message)
+            except httpx.HTTPError as exc:
+                raise AIProviderError(f"AI provider request failed: {type(exc).__name__}") from exc
+            except AIProviderError as exc:
+                if isinstance(exc, AIPayloadTooLargeError) and "HTTP 413" in str(exc):
+                    if variant_index == 0 and len(request_variants) > 1:
+                        logger.warning(
+                            "AI provider rejected request variant=%s with HTTP 413; "
+                            "retrying adaptive payload",
+                            variant_name,
+                        )
+                        break
+                    raise AIPayloadTooLargeError(
+                        f"{exc} Outbound request was {request_size} bytes after compaction "
+                        f"(messages={message_size}, tools={tool_size}, "
+                        f"estimated_tokens={_estimated_tokens(payload)})."
+                    ) from exc
+                if index == len(endpoint_bases) - 1 or not _can_try_endpoint_fallback(exc):
+                    raise
+                logger.info("Configured AI origin did not expose the API; trying /v1 endpoint")
 
     raise AIProviderError("AI provider endpoint list is empty")
 

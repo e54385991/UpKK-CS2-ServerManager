@@ -78,6 +78,7 @@ def test_context_window_defaults_to_256k_and_accepts_only_supported_presets():
     assert (
         AISystemSettingsUpdate(context_window_tokens=1_048_576).context_window_tokens == 1_048_576
     )
+    assert AISystemSettingsUpdate(context_window_tokens=32_768).context_window_tokens == 32_768
     with pytest.raises(ValidationError):
         AISystemSettingsUpdate(context_window_tokens=512_000)
 
@@ -606,6 +607,72 @@ async def test_provider_413_is_classified_as_non_retryable_payload_error(monkeyp
             ),
             [{"role": "user", "content": "hello"}],
         )
+
+
+@pytest.mark.asyncio
+async def test_provider_413_retries_once_with_compact_tools_and_history(monkeypatch):
+    captured: list[dict] = []
+    original_client = httpx.AsyncClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        if len(captured) == 1:
+            return httpx.Response(413, json={"error": {"message": "context limit"}})
+        return _sse_response(
+            {"choices": [{"delta": {"content": "OK"}, "finish_reason": None}]},
+        )
+
+    def client_factory(**kwargs):
+        return original_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(ai_provider.httpx, "AsyncClient", client_factory)
+    monkeypatch.setattr(
+        ai_provider,
+        "validate_provider_endpoint",
+        AsyncMock(return_value="https://provider.example/v1"),
+    )
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "probe",
+                "description": "A verbose tool description " * 100,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "value": {
+                            "type": "string",
+                            "description": "A verbose parameter description " * 100,
+                        }
+                    },
+                },
+            },
+        }
+    ]
+
+    message = await create_chat_completion(
+        AIProviderConfig(
+            base_url="https://provider.example/v1",
+            model="test-model",
+            api_key=None,
+            timeout_seconds=10,
+            allowlist=(),
+            source="global",
+            max_completion_tokens=2048,
+        ),
+        [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "request"},
+        ],
+        tools=tools,
+        stream=True,
+    )
+
+    assert message["content"] == "OK"
+    assert len(captured) == 2
+    assert captured[0]["max_completion_tokens"] == 2048
+    assert captured[1]["max_completion_tokens"] == 512
+    assert "description" not in captured[1]["tools"][0]["function"]
 
 
 @pytest.mark.asyncio

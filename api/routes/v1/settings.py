@@ -35,11 +35,33 @@ from .schemas import (
 router = APIRouter(prefix="/api/v1/settings", tags=["v1-settings"])
 
 
-def _context_window_tokens(value: object) -> Literal[262144, 393216, 1048576]:
-    if value == 393216:
-        return 393216
-    if value == 1048576:
-        return 1048576
+ContextWindowToken = Literal[
+    8192,
+    16384,
+    32768,
+    65536,
+    131072,
+    262144,
+    393216,
+    1048576,
+]
+
+
+def _context_window_tokens(
+    value: object,
+) -> ContextWindowToken:
+    supported: dict[int, ContextWindowToken] = {
+        8192: 8192,
+        16384: 16384,
+        32768: 32768,
+        65536: 65536,
+        131072: 131072,
+        262144: 262144,
+        393216: 393216,
+        1048576: 1048576,
+    }
+    if isinstance(value, int) and not isinstance(value, bool):
+        return supported.get(value, 262144)
     return 262144
 
 

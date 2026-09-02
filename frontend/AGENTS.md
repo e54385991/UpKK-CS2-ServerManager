@@ -197,7 +197,7 @@ Bilingual **zh-CN (default) + en-US** via `next-intl`, without URL routing:
 - Compose class names with `cn()` from `src/shared/lib/cn.ts`.
 - 助手页面消费可回放 SSE 的 `token_usage` 事件，实时显示输入、输出和合计 token；运行中必须有
   可访问的动画状态和当前阶段。只展示安全阶段/进度，不渲染内部 chain-of-thought 或原始秘密。
-- 系统 AI 上下文窗口默认 256K，管理端选项固定为 256K、384K、1M，并与 OpenAPI 生成类型保持同步。
+- 系统 AI 上下文窗口默认 256K，管理端可按模型能力选择 8K、16K、32K、64K、128K、256K、384K 或 1M，并与 OpenAPI 生成类型保持同步。
 
 ## Environment
 

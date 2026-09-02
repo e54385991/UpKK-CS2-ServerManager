@@ -245,7 +245,16 @@ class AssistantSystemSettingsView(V1Model):
     presence_penalty: float | None = None
     verbosity: str | None = None
     parallel_tool_calls: bool | None = None
-    context_window_tokens: Literal[262144, 393216, 1048576] = 262144
+    context_window_tokens: Literal[
+        8192,
+        16384,
+        32768,
+        65536,
+        131072,
+        262144,
+        393216,
+        1048576,
+    ] = 262144
     request_timeout_seconds: int
     history_retention_days: int
     max_provider_rounds: int
@@ -277,7 +286,19 @@ class AssistantSystemSettingsPatch(ApiRequest):
     history_retention_days: int | None = Field(default=None, ge=1, le=7)
     max_provider_rounds: int | None = Field(default=None, ge=1, le=1000)
     max_tool_calls_per_round: int | None = Field(default=None, ge=1, le=1000)
-    context_window_tokens: Literal[262144, 393216, 1048576] | None = None
+    context_window_tokens: (
+        Literal[
+            8192,
+            16384,
+            32768,
+            65536,
+            131072,
+            262144,
+            393216,
+            1048576,
+        ]
+        | None
+    ) = None
 
 
 class AssistantProviderTestBody(ApiRequest):

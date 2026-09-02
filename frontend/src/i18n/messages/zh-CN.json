@@ -2083,7 +2083,7 @@
     "verbosity": "回复详细程度",
     "maxTokens": "最大补全 token",
     "contextWindow": "上下文窗口",
-    "contextWindowHint": "默认 256K；可调整为 384K 或 1M。窗口越大，供应商请求和费用可能越高。",
+    "contextWindowHint": "默认 256K；可按模型能力调整为 8K–1M。窗口越大，供应商请求和费用可能越高。",
     "tokenField": "Token 上限字段",
     "omit": "不发送",
     "temperature": "温度",

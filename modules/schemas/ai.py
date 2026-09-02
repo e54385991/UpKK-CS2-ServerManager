@@ -12,7 +12,18 @@ ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "
 Verbosity = Literal["low", "medium", "high"]
 TokenLimitParameter = Literal["max_completion_tokens", "max_tokens", "omit"]
 AIAPIProtocol = Literal["chat_completions", "responses"]
-AIContextWindowTokens = Literal[262_144, 393_216, 1_048_576]
+# Keep the 256K default while allowing operators to match providers deployed
+# with smaller KV-cache limits. Values are audited presets, not arbitrary input.
+AIContextWindowTokens = Literal[
+    8_192,
+    16_384,
+    32_768,
+    65_536,
+    131_072,
+    262_144,
+    393_216,
+    1_048_576,
+]
 
 
 class AIModelParameters(SQLModel):

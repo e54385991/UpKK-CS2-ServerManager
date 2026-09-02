@@ -352,7 +352,11 @@ export function AiSettingsForm({
               >
                 {AI_CONTEXT_WINDOW_OPTIONS.map((value) => (
                   <option key={value} value={value}>
-                    {value === 262144 ? "256K" : value === 393216 ? "384K" : "1M"}
+                    {value >= 1048576
+                      ? "1M"
+                      : value >= 1024
+                        ? `${value / 1024}K`
+                        : value}
                   </option>
                 ))}
               </Select>

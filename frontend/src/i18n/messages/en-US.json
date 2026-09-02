@@ -2083,7 +2083,7 @@
     "verbosity": "Response verbosity",
     "maxTokens": "Maximum completion tokens",
     "contextWindow": "Context window",
-    "contextWindowHint": "Default 256K; choose 384K or 1M when supported. Larger windows can increase provider payloads and cost.",
+    "contextWindowHint": "Default 256K; choose 8K–1M to match the model. Larger windows can increase provider payloads and cost.",
     "tokenField": "Token limit field",
     "omit": "Do not send",
     "temperature": "Temperature",
