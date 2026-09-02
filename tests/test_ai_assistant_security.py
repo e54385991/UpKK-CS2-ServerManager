@@ -510,6 +510,72 @@ async def test_provider_root_origin_falls_back_to_conventional_v1_api(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_provider_compacts_multiple_large_tool_outputs_to_the_request_budget(monkeypatch):
+    original_client = httpx.AsyncClient
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"role": "assistant", "content": "OK"}}]},
+        )
+
+    def client_factory(**kwargs):
+        return original_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(ai_provider.httpx, "AsyncClient", client_factory)
+    monkeypatch.setattr(
+        ai_provider,
+        "validate_provider_endpoint",
+        AsyncMock(return_value="https://provider.example/v1"),
+    )
+    messages = [{"role": "system", "content": "诊断规则"}]
+    messages.append(
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": f"call-{index}",
+                    "type": "function",
+                    "function": {"name": "probe", "arguments": "{}"},
+                }
+                for index in range(4)
+            ],
+        }
+    )
+    messages.extend(
+        {
+            "role": "tool",
+            "tool_call_id": f"call-{index}",
+            "content": "日志输出 " + ("错误信息。" * 20_000),
+        }
+        for index in range(4)
+    )
+
+    await create_chat_completion(
+        AIProviderConfig(
+            base_url="https://provider.example/v1",
+            model="test-model",
+            api_key=None,
+            timeout_seconds=10,
+            allowlist=(),
+            source="global",
+        ),
+        messages,
+        tools=[{"type": "function", "function": {"name": "probe", "parameters": {}}}],
+    )
+
+    payload_size = len(json.dumps(captured, ensure_ascii=False, separators=(",", ":")).encode())
+    assert payload_size <= MAX_PROVIDER_REQUEST_BYTES
+    assert len(captured["messages"]) == len(messages)
+    assert any(
+        "earlier content truncated" in str(item.get("content")) for item in captured["messages"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_provider_413_is_classified_as_non_retryable_payload_error(monkeypatch):
     original_client = httpx.AsyncClient
 

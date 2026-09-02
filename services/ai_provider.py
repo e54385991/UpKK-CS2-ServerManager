@@ -30,7 +30,7 @@ from services.ai_security import (
 TextDeltaCallback = Callable[[str], Awaitable[None]]
 DEFAULT_CONTEXT_WINDOW_TOKENS = 262_144
 CONTEXT_WINDOW_TOKEN_PRESETS = (262_144, 393_216, 1_048_576)
-MAX_PROVIDER_REQUEST_BYTES = 96 * 1024
+MAX_PROVIDER_REQUEST_BYTES = 64 * 1024
 MAX_PROVIDER_MESSAGE_CONTENT_BYTES = 32 * 1024
 logger = logging.getLogger(__name__)
 
@@ -92,13 +92,36 @@ def _truncate_text(value: str, limit: int) -> str:
     return f"{head}{marker}{tail}"
 
 
-def _compact_message(message: dict[str, Any]) -> dict[str, Any]:
+def _compact_message(
+    message: dict[str, Any], *, content_limit: int = MAX_PROVIDER_MESSAGE_CONTENT_BYTES
+) -> dict[str, Any]:
     content = message.get("content")
     if not isinstance(content, str):
         return message
     compacted = dict(message)
-    compacted["content"] = _truncate_text(content, MAX_PROVIDER_MESSAGE_CONTENT_BYTES)
+    compacted["content"] = _truncate_text(content, content_limit)
     return compacted
+
+
+def _compact_messages_to_budget(
+    messages: list[dict[str, Any]],
+    payload_factory: Callable[[list[dict[str, Any]]], dict[str, Any]],
+    *,
+    byte_limit: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Shrink message text until the complete serialized request fits."""
+    content_limits = MAX_PROVIDER_MESSAGE_CONTENT_BYTES
+    compacted = [_compact_message(message, content_limit=content_limits) for message in messages]
+    while True:
+        payload = payload_factory(compacted)
+        if _json_size(payload) <= byte_limit:
+            return compacted, _json_size(payload)
+        if content_limits <= 256:
+            return compacted, _json_size(payload)
+        content_limits = max(content_limits // 2, 256)
+        compacted = [
+            _compact_message(message, content_limit=content_limits) for message in messages
+        ]
 
 
 def _message_groups(
@@ -160,9 +183,12 @@ def _compact_messages(
         kept.pop(0)
 
     candidate = prefix + [message for group in kept for message in group]
-    compacted = [_compact_message(message) for message in candidate]
+    compacted, compacted_size = _compact_messages_to_budget(
+        candidate,
+        payload_factory,
+        byte_limit=MAX_PROVIDER_REQUEST_BYTES,
+    )
     compacted_payload = payload_factory(compacted)
-    compacted_size = _json_size(compacted_payload)
     if (
         compacted_size > MAX_PROVIDER_REQUEST_BYTES
         or _estimated_tokens(compacted_payload) > input_token_limit
