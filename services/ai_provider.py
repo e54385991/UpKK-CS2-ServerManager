@@ -30,7 +30,7 @@ from services.ai_security import (
 TextDeltaCallback = Callable[[str], Awaitable[None]]
 DEFAULT_CONTEXT_WINDOW_TOKENS = 262_144
 CONTEXT_WINDOW_TOKEN_PRESETS = (262_144, 393_216, 1_048_576)
-MAX_PROVIDER_REQUEST_BYTES = 64 * 1024
+MAX_PROVIDER_REQUEST_BYTES = 48 * 1024
 MAX_PROVIDER_MESSAGE_CONTENT_BYTES = 32 * 1024
 logger = logging.getLogger(__name__)
 
@@ -501,6 +501,15 @@ async def create_chat_completion(
         endpoint, payload = _provider_request(
             config, messages, tools, tool_choice, stream, endpoint_base
         )
+        request_size = _json_size(payload)
+        logger.info(
+            "AI provider request endpoint=%s bytes=%d estimated_tokens=%d messages=%d tools=%d",
+            endpoint,
+            request_size,
+            _estimated_tokens(payload),
+            len(messages),
+            len(tools or []),
+        )
         try:
             async with ai_provider_transport.stream(
                 "POST",
@@ -522,6 +531,10 @@ async def create_chat_completion(
         except httpx.HTTPError as exc:
             raise AIProviderError(f"AI provider request failed: {type(exc).__name__}") from exc
         except AIProviderError as exc:
+            if isinstance(exc, AIPayloadTooLargeError) and "HTTP 413" in str(exc):
+                raise AIPayloadTooLargeError(
+                    f"{exc} Outbound request was {request_size} bytes after compaction."
+                ) from exc
             if index == len(endpoint_bases) - 1 or not _can_try_endpoint_fallback(exc):
                 raise
             logger.info("Configured AI origin did not expose the API; trying /v1 endpoint")
