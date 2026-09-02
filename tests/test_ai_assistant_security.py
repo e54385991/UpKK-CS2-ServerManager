@@ -469,6 +469,47 @@ async def test_provider_compacts_oversized_history_before_sending(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_provider_root_origin_falls_back_to_conventional_v1_api(monkeypatch):
+    original_client = httpx.AsyncClient
+    requested_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        if request.url.path == "/chat/completions":
+            return httpx.Response(200, headers={"content-type": "text/html"}, content=b"console")
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={"choices": [{"message": {"role": "assistant", "content": "OK"}}]},
+        )
+
+    def client_factory(**kwargs):
+        return original_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(ai_provider.httpx, "AsyncClient", client_factory)
+    monkeypatch.setattr(
+        ai_provider,
+        "validate_provider_endpoint",
+        AsyncMock(return_value="https://provider.example"),
+    )
+
+    message = await create_chat_completion(
+        AIProviderConfig(
+            base_url="https://provider.example",
+            model="test-model",
+            api_key=None,
+            timeout_seconds=10,
+            allowlist=(),
+            source="global",
+        ),
+        [{"role": "user", "content": "hello"}],
+    )
+
+    assert message["content"] == "OK"
+    assert requested_paths == ["/chat/completions", "/v1/chat/completions"]
+
+
+@pytest.mark.asyncio
 async def test_provider_413_is_classified_as_non_retryable_payload_error(monkeypatch):
     original_client = httpx.AsyncClient
 

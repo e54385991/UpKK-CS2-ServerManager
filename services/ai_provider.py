@@ -7,6 +7,7 @@ import logging
 import secrets
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -53,11 +54,16 @@ def _json_size(value: Any) -> int:
 def _estimated_tokens(value: Any) -> int:
     """Estimate provider tokens without adding a tokenizer dependency.
 
-    Four UTF-8 bytes per token is intentionally conservative for mixed
-    Chinese/English tool payloads.  The estimate is used only for local
-    compaction; providers remain the source of truth for actual usage.
+    ASCII text is approximated at four characters per token while non-ASCII
+    code points count as one token.  This deliberately overestimates CJK
+    content instead of relying on a byte ratio that would undercount it.
+    The estimate is used only for local compaction; providers remain the
+    source of truth for actual usage.
     """
-    return max(1, (_json_size(value) + 3) // 4)
+    serialized = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+    ascii_chars = sum(char.isascii() for char in serialized)
+    non_ascii_chars = len(serialized) - ascii_chars
+    return max(1, (ascii_chars + 3) // 4 + non_ascii_chars)
 
 
 def _normalized_context_window_tokens(value: object) -> int:
@@ -171,6 +177,36 @@ def _compact_messages(
         compacted_size,
     )
     return compacted, True
+
+
+def _provider_base_urls(base_url: str, api_protocol: str) -> tuple[str, ...]:
+    """Return the configured endpoint plus the conventional ``/v1`` fallback.
+
+    A number of OpenAI-compatible gateways publish their API below ``/v1``
+    while their bare origin serves a web console.  Keep the configured URL
+    authoritative, but make a root URL usable when the first response clearly
+    is not an API response.  Explicit paths are never rewritten.
+    """
+    if api_protocol != "chat_completions":
+        return (base_url,)
+    parsed = urlsplit(base_url)
+    if parsed.path not in {"", "/"}:
+        return (base_url,)
+    return (base_url, f"{base_url.rstrip('/')}/v1")
+
+
+_ENDPOINT_FALLBACK_ERRORS = frozenset(
+    {
+        "AI provider returned invalid JSON",
+        "AI provider returned an invalid Chat Completions response",
+        "AI provider did not return a standard SSE stream",
+        "AI provider returned an empty SSE stream",
+    }
+)
+
+
+def _can_try_endpoint_fallback(error: AIProviderError) -> bool:
+    return str(error) in _ENDPOINT_FALLBACK_ERRORS
 
 
 def _chat_completions_payload(
@@ -430,30 +466,41 @@ async def create_chat_completion(
         ),
         max_completion_tokens=config.max_completion_tokens,
     )
-    endpoint, payload = _provider_request(config, messages, tools, tool_choice, stream, base_url)
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
-    try:
-        async with ai_provider_transport.stream(
-            "POST",
-            endpoint,
-            headers=headers,
-            json=payload,
-            timeout=httpx.Timeout(config.timeout_seconds),
-        ) as response:
-            message, response_content = await _provider_message(
-                config,
-                response,
-                stream=stream,
-                on_text_delta=on_text_delta,
-            )
-    except httpx.HTTPError as exc:
-        raise AIProviderError(f"AI provider request failed: {type(exc).__name__}") from exc
-    if message is None:
-        assert response_content is not None
-        message = _decode_provider_message(config, response_content)
-    return _validate_message_payload(message)
+
+    endpoint_bases = _provider_base_urls(base_url, config.api_protocol)
+    for index, endpoint_base in enumerate(endpoint_bases):
+        endpoint, payload = _provider_request(
+            config, messages, tools, tool_choice, stream, endpoint_base
+        )
+        try:
+            async with ai_provider_transport.stream(
+                "POST",
+                endpoint,
+                headers=headers,
+                json=payload,
+                timeout=httpx.Timeout(config.timeout_seconds),
+            ) as response:
+                message, response_content = await _provider_message(
+                    config,
+                    response,
+                    stream=stream,
+                    on_text_delta=on_text_delta,
+                )
+            if message is None:
+                assert response_content is not None
+                message = _decode_provider_message(config, response_content)
+            return _validate_message_payload(message)
+        except httpx.HTTPError as exc:
+            raise AIProviderError(f"AI provider request failed: {type(exc).__name__}") from exc
+        except AIProviderError as exc:
+            if index == len(endpoint_bases) - 1 or not _can_try_endpoint_fallback(exc):
+                raise
+            logger.info("Configured AI origin did not expose the API; trying /v1 endpoint")
+
+    raise AIProviderError("AI provider endpoint list is empty")
 
 
 async def test_provider(config: AIProviderConfig) -> tuple[bool, bool, bool, str]:
