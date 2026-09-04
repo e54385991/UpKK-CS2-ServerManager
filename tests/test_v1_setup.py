@@ -168,7 +168,7 @@ def test_v1_setup_manual_script_includes_runtime_guards():
     assert "Acquire::Retries=3" in script
     assert "amd64|x86_64) ;;" in script
     assert "libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1" in script
-    assert "必需依赖验证失败" in script
+    assert "Required dependency verification failed" in script
     assert "cs2server:" in script
 
 

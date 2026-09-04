@@ -101,7 +101,7 @@ async def test_setup_retries_apt_update_then_fails_closed(monkeypatch):
         )
 
     assert exc_info.value.status_code == 502
-    assert "已自动重试" in exc_info.value.detail
+    assert "after automatic retries" in exc_info.value.detail
     assert sum(command.endswith(" update") for command in connection.commands) == 3
     assert connection.closed is True
 
@@ -122,7 +122,7 @@ async def test_setup_rejects_false_positive_apt_install(monkeypatch):
         )
 
     assert exc_info.value.status_code == 500
-    assert "依赖验证失败" in exc_info.value.detail
+    assert "dependency verification failed" in exc_info.value.detail
     assert "lib32z1" in exc_info.value.detail
 
 
@@ -188,7 +188,7 @@ def test_manual_setup_script_contains_retry_architecture_and_runtime_guards():
     assert "Acquire::Retries=3" in script
     assert "amd64|x86_64) ;;" in script
     assert "libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1" in script
-    assert "必需依赖验证失败" in script
+    assert "Required dependency verification failed" in script
     template = (
         Path(__file__).resolve().parents[1] / "templates" / "server_setup_wizard.html"
     ).read_text()
