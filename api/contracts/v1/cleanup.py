@@ -137,7 +137,7 @@ class InitializedHostView(V1Model):
 
 
 class InitializedHostCredentialsView(V1Model):
-    """Owner-only one-time reveal of a saved auto-setup host (Redis, 24h)."""
+    """Owner-only reveal of a saved initialized host credential."""
 
     key: str
     name: str
@@ -147,6 +147,12 @@ class InitializedHostCredentialsView(V1Model):
     ssh_password: str
     game_directory: str
     created_at: float
+
+
+class InitializedHostBatchDeleteRequest(ApiRequest):
+    """Delete a bounded batch of saved initialized hosts owned by the caller."""
+
+    ids: list[int] = Field(min_length=1, max_length=100)
 
 
 class AutoSetupRequest(ApiRequest):
@@ -246,6 +252,7 @@ __all__ = [
     "CleanupPolicyBody",
     "InitializedHostView",
     "InitializedHostCredentialsView",
+    "InitializedHostBatchDeleteRequest",
     "AutoSetupRequest",
     "AutoSetupResultView",
     "ManualSetupScriptView",

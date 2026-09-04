@@ -50,6 +50,33 @@ export type MarketPluginPage = {
   readonly offset: number;
 };
 
+export type MarketPluginCreateInput = {
+  readonly githubUrl: string;
+  readonly title?: string | null;
+  readonly description?: string | null;
+  readonly author?: string | null;
+  readonly version?: string | null;
+  readonly category: PluginCategory;
+  readonly tags?: string | null;
+  readonly isRecommended?: boolean;
+  readonly iconUrl?: string | null;
+  readonly dependencyIds?: readonly number[];
+  readonly customInstallPath?: string | null;
+};
+
+export type GitHubRepoInfo = {
+  readonly success: boolean;
+  readonly repoName: string | null;
+  readonly description: string | null;
+  readonly author: string | null;
+  readonly error: string | null;
+};
+
+export type PluginDependencyOptions = {
+  readonly id: number;
+  readonly title: string;
+};
+
 export type MarketQuery = {
   readonly q?: string;
   readonly category?: string;

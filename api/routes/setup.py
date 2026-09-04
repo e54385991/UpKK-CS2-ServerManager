@@ -14,10 +14,22 @@ from modules import (
     authenticate_websocket,
     get_current_time,
 )
+from modules.database import async_session_maker
 from services.captcha_policy import require_captcha
 
 # Kept as a compatibility alias for integrations that patch the legacy service directly.
 from services.captcha_service import captcha_service  # noqa: F401
+from services.initialized_server_service import (
+    InitializedServerAccessDenied,
+    InitializedServerRecord,
+    resolve_initialized_server,
+)
+from services.initialized_server_service import (
+    delete_initialized_server as delete_saved_initialized_server,
+)
+from services.initialized_server_service import (
+    list_initialized_servers as list_saved_initialized_servers,
+)
 from services.redis_manager import redis_manager
 
 from .setup_workflow import (
@@ -95,6 +107,51 @@ class RedisServerDetail(BaseModel):
     ssh_password: str
     game_directory: str
     created_at: float = Field(..., description="Unix timestamp")
+
+
+def _legacy_list_item(server: InitializedServerRecord) -> RedisServerListItem:
+    return RedisServerListItem(
+        key=server.key,
+        name=server.name,
+        host=server.host,
+        ssh_port=server.ssh_port,
+        ssh_user=server.ssh_user,
+        game_directory=server.game_directory,
+        created_at=server.created_at,
+    )
+
+
+def _legacy_detail(server: InitializedServerRecord) -> RedisServerDetail:
+    return RedisServerDetail(
+        user_id=server.user_id,
+        name=server.name,
+        host=server.host,
+        ssh_port=server.ssh_port,
+        ssh_user=server.ssh_user,
+        ssh_password=server.ssh_password,
+        game_directory=server.game_directory,
+        created_at=server.created_at,
+    )
+
+
+async def _resolve_legacy_compatible_server(
+    db, server_key: str, user_id: int
+) -> InitializedServerRecord:
+    try:
+        resolved = await resolve_initialized_server(
+            db, server_key, user_id, legacy_store=redis_manager
+        )
+    except InitializedServerAccessDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this server configuration",
+        ) from exc
+    if resolved is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Initialized server not found or already expired",
+        )
+    return resolved.record
 
 
 async def send_setup_progress(session_id: Optional[str], user_id: int, log_message: str):
@@ -256,53 +313,30 @@ async def auto_setup_server(
 @router.get("/initialized-servers", response_model=List[RedisServerListItem])
 async def list_initialized_servers(current_user: ActiveUser):
     """
-    List all initialized servers for the current user from Redis (without sensitive credentials)
+    List all initialized servers for the current user (without sensitive credentials).
 
     **Authentication Required**: User must be logged in.
-    Note: Data stored in Redis with 24-hour expiration.
+    Database records are durable; Redis records are read as a compatibility fallback.
     """
-    servers = await redis_manager.get_initialized_servers(current_user.id)
-
-    # Remove sensitive data from list response
-    safe_servers = []
-    for server in servers:
-        safe_server = RedisServerListItem(
-            key=server.get("key"),
-            name=server.get("name"),
-            host=server.get("host"),
-            ssh_port=server.get("ssh_port"),
-            ssh_user=server.get("ssh_user"),
-            game_directory=server.get("game_directory"),
-            created_at=server.get("created_at"),
+    async with async_session_maker() as db:
+        servers = await list_saved_initialized_servers(
+            db, current_user.id, legacy_store=redis_manager
         )
-        safe_servers.append(safe_server)
-
-    return safe_servers
+    return [_legacy_list_item(server) for server in servers]
 
 
 @router.delete("/initialized-servers/{server_key:path}")
 async def delete_initialized_server(server_key: str, current_user: ActiveUser):
     """
-    Delete an initialized server configuration from Redis
+    Delete an initialized server configuration from durable storage or Redis.
 
     **Authentication Required**: User must be logged in and own the server.
     """
-    # Verify ownership by checking if server belongs to user
-    server_data = await redis_manager.get_initialized_server(server_key)
-
-    if not server_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initialized server not found or already expired",
+    async with async_session_maker() as db:
+        await _resolve_legacy_compatible_server(db, server_key, current_user.id)
+        success = await delete_saved_initialized_server(
+            db, server_key, current_user.id, legacy_store=redis_manager
         )
-
-    if server_data.get("user_id") != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this server configuration",
-        )
-
-    success = await redis_manager.delete_initialized_server(current_user.id, server_key)
 
     if not success:
         raise HTTPException(
@@ -316,22 +350,10 @@ async def delete_initialized_server(server_key: str, current_user: ActiveUser):
 @router.get("/initialized-servers/{server_key:path}", response_model=RedisServerDetail)
 async def get_initialized_server(server_key: str, current_user: ActiveUser):
     """
-    Get a specific initialized server configuration from Redis (including credentials)
+    Get a specific initialized server configuration (including credentials).
 
     **Authentication Required**: User must be logged in and own the server.
     """
-    server_data = await redis_manager.get_initialized_server(server_key)
-
-    if not server_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Initialized server not found or expired (24-hour limit)",
-        )
-
-    if server_data.get("user_id") != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this server configuration",
-        )
-
-    return RedisServerDetail(**server_data)
+    async with async_session_maker() as db:
+        server = await _resolve_legacy_compatible_server(db, server_key, current_user.id)
+    return _legacy_detail(server)

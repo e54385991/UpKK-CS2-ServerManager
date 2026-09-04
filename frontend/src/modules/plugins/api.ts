@@ -2,9 +2,13 @@ import "server-only";
 import { apiFetch, type ApiResult } from "@/shared/api/server-fetch";
 import type {
   ActionResultDto,
+  GitHubRepoInfoRequestDto,
+  GitHubRepoInfoViewDto,
   ManagedPluginViewDto,
+  MarketPluginCreateRequestDto,
   MarketPluginPageDto,
   MarketPluginViewDto,
+  PluginDependencyOptionsDto,
   PluginCatalogExportDto,
   PluginCatalogImportResponseDto,
   PluginCategoryListDto,
@@ -29,15 +33,18 @@ const SERVER_STATUSES: readonly ServerStatus[] = [
 import type {
   ManagedPlugin,
   MarketPlugin,
+  MarketPluginCreateInput,
   MarketPluginPage,
   MarketQuery,
   GitHubArchive,
   GitHubInstallPlan,
   GitHubReleases,
+  GitHubRepoInfo,
   PluginCatalogBundle,
   PluginCatalogImportRequest,
   PluginCatalogImportSummary,
   PluginCategoryOption,
+  PluginDependencyOptions,
   PluginConflict,
   PluginInstallPlan,
   PluginRef,
@@ -95,7 +102,76 @@ export async function listPluginCategories(): Promise<
     "/api/v1/plugins/market/categories",
   );
   if (!result.ok) return result;
-  return { ok: true, data: result.data.items };
+  return { ok: true, data: result.data.items ?? [] };
+}
+
+export async function listPluginDependencyOptions(
+  search?: string,
+): Promise<ApiResult<PluginDependencyOptions[]>> {
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set("search", search.trim());
+  const query = params.toString();
+  const result = await apiFetch<PluginDependencyOptionsDto>(
+    `/api/v1/plugins/market/dependency-options${query ? `?${query}` : ""}`,
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: result.data.items ?? [] };
+}
+
+export async function fetchMarketRepoInfo(
+  githubUrl: string,
+): Promise<ApiResult<GitHubRepoInfo>> {
+  const body: GitHubRepoInfoRequestDto = { github_url: githubUrl };
+  const result = await apiFetch<GitHubRepoInfoViewDto>(
+    "/api/v1/plugins/market/repo-info",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: {
+      success: result.data.success,
+      repoName: result.data.repo_name ?? null,
+      description: result.data.description ?? null,
+      author: result.data.author ?? null,
+      error: result.data.error ?? null,
+    },
+  };
+}
+
+export async function createMarketPlugin(
+  input: MarketPluginCreateInput,
+): Promise<ApiResult<MarketPlugin>> {
+  const body: MarketPluginCreateRequestDto = {
+    github_url: input.githubUrl,
+    title: input.title ?? null,
+    description: input.description ?? null,
+    author: input.author ?? null,
+    version: input.version ?? null,
+    category: input.category,
+    tags: input.tags ?? null,
+    is_recommended: input.isRecommended ?? false,
+    icon_url: input.iconUrl ?? null,
+    dependencies:
+      input.dependencyIds && input.dependencyIds.length > 0
+        ? input.dependencyIds.join(",")
+        : null,
+    custom_install_path: input.customInstallPath ?? null,
+  };
+  const result = await apiFetch<MarketPluginViewDto>(
+    "/api/v1/plugins/market",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: toMarketPlugin(result.data) };
 }
 
 export async function getMarketPlugin(

@@ -6,13 +6,16 @@ import type { ActionResultDto } from "@/shared/api/types";
 import type { ApiResult } from "@/shared/api/server-fetch";
 import {
   analyzeGitHubArchive,
+  createMarketPlugin,
   deleteMarketPlugin,
   exportPluginCatalog,
+  fetchMarketRepoInfo,
   getPluginInstallPlan,
   importPluginCatalog,
   installGitHubPlugin,
   installMarketPlugin,
   listGitHubReleases,
+  listPluginDependencyOptions,
   listServerPlugins,
   planGitHubPluginInstall,
   uninstallGitHubPlugin,
@@ -21,10 +24,14 @@ import {
 import type {
   GitHubArchive,
   GitHubInstallPlan,
+  GitHubRepoInfo,
+  MarketPlugin,
+  MarketPluginCreateInput,
   GitHubReleases,
   PluginCatalogBundle,
   PluginCatalogImportRequest,
   PluginCatalogImportSummary,
+  PluginDependencyOptions,
   PluginInstallPlan,
 } from "@/modules/plugins/types";
 import type { ServerOperation } from "@/modules/servers/types";
@@ -63,6 +70,38 @@ export async function exportPluginCatalogAction(): Promise<
   ApiResult<PluginCatalogBundle>
 > {
   return exportPluginCatalog();
+}
+
+export async function listPluginDependencyOptionsAction(
+  search?: string,
+): Promise<ApiResult<PluginDependencyOptions[]>> {
+  const session = await getSession();
+  if (!session?.isAdmin) {
+    return { ok: false, status: 403, error: "Not enough permissions" };
+  }
+  return listPluginDependencyOptions(search);
+}
+
+export async function fetchMarketRepoInfoAction(
+  githubUrl: string,
+): Promise<ApiResult<GitHubRepoInfo>> {
+  const session = await getSession();
+  if (!session?.isAdmin) {
+    return { ok: false, status: 403, error: "Not enough permissions" };
+  }
+  return fetchMarketRepoInfo(githubUrl);
+}
+
+export async function createMarketPluginAction(
+  input: MarketPluginCreateInput,
+): Promise<ApiResult<MarketPlugin>> {
+  const session = await getSession();
+  if (!session?.isAdmin) {
+    return { ok: false, status: 403, error: "Not enough permissions" };
+  }
+  const result = await createMarketPlugin(input);
+  if (result.ok) revalidatePath("/plugins");
+  return result;
 }
 
 export async function listServerMarketPluginIdsAction(

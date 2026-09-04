@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlmodel import select
 
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession, require_server_access
+from api.routes import plugin_market as legacy
 from modules import ManagedPlugin, MarketPlugin, PluginCategory
+from modules.schemas.plugins import MarketPluginCreate, MarketPluginResponse
 from services.audit_log_service import record_audit_event
+from services.github_credentials import get_effective_github_token
 from services.plugin_catalog import delete_market_plugin as remove_catalog_plugin
 from services.plugin_conflict_service import (
     PluginPlanError,
@@ -24,17 +28,22 @@ from .operation_runner import enqueue_github_plugin_uninstall, enqueue_plugin_in
 from .operations import to_view
 from .schemas import (
     ActionResult,
+    GitHubRepoInfoRequest,
+    GitHubRepoInfoView,
     GitHubUninstallRequest,
     ManagedPluginView,
+    MarketPluginCreateRequest,
     MarketPluginView,
     Page,
     PluginCategoryList,
     PluginCategoryView,
     PluginConflictView,
+    PluginDependencyOptionsView,
     PluginInstallPlanView,
     PluginInstallRequest,
     PluginInstallStep,
     PluginRef,
+    ProblemDetail,
     ServerOperationView,
 )
 
@@ -53,7 +62,9 @@ def _to_plugin_ref(plugin: MarketPlugin) -> PluginRef:
     return PluginRef(id=int(plugin.id), title=plugin.title)
 
 
-async def _dependency_refs(db, plugins: list[MarketPlugin]) -> list[list[PluginRef]]:
+async def _dependency_refs(
+    db, plugins: Sequence[MarketPlugin | MarketPluginResponse]
+) -> list[list[PluginRef]]:
     parsed: list[list[int] | None] = []
     all_ids: list[int] = []
     for plugin in plugins:
@@ -81,7 +92,9 @@ async def _dependency_refs(db, plugins: list[MarketPlugin]) -> list[list[PluginR
     return refs
 
 
-def to_market_view(plugin: MarketPlugin, dependencies: list[PluginRef]) -> MarketPluginView:
+def to_market_view(
+    plugin: MarketPlugin | MarketPluginResponse, dependencies: list[PluginRef]
+) -> MarketPluginView:
     return MarketPluginView(
         id=int(plugin.id),
         title=plugin.title,
@@ -218,6 +231,93 @@ async def list_market_categories(current_user: ActiveUser) -> PluginCategoryList
             for item in PluginCategory
         ]
     )
+
+
+@market_router.get(
+    "/market/dependency-options",
+    response_model=PluginDependencyOptionsView,
+    responses={403: {"model": ProblemDetail}},
+)
+async def list_market_dependency_options(
+    db: DatabaseSession,
+    current_user: AdminUser,
+    search: str | None = Query(default=None, max_length=200),
+    exclude_id: int | None = Query(default=None, ge=1),
+) -> PluginDependencyOptionsView:
+    """Return the minimal admin-only dependency picker options."""
+    plugins, _ = await MarketPlugin.search_plugins(
+        db,
+        search_query=search.strip() if search and search.strip() else None,
+        skip=0,
+        limit=100,
+    )
+    return PluginDependencyOptionsView(
+        items=[
+            _to_plugin_ref(plugin)
+            for plugin in plugins
+            if exclude_id is None or plugin.id != exclude_id
+        ]
+    )
+
+
+@market_router.post(
+    "/market/repo-info",
+    response_model=GitHubRepoInfoView,
+    responses={403: {"model": ProblemDetail}},
+)
+async def fetch_market_repo_info(
+    body: GitHubRepoInfoRequest,
+    db: DatabaseSession,
+    current_user: AdminUser,
+) -> GitHubRepoInfoView:
+    """Fetch non-secret GitHub metadata for the admin create form."""
+    github_token = await get_effective_github_token(db, current_user)
+    await db.commit()
+    result = await legacy.fetch_github_repo_info(body.github_url, github_token=github_token)
+    return GitHubRepoInfoView(
+        success=bool(result.success),
+        repo_name=result.repo_name,
+        description=result.description,
+        author=result.author,
+        error=result.error,
+    )
+
+
+@market_router.post(
+    "/market",
+    response_model=MarketPluginView,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        403: {"model": ProblemDetail},
+        409: {"model": ProblemDetail},
+    },
+)
+async def create_market_plugin(
+    body: MarketPluginCreateRequest,
+    db: DatabaseSession,
+    current_user: AdminUser,
+    request: Request,
+) -> MarketPluginView:
+    """Create a marketplace listing through the existing validated workflow."""
+    created = await legacy.create_plugin(
+        MarketPluginCreate(**body.model_dump()),
+        db,
+        current_user,
+    )
+    dependencies = (await _dependency_refs(db, [created]))[0]
+    await record_audit_event(
+        category="plugin",
+        action="plugin.catalog.create",
+        status="success",
+        user=current_user,
+        request=request,
+        details={
+            "plugin_id": created.id,
+            "title": created.title,
+            "github_url": created.github_url,
+        },
+    )
+    return to_market_view(created, dependencies)
 
 
 @market_router.get("/market/{plugin_id}", response_model=MarketPluginView)

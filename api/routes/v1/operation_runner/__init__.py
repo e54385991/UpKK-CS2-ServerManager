@@ -12,6 +12,7 @@ from .diagnostics import *  # noqa: F401,F403
 from .downloads import *  # noqa: F401,F403
 from .game_mode import *  # noqa: F401,F403
 from .host import *  # noqa: F401,F403
+from .initialized_hosts import *  # noqa: F401,F403
 from .maintenance import *  # noqa: F401,F403
 from .maintenance import enqueue_plugin_auto_update
 from .market import *  # noqa: F401,F403

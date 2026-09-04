@@ -45,7 +45,10 @@ export function getActivityTraySnapshot(): Snapshot {
 
 export function trackQueuedOperation(
   operation: ServerOperation,
-  extras?: { readonly serverName?: string; readonly latestMessage?: string | null },
+  extras?: {
+    readonly serverName?: string;
+    readonly latestMessage?: string | null;
+  },
 ) {
   const item: ActivityOverlay = {
     ...operation,

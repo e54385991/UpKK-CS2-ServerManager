@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules import SSHServerSudo, User
+from services.initialized_server_service import save_initialized_server
 from services.redis_manager import redis_manager
 from services.ssh.text import decode_remote_text
 from services.system_dependencies import (
@@ -59,7 +60,7 @@ class ServerSetupResponse(BaseModel):
     cs2_password: str
     game_directory: str
     logs: list[str]
-    initialized_server_id: Optional[str] = None  # Redis key of saved server if save_config is True
+    initialized_server_id: Optional[str] = None  # Durable ID of saved server if save_config is True
     session_id: Optional[str] = None  # Session ID for WebSocket progress updates (if requested)
 
 
@@ -509,26 +510,40 @@ async def _persist_setup_configuration(
 
     if not context.request.save_config:
         return initialized_server_id
+    server_data = {
+        "user_id": current_user.id,
+        "name": context.request.name,
+        "host": context.request.host,
+        "ssh_port": context.request.ssh_port,
+        "ssh_user": context.request.cs2_username,
+        "ssh_password": context.cs2_password,
+        "game_directory": context.game_directory,
+        "created_at": time.time(),
+    }
     try:
-        await context.add_log("保存服务器配置到 Redis...")
-        server_data = {
-            "user_id": current_user.id,
-            "name": context.request.name,
-            "host": context.request.host,
-            "ssh_port": context.request.ssh_port,
-            "ssh_user": context.request.cs2_username,
-            "ssh_password": context.cs2_password,
-            "game_directory": context.game_directory,
-            "created_at": time.time(),
-        }
-        initialized_server_id = await redis_manager.set_initialized_server(
-            current_user.id, server_data
+        await context.add_log("正在将服务器配置保存到数据库...")
+        initialized_server_id = await save_initialized_server(
+            db,
+            user_id=current_user.id,
+            name=context.request.name,
+            host=context.request.host,
+            ssh_port=context.request.ssh_port,
+            ssh_user=context.request.cs2_username,
+            ssh_password=context.cs2_password,
+            game_directory=context.game_directory,
         )
-        await context.add_log(
-            f"✓ 服务器配置已保存到 Redis (用户: {context.request.cs2_username}, 24小时有效期)"
-        )
+        await context.add_log(f"✓ 服务器配置已长期保存 (用户: {context.request.cs2_username})")
     except Exception as exc:
-        await context.add_log(f"⚠ 保存配置失败: {exc}")
+        await context.add_log(f"⚠ 保存到数据库失败，尝试 Redis 兼容存储: {exc}")
+        try:
+            initialized_server_id = await redis_manager.set_initialized_server(
+                current_user.id, server_data
+            )
+            await context.add_log(
+                f"⚠ 已保存到 Redis 兼容存储 (用户: {context.request.cs2_username}, 旧数据最多保留 30 天)"
+            )
+        except Exception as fallback_exc:
+            await context.add_log(f"⚠ 保存配置失败: {fallback_exc}")
     return initialized_server_id
 
 

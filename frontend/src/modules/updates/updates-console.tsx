@@ -598,6 +598,7 @@ function PluginExcludeEditor({
           <Switch
             id={`plugin-${plugin.id}`}
             label={t("auto")}
+            description={t("autoHint")}
             checked={plugin.autoUpdateEnabled}
             disabled={pending === `plugin-${plugin.id}`}
             onCheckedChange={onToggle}
@@ -605,6 +606,7 @@ function PluginExcludeEditor({
           <Switch
             id={`backup-${plugin.id}`}
             label={t("backup")}
+            description={t("backupHint")}
             checked={plugin.backupBeforeUpdate}
             disabled={pending === `backup-${plugin.id}`}
             onCheckedChange={(next) => void toggleBackup(next)}
@@ -612,6 +614,7 @@ function PluginExcludeEditor({
           <Switch
             id={`restart-${plugin.id}`}
             label={t("restart")}
+            description={t("restartHint")}
             checked={plugin.restartAfterUpdate}
             disabled={pending === `restart-${plugin.id}`}
             onCheckedChange={(next) => void toggleRestart(next)}

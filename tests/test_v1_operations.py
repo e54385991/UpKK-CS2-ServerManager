@@ -127,6 +127,7 @@ def test_v1_operation_action_literals_match_legacy_allow_list():
         "plugin_diagnostic_restore",
         "plugin_diagnostic_resume",
         "send_game_command",
+        "test_initialized_ssh",
     }
 
 

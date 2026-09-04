@@ -10258,6 +10258,81 @@
         "title": "GitHubRepoInfo",
         "type": "object"
       },
+      "GitHubRepoInfoRequest": {
+        "additionalProperties": false,
+        "description": "Request for administrator-only GitHub metadata auto-fill.",
+        "properties": {
+          "github_url": {
+            "maxLength": 500,
+            "title": "Github Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "github_url"
+        ],
+        "title": "GitHubRepoInfoRequest",
+        "type": "object"
+      },
+      "GitHubRepoInfoView": {
+        "additionalProperties": false,
+        "description": "Non-secret GitHub repository metadata returned by the auto-fill helper.",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "repo_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Name"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "GitHubRepoInfoView",
+        "type": "object"
+      },
       "GitHubTokenStatusResponse": {
         "description": "Schema for GitHub token status response",
         "properties": {
@@ -10708,9 +10783,29 @@
         "title": "HostSystemInfoView",
         "type": "object"
       },
+      "InitializedHostBatchDeleteRequest": {
+        "additionalProperties": false,
+        "description": "Delete a bounded batch of saved initialized hosts owned by the caller.",
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "InitializedHostBatchDeleteRequest",
+        "type": "object"
+      },
       "InitializedHostCredentialsView": {
         "additionalProperties": false,
-        "description": "Owner-only one-time reveal of a saved auto-setup host (Redis, 24h).",
+        "description": "Owner-only reveal of a saved initialized host credential.",
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -10756,6 +10851,200 @@
           "created_at"
         ],
         "title": "InitializedHostCredentialsView",
+        "type": "object"
+      },
+      "InitializedHostDeployRequest": {
+        "additionalProperties": false,
+        "description": "Create a new server record from a saved host and queue its deployment.",
+        "properties": {
+          "captcha_code": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
+          },
+          "captcha_token": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "game_port": {
+            "default": 27015,
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Game Port",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "server_name": {
+            "default": "CS2 Server",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Server Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "InitializedHostDeployRequest",
+        "type": "object"
+      },
+      "InitializedHostDeployView": {
+        "additionalProperties": false,
+        "description": "The created game-server ID and its queued deployment.",
+        "properties": {
+          "initialized_server_id": {
+            "title": "Initialized Server Id",
+            "type": "integer"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/ServerOperationView"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "initialized_server_id",
+          "server_id",
+          "operation"
+        ],
+        "title": "InitializedHostDeployView",
+        "type": "object"
+      },
+      "InitializedHostOperationRequest": {
+        "additionalProperties": false,
+        "description": "Queue an operation for a saved host that is not a game-server record yet.",
+        "properties": {
+          "action": {
+            "const": "test_ssh",
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "InitializedHostOperationRequest",
+        "type": "object"
+      },
+      "InitializedHostOperationView": {
+        "additionalProperties": false,
+        "description": "Non-secret projection of a queued saved-host operation.",
+        "properties": {
+          "action": {
+            "const": "test_ssh",
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_user_id": {
+            "title": "Actor User Id",
+            "type": "integer"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "initialized_server_id": {
+            "title": "Initialized Server Id",
+            "type": "integer"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stream_url": {
+            "title": "Stream Url",
+            "type": "string"
+          },
+          "success": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success"
+          }
+        },
+        "required": [
+          "operation_id",
+          "initialized_server_id",
+          "action",
+          "status",
+          "started_at",
+          "actor_user_id",
+          "stream_url"
+        ],
+        "title": "InitializedHostOperationView",
         "type": "object"
       },
       "InitializedHostView": {
@@ -12617,6 +12906,137 @@
         "title": "MarketPluginCreate",
         "type": "object"
       },
+      "MarketPluginCreateRequest": {
+        "additionalProperties": false,
+        "description": "Strict administrator request for adding a marketplace listing.",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "category": {
+            "default": "other",
+            "enum": [
+              "game_mode",
+              "entertainment",
+              "utility",
+              "admin",
+              "performance",
+              "library",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "custom_install_path": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Install Path"
+          },
+          "dependencies": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependencies"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "github_url": {
+            "maxLength": 500,
+            "title": "Github Url",
+            "type": "string"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          },
+          "is_recommended": {
+            "default": false,
+            "title": "Is Recommended",
+            "type": "boolean"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "github_url"
+        ],
+        "title": "MarketPluginCreateRequest",
+        "type": "object"
+      },
       "MarketPluginListResponse": {
         "description": "Schema for market plugin list response with pagination",
         "properties": {
@@ -13126,7 +13546,8 @@
               "plugin_diagnostic_execute",
               "plugin_diagnostic_restore",
               "plugin_diagnostic_resume",
-              "send_game_command"
+              "send_game_command",
+              "test_initialized_ssh"
             ],
             "title": "Action",
             "type": "string"
@@ -14645,6 +15066,21 @@
         "title": "PluginConflictView",
         "type": "object"
       },
+      "PluginDependencyOptionsView": {
+        "additionalProperties": false,
+        "description": "Minimal marketplace rows used by the administrator dependency picker.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PluginRef"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "PluginDependencyOptionsView",
+        "type": "object"
+      },
       "PluginDiagnosticExecuteBody": {
         "additionalProperties": false,
         "properties": {
@@ -15582,6 +16018,42 @@
           "plugin_update_check_interval_hours"
         ],
         "title": "PluginUpdatesView",
+        "type": "object"
+      },
+      "ProblemDetail": {
+        "additionalProperties": false,
+        "description": "RFC 9457-style error body used by the versioned API.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "status"
+        ],
+        "title": "ProblemDetail",
         "type": "object"
       },
       "ProfileApiKeyGenerate": {
@@ -19689,7 +20161,8 @@
               "plugin_diagnostic_execute",
               "plugin_diagnostic_restore",
               "plugin_diagnostic_resume",
-              "send_game_command"
+              "send_game_command",
+              "test_initialized_ssh"
             ],
             "title": "Action",
             "type": "string"
@@ -29310,7 +29783,7 @@
     },
     "/api/setup/initialized-servers": {
       "get": {
-        "description": "List all initialized servers for the current user from Redis (without sensitive credentials)\n\n**Authentication Required**: User must be logged in.\nNote: Data stored in Redis with 24-hour expiration.",
+        "description": "List all initialized servers for the current user (without sensitive credentials).\n\n**Authentication Required**: User must be logged in.\nDatabase records are durable; Redis records are read as a compatibility fallback.",
         "operationId": "list_initialized_servers_api_setup_initialized_servers_get",
         "responses": {
           "200": {
@@ -29341,7 +29814,7 @@
     },
     "/api/setup/initialized-servers/{server_key}": {
       "delete": {
-        "description": "Delete an initialized server configuration from Redis\n\n**Authentication Required**: User must be logged in and own the server.",
+        "description": "Delete an initialized server configuration from durable storage or Redis.\n\n**Authentication Required**: User must be logged in and own the server.",
         "operationId": "delete_initialized_server_api_setup_initialized_servers__server_key__delete",
         "parameters": [
           {
@@ -29385,7 +29858,7 @@
         ]
       },
       "get": {
-        "description": "Get a specific initialized server configuration from Redis (including credentials)\n\n**Authentication Required**: User must be logged in and own the server.",
+        "description": "Get a specific initialized server configuration (including credentials).\n\n**Authentication Required**: User must be logged in and own the server.",
         "operationId": "get_initialized_server_api_setup_initialized_servers__server_key__get",
         "parameters": [
           {
@@ -31593,6 +32066,71 @@
         "tags": [
           "v1-plugins"
         ]
+      },
+      "post": {
+        "description": "Create a marketplace listing through the existing validated workflow.",
+        "operationId": "create_market_plugin_api_v1_plugins_market_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketPluginCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketPluginView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Market Plugin",
+        "tags": [
+          "v1-plugins"
+        ]
       }
     },
     "/api/v1/plugins/market/categories": {
@@ -31617,6 +32155,146 @@
           }
         ],
         "summary": "List Market Categories",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/dependency-options": {
+      "get": {
+        "description": "Return the minimal admin-only dependency picker options.",
+        "operationId": "list_market_dependency_options_api_v1_plugins_market_dependency_options_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Exclude Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDependencyOptionsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Market Dependency Options",
+        "tags": [
+          "v1-plugins"
+        ]
+      }
+    },
+    "/api/v1/plugins/market/repo-info": {
+      "post": {
+        "description": "Fetch non-secret GitHub metadata for the admin create form.",
+        "operationId": "fetch_market_repo_info_api_v1_plugins_market_repo_info_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubRepoInfoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubRepoInfoView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Fetch Market Repo Info",
         "tags": [
           "v1-plugins"
         ]
@@ -39370,6 +40048,344 @@
           }
         ],
         "summary": "List Initialized Hosts",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/initialized-servers/batch-delete": {
+      "post": {
+        "operationId": "batch_delete_initialized_hosts_api_v1_setup_initialized_servers_batch_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitializedHostBatchDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Batch Delete Initialized Hosts",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/deploy": {
+      "post": {
+        "operationId": "deploy_from_initialized_host_api_v1_setup_initialized_servers__initialized_server_id__deploy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initialized_server_id",
+            "required": true,
+            "schema": {
+              "title": "Initialized Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitializedHostDeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitializedHostDeployView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Deploy From Initialized Host",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations": {
+      "post": {
+        "operationId": "start_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initialized_server_id",
+            "required": true,
+            "schema": {
+              "title": "Initialized Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitializedHostOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitializedHostOperationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Start Initialized Host Operation",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/current": {
+      "get": {
+        "operationId": "get_current_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations_current_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initialized_server_id",
+            "required": true,
+            "schema": {
+              "title": "Initialized Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InitializedHostOperationView"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Current Initialized Host Operation Api V1 Setup Initialized Servers  Initialized Server Id  Operations Current Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Current Initialized Host Operation",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}": {
+      "get": {
+        "operationId": "get_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initialized_server_id",
+            "required": true,
+            "schema": {
+              "title": "Initialized Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitializedHostOperationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Initialized Host Operation",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}/events": {
+      "get": {
+        "operationId": "stream_initialized_host_operation_events_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initialized_server_id",
+            "required": true,
+            "schema": {
+              "title": "Initialized Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stream Initialized Host Operation Events",
         "tags": [
           "v1-setup"
         ]

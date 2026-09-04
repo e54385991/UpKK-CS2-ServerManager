@@ -665,6 +665,8 @@ async def create_plugin(
 
     if not title or not description:
         github_token = await get_effective_github_token(db, current_user)
+        # Release any read transaction before the external GitHub requests.
+        await db.commit()
         repo_info = await fetch_github_repo_info(request.github_url, github_token=github_token)
         if repo_info.success:
             if not title and repo_info.repo_name:

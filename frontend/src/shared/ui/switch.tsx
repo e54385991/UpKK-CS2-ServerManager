@@ -6,20 +6,24 @@ export function Switch({
   disabled,
   id,
   label,
+  description,
 }: {
   checked: boolean;
   onCheckedChange: (next: boolean) => void;
   disabled?: boolean;
   id: string;
   label: string;
+  description?: string;
 }) {
+  const accessibleLabel = description ? `${label}: ${description}` : label;
   return (
     <button
       id={id}
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-label={label}
+      aria-label={accessibleLabel}
+      title={description}
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(

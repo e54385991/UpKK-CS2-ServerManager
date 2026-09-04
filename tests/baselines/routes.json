@@ -2324,6 +2324,30 @@
     "methods": [
       "GET"
     ],
+    "name": "list_market_dependency_options",
+    "path": "/api/v1/plugins/market/dependency-options"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "fetch_market_repo_info",
+    "path": "/api/v1/plugins/market/repo-info"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "create_market_plugin",
+    "path": "/api/v1/plugins/market"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "get_market_plugin",
     "path": "/api/v1/plugins/market/{plugin_id}"
   },
@@ -3178,6 +3202,54 @@
     ],
     "name": "list_initialized_hosts",
     "path": "/api/v1/setup/initialized-servers"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "batch_delete_initialized_hosts",
+    "path": "/api/v1/setup/initialized-servers/batch-delete"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "start_initialized_host_operation",
+    "path": "/api/v1/setup/initialized-servers/{initialized_server_id}/operations"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_current_initialized_host_operation",
+    "path": "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/current"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "get_initialized_host_operation",
+    "path": "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
+    "name": "stream_initialized_host_operation_events",
+    "path": "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}/events"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "deploy_from_initialized_host",
+    "path": "/api/v1/setup/initialized-servers/{initialized_server_id}/deploy"
   },
   {
     "kind": "APIRoute",

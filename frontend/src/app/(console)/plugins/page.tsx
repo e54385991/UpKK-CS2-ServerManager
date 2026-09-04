@@ -5,6 +5,7 @@ import { requireSession } from "@/modules/auth/session";
 import { PluginCatalogButton } from "@/modules/plugins/catalog-button";
 import { GitHubInstallButton } from "@/modules/plugins/github-install-button";
 import { MarketFilters } from "@/modules/plugins/market-filters";
+import { MarketPluginCreateButton } from "@/modules/plugins/market-create-button";
 import {
   MarketCatalog,
   MarketCatalogSkeleton,
@@ -67,6 +68,7 @@ export default async function PluginsPage({
               }
               defaultServerId={Number.isInteger(serverId) ? serverId : null}
             />
+            {session.isAdmin ? <MarketPluginCreateButton /> : null}
             <PluginCatalogButton canImport={session.isAdmin} />
             <MarketFilters />
           </>

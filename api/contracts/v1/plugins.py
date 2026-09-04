@@ -17,6 +17,72 @@ class PluginRef(V1Model):
     title: str
 
 
+_GITHUB_REPOSITORY_PATTERN = re.compile(
+    r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/.*)?$",
+    re.IGNORECASE,
+)
+
+
+def _canonical_github_repository(value: str) -> str:
+    text = value.strip().rstrip("/")
+    match = _GITHUB_REPOSITORY_PATTERN.fullmatch(text)
+    if match is None:
+        raise ValueError("github_url must be a GitHub repository URL")
+    owner, repository = match.groups()
+    return f"https://github.com/{owner}/{repository.removesuffix('.git')}"
+
+
+class MarketPluginCreateRequest(ApiRequest):
+    """Strict administrator request for adding a marketplace listing."""
+
+    github_url: str = Field(..., max_length=500)
+    title: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    author: str | None = Field(default=None, max_length=255)
+    version: str | None = Field(default=None, max_length=50)
+    category: Literal[
+        "game_mode",
+        "entertainment",
+        "utility",
+        "admin",
+        "performance",
+        "library",
+        "other",
+    ] = "other"
+    tags: str | None = Field(default=None, max_length=1000)
+    is_recommended: bool = False
+    icon_url: str | None = Field(default=None, max_length=500)
+    dependencies: str | None = Field(default=None, max_length=1000)
+    custom_install_path: str | None = Field(default=None, max_length=255)
+
+    @field_validator("github_url")
+    @classmethod
+    def validate_github_url(cls, value: str) -> str:
+        return _canonical_github_repository(value)
+
+    @field_validator("dependencies")
+    @classmethod
+    def validate_dependency_ids(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parts = [item.strip() for item in value.split(",") if item.strip()]
+        if any(not item.isdigit() or int(item) <= 0 for item in parts):
+            raise ValueError("dependencies must contain positive plugin IDs")
+        unique = list(dict.fromkeys(parts))
+        return ",".join(unique) or None
+
+
+class GitHubRepoInfoRequest(ApiRequest):
+    """Request for administrator-only GitHub metadata auto-fill."""
+
+    github_url: str = Field(..., max_length=500)
+
+    @field_validator("github_url")
+    @classmethod
+    def validate_github_url(cls, value: str) -> str:
+        return _canonical_github_repository(value)
+
+
 class MarketPluginView(V1Model):
     """Non-secret marketplace listing. GitHub URLs are public repository links."""
 
@@ -42,6 +108,22 @@ class PluginCategoryView(V1Model):
 
 class PluginCategoryList(V1Model):
     items: list[PluginCategoryView]
+
+
+class PluginDependencyOptionsView(V1Model):
+    """Minimal marketplace rows used by the administrator dependency picker."""
+
+    items: list[PluginRef] = Field(default_factory=list)
+
+
+class GitHubRepoInfoView(V1Model):
+    """Non-secret GitHub repository metadata returned by the auto-fill helper."""
+
+    success: bool
+    repo_name: str | None = None
+    description: str | None = None
+    author: str | None = None
+    error: str | None = None
 
 
 class ManagedPluginView(V1Model):
@@ -403,9 +485,13 @@ class PluginCatalogImportRequest(ApiRequest):
 
 __all__ = [
     "PluginRef",
+    "MarketPluginCreateRequest",
+    "GitHubRepoInfoRequest",
     "MarketPluginView",
     "PluginCategoryView",
     "PluginCategoryList",
+    "PluginDependencyOptionsView",
+    "GitHubRepoInfoView",
     "ManagedPluginView",
     "ManagedPluginUpdateView",
     "PluginConflictView",

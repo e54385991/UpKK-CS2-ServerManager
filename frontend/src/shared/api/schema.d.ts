@@ -1934,10 +1934,10 @@ export interface paths {
         };
         /**
          * List Initialized Servers
-         * @description List all initialized servers for the current user from Redis (without sensitive credentials)
+         * @description List all initialized servers for the current user (without sensitive credentials).
          *
          *     **Authentication Required**: User must be logged in.
-         *     Note: Data stored in Redis with 24-hour expiration.
+         *     Database records are durable; Redis records are read as a compatibility fallback.
          */
         get: operations["list_initialized_servers_api_setup_initialized_servers_get"];
         put?: never;
@@ -1957,7 +1957,7 @@ export interface paths {
         };
         /**
          * Get Initialized Server
-         * @description Get a specific initialized server configuration from Redis (including credentials)
+         * @description Get a specific initialized server configuration (including credentials).
          *
          *     **Authentication Required**: User must be logged in and own the server.
          */
@@ -1966,7 +1966,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Initialized Server
-         * @description Delete an initialized server configuration from Redis
+         * @description Delete an initialized server configuration from durable storage or Redis.
          *
          *     **Authentication Required**: User must be logged in and own the server.
          */
@@ -2714,7 +2714,11 @@ export interface paths {
          */
         get: operations["list_market_plugins_api_v1_plugins_market_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Market Plugin
+         * @description Create a marketplace listing through the existing validated workflow.
+         */
+        post: operations["create_market_plugin_api_v1_plugins_market_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2735,6 +2739,46 @@ export interface paths {
         get: operations["list_market_categories_api_v1_plugins_market_categories_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/dependency-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Market Dependency Options
+         * @description Return the minimal admin-only dependency picker options.
+         */
+        get: operations["list_market_dependency_options_api_v1_plugins_market_dependency_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/market/repo-info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch Market Repo Info
+         * @description Fetch non-secret GitHub metadata for the admin create form.
+         */
+        post: operations["fetch_market_repo_info_api_v1_plugins_market_repo_info_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4915,6 +4959,108 @@ export interface paths {
         };
         /** List Initialized Hosts */
         get: operations["list_initialized_hosts_api_v1_setup_initialized_servers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/initialized-servers/batch-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch Delete Initialized Hosts */
+        post: operations["batch_delete_initialized_hosts_api_v1_setup_initialized_servers_batch_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/deploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deploy From Initialized Host */
+        post: operations["deploy_from_initialized_host_api_v1_setup_initialized_servers__initialized_server_id__deploy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Initialized Host Operation */
+        post: operations["start_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Current Initialized Host Operation */
+        get: operations["get_current_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Initialized Host Operation */
+        get: operations["get_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Initialized Host Operation Events */
+        get: operations["stream_initialized_host_operation_events_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10472,6 +10618,30 @@ export interface components {
             success: boolean;
         };
         /**
+         * GitHubRepoInfoRequest
+         * @description Request for administrator-only GitHub metadata auto-fill.
+         */
+        GitHubRepoInfoRequest: {
+            /** Github Url */
+            github_url: string;
+        };
+        /**
+         * GitHubRepoInfoView
+         * @description Non-secret GitHub repository metadata returned by the auto-fill helper.
+         */
+        GitHubRepoInfoView: {
+            /** Author */
+            author?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Repo Name */
+            repo_name?: string | null;
+            /** Success */
+            success: boolean;
+        };
+        /**
          * GitHubTokenStatusResponse
          * @description Schema for GitHub token status response
          */
@@ -10648,8 +10818,16 @@ export interface components {
             system_type?: string | null;
         };
         /**
+         * InitializedHostBatchDeleteRequest
+         * @description Delete a bounded batch of saved initialized hosts owned by the caller.
+         */
+        InitializedHostBatchDeleteRequest: {
+            /** Ids */
+            ids: number[];
+        };
+        /**
          * InitializedHostCredentialsView
-         * @description Owner-only one-time reveal of a saved auto-setup host (Redis, 24h).
+         * @description Owner-only reveal of a saved initialized host credential.
          */
         InitializedHostCredentialsView: {
             /** Created At */
@@ -10668,6 +10846,87 @@ export interface components {
             ssh_port: number;
             /** Ssh User */
             ssh_user: string;
+        };
+        /**
+         * InitializedHostDeployRequest
+         * @description Create a new server record from a saved host and queue its deployment.
+         */
+        InitializedHostDeployRequest: {
+            /** Captcha Code */
+            captcha_code?: string | null;
+            /** Captcha Token */
+            captcha_token?: string | null;
+            /**
+             * Game Port
+             * @default 27015
+             */
+            game_port: number;
+            /** Name */
+            name: string;
+            /**
+             * Server Name
+             * @default CS2 Server
+             */
+            server_name: string;
+        };
+        /**
+         * InitializedHostDeployView
+         * @description The created game-server ID and its queued deployment.
+         */
+        InitializedHostDeployView: {
+            /** Initialized Server Id */
+            initialized_server_id: number;
+            operation: components["schemas"]["ServerOperationView"];
+            /** Server Id */
+            server_id: number;
+        };
+        /**
+         * InitializedHostOperationRequest
+         * @description Queue an operation for a saved host that is not a game-server record yet.
+         */
+        InitializedHostOperationRequest: {
+            /**
+             * Action
+             * @constant
+             */
+            action: "test_ssh";
+        };
+        /**
+         * InitializedHostOperationView
+         * @description Non-secret projection of a queued saved-host operation.
+         */
+        InitializedHostOperationView: {
+            /**
+             * Action
+             * @constant
+             */
+            action: "test_ssh";
+            /** Actor User Id */
+            actor_user_id: number;
+            /** Command */
+            command?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Initialized Server Id */
+            initialized_server_id: number;
+            /** Message */
+            message?: string | null;
+            /** Operation Id */
+            operation_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "failed";
+            /** Stream Url */
+            stream_url: string;
+            /** Success */
+            success?: boolean | null;
         };
         /**
          * InitializedHostView
@@ -11315,6 +11574,41 @@ export interface components {
             version?: string | null;
         };
         /**
+         * MarketPluginCreateRequest
+         * @description Strict administrator request for adding a marketplace listing.
+         */
+        MarketPluginCreateRequest: {
+            /** Author */
+            author?: string | null;
+            /**
+             * Category
+             * @default other
+             * @enum {string}
+             */
+            category: "game_mode" | "entertainment" | "utility" | "admin" | "performance" | "library" | "other";
+            /** Custom Install Path */
+            custom_install_path?: string | null;
+            /** Dependencies */
+            dependencies?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Github Url */
+            github_url: string;
+            /** Icon Url */
+            icon_url?: string | null;
+            /**
+             * Is Recommended
+             * @default false
+             */
+            is_recommended: boolean;
+            /** Tags */
+            tags?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Version */
+            version?: string | null;
+        };
+        /**
          * MarketPluginListResponse
          * @description Schema for market plugin list response with pagination
          */
@@ -11460,7 +11754,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command" | "test_initialized_ssh";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -12080,6 +12374,14 @@ export interface components {
             /** Severity */
             severity: string;
         };
+        /**
+         * PluginDependencyOptionsView
+         * @description Minimal marketplace rows used by the administrator dependency picker.
+         */
+        PluginDependencyOptionsView: {
+            /** Items */
+            items?: components["schemas"]["PluginRef"][];
+        };
         /** PluginDiagnosticExecuteBody */
         PluginDiagnosticExecuteBody: {
             /** Expected Plan Hash */
@@ -12459,6 +12761,23 @@ export interface components {
             plugin_update_check_interval_hours: number;
             /** Plugins */
             plugins?: components["schemas"]["ManagedPluginUpdateView"][];
+        };
+        /**
+         * ProblemDetail
+         * @description RFC 9457-style error body used by the versioned API.
+         */
+        ProblemDetail: {
+            /** Detail */
+            detail?: string | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @default about:blank
+             */
+            type: string;
         };
         /**
          * ProfileApiKeyGenerate
@@ -14182,7 +14501,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command" | "test_initialized_ssh";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -20323,6 +20642,57 @@ export interface operations {
             };
         };
     };
+    create_market_plugin_api_v1_plugins_market_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketPluginCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPluginView"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_market_categories_api_v1_plugins_market_categories_get: {
         parameters: {
             query?: never;
@@ -20339,6 +20709,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PluginCategoryList"];
+                };
+            };
+        };
+    };
+    list_market_dependency_options_api_v1_plugins_market_dependency_options_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                exclude_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginDependencyOptionsView"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fetch_market_repo_info_api_v1_plugins_market_repo_info_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitHubRepoInfoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubRepoInfoView"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -25087,6 +25540,206 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InitializedHostView"][];
+                };
+            };
+        };
+    };
+    batch_delete_initialized_hosts_api_v1_setup_initialized_servers_batch_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitializedHostBatchDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deploy_from_initialized_host_api_v1_setup_initialized_servers__initialized_server_id__deploy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                initialized_server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitializedHostDeployRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitializedHostDeployView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                initialized_server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitializedHostOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitializedHostOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                initialized_server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitializedHostOperationView"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                initialized_server_id: number;
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitializedHostOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_initialized_host_operation_events_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__events_get: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                initialized_server_id: number;
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

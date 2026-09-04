@@ -112,7 +112,9 @@ async def create_plugin(
             detail=f"Invalid category. Must be one of: {', '.join([c.value for c in PluginCategory])}",
         ) from None
 
-    new_plugin = Plugin(**plugin.model_dump(), category=plugin_category)
+    plugin_values = plugin.model_dump()
+    plugin_values["category"] = plugin_category
+    new_plugin = Plugin(**plugin_values)
 
     db.add(new_plugin)
     await db.commit()

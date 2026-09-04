@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from api.application import create_app
@@ -164,6 +165,162 @@ def test_v1_plugins_market_list_and_categories(monkeypatch):
     values = {item["value"] for item in categories.json()["items"]}
     assert "game_mode" in values
     assert "utility" in values
+
+
+def test_v1_plugins_market_create_requires_authentication():
+    client = TestClient(create_app(lifespan=None))
+    response = client.post("/api/v1/plugins/market", json={})
+    assert response.status_code == 401
+
+
+def test_v1_plugins_market_create_is_admin_only(monkeypatch):
+    client, _user = _client(monkeypatch=monkeypatch)
+    response = client.post(
+        "/api/v1/plugins/market",
+        json={
+            "github_url": "https://github.com/example/plugin",
+            "title": "Plugin",
+            "category": "utility",
+        },
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not enough permissions"
+
+
+def test_v1_plugins_market_create_admin_returns_presented_plugin_and_audits(monkeypatch):
+    client, user = _client(monkeypatch=monkeypatch)
+    user.is_admin = True
+    created = _sample_market(
+        id=21,
+        title="Admin Plugin",
+        github_url="https://github.com/example/plugin",
+        dependencies="12",
+    )
+    create = AsyncMock(return_value=created)
+    dependency_refs = AsyncMock(return_value=[[{"id": 12, "title": "Base plugin"}]])
+    audit = AsyncMock()
+    monkeypatch.setattr("api.routes.v1.plugins.legacy.create_plugin", create)
+    monkeypatch.setattr("api.routes.v1.plugins._dependency_refs", dependency_refs)
+    monkeypatch.setattr("api.routes.v1.plugins.record_audit_event", audit)
+
+    response = client.post(
+        "/api/v1/plugins/market",
+        json={
+            "github_url": "https://github.com/example/plugin.git/",
+            "title": "Admin Plugin",
+            "description": "A plugin",
+            "category": "utility",
+            "dependencies": "12,12",
+            "is_recommended": True,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["id"] == 21
+    assert response.json()["dependencies"] == [{"id": 12, "title": "Base plugin"}]
+    create.assert_awaited_once()
+    assert create.await_args.args[0].github_url == "https://github.com/example/plugin"
+    audit.assert_awaited_once()
+    assert audit.await_args.kwargs["action"] == "plugin.catalog.create"
+    assert audit.await_args.kwargs["details"]["plugin_id"] == 21
+
+
+def test_v1_plugins_market_create_rejects_invalid_fields(monkeypatch):
+    client, user = _client(monkeypatch=monkeypatch)
+    user.is_admin = True
+    invalid_url = client.post(
+        "/api/v1/plugins/market",
+        json={
+            "github_url": "https://gitlab.com/example/plugin",
+            "title": "Plugin",
+            "category": "utility",
+        },
+    )
+    invalid_category = client.post(
+        "/api/v1/plugins/market",
+        json={
+            "github_url": "https://github.com/example/plugin",
+            "title": "Plugin",
+            "category": "not-a-category",
+        },
+    )
+    invalid_dependencies = client.post(
+        "/api/v1/plugins/market",
+        json={
+            "github_url": "https://github.com/example/plugin",
+            "title": "Plugin",
+            "category": "utility",
+            "dependencies": "1,nope",
+        },
+    )
+    assert invalid_url.status_code == 422
+    assert invalid_category.status_code == 422
+    assert invalid_dependencies.status_code == 422
+
+
+def test_v1_plugins_market_create_preserves_duplicate_conflict(monkeypatch):
+    client, user = _client(monkeypatch=monkeypatch)
+    user.is_admin = True
+    monkeypatch.setattr(
+        "api.routes.v1.plugins.legacy.create_plugin",
+        AsyncMock(
+            side_effect=HTTPException(
+                status_code=409,
+                detail="Plugin with this GitHub URL already exists",
+            )
+        ),
+    )
+    response = client.post(
+        "/api/v1/plugins/market",
+        json={
+            "github_url": "https://github.com/example/plugin",
+            "title": "Plugin",
+            "category": "utility",
+        },
+    )
+    assert response.status_code == 409
+
+
+def test_v1_plugins_market_repo_info_is_admin_only_and_maps_metadata(monkeypatch):
+    client, user = _client(monkeypatch=monkeypatch)
+    user.is_admin = True
+    token = AsyncMock(return_value="github-token")
+    fetch = AsyncMock(
+        return_value=SimpleNamespace(
+            success=True,
+            repo_name="Plugin",
+            description="Repository description",
+            author="example",
+            error=None,
+        )
+    )
+    monkeypatch.setattr("api.routes.v1.plugins.get_effective_github_token", token)
+    monkeypatch.setattr("api.routes.v1.plugins.legacy.fetch_github_repo_info", fetch)
+    response = client.post(
+        "/api/v1/plugins/market/repo-info",
+        json={"github_url": "https://github.com/example/plugin/"},
+    )
+    assert response.status_code == 200
+    assert response.json()["repo_name"] == "Plugin"
+    assert response.json()["author"] == "example"
+    token.assert_awaited_once()
+    fetch.assert_awaited_once_with("https://github.com/example/plugin", github_token="github-token")
+
+
+def test_v1_plugins_market_dependency_options_exclude_and_search(monkeypatch):
+    client, user = _client(monkeypatch=monkeypatch)
+    user.is_admin = True
+    search = AsyncMock(
+        return_value=(
+            [_sample_market(id=12, title="Base"), _sample_market(id=13, title="Other")],
+            2,
+        )
+    )
+    monkeypatch.setattr("api.routes.v1.plugins.MarketPlugin.search_plugins", search)
+    response = client.get("/api/v1/plugins/market/dependency-options?search=base&exclude_id=12")
+    assert response.status_code == 200
+    assert response.json()["items"] == [{"id": 13, "title": "Other"}]
+    assert search.await_args.kwargs["search_query"] == "base"
 
 
 def test_v1_plugins_market_rejects_unknown_category(monkeypatch):

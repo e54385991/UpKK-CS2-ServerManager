@@ -38,6 +38,7 @@ import {
   operationEventsUrl,
   parseOperationEvent,
 } from "@/modules/servers/operation-events";
+import { initializedHostOperationEventsUrl } from "@/modules/servers/initialized-host-operation-events";
 import {
   OPERATION_INBOX_LOCK,
   subscribeVisibleEventSource,
@@ -73,14 +74,16 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
   useEffect(() => {
     let cancelled = false;
     const after = { current: "0" };
-    void loadOperationJournalFromBrowser(item.serverId, item.operationId).then(
-      (result) => {
-        if (!cancelled && result.ok) {
-          setEvents(mergeOperationEvents([], result.data.events));
-          after.current = lastEventSequence(result.data.events);
-        }
-      },
-    );
+    if (item.serverId > 0) {
+      void loadOperationJournalFromBrowser(item.serverId, item.operationId).then(
+        (result) => {
+          if (!cancelled && result.ok) {
+            setEvents(mergeOperationEvents([], result.data.events));
+            after.current = lastEventSequence(result.data.events);
+          }
+        },
+      );
+    }
     const ingest = (raw: string) => {
       const event = parseOperationEvent(raw);
       if (!event) return;
@@ -95,7 +98,14 @@ function ActivityConsole({ item }: { item: OperationInboxItem }) {
       }
     };
     const stop = subscribeVisibleEventSource({
-      url: () => operationEventsUrl(item.serverId, item.operationId, after.current),
+      url: () =>
+        item.serverId < 0
+          ? initializedHostOperationEventsUrl(
+              -item.serverId,
+              item.operationId,
+              after.current,
+            )
+          : operationEventsUrl(item.serverId, item.operationId, after.current),
       eventTypes: ["progress", "operation_completed", "operation_failed"],
       shouldReconnect: () => isActiveOperation(itemRef.current),
       onData: ingest,
@@ -475,12 +485,14 @@ export function ActivityTray() {
                 </div>
                 <ActivityConsole key={selected.operationId} item={selected} />
                 <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/servers/${selected.serverId}/operations` as Route}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    {t("activityOpenOperations")}
-                  </Link>
+                  {selected.serverId > 0 ? (
+                    <Link
+                      href={`/servers/${selected.serverId}/operations` as Route}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      {t("activityOpenOperations")}
+                    </Link>
+                  ) : null}
                   {isDeployProgressVisible({ operation: selected }) ? (
                     <OpenLiveTerminalButton
                       serverId={selected.serverId}

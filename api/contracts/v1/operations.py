@@ -64,6 +64,7 @@ ServerOperationAction = Literal[
     "plugin_diagnostic_restore",
     "plugin_diagnostic_resume",
     "send_game_command",
+    "test_initialized_ssh",
 ]
 ServerOperationStatus = Literal["queued", "running", "completed", "failed"]
 
@@ -138,6 +139,46 @@ class ServerOperationView(V1Model):
     command: str | None = None
 
 
+class InitializedHostOperationRequest(ApiRequest):
+    """Queue an operation for a saved host that is not a game-server record yet."""
+
+    action: Literal["test_ssh"]
+
+
+class InitializedHostDeployRequest(ApiRequest):
+    """Create a new server record from a saved host and queue its deployment."""
+
+    name: str = Field(min_length=1, max_length=255)
+    game_port: int = Field(default=27015, ge=1, le=65535)
+    server_name: str = Field(default="CS2 Server", min_length=1, max_length=255)
+    captcha_token: str | None = Field(default=None, min_length=1)
+    captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
+
+
+class InitializedHostOperationView(V1Model):
+    """Non-secret projection of a queued saved-host operation."""
+
+    operation_id: str
+    initialized_server_id: int
+    action: Literal["test_ssh"]
+    status: ServerOperationStatus
+    success: bool | None = None
+    message: str | None = None
+    started_at: datetime
+    completed_at: datetime | None = None
+    actor_user_id: int
+    stream_url: str
+    command: str | None = None
+
+
+class InitializedHostDeployView(V1Model):
+    """The created game-server ID and its queued deployment."""
+
+    initialized_server_id: int
+    server_id: int
+    operation: ServerOperationView
+
+
 class OperationJournalEvent(V1Model):
     """One persisted operation log line for JSON replay (SSE fallback)."""
 
@@ -200,6 +241,10 @@ __all__ = [
     "AptMirrorApplyRequest",
     "ServerOperationRequest",
     "ServerOperationView",
+    "InitializedHostOperationRequest",
+    "InitializedHostOperationView",
+    "InitializedHostDeployRequest",
+    "InitializedHostDeployView",
     "OperationJournalEvent",
     "OperationJournal",
     "CurrentServerOperation",

@@ -19,6 +19,7 @@ from .cleanup import (
     CleanupDeleteBody,
     CleanupPolicyBody,
     CleanupSystemApplyBody,
+    InitializedHostBatchDeleteRequest,
     PluginDiagnosticExecuteBody,
     PluginDiagnosticPlanBody,
 )
@@ -54,14 +55,22 @@ from .maps_files import (
     PluginConfigSaveRequest,
     PluginConfigSourceCreateRequest,
 )
-from .operations import AptMirrorApplyRequest, S3RestoreBody, ServerOperationRequest
+from .operations import (
+    AptMirrorApplyRequest,
+    InitializedHostDeployRequest,
+    InitializedHostOperationRequest,
+    S3RestoreBody,
+    ServerOperationRequest,
+)
 from .plugins import (
     BatchActionRequest,
     BatchInstallPluginsRequest,
     BatchSendCommandRequest,
     GitHubInstallPlanRequest,
     GitHubInstallRequest,
+    GitHubRepoInfoRequest,
     GitHubUninstallRequest,
+    MarketPluginCreateRequest,
     PluginCatalogImportRequest,
     PluginInstallRequest,
 )
@@ -99,6 +108,7 @@ __all__ = [
     "CleanupSystemApplyBody",
     "CleanupPolicyBody",
     "AutoSetupRequest",
+    "InitializedHostBatchDeleteRequest",
     "PluginDiagnosticPlanBody",
     "PluginDiagnosticExecuteBody",
     "GameModePreflightRequest",
@@ -133,7 +143,11 @@ __all__ = [
     "S3RestoreBody",
     "AptMirrorApplyRequest",
     "ServerOperationRequest",
+    "InitializedHostOperationRequest",
+    "InitializedHostDeployRequest",
     "PluginInstallRequest",
+    "MarketPluginCreateRequest",
+    "GitHubRepoInfoRequest",
     "PluginCatalogImportRequest",
     "GitHubInstallPlanRequest",
     "GitHubInstallRequest",

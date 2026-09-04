@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   Server,
+  ServerCog,
   Boxes,
   Bot,
   MessageCircle,
@@ -52,6 +53,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     items: [
       { href: "/overview", key: "overview", icon: LayoutDashboard },
       { href: "/servers", key: "servers", icon: Server },
+      { href: "/servers/initialized" as Route, key: "initializedServers", icon: ServerCog },
       { href: "/plugins", key: "plugins", icon: Boxes },
       { href: "/assistant", key: "assistant", icon: Bot },
     ],

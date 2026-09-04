@@ -204,6 +204,14 @@ test("server workspace two-row nav reaches named surfaces", async ({ page }) => 
       .getByText(/排除文件|Exclude files/)
       .or(page.getByText(/暂时无法加载自动更新|Unable to load auto-update/)),
   ).toBeVisible();
+  const itemSwitches = page.locator(
+    '[data-testid="plugin-exclude-fields"] button[role="switch"][title]',
+  );
+  if ((await itemSwitches.count()) >= 3) {
+    await expect(itemSwitches.first()).toHaveAttribute("title", /.+/);
+    await expect(itemSwitches.nth(1)).toHaveAttribute("title", /.+/);
+    await expect(itemSwitches.nth(2)).toHaveAttribute("title", /.+/);
+  }
   await expect(
     page
       .getByTestId("plugin-register-form")
@@ -474,6 +482,20 @@ test("admin fleet toggle stays on the servers list", async ({ page }) => {
 test("plugin catalog dialog opens without importing", async ({ page }) => {
   await page.goto("/plugins");
   await expect(page.getByRole("heading", { name: /插件中心|Plugins/ })).toBeVisible();
+  await expect(page.getByTestId("market-create-open")).toBeVisible();
+  await page.getByTestId("market-create-open").click();
+  const createDialog = page.getByRole("dialog");
+  await expect(createDialog).toBeVisible();
+  await expect(
+    createDialog.getByRole("heading", { name: /添加市场插件|Add marketplace plugin/ }),
+  ).toBeVisible();
+  await expect(createDialog.getByLabel(/GitHub 地址|GitHub URL/)).toBeVisible();
+  await expect(
+    createDialog.getByLabel(/搜索依赖插件|Search dependency plugins/),
+  ).toBeVisible();
+  await expect(createDialog.getByTestId("market-create-dependencies")).toBeVisible();
+  await expect(createDialog.getByTestId("market-create-autofill")).toBeVisible();
+  await closeDialog(page);
   await expect(
     page.getByRole("button", { name: /从 GitHub 安装|Install from GitHub/ }),
   ).toBeVisible();
