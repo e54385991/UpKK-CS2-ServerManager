@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
+import { navPathMatches } from "@/shared/config/navigation";
 
 /**
  * Sidebar navigation link. Uses the default `<Link>` prefetch so the shared App
@@ -15,13 +16,15 @@ export function NavLink({
   href,
   label,
   icon: Icon,
+  active: activeOverride,
 }: {
   href: Route;
   label: string;
   icon: LucideIcon;
+  active?: boolean;
 }) {
   const pathname = usePathname();
-  const active = pathname === href || pathname.startsWith(`${href}/`);
+  const active = activeOverride ?? navPathMatches(pathname, href);
 
   return (
     <Link

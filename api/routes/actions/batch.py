@@ -216,10 +216,10 @@ async def batch_send_command(
     http_request: Request,
 ):
     """
-    Send a command to multiple game servers asynchronously (non-blocking).
+    Queue a command for multiple game servers asynchronously (non-blocking).
 
-    This endpoint sends the specified command to all selected game servers.
-    Commands are sent via each server's configured detached session.
+    Each server command is placed on that server's task queue before it is
+    sent via the configured detached session.
 
     Use the batch_id returned to check progress via GET /servers/batch-actions/{batch_id}
 
@@ -259,6 +259,7 @@ async def batch_send_command(
                 lambda server_id=server_id: execute_single_server_command(
                     server_id, request.command, current_user.id, current_user.is_admin, batch_id
                 ),
+                acquire_lock=False,
             )
         )
         _store_task(task)

@@ -11,12 +11,18 @@ from modules.models.servers import ServerStatus
 from modules.utils import get_current_time
 from services.a2s_cache_service import a2s_cache_service
 from services.disk_space_service import disk_space_service
+from services.host_system_info_service import (
+    HostSystemInfoData,
+    host_system_info_service,
+)
 
 from .schemas import (
     A2SCacheListView,
     A2SCacheView,
     DiskSpaceListView,
     DiskSpaceView,
+    HostSystemInfoListView,
+    HostSystemInfoView,
     OverviewSummary,
     SteamLatestVersionView,
 )
@@ -57,6 +63,27 @@ def _disk_view(server_id: int, info: dict | None) -> DiskSpaceView:
         total_gb=info.get("total_gb"),
         available_gb=info.get("available_gb"),
         used_percent=info.get("used_percent"),
+    )
+
+
+def _host_system_info_view(server_id: int, info: HostSystemInfoData | None) -> HostSystemInfoView:
+    if info is None:
+        return HostSystemInfoView(server_id=server_id)
+    return HostSystemInfoView(
+        server_id=server_id,
+        cached=info["cached"],
+        success=info["success"],
+        system_type=info["system_type"],
+        architecture=info["architecture"],
+        cpu_model=info["cpu_model"],
+        cpu_cores=info["cpu_cores"],
+        kernel_version=info["kernel_version"],
+        distribution=info["distribution"],
+        distribution_version=info["distribution_version"],
+        distribution_pretty_name=info["distribution_pretty_name"],
+        memory_total_bytes=info["memory_total_bytes"],
+        memory_available_bytes=info["memory_available_bytes"],
+        collected_at=_parse_steam_timestamp(info["collected_at"]),
     )
 
 
@@ -139,6 +166,37 @@ async def read_overview_disk_space(
         )
         views.append(_disk_view(int(server.id), info if isinstance(info, dict) else None))
     return DiskSpaceListView(servers=views, timestamp=get_current_time())
+
+
+@router.get("/host-system-info", response_model=HostSystemInfoListView)
+async def read_overview_host_system_info(
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    scope: Literal["mine", "all"] = Query(default="mine"),
+    force_refresh: bool = Query(default=False),
+) -> HostSystemInfoListView:
+    """Return low-frequency Linux host snapshots, refreshing only stale entries."""
+    if scope == "all":
+        if not current_user.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+            )
+        servers = await Server.get_all(db, skip=0, limit=1000)
+    else:
+        servers = await Server.get_all_by_user(db, current_user.id, skip=0, limit=1000)
+
+    views = [
+        _host_system_info_view(
+            int(server.id),
+            await host_system_info_service.get_host_system_info(
+                server,
+                force_refresh=force_refresh,
+            ),
+        )
+        for server in servers
+    ]
+    return HostSystemInfoListView(servers=views, timestamp=get_current_time())
 
 
 @router.get("/a2s-cache", response_model=A2SCacheListView)

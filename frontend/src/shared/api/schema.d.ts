@@ -2597,6 +2597,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/overview/host-system-info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Overview Host System Info
+         * @description Return low-frequency Linux host snapshots, refreshing only stale entries.
+         */
+        get: operations["read_overview_host_system_info_api_v1_overview_host_system_info_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/overview/steam-version": {
         parameters: {
             query?: never;
@@ -3055,7 +3075,7 @@ export interface paths {
         put?: never;
         /**
          * Start Batch Send Command
-         * @description Send one game command to owned servers via each host's detached session.
+         * @description Queue one game command per owned server and run it via its detached session.
          */
         post: operations["start_batch_send_command_api_v1_servers_batch_send_command_post"];
         delete?: never;
@@ -5389,10 +5409,10 @@ export interface paths {
         put?: never;
         /**
          * Batch Send Command
-         * @description Send a command to multiple game servers asynchronously (non-blocking).
+         * @description Queue a command for multiple game servers asynchronously (non-blocking).
          *
-         *     This endpoint sends the specified command to all selected game servers.
-         *     Commands are sent via each server's configured detached session.
+         *     Each server command is placed on that server's task queue before it is
+         *     sent via the configured detached session.
          *
          *     Use the batch_id returned to check progress via GET /servers/batch-actions/{batch_id}
          *
@@ -10537,6 +10557,56 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** HostSystemInfoListView */
+        HostSystemInfoListView: {
+            /** Servers */
+            servers?: components["schemas"]["HostSystemInfoView"][];
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+        };
+        /**
+         * HostSystemInfoView
+         * @description Low-frequency, non-secret Linux host snapshot for one server.
+         */
+        HostSystemInfoView: {
+            /** Architecture */
+            architecture?: string | null;
+            /**
+             * Cached
+             * @default false
+             */
+            cached: boolean;
+            /** Collected At */
+            collected_at?: string | null;
+            /** Cpu Cores */
+            cpu_cores?: number | null;
+            /** Cpu Model */
+            cpu_model?: string | null;
+            /** Distribution */
+            distribution?: string | null;
+            /** Distribution Pretty Name */
+            distribution_pretty_name?: string | null;
+            /** Distribution Version */
+            distribution_version?: string | null;
+            /** Kernel Version */
+            kernel_version?: string | null;
+            /** Memory Available Bytes */
+            memory_available_bytes?: number | null;
+            /** Memory Total Bytes */
+            memory_total_bytes?: number | null;
+            /** Server Id */
+            server_id: number;
+            /**
+             * Success
+             * @default false
+             */
+            success: boolean;
+            /** System Type */
+            system_type?: string | null;
+        };
         /**
          * InitializedHostCredentialsView
          * @description Owner-only one-time reveal of a saved auto-setup host (Redis, 24h).
@@ -11350,7 +11420,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -13963,7 +14033,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume";
+            action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins" | "install_plugin" | "install_github_plugin" | "uninstall_github_plugin" | "apply_apt_mirror" | "s3_restore" | "install_game_mode" | "extract_archive" | "download_url" | "cleanup_delete" | "cleanup_system" | "plugin_auto_update" | "plugin_auto_update_test" | "plugin_diagnostic_execute" | "plugin_diagnostic_restore" | "plugin_diagnostic_resume" | "send_game_command";
             /** Actor User Id */
             actor_user_id: number;
             /** Command */
@@ -19899,6 +19969,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiskSpaceListView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_overview_host_system_info_api_v1_overview_host_system_info_get: {
+        parameters: {
+            query?: {
+                scope?: "mine" | "all";
+                force_refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostSystemInfoListView"];
                 };
             };
             /** @description Validation Error */

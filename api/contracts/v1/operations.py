@@ -63,6 +63,7 @@ ServerOperationAction = Literal[
     "plugin_diagnostic_execute",
     "plugin_diagnostic_restore",
     "plugin_diagnostic_resume",
+    "send_game_command",
 ]
 ServerOperationStatus = Literal["queued", "running", "completed", "failed"]
 

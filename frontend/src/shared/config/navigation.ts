@@ -25,6 +25,22 @@ export type NavSection = {
   readonly items: readonly NavItem[];
 };
 
+export function navPathMatches(pathname: string, href: Route): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Return the most specific matching item so parent paths do not steal focus. */
+export function activeNavHref(
+  pathname: string,
+  items: readonly NavItem[],
+): Route | undefined {
+  return items.reduce<Route | undefined>((current, item) => {
+    if (!navPathMatches(pathname, item.href)) return current;
+    if (!current || item.href.length > current.length) return item.href;
+    return current;
+  }, undefined);
+}
+
 /**
  * Primary console navigation. Declarative so the sidebar, mobile drawer, and
  * command palette render from one source of truth; labels are resolved via i18n

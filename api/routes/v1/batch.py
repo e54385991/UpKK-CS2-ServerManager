@@ -241,7 +241,7 @@ async def start_batch_send_command(
     current_user: ActiveUser,
     http_request: Request,
 ) -> BatchActionView:
-    """Send one game command to owned servers via each host's detached session."""
+    """Queue one game command per owned server and run it via its detached session."""
     command = body.command
     return await _start_batch(
         db=db,
@@ -259,6 +259,7 @@ async def start_batch_send_command(
             )
         ),
         response_message="Sending command to {count} server(s) in background",
+        acquire_lock=False,
     )
 
 

@@ -168,7 +168,24 @@
     "fetchError": "Unable to load overview data right now ({status}).",
     "tutorialLink": "First deploy?",
     "tutorialHelp": "Illustrated walkthrough using Aliyun. Other clouds follow the same steps.",
-    "tutorialOpen": "Open the deployment tutorial"
+    "tutorialOpen": "Open the deployment tutorial",
+    "hostInfoTitle": "Linux host overview",
+    "hostInfoHint": "Cached per server and collected at most every 15 minutes; overview refreshes do not SSH frequently.",
+    "hostInfoEmpty": "No host information is available yet.",
+    "hostInfoUnknownServer": "Unknown server",
+    "hostInfoReady": "Collected",
+    "hostInfoUnavailable": "Unavailable",
+    "hostInfoUnavailableValue": "—",
+    "hostInfoSystem": "System",
+    "hostInfoDistribution": "Distribution",
+    "hostInfoKernel": "Kernel",
+    "hostInfoArchitecture": "Architecture",
+    "hostInfoCpu": "CPU model",
+    "hostInfoCpuCores": "CPU cores",
+    "hostInfoCores": "{count} cores",
+    "hostInfoMemoryTotal": "Total memory",
+    "hostInfoMemoryAvailable": "Available memory",
+    "hostInfoUpdated": "Collected {time}"
   },
   "servers": {
     "title": "Servers",
@@ -475,7 +492,8 @@
       "plugin_auto_update_test": "Plugin test update",
       "plugin_diagnostic_execute": "Plugin diagnostic",
       "plugin_diagnostic_restore": "Restore diagnostic snapshot",
-      "plugin_diagnostic_resume": "Resume plugin diagnostic"
+      "plugin_diagnostic_resume": "Resume plugin diagnostic",
+      "send_game_command": "Send game command"
     },
     "confirm": {
       "deploy": "Deploy CS2 to this host? SteamCMD can take a long time and will lock other actions.",

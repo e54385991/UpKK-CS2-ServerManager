@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, Crosshair } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { NAV_SECTIONS } from "@/shared/config/navigation";
+import { activeNavHref, NAV_SECTIONS } from "@/shared/config/navigation";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 
@@ -74,6 +74,7 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
               (item) => !item.adminOnly || isAdmin,
             );
             if (items.length === 0) return null;
+            const activeHref = activeNavHref(pathname, items);
             return (
               <div key={section.titleKey}>
                 <p className="px-3 pb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-fg-subtle">
@@ -81,9 +82,7 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
                 </p>
                 <div className="space-y-1">
                   {items.map((item) => {
-                    const active =
-                      pathname === item.href ||
-                      pathname.startsWith(`${item.href}/`);
+                    const active = item.href === activeHref;
                     return (
                       <Link
                         key={item.href}

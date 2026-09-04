@@ -202,9 +202,8 @@ async def _run_bounded_batch_operation(
 ):
     """Bound global fan-out. Lifecycle/plugin jobs join the per-server hub FIFO.
 
-    ``acquire_lock`` stays on for short game-console commands that do not go
-    through the hub. Hub-backed jobs must not hold the lock or the worker
-    cannot start.
+    Hub-backed jobs must not hold the maintenance lock while waiting for their
+    turn; the operation worker acquires it after the hub promotes the job.
     """
     try:
         async with _batch_operation_limiter.slot(user_id):
@@ -421,18 +420,9 @@ async def execute_single_server_plugins(
 async def execute_single_server_command(
     server_id: int, command: str, user_id: int, is_admin: bool, batch_id: str
 ):
-    """
-    Send a command to a single game server in the background.
-    This function is designed to run as a background task.
-
-    Args:
-        server_id: Server ID to send command to
-        command: Command to send to the game server
-        user_id: User ID who initiated the command
-        is_admin: Whether the user is an admin
-        batch_id: Batch ID for tracking progress
-    """
-    from modules.database import async_session_maker
+    """Enqueue one game-console command and mirror its result into the batch journal."""
+    from api.routes.v1.operation_runner import enqueue_game_console_command
+    from services.server_operation_hub import ServerOperationConflict, server_operation_hub
 
     try:
         await redis_manager.set_batch_action_status(
@@ -441,70 +431,39 @@ async def execute_single_server_command(
 
         async with async_session_maker() as db:
             server = await db.get(Server, server_id)
-
             if not server:
                 await redis_manager.set_batch_action_status(
                     batch_id, server_id, "failed", "Server not found"
                 )
                 return
-
-            # Verify ownership
             if not is_admin and server.user_id != user_id:
                 await redis_manager.set_batch_action_status(
                     batch_id, server_id, "failed", "Access denied"
                 )
                 return
 
-            # Connect to server via SSH
-            ssh_manager = SSHManager()
-            success, msg = await ssh_manager.connect(server)
+        await redis_manager.set_batch_action_status(
+            batch_id, server_id, "in_progress", "Queued on the server task list..."
+        )
+        try:
+            record = await enqueue_game_console_command(
+                server_id=server_id,
+                command=command,
+                actor_user_id=user_id,
+            )
+        except ServerOperationConflict as exc:
+            await redis_manager.set_batch_action_status(batch_id, server_id, "failed", str(exc))
+            return
 
-            if not success:
-                await redis_manager.set_batch_action_status(
-                    batch_id, server_id, "failed", f"SSH connection failed: {msg}"
-                )
-                return
-
-            try:
-                # Detect the configured manager first and the legacy manager
-                # second, so switching settings cannot orphan a running session.
-                name = session_name(server_id)
-                active_manager = await find_running_session_manager(
-                    ssh_manager.execute_command,
-                    server.session_manager,
-                    name,
-                )
-
-                if not active_manager:
-                    await redis_manager.set_batch_action_status(
-                        batch_id,
-                        server_id,
-                        "failed",
-                        "Game server is not running. Please start the server first.",
-                    )
-                    return
-
-                await redis_manager.set_batch_action_status(
-                    batch_id, server_id, "in_progress", f"Executing command: {command}"
-                )
-
-                input_cmd = send_keys_command(active_manager, name, command)
-                success, stdout, stderr = await ssh_manager.execute_command(input_cmd, timeout=10)
-
-                if success:
-                    await redis_manager.set_batch_action_status(
-                        batch_id, server_id, "success", f"Command sent successfully: {command}"
-                    )
-                else:
-                    await redis_manager.set_batch_action_status(
-                        batch_id,
-                        server_id,
-                        "failed",
-                        f"Failed to send command: {stderr or 'Unknown error'}",
-                    )
-
-            finally:
-                await ssh_manager.disconnect()
+        final = await server_operation_hub.wait_until_terminal(str(record["operation_id"]))
+        success = bool(final.get("success"))
+        message = str(final.get("message") or "")
+        await redis_manager.set_batch_action_status(
+            batch_id,
+            server_id,
+            "success" if success else "failed",
+            message,
+        )
 
     except Exception as e:
         logger.error(f"Error sending command to server {server_id}: {e}")

@@ -2460,6 +2460,14 @@
     "methods": [
       "GET"
     ],
+    "name": "read_overview_host_system_info",
+    "path": "/api/v1/overview/host-system-info"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "read_overview_a2s_cache",
     "path": "/api/v1/overview/a2s-cache"
   },

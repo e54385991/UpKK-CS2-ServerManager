@@ -6,6 +6,7 @@ import type {
   ServerWriteResultDto,
   ServerCreateResultDto,
   OverviewSummaryDto,
+  HostSystemInfoListViewDto,
   OperationJournalDto,
   OperationJournalEventDto,
   ServerOperationViewDto,
@@ -37,6 +38,7 @@ import type {
   BatchJournal,
   BatchPlugin,
   DiskSpace,
+  HostSystemInfo,
   ServerListScope,
   ServerOperation,
   ServerOperationAction,
@@ -462,6 +464,45 @@ export async function listDiskSpace(
       availableGb: item.available_gb ?? null,
       usedPercent: item.used_percent ?? null,
     })),
+  };
+}
+
+function toHostSystemInfo(
+  raw: NonNullable<HostSystemInfoListViewDto["servers"]>[number],
+): HostSystemInfo {
+  return {
+    serverId: raw.server_id,
+    cached: raw.cached,
+    success: raw.success,
+    systemType: raw.system_type ?? null,
+    architecture: raw.architecture ?? null,
+    cpuModel: raw.cpu_model ?? null,
+    cpuCores: raw.cpu_cores ?? null,
+    kernelVersion: raw.kernel_version ?? null,
+    distribution: raw.distribution ?? null,
+    distributionVersion: raw.distribution_version ?? null,
+    distributionPrettyName: raw.distribution_pretty_name ?? null,
+    memoryTotalBytes: raw.memory_total_bytes ?? null,
+    memoryAvailableBytes: raw.memory_available_bytes ?? null,
+    collectedAt: raw.collected_at ?? null,
+  };
+}
+
+export async function listOverviewHostSystemInfo(
+  scope: ServerListScope = "mine",
+  forceRefresh = false,
+): Promise<ApiResult<readonly HostSystemInfo[]>> {
+  const params = new URLSearchParams();
+  if (scope === "all") params.set("scope", "all");
+  if (forceRefresh) params.set("force_refresh", "true");
+  const query = params.toString();
+  const result = await apiFetch<HostSystemInfoListViewDto>(
+    `/api/v1/overview/host-system-info${query ? `?${query}` : ""}`,
+  );
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: (result.data.servers ?? []).map(toHostSystemInfo),
   };
 }
 

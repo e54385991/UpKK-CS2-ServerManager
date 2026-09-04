@@ -67,6 +67,23 @@ export type DiskSpace = {
   readonly usedPercent: number | null;
 };
 
+export type HostSystemInfo = {
+  readonly serverId: number;
+  readonly cached: boolean;
+  readonly success: boolean;
+  readonly systemType: string | null;
+  readonly architecture: string | null;
+  readonly cpuModel: string | null;
+  readonly cpuCores: number | null;
+  readonly kernelVersion: string | null;
+  readonly distribution: string | null;
+  readonly distributionVersion: string | null;
+  readonly distributionPrettyName: string | null;
+  readonly memoryTotalBytes: number | null;
+  readonly memoryAvailableBytes: number | null;
+  readonly collectedAt: string | null;
+};
+
 export type A2SServerInfo = {
   readonly serverName: string | null;
   readonly mapName: string | null;
@@ -226,6 +243,7 @@ export const SERVER_OPERATION_ACTIONS = [
   "plugin_diagnostic_execute",
   "plugin_diagnostic_restore",
   "plugin_diagnostic_resume",
+  "send_game_command",
 ] as const;
 
 export type ServerOperationAction = (typeof SERVER_OPERATION_ACTIONS)[number];
@@ -381,4 +399,3 @@ export const IMPORT_ACTION_TONE: Record<ServerConfigImportAction, Tone> = {
   skipped: "neutral",
   failed: "danger",
 };
-

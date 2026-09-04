@@ -10539,6 +10539,175 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "HostSystemInfoListView": {
+        "additionalProperties": false,
+        "properties": {
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/HostSystemInfoView"
+            },
+            "title": "Servers",
+            "type": "array"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timestamp"
+        ],
+        "title": "HostSystemInfoListView",
+        "type": "object"
+      },
+      "HostSystemInfoView": {
+        "additionalProperties": false,
+        "description": "Low-frequency, non-secret Linux host snapshot for one server.",
+        "properties": {
+          "architecture": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Architecture"
+          },
+          "cached": {
+            "default": false,
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "collected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collected At"
+          },
+          "cpu_cores": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpu Cores"
+          },
+          "cpu_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpu Model"
+          },
+          "distribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distribution"
+          },
+          "distribution_pretty_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distribution Pretty Name"
+          },
+          "distribution_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distribution Version"
+          },
+          "kernel_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kernel Version"
+          },
+          "memory_available_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Available Bytes"
+          },
+          "memory_total_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Total Bytes"
+          },
+          "server_id": {
+            "title": "Server Id",
+            "type": "integer"
+          },
+          "success": {
+            "default": false,
+            "title": "Success",
+            "type": "boolean"
+          },
+          "system_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Type"
+          }
+        },
+        "required": [
+          "server_id"
+        ],
+        "title": "HostSystemInfoView",
+        "type": "object"
+      },
       "InitializedHostCredentialsView": {
         "additionalProperties": false,
         "description": "Owner-only one-time reveal of a saved auto-setup host (Redis, 24h).",
@@ -12956,7 +13125,8 @@
               "plugin_auto_update_test",
               "plugin_diagnostic_execute",
               "plugin_diagnostic_restore",
-              "plugin_diagnostic_resume"
+              "plugin_diagnostic_resume",
+              "send_game_command"
             ],
             "title": "Action",
             "type": "string"
@@ -19207,7 +19377,8 @@
               "plugin_auto_update_test",
               "plugin_diagnostic_execute",
               "plugin_diagnostic_restore",
-              "plugin_diagnostic_resume"
+              "plugin_diagnostic_resume",
+              "send_game_command"
             ],
             "title": "Action",
             "type": "string"
@@ -30751,6 +30922,69 @@
         ]
       }
     },
+    "/api/v1/overview/host-system-info": {
+      "get": {
+        "description": "Return low-frequency Linux host snapshots, refreshing only stale entries.",
+        "operationId": "read_overview_host_system_info_api_v1_overview_host_system_info_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "mine",
+              "enum": [
+                "mine",
+                "all"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "force_refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostSystemInfoListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Read Overview Host System Info",
+        "tags": [
+          "v1-overview"
+        ]
+      }
+    },
     "/api/v1/overview/steam-version": {
       "get": {
         "description": "Return the Redis-cached Steam CS2 version. Does not call Steam or SSH.",
@@ -32077,7 +32311,7 @@
     },
     "/api/v1/servers/batch-send-command": {
       "post": {
-        "description": "Send one game command to owned servers via each host's detached session.",
+        "description": "Queue one game command per owned server and run it via its detached session.",
         "operationId": "start_batch_send_command_api_v1_servers_batch_send_command_post",
         "requestBody": {
           "content": {
@@ -39515,7 +39749,7 @@
     },
     "/servers/batch-send-command": {
       "post": {
-        "description": "Send a command to multiple game servers asynchronously (non-blocking).\n\nThis endpoint sends the specified command to all selected game servers.\nCommands are sent via each server's configured detached session.\n\nUse the batch_id returned to check progress via GET /servers/batch-actions/{batch_id}\n\nArgs:\n    request: BatchSendCommandRequest with server_ids and command\n\nReturns:\n    BatchActionResponse with batch_id for tracking progress",
+        "description": "Queue a command for multiple game servers asynchronously (non-blocking).\n\nEach server command is placed on that server's task queue before it is\nsent via the configured detached session.\n\nUse the batch_id returned to check progress via GET /servers/batch-actions/{batch_id}\n\nArgs:\n    request: BatchSendCommandRequest with server_ids and command\n\nReturns:\n    BatchActionResponse with batch_id for tracking progress",
         "operationId": "batch_send_command_servers_batch_send_command_post",
         "requestBody": {
           "content": {

@@ -5,11 +5,15 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.application import create_app
 from api.dependencies import get_bearer_or_cookie_user
+from api.routes.actions import common as action_common
+from api.routes.v1.operation_runner import server as server_runner
 from modules import get_current_active_user, get_current_user, get_db
+from services.server_operation_hub import server_operation_hub
 
 
 def _database_session():
@@ -128,3 +132,124 @@ def test_v1_batch_journal_returns_summary(monkeypatch):
     assert body["summary"]["total"] == 2
     assert body["summary"]["succeeded"] == 1
     assert body["summary"]["is_complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_batch_send_command_delegates_execution_to_server_queue(monkeypatch):
+    server = SimpleNamespace(id=1, user_id=1)
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return None
+
+        async def get(self, _model, server_id):
+            assert server_id == server.id
+            return server
+
+    status_updates = AsyncMock()
+    enqueue = AsyncMock(
+        return_value={"operation_id": "queued-command-1"},
+    )
+    wait_until_terminal = AsyncMock(
+        return_value={"success": True, "message": "Executed successfully"},
+    )
+    monkeypatch.setattr(action_common, "async_session_maker", lambda: Session())
+    monkeypatch.setattr(action_common.redis_manager, "set_batch_action_status", status_updates)
+    monkeypatch.setattr(
+        "api.routes.v1.operation_runner.enqueue_game_console_command",
+        enqueue,
+    )
+    monkeypatch.setattr(
+        server_operation_hub,
+        "wait_until_terminal",
+        wait_until_terminal,
+    )
+
+    await action_common.execute_single_server_command(
+        server.id,
+        "status",
+        user_id=server.user_id,
+        is_admin=False,
+        batch_id="batch-1",
+    )
+
+    enqueue.assert_awaited_once_with(
+        server_id=server.id,
+        command="status",
+        actor_user_id=server.user_id,
+    )
+    wait_until_terminal.assert_awaited_once_with("queued-command-1")
+    assert status_updates.await_count == 3
+    assert status_updates.await_args_list[-1].args == (
+        "batch-1",
+        server.id,
+        "success",
+        "Executed successfully",
+    )
+
+
+@pytest.mark.asyncio
+async def test_queued_game_console_command_runs_only_after_hub_dispatch(monkeypatch):
+    record = {
+        "operation_id": "queued-command-2",
+        "server_id": 1,
+        "actor_user_id": 1,
+    }
+    user = SimpleNamespace(id=1, is_active=True)
+    server = SimpleNamespace(id=1)
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return None
+
+        async def get(self, _model, user_id):
+            assert user_id == user.id
+            return user
+
+    class Lock:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return None
+
+    get_record = AsyncMock(return_value=record)
+    mark_running = AsyncMock()
+    emit = AsyncMock()
+    finish = AsyncMock()
+    execute = AsyncMock(return_value={"success": True, "message": "Command sent"})
+    monkeypatch.setattr(server_runner.server_operation_hub, "get", get_record)
+    monkeypatch.setattr(server_runner.server_operation_hub, "mark_running", mark_running)
+    monkeypatch.setattr(server_runner.server_operation_hub, "emit", emit)
+    monkeypatch.setattr(server_runner.server_operation_hub, "finish", finish)
+    monkeypatch.setattr(server_runner, "async_session_maker", lambda: Session())
+    monkeypatch.setattr(
+        server_runner,
+        "require_server_access",
+        AsyncMock(return_value=server),
+    )
+    monkeypatch.setattr(
+        server_runner.maintenance_lock_service,
+        "get",
+        lambda *_args, **_kwargs: Lock(),
+    )
+    monkeypatch.setattr(server_runner, "execute_custom_commands", execute)
+
+    await server_runner.run_game_console_command(
+        operation_id=record["operation_id"],
+        command="status",
+    )
+
+    mark_running.assert_awaited_once_with(record["operation_id"])
+    execute.assert_awaited_once_with(server, "game_process", "status")
+    finish.assert_awaited_once_with(
+        record["operation_id"],
+        success=True,
+        message="Command sent",
+    )

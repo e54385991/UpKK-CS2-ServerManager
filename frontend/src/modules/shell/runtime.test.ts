@@ -7,6 +7,7 @@ import {
   runtimeEnvironment,
   shortCommit,
 } from "./runtime.ts";
+import { activeNavHref, NAV_SECTIONS } from "../../shared/config/navigation.ts";
 
 test("runtimeEnvironment maps NODE_ENV", () => {
   assert.equal(runtimeEnvironment("production"), "production");
@@ -73,4 +74,14 @@ test("formatRuntimeLines keeps env first and fills missing backend versions", ()
       "FastAPI —",
     ],
   );
+});
+
+test("activeNavHref prefers the most specific matching path", () => {
+  const manageItems = NAV_SECTIONS[1].items;
+  assert.equal(activeNavHref("/settings/discord", manageItems), "/settings/discord");
+  assert.equal(
+    activeNavHref("/settings/discord/channels", manageItems),
+    "/settings/discord",
+  );
+  assert.equal(activeNavHref("/settings", manageItems), "/settings");
 });

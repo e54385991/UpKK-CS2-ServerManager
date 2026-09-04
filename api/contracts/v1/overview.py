@@ -47,6 +47,30 @@ class DiskSpaceListView(V1Model):
     timestamp: datetime
 
 
+class HostSystemInfoView(V1Model):
+    """Low-frequency, non-secret Linux host snapshot for one server."""
+
+    server_id: int
+    cached: bool = False
+    success: bool = False
+    system_type: str | None = None
+    architecture: str | None = None
+    cpu_model: str | None = None
+    cpu_cores: int | None = None
+    kernel_version: str | None = None
+    distribution: str | None = None
+    distribution_version: str | None = None
+    distribution_pretty_name: str | None = None
+    memory_total_bytes: int | None = None
+    memory_available_bytes: int | None = None
+    collected_at: datetime | None = None
+
+
+class HostSystemInfoListView(V1Model):
+    servers: list[HostSystemInfoView] = Field(default_factory=list)
+    timestamp: datetime
+
+
 class A2SCacheView(V1Model):
     """Cached A2S snapshot for one server. Default reads never query A2S or SSH."""
 
@@ -155,6 +179,8 @@ __all__ = [
     "SteamLatestVersionView",
     "DiskSpaceView",
     "DiskSpaceListView",
+    "HostSystemInfoView",
+    "HostSystemInfoListView",
     "A2SCacheView",
     "A2SCacheListView",
     "A2SServerInfoView",
