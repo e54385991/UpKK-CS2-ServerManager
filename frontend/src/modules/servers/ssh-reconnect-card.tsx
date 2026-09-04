@@ -17,7 +17,7 @@ import { ForceStopButton } from "@/modules/servers/force-stop-button";
 import { startServerOperationFromBrowser } from "@/modules/servers/operation-client";
 import { SshHealthBlock, type SshHealthFields } from "@/modules/servers/ssh-health-block";
 import {
-  CONFIRM_ACTIONS,
+  requiresOperationConfirmation,
   type ServerOperationAction,
 } from "@/modules/servers/types";
 import { confirm } from "@/shared/feedback";
@@ -94,7 +94,10 @@ export function SshReconnectCard({
 
   async function onQuickAction(action: (typeof QUICK_ACTIONS)[number]) {
     if (submitting || actionInFlight.current) return;
-    if (CONFIRM_ACTIONS.has(action) && !(await confirm(t(`confirm.${action}`)))) {
+    if (
+      requiresOperationConfirmation(action) &&
+      !(await confirm(t(`confirm.${action}`)))
+    ) {
       return;
     }
     actionInFlight.current = true;

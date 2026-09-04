@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight, RefreshCw, Save, Search, TriangleAlert } from "lucide-react";
 import { formatA2SDuration, paginateA2SLogs } from "@/modules/servers/a2s";
 import {
@@ -34,6 +34,7 @@ export function ServerA2SPanel({
   initialLogs: readonly MonitoringLog[];
 }) {
   const t = useTranslations("serverMonitoring");
+  const format = useFormatter();
   const router = useRouter();
   const [enableA2s, setEnableA2s] = useState(server.enableA2sMonitoring);
   const [queryHost, setQueryHost] = useState(server.a2sQueryHost ?? "");
@@ -264,7 +265,12 @@ export function ServerA2SPanel({
                   </li>
                   <li>
                     {t("lastQuery")}:{" "}
-                    {lastCheckAt ? new Date(lastCheckAt).toLocaleString() : t("neverQueried")}
+                    {lastCheckAt
+                      ? format.dateTime(new Date(lastCheckAt), {
+                          dateStyle: "medium",
+                          timeStyle: "medium",
+                        })
+                      : t("neverQueried")}
                   </li>
                   {snapshot.responseTimeMs != null ? (
                     <li>{t("responseTime")}: {t("ms", { ms: snapshot.responseTimeMs })}</li>
@@ -392,7 +398,10 @@ export function ServerA2SPanel({
                       <p className="text-xs text-fg-subtle">
                         {log.status}
                         {log.createdAt
-                          ? ` · ${new Date(log.createdAt).toLocaleString()}`
+                          ? ` · ${format.dateTime(new Date(log.createdAt), {
+                              dateStyle: "medium",
+                              timeStyle: "medium",
+                            })}`
                           : ""}
                       </p>
                     </li>

@@ -10,8 +10,6 @@ import { Dialog } from "@/shared/ui/dialog";
 import { Input, Label } from "@/shared/ui/input";
 
 type GoogleConfig = { clientId: string; enabled: boolean };
-type Translate = ReturnType<typeof useTranslations>;
-
 const TOKEN_MESSAGE = "google-oauth-token";
 
 export function GoogleLoginButton({ nextPath }: { nextPath: Route }) {
@@ -69,7 +67,10 @@ export function GoogleLoginButton({ nextPath }: { nextPath: Route }) {
           router.refresh();
           return;
         }
-        const detail = await extractDetail(response, t);
+        const detail = await extractDetail(
+          response,
+          t("googleFailed", { status: response.status }),
+        );
         if (
           response.status === 400 &&
           detail.includes("Username and password required")
@@ -277,7 +278,7 @@ function GoogleMark() {
 
 async function extractDetail(
   response: Response,
-  t: Translate,
+  fallback: string,
 ): Promise<string> {
   try {
     const data = (await response.json()) as { detail?: unknown };
@@ -285,5 +286,5 @@ async function extractDetail(
   } catch {
     // ignore
   }
-  return t("googleFailed", { status: response.status });
+  return fallback;
 }

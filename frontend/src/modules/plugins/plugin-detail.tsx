@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/ui/card";
-import { PLUGIN_CATEGORIES } from "@/modules/plugins/types";
+import { isPluginCategory } from "@/modules/plugins/types";
 
 export async function PluginDetail({
   pluginId,
@@ -43,9 +43,7 @@ export async function PluginDetail({
   }
 
   const plugin = pluginResult.data;
-  const categoryLabel = (PLUGIN_CATEGORIES as readonly string[]).includes(
-    plugin.category,
-  )
+  const categoryLabel = isPluginCategory(plugin.category)
     ? t(`categories.${plugin.category}`)
     : plugin.category;
 

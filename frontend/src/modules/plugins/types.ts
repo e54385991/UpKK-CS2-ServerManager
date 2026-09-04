@@ -10,6 +10,10 @@ export const PLUGIN_CATEGORIES = [
 
 export type PluginCategory = (typeof PLUGIN_CATEGORIES)[number];
 
+export function isPluginCategory(value: string): value is PluginCategory {
+  return (PLUGIN_CATEGORIES as readonly string[]).includes(value);
+}
+
 export type PluginRef = {
   readonly id: number;
   readonly title: string;

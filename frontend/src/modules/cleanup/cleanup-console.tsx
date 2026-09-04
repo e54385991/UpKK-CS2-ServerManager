@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import type { Route } from "next";
 import {
   applySystemCleanupAction,
@@ -110,6 +110,7 @@ export function CleanupConsole({
   initialPolicy: CleanupPolicy | null;
 }) {
   const t = useTranslations("cleanup");
+  const format = useFormatter();
   const [scan, setScan] = useState<CleanupScan | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [workshopConfirm, setWorkshopConfirm] = useState("");
@@ -189,6 +190,8 @@ export function CleanupConsole({
     setSelected([]);
     setScanProgress(t("scanning"));
     streamCancelRef.current = openCleanupEventSource(cleanupScanStreamUrl(serverId), {
+      streamFailedMessage: t("streamFailed"),
+      streamClosedMessage: t("streamClosed"),
       onPhase: (message) => {
         setScanProgress(message || t("scanning"));
       },
@@ -294,6 +297,8 @@ export function CleanupConsole({
     setSystemScan(null);
     setScanProgress(t("systemScanning"));
     streamCancelRef.current = openCleanupEventSource(cleanupSystemStreamUrl(serverId), {
+      streamFailedMessage: t("streamFailed"),
+      streamClosedMessage: t("streamClosed"),
       onPhase: (message) => {
         setScanProgress(message || t("systemScanning"));
       },
@@ -660,10 +665,20 @@ export function CleanupConsole({
         </ul>
         <p className="text-xs text-fg-subtle">
           {t("lastRun")}:{" "}
-          {policy?.lastRun ? new Date(policy.lastRun).toLocaleString() : t("neverRun")}
+          {policy?.lastRun
+            ? format.dateTime(new Date(policy.lastRun), {
+                dateStyle: "medium",
+                timeStyle: "medium",
+              })
+            : t("neverRun")}
           {" · "}
           {t("nextRun")}:{" "}
-          {policy?.nextRun ? new Date(policy.nextRun).toLocaleString() : "—"}
+          {policy?.nextRun
+            ? format.dateTime(new Date(policy.nextRun), {
+                dateStyle: "medium",
+                timeStyle: "medium",
+              })
+            : "—"}
         </p>
         {policy?.lastError ? (
           <p className="whitespace-pre-wrap text-xs text-warn">{policy.lastError}</p>

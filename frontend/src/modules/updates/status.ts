@@ -28,8 +28,11 @@ export function pluginRunIsBusy(state: string | null | undefined): boolean {
   return state === "running";
 }
 
-export function formatStatusTime(value: string | null): string {
+export function formatStatusTime(
+  value: string | null,
+  formatDateTime: (value: Date) => string,
+): string {
   if (!value) return "";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString();
+  return Number.isNaN(date.getTime()) ? value : formatDateTime(date);
 }

@@ -169,11 +169,13 @@ is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-
 
 ## Internationalization (i18n)
 
-Bilingual **zh-CN (default) + en-US** via `next-intl`, without URL routing:
+Bilingual **zh-CN + en-US (default)** via `next-intl`, without URL routing:
 
-- Active locale comes from the `locale` cookie (SSR-authoritative), falling back
-  to `Accept-Language`, then the default — see `src/i18n/request.ts` and
-  `src/i18n/config.ts`. The Next plugin is wired in `next.config.ts`.
+- Active locale comes from the `locale` cookie (SSR-authoritative). Without a
+  valid cookie, the browser's highest-priority Chinese language maps to
+  `zh-CN`; every other language falls back to `en-US` — see
+  `src/i18n/request.ts` and `src/i18n/config.ts`. The Next plugin is wired in
+  `next.config.ts`.
 - Message catalogs live in `src/i18n/messages/{zh-CN,en-US}.json` and MUST keep
   identical key sets. Namespaces: `site`, `nav`, `shell`, `login`, `overview`,
   `servers`, `serverDetail`, `serverNew`, `plugins`, `assistant`, `settings`,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   CirclePlay,
   CircleStop,
@@ -15,7 +15,7 @@ import { AptMirrorSwitcher } from "@/modules/servers/apt-mirror-switcher";
 import { OperationLiveLog, formatOperationClock } from "@/modules/servers/operation-live-log";
 import { useOperationRunner } from "@/modules/servers/use-operation-runner";
 import {
-  SERVER_OPERATION_ACTIONS,
+  isServerOperationAction,
   SERVER_STATUS_TONE,
   type DeploymentLock,
   type DeploymentLogEntry,
@@ -62,6 +62,7 @@ export function OperationsConsole({
 }) {
   const t = useTranslations("serverDetail");
   const tServers = useTranslations("servers");
+  const format = useFormatter();
   const {
     status,
     operation,
@@ -189,14 +190,14 @@ export function OperationsConsole({
                   <li key={entry.id} className="px-5 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-medium text-fg">
-                        {(SERVER_OPERATION_ACTIONS as readonly string[]).includes(
-                          entry.action,
-                        )
+                        {isServerOperationAction(entry.action)
                           ? t(`actions.${entry.action}`)
                           : entry.action}
                       </p>
                       <span className="font-mono text-xs text-fg-subtle">
-                        {entry.createdAt ? formatOperationClock(entry.createdAt) : "—"}
+                        {entry.createdAt
+                          ? formatOperationClock(entry.createdAt, format.dateTime)
+                          : "—"}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-fg-muted">

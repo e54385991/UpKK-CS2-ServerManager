@@ -1,4 +1,4 @@
-import { getTranslations } from "next-intl/server";
+import { getFormatter, getTranslations } from "next-intl/server";
 import type { Route } from "next";
 import { getServer, getStartupCommand } from "@/modules/servers/api";
 import { StartupCommandCard } from "@/modules/servers/startup-command-card";
@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { LinkButton } from "@/shared/ui/link-button";
 
 export async function OverviewPanel({ serverId }: { serverId: number }) {
-  const t = await getTranslations("serverDetail");
-  const tStartup = await getTranslations("startupCommand");
-  const [result, startup] = await Promise.all([
+  const [t, tStartup, format, result, startup] = await Promise.all([
+    getTranslations("serverDetail"),
+    getTranslations("startupCommand"),
+    getFormatter(),
     getServer(serverId),
     getStartupCommand(serverId),
   ]);
@@ -62,13 +63,13 @@ export async function OverviewPanel({ serverId }: { serverId: number }) {
           <Field label={t("directory")} value={server.gameDirectory} mono />
           <Field
             label={t("created")}
-            value={formatStamp(server.createdAt)}
+            value={formatStamp(server.createdAt, format.dateTime)}
           />
           <Field
             label={t("lastDeployed")}
             value={
               server.lastDeployed
-                ? formatStamp(server.lastDeployed)
+                ? formatStamp(server.lastDeployed, format.dateTime)
                 : t("neverDeployed")
             }
           />
@@ -174,8 +175,10 @@ function Field({
   );
 }
 
-function formatStamp(value: string): string {
+type DateTimeFormatter = Awaited<ReturnType<typeof getFormatter>>["dateTime"];
+
+function formatStamp(value: string, formatDateTime: DateTimeFormatter): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatDateTime(date, { dateStyle: "medium", timeStyle: "medium" });
 }

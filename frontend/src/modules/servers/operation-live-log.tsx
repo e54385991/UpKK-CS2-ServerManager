@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type RefObject } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { LoaderCircle, SquareTerminal } from "lucide-react";
 import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { fetchConsolePane } from "@/modules/console/pane-client";
@@ -32,10 +32,15 @@ function lineTone(kind: string): string {
   return "text-fg-muted";
 }
 
-export function formatOperationClock(value: string): string {
+type DateTimeFormatter = ReturnType<typeof useFormatter>["dateTime"];
+
+export function formatOperationClock(
+  value: string,
+  formatDateTime: DateTimeFormatter,
+): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], {
+  return formatDateTime(date, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -70,6 +75,7 @@ export function OperationLiveLog({
   logClassName?: string;
 }) {
   const t = useTranslations("serverDetail");
+  const format = useFormatter();
   const [paneLatest, setPaneLatest] = useState<string | null>(null);
   const watchDeploy = isDeployProgressVisible({ operation });
 
@@ -197,7 +203,7 @@ export function OperationLiveLog({
                 className={cn("whitespace-pre-wrap break-all", lineTone(event.kind))}
               >
                 <span className="mr-2 text-fg-subtle">
-                  {formatOperationClock(event.timestamp)}
+                  {formatOperationClock(event.timestamp, format.dateTime)}
                 </span>
                 {event.message}
               </p>

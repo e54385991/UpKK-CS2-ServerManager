@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { getTranslations } from "next-intl/server";
+import { getFormatter, getTranslations } from "next-intl/server";
 import { ServerOff, TriangleAlert } from "lucide-react";
 import {
   getSteamLatestVersion,
@@ -29,8 +29,9 @@ export async function ServerList({
   scope?: ServerListScope;
   isAdmin?: boolean;
 }) {
-  const t = await getTranslations("servers");
-  const [result, steam, disk, a2s] = await Promise.all([
+  const [t, format, result, steam, disk, a2s] = await Promise.all([
+    getTranslations("servers"),
+    getFormatter(),
     listServers(scope),
     getSteamLatestVersion(),
     listDiskSpace(scope),
@@ -91,6 +92,7 @@ export async function ServerList({
           steam={steam.data}
           label={t("steamLatestVersion")}
           updated={t("updated")}
+          formatDateTime={format.dateTime}
         />
       ) : null}
       {isAdmin ? (
@@ -180,21 +182,28 @@ function CategoryChip({
   );
 }
 
-function formatTimestamp(value: string | null): string {
+type DateTimeFormatter = Awaited<ReturnType<typeof getFormatter>>["dateTime"];
+
+function formatTimestamp(
+  value: string | null,
+  formatDateTime: DateTimeFormatter,
+): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatDateTime(date, { dateStyle: "medium", timeStyle: "medium" });
 }
 
 function SteamVersionBanner({
   steam,
   label,
   updated,
+  formatDateTime,
 }: {
   steam: SteamLatestVersion;
   label: string;
   updated: string;
+  formatDateTime: DateTimeFormatter;
 }) {
   return (
     <Card className="border-primary/20 bg-primary-muted/40 px-5 py-3 text-sm text-fg">
@@ -203,7 +212,7 @@ function SteamVersionBanner({
         <span className="font-mono">{steam.version}</span>
         {steam.timestamp ? (
           <span className="ms-2 text-xs text-fg-muted">
-            ({updated} {formatTimestamp(steam.timestamp)})
+            ({updated} {formatTimestamp(steam.timestamp, formatDateTime)})
           </span>
         ) : null}
       </p>

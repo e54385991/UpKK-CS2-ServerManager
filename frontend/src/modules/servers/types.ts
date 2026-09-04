@@ -249,6 +249,10 @@ export const SERVER_OPERATION_ACTIONS = [
 
 export type ServerOperationAction = (typeof SERVER_OPERATION_ACTIONS)[number];
 
+export function isServerOperationAction(value: string): value is ServerOperationAction {
+  return (SERVER_OPERATION_ACTIONS as readonly string[]).includes(value);
+}
+
 export type ServerOperationStatus =
   | "queued"
   | "running"
@@ -333,7 +337,7 @@ export const OPERATION_STATUS_TONE: Record<ServerOperationStatus, Tone> = {
   failed: "danger",
 };
 
-export const CONFIRM_ACTIONS = new Set<ServerOperationAction>([
+const CONFIRM_ACTION_VALUES = [
   "deploy",
   "stop",
   "update",
@@ -343,7 +347,19 @@ export const CONFIRM_ACTIONS = new Set<ServerOperationAction>([
   "install_counterstrikesharp",
   "install_cs2fixes",
   "install_swiftly",
-]);
+] as const satisfies readonly ServerOperationAction[];
+
+export type ConfirmAction = (typeof CONFIRM_ACTION_VALUES)[number];
+
+export const CONFIRM_ACTIONS: ReadonlySet<ConfirmAction> = new Set(
+  CONFIRM_ACTION_VALUES,
+);
+
+export function requiresOperationConfirmation(
+  action: ServerOperationAction,
+): action is ConfirmAction {
+  return (CONFIRM_ACTIONS as ReadonlySet<ServerOperationAction>).has(action);
+}
 
 export const CONFLICT_STRATEGIES = ["skip", "update", "rename"] as const;
 export type ConflictStrategy = (typeof CONFLICT_STRATEGIES)[number];

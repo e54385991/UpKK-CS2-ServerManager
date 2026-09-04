@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   Archive,
   Cloud,
@@ -33,11 +33,16 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 
-function formatBackupTime(value: string | null): string {
+type DateTimeFormatter = ReturnType<typeof useFormatter>["dateTime"];
+
+function formatBackupTime(
+  value: string | null,
+  formatDateTime: DateTimeFormatter,
+): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString();
+  return formatDateTime(date, { dateStyle: "medium", timeStyle: "medium" });
 }
 
 function formatBackupSize(bytes: number): string {
@@ -72,6 +77,7 @@ export function S3BackupsConsole({
   initialLock: DeploymentLock;
 }) {
   const t = useTranslations("s3Backups");
+  const format = useFormatter();
   const [backups, setBackups] = useState(initialBackups);
   const [refreshing, setRefreshing] = useState(false);
   const refreshList = useCallback(async () => {
@@ -220,7 +226,7 @@ export function S3BackupsConsole({
                         {formatBackupSize(item.size)}
                       </td>
                       <td className="py-3 pr-4 text-fg-muted">
-                        {formatBackupTime(item.lastModified)}
+                        {formatBackupTime(item.lastModified, format.dateTime)}
                       </td>
                       <td className="py-3 text-right">
                         <Button

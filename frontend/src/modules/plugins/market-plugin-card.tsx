@@ -9,6 +9,7 @@ import { DeleteMarketPluginButton } from "@/modules/plugins/delete-market-plugin
 import { MarketInstallDialog } from "@/modules/plugins/market-install-dialog";
 import {
   PLUGIN_CATEGORIES,
+  isPluginCategory,
   type MarketInstallServer,
   type MarketPlugin,
 } from "@/modules/plugins/types";
@@ -34,9 +35,7 @@ export function MarketPluginCard({
 }) {
   const t = useTranslations("plugins");
   const [open, setOpen] = useState(false);
-  const categoryLabel = (PLUGIN_CATEGORIES as readonly string[]).includes(
-    plugin.category,
-  )
+  const categoryLabel = isPluginCategory(plugin.category)
     ? t(`categories.${plugin.category}`)
     : plugin.category;
 

@@ -273,8 +273,8 @@ export function AiSettingsForm({
             value={protocol}
             onChange={(event) => setProtocol(event.target.value as AiProtocol)}
           >
-            <option value="chat_completions">chat_completions</option>
-            <option value="responses">responses</option>
+            <option value="chat_completions">{t("protocolChat")}</option>
+            <option value="responses">{t("protocolResponses")}</option>
           </Select>
         </div>
         <div className="space-y-2">
@@ -309,14 +309,14 @@ export function AiSettingsForm({
                 onChange={(event) => setReasoning(event.target.value)}
               >
                 <option value="">{t("providerDefault")}</option>
-                <option value="none">none</option>
-                <option value="minimal">minimal</option>
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-                <option value="xhigh">xhigh</option>
-                <option value="max">max</option>
-                <option value="ultra">ultra</option>
+                <option value="none">{t("reasoningOptions.none")}</option>
+                <option value="minimal">{t("reasoningOptions.minimal")}</option>
+                <option value="low">{t("reasoningOptions.low")}</option>
+                <option value="medium">{t("reasoningOptions.medium")}</option>
+                <option value="high">{t("reasoningOptions.high")}</option>
+                <option value="xhigh">{t("reasoningOptions.xhigh")}</option>
+                <option value="max">{t("reasoningOptions.max")}</option>
+                <option value="ultra">{t("reasoningOptions.ultra")}</option>
               </Select>
             </div>
             <div>
@@ -327,9 +327,9 @@ export function AiSettingsForm({
                 onChange={(event) => setVerbosity(event.target.value)}
               >
                 <option value="">{t("providerDefault")}</option>
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
+                <option value="low">{t("verbosityOptions.low")}</option>
+                <option value="medium">{t("verbosityOptions.medium")}</option>
+                <option value="high">{t("verbosityOptions.high")}</option>
               </Select>
             </div>
             <div>

@@ -270,14 +270,14 @@ export function UserAiForm({ initial }: { initial: ProfileAiSettings | null }) {
                     onChange={(event) => setReasoning(event.target.value)}
                   >
                     <option value="">{t("aiProviderDefault")}</option>
-                    <option value="none">none</option>
-                    <option value="minimal">minimal</option>
-                    <option value="low">low</option>
-                    <option value="medium">medium</option>
-                    <option value="high">high</option>
-                    <option value="xhigh">xhigh</option>
-                    <option value="max">max</option>
-                    <option value="ultra">ultra</option>
+                    <option value="none">{tAi("reasoningOptions.none")}</option>
+                    <option value="minimal">{tAi("reasoningOptions.minimal")}</option>
+                    <option value="low">{tAi("reasoningOptions.low")}</option>
+                    <option value="medium">{tAi("reasoningOptions.medium")}</option>
+                    <option value="high">{tAi("reasoningOptions.high")}</option>
+                    <option value="xhigh">{tAi("reasoningOptions.xhigh")}</option>
+                    <option value="max">{tAi("reasoningOptions.max")}</option>
+                    <option value="ultra">{tAi("reasoningOptions.ultra")}</option>
                   </Select>
                 </div>
                 <div>
@@ -288,9 +288,9 @@ export function UserAiForm({ initial }: { initial: ProfileAiSettings | null }) {
                     onChange={(event) => setVerbosity(event.target.value)}
                   >
                     <option value="">{t("aiProviderDefault")}</option>
-                    <option value="low">low</option>
-                    <option value="medium">medium</option>
-                    <option value="high">high</option>
+                    <option value="low">{tAi("verbosityOptions.low")}</option>
+                    <option value="medium">{tAi("verbosityOptions.medium")}</option>
+                    <option value="high">{tAi("verbosityOptions.high")}</option>
                   </Select>
                 </div>
                 <div>

@@ -138,7 +138,3 @@ export function formatConfigSize(bytes: number): string {
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
 }
-
-export function formatConfigTimestamp(timestamp: number): string {
-  return timestamp ? new Date(timestamp * 1000).toLocaleString() : "—";
-}

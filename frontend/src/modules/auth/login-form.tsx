@@ -13,8 +13,6 @@ import { Button } from "@/shared/ui/button";
 import { Input, Label } from "@/shared/ui/input";
 
 type Captcha = { token: string; imageUrl: string; enabled: boolean };
-type Translate = ReturnType<typeof useTranslations>;
-
 /**
  * Login form wired to the existing backend auth + CAPTCHA endpoints through the
  * Next API proxy (first-party cookies, no CORS). On success the backend sets
@@ -91,7 +89,13 @@ export function LoginForm() {
         return;
       }
 
-      setError(await extractDetail(response, t));
+      setError(
+        await extractDetail(response, {
+          unauthorized: t("invalidCredentials"),
+          badRequest: t("invalidCaptcha"),
+          fallback: t("failed", { status: response.status }),
+        }),
+      );
       refreshCaptcha();
     } catch {
       setError(t("networkError"));
@@ -206,7 +210,11 @@ function sanitizeNext(value: string | null): Route {
 
 async function extractDetail(
   response: Response,
-  t: Translate,
+  messages: {
+    readonly unauthorized: string;
+    readonly badRequest: string;
+    readonly fallback: string;
+  },
 ): Promise<string> {
   try {
     const data = (await response.json()) as { detail?: unknown };
@@ -214,7 +222,7 @@ async function extractDetail(
   } catch {
     // ignore
   }
-  if (response.status === 401) return t("invalidCredentials");
-  if (response.status === 400) return t("invalidCaptcha");
-  return t("failed", { status: response.status });
+  if (response.status === 401) return messages.unauthorized;
+  if (response.status === 400) return messages.badRequest;
+  return messages.fallback;
 }

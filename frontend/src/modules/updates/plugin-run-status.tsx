@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { pluginUpdateProgressPercent } from "@/modules/updates/intervals";
 import {
   formatStatusTime,
@@ -11,6 +11,7 @@ import { Badge } from "@/shared/ui/badge";
 
 export function PluginRunStatus({ status }: { status: PluginUpdateStatus }) {
   const t = useTranslations("pluginUpdates");
+  const format = useFormatter();
   if (status.state === "idle") return null;
   const percent = pluginUpdateProgressPercent(
     status.current,
@@ -48,7 +49,13 @@ export function PluginRunStatus({ status }: { status: PluginUpdateStatus }) {
             <div key={`${entry.time ?? "log"}-${index}`}>
               {entry.time ? (
                 <span className="text-fg-subtle">
-                  {formatStatusTime(entry.time)}{" "}
+                  {formatStatusTime(entry.time, (value) =>
+                    format.dateTime(value, {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    }),
+                  )}{" "}
                 </span>
               ) : null}
               <span>{entry.message}</span>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { isA2SVersionOutdated } from "@/modules/servers/a2s";
 import {
   exportServerConfigsAction,
@@ -341,13 +341,6 @@ export function ServerFleet({
   );
 }
 
-function formatA2STime(value: string | null): string | null {
-  if (!value) return null;
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) return value;
-  return new Date(parsed).toLocaleString();
-}
-
 function ServerCard({
   server,
   disk,
@@ -366,9 +359,16 @@ function ServerCard({
   showOwner: boolean;
 }) {
   const t = useTranslations("servers");
+  const format = useFormatter();
   const tone = SERVER_STATUS_TONE[server.status];
   const outdated = isA2SVersionOutdated(a2s?.version, steam?.version ?? null);
-  const a2sUpdated = formatA2STime(a2s?.lastUpdated ?? null);
+  const a2sUpdated = (() => {
+    if (!a2s?.lastUpdated) return null;
+    const parsed = Date.parse(a2s.lastUpdated);
+    return Number.isNaN(parsed)
+      ? a2s.lastUpdated
+      : format.dateTime(parsed, { dateStyle: "medium", timeStyle: "medium" });
+  })();
 
   return (
     <li>
@@ -452,7 +452,7 @@ function ServerCard({
                 <p>
                   {t("a2s.ping")}:{" "}
                   <strong className="font-medium text-fg">
-                    {a2s.responseTimeMs}ms
+                    {t("a2s.responseTime", { ms: a2s.responseTimeMs })}
                   </strong>
                 </p>
               ) : null}

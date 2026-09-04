@@ -21,7 +21,7 @@ import {
 } from "@/modules/servers/operation-events";
 import { subscribeVisibleEventSource } from "@/shared/lib/visible-event-source";
 import {
-  CONFIRM_ACTIONS,
+  requiresOperationConfirmation,
   type DeploymentLock,
   type DeploymentLogEntry,
   type OperationStreamEvent,
@@ -218,7 +218,10 @@ export function useOperationRunner({
 
   async function runAction(action: ServerOperationAction) {
     if (running) return;
-    if (CONFIRM_ACTIONS.has(action) && !(await confirm(t(`confirm.${action}`)))) {
+    if (
+      requiresOperationConfirmation(action) &&
+      !(await confirm(t(`confirm.${action}`)))
+    ) {
       return;
     }
     setError(null);

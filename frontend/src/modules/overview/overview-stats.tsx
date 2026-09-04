@@ -12,7 +12,8 @@ import {
   MemoryStick,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { getTranslations } from "next-intl/server";
+import type { useTranslations } from "next-intl";
+import { getFormatter, getTranslations } from "next-intl/server";
 import {
   listServers,
   getOverviewSummary,
@@ -23,6 +24,9 @@ import { SERVER_STATUS_TONE } from "@/modules/servers/types";
 import { Card } from "@/shared/ui/card";
 import { Badge, StatusDot } from "@/shared/ui/badge";
 import { cn } from "@/shared/lib/cn";
+
+type OverviewTranslator = ReturnType<typeof useTranslations<"overview">>;
+type DateTimeFormatter = Awaited<ReturnType<typeof getFormatter>>["dateTime"];
 
 function StatCard({
   label,
@@ -69,10 +73,16 @@ function formatBytes(value: number | null, unavailable: string): string {
   return `${(value / 1024 ** 3).toFixed(1)} GiB`;
 }
 
-function formatHostTime(value: string | null, unavailable: string): string {
+function formatHostTime(
+  value: string | null,
+  unavailable: string,
+  formatDateTime: DateTimeFormatter,
+): string {
   if (!value) return unavailable;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? unavailable : date.toLocaleString();
+  return Number.isNaN(date.getTime())
+    ? unavailable
+    : formatDateTime(date, { dateStyle: "medium", timeStyle: "medium" });
 }
 
 function HostInfoField({
@@ -95,11 +105,13 @@ function HostSystemInfoCard({
   server,
   unavailable,
   t,
+  formatDateTime,
 }: {
   info: HostSystemInfo;
   server: ServerSummary | undefined;
   unavailable: string;
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: OverviewTranslator;
+  formatDateTime: DateTimeFormatter;
 }) {
   const distribution = info.distributionPrettyName
     ? info.distributionPrettyName
@@ -157,7 +169,7 @@ function HostSystemInfoCard({
         <MemoryStick className="size-3.5" />
         <span>
           {t("hostInfoUpdated", {
-            time: formatHostTime(info.collectedAt, unavailable),
+            time: formatHostTime(info.collectedAt, unavailable, formatDateTime),
           })}
         </span>
       </div>
@@ -169,10 +181,12 @@ function HostSystemInfoSection({
   infos,
   servers,
   t,
+  formatDateTime,
 }: {
   infos: readonly HostSystemInfo[];
   servers: readonly ServerSummary[];
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: OverviewTranslator;
+  formatDateTime: DateTimeFormatter;
 }) {
   const unavailable = t("hostInfoUnavailableValue");
   return (
@@ -199,6 +213,7 @@ function HostSystemInfoSection({
               server={servers.find((item) => item.id === info.serverId)}
               unavailable={unavailable}
               t={t}
+              formatDateTime={formatDateTime}
             />
           ))}
         </div>
@@ -210,9 +225,10 @@ function HostSystemInfoSection({
 export async function OverviewStats() {
   // Counts come from the server-side aggregate; the recent list reuses the
   // summaries endpoint. Both are fetched in parallel.
-  const [t, tServers, summaryResult, result, hostInfoResult] = await Promise.all([
+  const [t, tServers, format, summaryResult, result, hostInfoResult] = await Promise.all([
     getTranslations("overview"),
     getTranslations("servers"),
+    getFormatter(),
     getOverviewSummary(),
     listServers(),
     listOverviewHostSystemInfo(),
@@ -342,6 +358,7 @@ export async function OverviewStats() {
           infos={hostInfoResult.data}
           servers={servers}
           t={t}
+          formatDateTime={format.dateTime}
         />
       ) : null}
     </div>

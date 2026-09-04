@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { openLiveTerminal } from "@/modules/console/open-live-terminal";
 import { loadCurrentOperationFromBrowser } from "@/modules/servers/operation-client";
@@ -34,10 +34,18 @@ import { Label } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
 
-function formatWhen(value: string | null, fallback: string): string {
+type DateTimeFormatter = ReturnType<typeof useFormatter>["dateTime"];
+
+function formatWhen(
+  value: string | null,
+  fallback: string,
+  formatDateTime: DateTimeFormatter,
+): string {
   if (!value) return fallback;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? fallback : date.toLocaleString();
+  return Number.isNaN(date.getTime())
+    ? fallback
+    : formatDateTime(date, { dateStyle: "medium", timeStyle: "medium" });
 }
 
 function intervalSelectValue(hours: number): string {
@@ -55,6 +63,7 @@ export function GameUpdatesConsole({
 }) {
   const t = useTranslations("gameUpdates");
   const tActions = useTranslations("serverDetail.actions");
+  const format = useFormatter();
   const [workspace, setWorkspace] = useState(initial);
   const [enabled, setEnabled] = useState(initial.enableAutoUpdate);
   const [intervalHours, setIntervalHours] = useState(
@@ -188,13 +197,13 @@ export function GameUpdatesConsole({
           <div>
             <dt className="text-xs text-fg-subtle">{t("lastCheck")}</dt>
             <dd className="text-sm text-fg">
-              {formatWhen(workspace.lastUpdateCheck, t("never"))}
+              {formatWhen(workspace.lastUpdateCheck, t("never"), format.dateTime)}
             </dd>
           </div>
           <div>
             <dt className="text-xs text-fg-subtle">{t("lastUpdate")}</dt>
             <dd className="text-sm text-fg">
-              {formatWhen(workspace.lastUpdateTime, t("never"))}
+              {formatWhen(workspace.lastUpdateTime, t("never"), format.dateTime)}
             </dd>
           </div>
         </dl>

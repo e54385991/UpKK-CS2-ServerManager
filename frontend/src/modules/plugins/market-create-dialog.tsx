@@ -11,6 +11,7 @@ import {
 } from "@/modules/plugins/actions";
 import {
   PLUGIN_CATEGORIES,
+  isPluginCategory,
   type GitHubRepoInfo,
   type MarketPluginCreateInput,
   type PluginCategory,
@@ -24,10 +25,6 @@ import { Select } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
 
 type PendingAction = "repo-info" | "dependencies" | "create" | null;
-
-function isPluginCategory(value: string): value is PluginCategory {
-  return (PLUGIN_CATEGORIES as readonly string[]).includes(value);
-}
 
 export function MarketPluginCreateDialog({
   open,

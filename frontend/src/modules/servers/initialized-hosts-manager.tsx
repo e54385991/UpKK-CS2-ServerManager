@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { CheckCircle2, CircleAlert, LoaderCircle, Plus, RefreshCw, Server, Trash2 } from "lucide-react";
 import {
   batchDeleteInitializedHostsAction,
@@ -62,6 +62,7 @@ function trackInitializedHostOperation(
 export function InitializedHostsManager({ hosts: initialHosts }: { hosts: InitializedHost[] }) {
   const t = useTranslations("initializedHosts");
   const tSetup = useTranslations("setupWizard");
+  const format = useFormatter();
   const router = useRouter();
   const [hosts, setHosts] = useState(initialHosts);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -281,7 +282,14 @@ export function InitializedHostsManager({ hosts: initialHosts }: { hosts: Initia
                       <Badge tone="ok">{t("initialized")}</Badge>
                     </CardTitle>
                     <CardDescription className="mt-1">
-                      {t("savedAt", { date: formatDate(host.createdAt) })}
+                      {t("savedAt", {
+                        date: host.createdAt
+                          ? format.dateTime(host.createdAt * 1000, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })
+                          : "—",
+                      })}
                     </CardDescription>
                   </div>
                   {operation ? <OperationBadge operation={operation} t={t} /> : null}
@@ -378,11 +386,6 @@ function isActive(status: InitializedHostOperation["status"] | undefined): boole
   return status === "queued" || status === "running";
 }
 
-function formatDate(value: number): string {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(value * 1000);
-}
-
 function Info({ label, value, mono, wide = false }: { label: string; value: string; mono?: boolean; wide?: boolean }) {
   return (
     <div className={wide ? "sm:col-span-2" : undefined}>
@@ -392,7 +395,15 @@ function Info({ label, value, mono, wide = false }: { label: string; value: stri
   );
 }
 
-function OperationBadge({ operation, t }: { operation: InitializedHostOperation; t: (key: string) => string }) {
+type InitializedOperationStatus = InitializedHostOperation["status"];
+
+function OperationBadge({
+  operation,
+  t,
+}: {
+  operation: InitializedHostOperation;
+  t: (key: `status.${InitializedOperationStatus}`) => string;
+}) {
   const tone = operation.status === "failed" ? "danger" : operation.status === "completed" ? "ok" : operation.status === "running" ? "info" : "warn";
   return <Badge tone={tone}>{t(`status.${operation.status}`)}</Badge>;
 }

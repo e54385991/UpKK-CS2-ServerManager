@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import type { Route } from "next";
 import Link from "next/link";
 import { Bot, LoaderCircle, Plus, TriangleAlert } from "lucide-react";
@@ -57,10 +57,6 @@ function tokenCount(value: unknown): number {
   return 0;
 }
 
-function formatTokenCount(value: number): string {
-  return new Intl.NumberFormat().format(value);
-}
-
 export function AssistantChat({
   initial,
   initialDetail,
@@ -73,6 +69,7 @@ export function AssistantChat({
   servers: readonly AssistantServerOption[];
 }) {
   const t = useTranslations("assistant");
+  const format = useFormatter();
   const router = useRouter();
   const [workspace, setWorkspace] = useState(initial);
   const [detail, setDetail] = useState(initialDetail);
@@ -620,9 +617,9 @@ export function AssistantChat({
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   {busy ? <LoaderCircle className="size-3.5 animate-spin text-primary" /> : null}
                   <span className={cn(busy && "font-medium text-fg")}>{status || t("thinking")}</span>
-                  <span>{t("inputTokens", { count: formatTokenCount(tokenUsage.input) })}</span>
-                  <span>{t("outputTokens", { count: formatTokenCount(tokenUsage.output) })}</span>
-                  <span>{t("totalTokens", { count: formatTokenCount(tokenUsage.total) })}</span>
+                  <span>{t("inputTokens", { count: format.number(tokenUsage.input) })}</span>
+                  <span>{t("outputTokens", { count: format.number(tokenUsage.output) })}</span>
+                  <span>{t("totalTokens", { count: format.number(tokenUsage.total) })}</span>
                   {tokenUsage.estimated ? <span className="text-fg-subtle">{t("estimated")}</span> : null}
                 </div>
                 {busy ? <p className="mt-1 text-fg-subtle">{t("thinkingHint")}</p> : null}

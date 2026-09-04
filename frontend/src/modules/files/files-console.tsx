@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   ArrowDown,
   ArrowUp,
@@ -99,6 +99,7 @@ type Banner = { readonly tone: "ok" | "warn" | "danger"; readonly text: string }
 
 export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
   const t = useTranslations("files");
+  const format = useFormatter();
   const uploadRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const bindFolderInput = useCallback((node: HTMLInputElement | null) => {
@@ -828,7 +829,7 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                         ) : null}
                         {entry.isSymlink ? (
                           <Badge tone="info" className="ml-2">
-                            symlink
+                            {t("symlink")}
                           </Badge>
                         ) : null}
                       </td>
@@ -837,7 +838,10 @@ export function FilesConsole({ initial }: { initial: FilesWorkspace }) {
                       </td>
                       <td className="py-2 pr-3 text-fg-muted">
                         {entry.modified
-                          ? new Date(entry.modified * 1000).toLocaleString()
+                          ? format.dateTime(entry.modified * 1000, {
+                              dateStyle: "medium",
+                              timeStyle: "medium",
+                            })
                           : "—"}
                       </td>
                       <td className="py-2">

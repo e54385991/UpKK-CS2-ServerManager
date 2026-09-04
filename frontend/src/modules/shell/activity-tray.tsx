@@ -23,6 +23,7 @@ import {
 } from "@/modules/servers/operation-client";
 import {
   OPERATION_STATUS_TONE,
+  isServerOperationAction,
   isActiveOperation,
   type OperationInbox,
   type OperationInboxItem,
@@ -218,11 +219,7 @@ export function ActivityTray() {
   }, [remaining]);
 
   const actionLabel = (action: string) => {
-    try {
-      return tActions(action);
-    } catch {
-      return action;
-    }
+    return isServerOperationAction(action) ? tActions(action) : action;
   };
 
   async function clearFailed() {

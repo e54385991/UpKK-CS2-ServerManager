@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   getPluginUpdateStatusAction,
   refreshPluginUpdatesAction,
@@ -63,15 +63,23 @@ function splitLines(value: string): string[] {
     .filter(Boolean);
 }
 
-function formatWhen(value: string | null, fallback: string): string {
+type DateTimeFormatter = ReturnType<typeof useFormatter>["dateTime"];
+
+function formatWhen(
+  value: string | null,
+  fallback: string,
+  formatDateTime: DateTimeFormatter,
+): string {
   if (!value) return fallback;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? fallback : date.toLocaleString();
+  return Number.isNaN(date.getTime())
+    ? fallback
+    : formatDateTime(date, { dateStyle: "medium", timeStyle: "medium" });
 }
 
 function sourceLabel(
   sourceType: string,
-  t: (key: string) => string,
+  t: (key: "sourceTypes.github" | "sourceTypes.market" | "sourceTypes.framework") => string,
 ): string {
   if (
     sourceType === "github" ||
@@ -96,6 +104,7 @@ export function UpdatesConsole({
 }) {
   const t = useTranslations("pluginUpdates");
   const tCommands = useTranslations("quickCommands");
+  const format = useFormatter();
   const [workspace, setWorkspace] = useState(initial);
   const [enabled, setEnabled] = useState(initial.enableAutoUpdate);
   const [intervalHours, setIntervalHours] = useState(String(initial.intervalHours));
@@ -270,7 +279,7 @@ export function UpdatesConsole({
             <p className="text-xs text-fg-subtle">{t("intervalHelp")}</p>
           </div>
           <p className="text-xs text-fg-subtle">
-            {t("lastCheck")}: {formatWhen(workspace.lastCheck, t("never"))}
+            {t("lastCheck")}: {formatWhen(workspace.lastCheck, t("never"), format.dateTime)}
           </p>
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -534,6 +543,7 @@ function PluginExcludeEditor({
   onQueued: (operationId: string) => void;
 }) {
   const t = useTranslations("pluginUpdates");
+  const format = useFormatter();
   const [dirs, setDirs] = useState(joinLines(plugin.excludeDirs));
   const [files, setFiles] = useState(joinLines(plugin.excludeFiles));
 
@@ -619,7 +629,7 @@ function PluginExcludeEditor({
             {plugin.lastStatus ? ` · ${plugin.lastStatus}` : ""}
           </p>
           <p className="text-xs text-fg-subtle">
-            {t("lastItemCheck")}: {formatWhen(plugin.lastCheckAt, t("never"))}
+            {t("lastItemCheck")}: {formatWhen(plugin.lastCheckAt, t("never"), format.dateTime)}
           </p>
           {plugin.lastError ? (
             <p className="text-xs text-danger">{plugin.lastError}</p>

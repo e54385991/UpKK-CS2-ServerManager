@@ -24,6 +24,8 @@ export function openCleanupEventSource(
     readonly onEvent?: (type: string, data: Record<string, unknown>) => void;
     readonly onDone: (data: Record<string, unknown>) => void;
     readonly onError: (message: string) => void;
+    readonly streamFailedMessage: string;
+    readonly streamClosedMessage: string;
   },
 ): () => void {
   const source = new EventSource(url);
@@ -63,12 +65,16 @@ export function openCleanupEventSource(
     if (event instanceof MessageEvent && event.data) {
       const data = read(event);
       finish(() =>
-        handlers.onError(typeof data.message === "string" ? data.message : "Cleanup stream failed"),
+        handlers.onError(
+          typeof data.message === "string"
+            ? data.message
+            : handlers.streamFailedMessage,
+        ),
       );
       return;
     }
     // Close immediately so EventSource cannot reconnect and start another SSH scan.
-    finish(() => handlers.onError("Cleanup stream closed"));
+    finish(() => handlers.onError(handlers.streamClosedMessage));
   });
 
   return () => {

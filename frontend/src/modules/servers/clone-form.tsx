@@ -32,6 +32,12 @@ const GAME_MODES = [
   "custom",
 ] as const;
 
+type GameMode = (typeof GAME_MODES)[number];
+
+function isGameMode(value: string): value is GameMode {
+  return (GAME_MODES as readonly string[]).includes(value);
+}
+
 function canonicalDirectory(value: string): string {
   const raw = value.trim();
   if (!raw.startsWith("/")) return raw;
@@ -94,7 +100,7 @@ export function CloneServerForm({ template }: { template: ServerCloneTemplate })
   const portIsSame = numericGamePort === template.sourceGamePort;
   const targetNameIsEmpty = targetName.trim() === "";
   const serverNameIsEmpty = serverName.trim() === "";
-  const gameModeOptions = GAME_MODES.includes(template.gameMode as (typeof GAME_MODES)[number])
+  const gameModeOptions = isGameMode(template.gameMode)
     ? GAME_MODES
     : [template.gameMode, ...GAME_MODES];
   const canPreview = Boolean(
@@ -297,7 +303,7 @@ export function CloneServerForm({ template }: { template: ServerCloneTemplate })
                 <Select id="gameMode" name="gameMode" defaultValue={template.gameMode}>
                   {gameModeOptions.map((mode) => (
                     <option key={mode} value={mode}>
-                      {GAME_MODES.includes(mode as (typeof GAME_MODES)[number])
+                      {isGameMode(mode)
                         ? t(`modes.${mode}`)
                         : mode}
                     </option>
@@ -404,13 +410,14 @@ export function CloneServerForm({ template }: { template: ServerCloneTemplate })
           </div>
         }
       >
-        {preview ? <PreviewValues template={template} values={preview} t={t} /> : null}
+        {preview ? <PreviewValues template={template} values={preview} /> : null}
       </Dialog>
     </>
   );
 }
 
-function PreviewValues({ template, values, t }: { template: ServerCloneTemplate; values: ServerCloneInput; t: (key: string, values?: Record<string, string>) => string }) {
+function PreviewValues({ template, values }: { template: ServerCloneTemplate; values: ServerCloneInput }) {
+  const t = useTranslations("serverNew");
   const secret = (value: string | undefined, fallback: string) => value ? t("clone.newSecret") : fallback;
   return (
     <div className="space-y-4 text-sm">

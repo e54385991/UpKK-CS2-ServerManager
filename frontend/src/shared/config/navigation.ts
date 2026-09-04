@@ -14,7 +14,15 @@ import {
 export type NavItem = {
   readonly href: Route;
   /** Translation key under the `nav` namespace. */
-  readonly key: string;
+  readonly key:
+    | "overview"
+    | "servers"
+    | "initializedServers"
+    | "plugins"
+    | "assistant"
+    | "discord"
+    | "audit"
+    | "settings";
   readonly icon: LucideIcon;
   /** When true, only administrators see this entry. */
   readonly adminOnly?: boolean;
@@ -22,7 +30,7 @@ export type NavItem = {
 
 export type NavSection = {
   /** Translation key under the `nav` namespace. */
-  readonly titleKey: string;
+  readonly titleKey: "sectionOperate" | "sectionManage";
   readonly items: readonly NavItem[];
 };
 

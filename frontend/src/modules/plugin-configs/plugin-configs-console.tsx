@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   ArrowUp,
   FileCode,
@@ -25,7 +25,6 @@ import {
 } from "@/modules/plugin-configs/actions";
 import {
   formatConfigSize,
-  formatConfigTimestamp,
   groupConfigFields,
   groupConfigFiles,
   type PluginConfigBrowseItem,
@@ -118,6 +117,7 @@ export function PluginConfigsConsole({
   initial: PluginConfigWorkspace;
 }) {
   const t = useTranslations("pluginConfigs");
+  const format = useFormatter();
   const [workspace, setWorkspace] = useState(initial);
   const [runtime, setRuntime] = useState<Record<number, SourceRuntime>>({});
   const [activeSourceId, setActiveSourceId] = useState<number | null>(
@@ -796,7 +796,12 @@ export function PluginConfigsConsole({
                             <span className="min-w-0">
                               <span className="block truncate">{file.name}</span>
                               <span className="block text-[11px] text-fg-subtle">
-                                {formatConfigSize(file.size)} · {formatConfigTimestamp(file.modified)}
+                                {formatConfigSize(file.size)} · {file.modified
+                                  ? format.dateTime(file.modified * 1000, {
+                                      dateStyle: "medium",
+                                      timeStyle: "medium",
+                                    })
+                                  : "—"}
                               </span>
                             </span>
                             <span className="flex items-center gap-1">

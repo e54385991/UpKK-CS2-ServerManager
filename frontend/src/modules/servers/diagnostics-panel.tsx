@@ -35,6 +35,18 @@ const SCOPES: readonly DiagnosticScope[] = [
   "counterstrikesharp",
 ];
 
+const DIAGNOSTIC_REASONS = [
+  "restart_loop_protection",
+  "post_update_start_failures",
+  "unknown",
+] as const;
+
+type DiagnosticReason = (typeof DIAGNOSTIC_REASONS)[number];
+
+function isDiagnosticReason(value: string): value is DiagnosticReason {
+  return (DIAGNOSTIC_REASONS as readonly string[]).includes(value);
+}
+
 export function PluginDiagnosticsPanel({
   serverId,
   recommendation,
@@ -121,7 +133,13 @@ export function PluginDiagnosticsPanel({
             <div>
               <CardTitle>{t("diagnosticBannerTitle")}</CardTitle>
               <CardDescription>
-                {t(`diagnosticReasons.${recommendation.reason ?? "unknown"}`)}
+                {t(
+                  `diagnosticReasons.${
+                    recommendation.reason && isDiagnosticReason(recommendation.reason)
+                      ? recommendation.reason
+                      : "unknown"
+                  }`,
+                )}
               </CardDescription>
             </div>
           </CardHeader>

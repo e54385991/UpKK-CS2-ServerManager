@@ -1,7 +1,19 @@
 import type { AlertOptions } from "@/shared/feedback";
 import type { AssistantProviderTestViewDto } from "@/shared/api/types";
 
-type Translate = (key: string) => string;
+type TranslateKey =
+  | "testOk"
+  | "testFail"
+  | "testUsableTitle"
+  | "testUnusableTitle"
+  | "testText"
+  | "testTools"
+  | "testStream"
+  | "testUsableHelp"
+  | "testUnusableHelp"
+  | "testAck";
+
+type Translate = (key: TranslateKey) => string;
 
 export function providerTestAlert(
   data: AssistantProviderTestViewDto,

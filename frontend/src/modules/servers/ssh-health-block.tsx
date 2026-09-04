@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import { reconnectServerSshAction } from "@/modules/servers/actions";
 import type { ServerSummary } from "@/modules/servers/types";
@@ -38,18 +38,24 @@ const KNOWN_HEALTH = [
   "unknown",
 ] as const;
 
-function formatLastCheck(value: string | null): string | null {
+type KnownHealth = (typeof KNOWN_HEALTH)[number];
+
+function isKnownHealth(value: string): value is KnownHealth {
+  return (KNOWN_HEALTH as readonly string[]).includes(value);
+}
+
+function parseLastCheck(value: string | null): Date | string | null {
   if (!value) return null;
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) return value;
-  return new Date(parsed).toLocaleString();
+  return new Date(parsed);
 }
 
 function statusLabel(
-  t: (key: string) => string,
+  t: (key: `statusValue.${KnownHealth}`) => string,
   status: string,
 ): string {
-  return (KNOWN_HEALTH as readonly string[]).includes(status)
+  return isKnownHealth(status)
     ? t(`statusValue.${status}`)
     : status;
 }
@@ -62,6 +68,7 @@ export function SshHealthBlock({
   showReconnect?: boolean;
 }) {
   const t = useTranslations("servers.sshHealth");
+  const format = useFormatter();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -73,6 +80,10 @@ export function SshHealthBlock({
     (server.isSshDown ||
       server.sshHealthStatus === "completely_down" ||
       server.sshHealthStatus === "down");
+  const lastCheck = parseLastCheck(server.lastSshHealthCheck);
+  const lastCheckLabel = lastCheck instanceof Date
+    ? format.dateTime(lastCheck, { dateStyle: "medium", timeStyle: "medium" })
+    : lastCheck ?? t("never");
 
   async function onReconnect() {
     setPending(true);
@@ -120,8 +131,7 @@ export function SshHealthBlock({
           </li>
         ) : null}
         <li>
-          {t("lastCheck")}:{" "}
-          {formatLastCheck(server.lastSshHealthCheck) ?? t("never")}
+          {t("lastCheck")}: {lastCheckLabel}
         </li>
       </ul>
       {canReconnect ? (

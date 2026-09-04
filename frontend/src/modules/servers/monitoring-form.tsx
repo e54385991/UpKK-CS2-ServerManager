@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { Save, TriangleAlert } from "lucide-react";
 import { updateServerAction } from "@/modules/servers/actions";
 import type { ServerDetail } from "@/modules/servers/api";
@@ -19,6 +19,7 @@ import { Switch } from "@/shared/ui/switch";
 
 export function ServerMonitoringForm({ server }: { server: ServerDetail }) {
   const t = useTranslations("serverMonitoring");
+  const format = useFormatter();
   const router = useRouter();
   const [enablePanel, setEnablePanel] = useState(server.enablePanelMonitoring);
   const [autoRestart, setAutoRestart] = useState(server.autoRestartOnCrash);
@@ -67,7 +68,10 @@ export function ServerMonitoringForm({ server }: { server: ServerDetail }) {
           <p className="text-sm text-fg-muted">
             {t("lastSsh")}:{" "}
             {server.lastSshSuccess
-              ? new Date(server.lastSshSuccess).toLocaleString()
+              ? format.dateTime(new Date(server.lastSshSuccess), {
+                  dateStyle: "medium",
+                  timeStyle: "medium",
+                })
               : t("neverSsh")}
           </p>
 
