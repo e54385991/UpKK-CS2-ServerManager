@@ -169,8 +169,12 @@ export async function runAutoSetup(
       ssh_password: input.sshPassword,
       sudo_password: input.sudoPassword || undefined,
       cs2_username: input.cs2Username,
-      captcha_token: input.captchaToken,
-      captcha_code: input.captchaCode,
+      ...(input.captchaToken && input.captchaCode
+        ? {
+            captcha_token: input.captchaToken,
+            captcha_code: input.captchaCode,
+          }
+        : {}),
       save_config: input.saveConfig,
       open_game_ports: input.openGamePorts,
     }),

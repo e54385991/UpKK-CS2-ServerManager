@@ -2,7 +2,7 @@
 
 # This is NOT the Next.js you know
 
-This project uses **Next.js 16.3.3**, which has breaking changes versus older
+This project uses **Next.js 16.3.4**, which has breaking changes versus older
 Next.js — APIs, conventions, and file structure may differ from your training
 data. **Before writing any Next.js code, read the version-matched guide under
 `node_modules/next/dist/docs/`** (e.g. `dist/docs/01-app/...`). Heed deprecation
@@ -21,11 +21,11 @@ Jinja/Bootstrap UI and talks to the FastAPI backend through a same-origin proxy.
 
 | Area | Choice | Notes |
 | --- | --- | --- |
-| Framework | `next@16.3.3` (App Router, Turbopack) | Read `node_modules/next/dist/docs/` first. |
+| Framework | `next@16.3.4` (App Router, Turbopack) | Read `node_modules/next/dist/docs/` first. |
 | UI runtime | `react`/`react-dom@19.2.8` | React Compiler-era; the `react-hooks` lint rules are strict. |
 | Language | `typescript@5.9.3` | **Deliberate pin.** TS 7 is installed as latest on the registry, and `tsc`/Next build support it, but `typescript-eslint` does not yet support TS ≥ 7.1 (tracking: typescript-eslint#10940). Pinning 5.9.3 keeps build + typecheck + **lint** all green. Move to 7.x once typescript-eslint supports it. |
 | Styling | `tailwindcss@4.3.3` + `@tailwindcss/postcss` | v4 engine; design tokens live in `src/app/globals.css` under `@theme`. |
-| Lint | `eslint@9.39.5` + `eslint-config-next@16.3.3` | Flat config. ESLint 10 is incompatible with the TS-ESLint parser's scope manager here — stay on ESLint 9. |
+| Lint | `eslint@9.39.5` + `eslint-config-next@16.3.4` | Flat config. ESLint 10 is incompatible with the TS-ESLint parser's scope manager here — stay on ESLint 9. |
 | Icons | `lucide-react` | Import per-icon; never pass an icon **component** across the server→client boundary (see RSC rules). |
 | Docker runtime | `node:26.8.1-alpine` | Production image + CI use Node 26 Current. |
 

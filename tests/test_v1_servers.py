@@ -100,13 +100,14 @@ def test_v1_create_server_requires_authentication():
     assert response.status_code == 401
 
 
-def test_v1_create_server_requires_captcha(monkeypatch):
+def test_v1_create_server_requires_captcha_when_enabled(monkeypatch):
     client, _user = _client(monkeypatch)
     payload = _create_payload()
     del payload["captcha_token"]
     del payload["captcha_code"]
     response = client.post("/api/v1/servers", json=payload)
-    assert response.status_code == 422
+    assert response.status_code == 400
+    assert response.json()["detail"] == "CAPTCHA is required"
 
 
 def test_v1_create_server_returns_201_without_secrets(monkeypatch):
@@ -203,6 +204,33 @@ def test_v1_create_server_reports_manual_install_when_init_fails(monkeypatch):
     response = client.post("/api/v1/servers", json=_create_payload())
     assert response.status_code == 400
     assert "CAPTCHA" in response.json()["detail"]
+
+
+def test_v1_create_server_can_force_add_without_host_initialization(monkeypatch):
+    client, _user = _client(monkeypatch)
+    created = _sample_server()
+    captured = {}
+
+    async def fake_force_create(
+        server_data, _db, _current_user, _request, *, skip_host_initialization
+    ):
+        captured["server_data"] = server_data
+        captured["skip_host_initialization"] = skip_host_initialization
+        return created
+
+    monkeypatch.setattr("api.routes.v1.servers.create_server_record", fake_force_create)
+    response = client.post(
+        "/api/v1/servers",
+        json=_create_payload(force_add=True),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["host_initialized"] is False
+    assert "SteamCMD" in body["initialization_message"]
+    assert captured["skip_host_initialization"] is True
+    assert captured["server_data"].name == "bravo"
+    assert not hasattr(captured["server_data"], "force_add")
 
 
 def test_v1_get_server_includes_workspace_fields_without_secrets(monkeypatch):

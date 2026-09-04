@@ -79,6 +79,7 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
     return SystemSettingsView(
         default_proxy_mode=proxy_mode,
         github_proxy_url=settings.github_proxy_url,
+        captcha_enabled=bool(settings.captcha_enabled),
         has_global_github_token=settings.has_global_github_token,
         global_github_token_prefix=settings.global_github_token_prefix,
         email_enabled=settings.email_enabled,

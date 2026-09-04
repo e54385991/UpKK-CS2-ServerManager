@@ -17,7 +17,10 @@ from modules import (
     settings,
 )
 from services.audit_log_service import record_audit_event
-from services.captcha_service import captcha_service
+from services.captcha_policy import require_captcha
+
+# Kept as a compatibility alias for integrations that patch the legacy service directly.
+from services.captcha_service import captcha_service  # noqa: F401
 from services.email_service import email_service
 from services.rate_limit import enforce_rate_limit
 
@@ -38,18 +41,13 @@ def build_password_reset_link(token: str) -> str:
 async def request_password_reset(
     *,
     email: str,
-    captcha_token: str,
-    captcha_code: str,
+    captcha_token: str | None,
+    captcha_code: str | None,
     request: Request,
     db: AsyncSession,
 ) -> dict[str, bool | str]:
     await enforce_rate_limit(request, "forgot_password", limit=5, window=3600, identity=email)
-    is_valid = await captcha_service.validate_captcha(captcha_token, captcha_code)
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired CAPTCHA code",
-        )
+    await require_captcha(db, captcha_token, captcha_code)
 
     await record_audit_event(
         category="auth",

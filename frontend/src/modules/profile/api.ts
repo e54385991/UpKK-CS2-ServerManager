@@ -93,8 +93,12 @@ export async function patchProfileCredentials(
         : patch.githubToken !== undefined
           ? { github_token: patch.githubToken }
           : {}),
-      captcha_token: patch.captchaToken,
-      captcha_code: patch.captchaCode,
+      ...(patch.captchaToken && patch.captchaCode
+        ? {
+            captcha_token: patch.captchaToken,
+            captcha_code: patch.captchaCode,
+          }
+        : {}),
     }),
   });
   if (!result.ok) return result;
@@ -115,8 +119,12 @@ export async function changePassword(input: {
       current_password: input.currentPassword,
       new_password: input.newPassword,
       confirm_password: input.confirmPassword,
-      captcha_token: input.captchaToken,
-      captcha_code: input.captchaCode,
+      ...(input.captchaToken && input.captchaCode
+        ? {
+            captcha_token: input.captchaToken,
+            captcha_code: input.captchaCode,
+          }
+        : {}),
     }),
   });
 }
@@ -138,8 +146,12 @@ export async function generateApiKey(input: {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      captcha_token: input.captchaToken,
-      captcha_code: input.captchaCode,
+      ...(input.captchaToken && input.captchaCode
+        ? {
+            captcha_token: input.captchaToken,
+            captcha_code: input.captchaCode,
+          }
+        : {}),
     }),
   });
   if (!result.ok) return result;
@@ -165,8 +177,12 @@ export async function generateGslt(input: {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...(input.serverName ? { server_name: input.serverName } : {}),
-        captcha_token: input.captchaToken,
-        captcha_code: input.captchaCode,
+        ...(input.captchaToken && input.captchaCode
+          ? {
+              captcha_token: input.captchaToken,
+              captcha_code: input.captchaCode,
+            }
+          : {}),
       }),
       timeoutMs: 25_000,
     },
@@ -204,8 +220,12 @@ export async function putS3Settings(
       use_ssl: patch.useSsl,
       retention_count: patch.retentionCount,
       clear_secret: Boolean(patch.clearSecret),
-      captcha_token: patch.captchaToken,
-      captcha_code: patch.captchaCode,
+      ...(patch.captchaToken && patch.captchaCode
+        ? {
+            captcha_token: patch.captchaToken,
+            captcha_code: patch.captchaCode,
+          }
+        : {}),
     }),
   });
   if (!result.ok) return result;

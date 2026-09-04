@@ -8,6 +8,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from api.dependencies import DatabaseSession
+from services.captcha_policy import captcha_is_enabled
 from services.captcha_service import captcha_service
 from services.rate_limit import enforce_rate_limit
 
@@ -25,6 +27,7 @@ class CaptchaChallenge(BaseModel):
 
     token: str
     image: str
+    enabled: bool = True
 
 
 class CaptchaRefreshRequest(BaseModel):
@@ -34,12 +37,14 @@ class CaptchaRefreshRequest(BaseModel):
 
 
 @router.get("/challenge")
-async def captcha_challenge(request: Request) -> CaptchaChallenge:
+async def captcha_challenge(request: Request, db: DatabaseSession) -> CaptchaChallenge:
     """Return a one-time CAPTCHA as JSON so the console can render it on LAN."""
     await enforce_rate_limit(request, "captcha", limit=60, window=60)
+    if not await captcha_is_enabled(db):
+        return CaptchaChallenge(token="", image="", enabled=False)
     token, image_bytes = await captcha_service.generate_captcha()
     encoded = base64.b64encode(image_bytes).decode("ascii")
-    return CaptchaChallenge(token=token, image=f"data:image/png;base64,{encoded}")
+    return CaptchaChallenge(token=token, image=f"data:image/png;base64,{encoded}", enabled=True)
 
 
 @router.get("/generate")

@@ -39,6 +39,7 @@ class SystemSettingsResponse(SQLModel):
     id: int
     default_proxy_mode: str
     github_proxy_url: Optional[str]
+    captcha_enabled: bool = True
     has_global_github_token: bool
     global_github_token_prefix: Optional[str]
     email_enabled: bool
@@ -58,6 +59,7 @@ class SystemSettingsUpdate(SQLModel):
 
     default_proxy_mode: Optional[str] = None
     github_proxy_url: Optional[str] = None
+    captcha_enabled: Optional[bool] = None
     global_github_token: Optional[str] = Field(default=None, max_length=255)
     clear_global_github_token: bool = False
     email_enabled: Optional[bool] = None
@@ -100,9 +102,11 @@ class ForgotPasswordRequest(SQLModel):
     """Schema for forgot password request"""
 
     email: EmailStr
-    captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
-    captcha_code: str = Field(
-        ..., min_length=4, max_length=4, description="User-entered CAPTCHA code"
+    captcha_token: Optional[str] = Field(
+        None, description="CAPTCHA token from /api/captcha/generate (optional when disabled)"
+    )
+    captcha_code: Optional[str] = Field(
+        None, min_length=4, max_length=4, description="User-entered CAPTCHA code"
     )
 
 

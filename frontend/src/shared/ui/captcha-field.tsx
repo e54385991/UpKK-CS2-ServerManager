@@ -9,6 +9,7 @@ import { cn } from "@/shared/lib/cn";
 export type CaptchaValue = { token: string; code: string };
 
 export function useCaptcha() {
+  const [enabled, setEnabled] = useState(true);
   const [token, setToken] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [code, setCode] = useState("");
@@ -21,6 +22,7 @@ export function useCaptcha() {
     const nextUrl = next?.imageUrl ?? previous;
     imageUrlRef.current = nextUrl;
     setImageUrl(nextUrl);
+    setEnabled(next?.enabled ?? true);
     if (next) {
       setToken(next.token);
       setCode("");
@@ -53,7 +55,8 @@ export function useCaptcha() {
     setCode,
     imageUrl,
     loading,
-    ready: Boolean(token),
+    enabled,
+    ready: !enabled || Boolean(token),
     refresh,
   };
 }
@@ -75,6 +78,8 @@ export function CaptchaField({
   captcha: ReturnType<typeof useCaptcha>;
   required?: boolean;
 }) {
+  if (!captcha.enabled) return null;
+
   return (
     <div>
       <Label htmlFor={id}>{label}</Label>

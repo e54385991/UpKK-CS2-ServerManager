@@ -15,10 +15,33 @@ jobs:
   baseline:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: cs2_manager
+      POSTGRES_PASSWORD: your_postgres_password
+      POSTGRES_DATABASE: cs2_manager
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      REDIS_POOL_SIZE: "10"
+      REDIS_HEALTH_CHECK_INTERVAL: "30"
+      REDIS_SOCKET_CONNECT_TIMEOUT: "5"
+      REDIS_SOCKET_TIMEOUT: "5"
+      API_HOST: 127.0.0.1
+      API_PORT: "8000"
+      BACKEND_URL: http://127.0.0.1:8000
+      LOG_LEVEL: INFO
+      ASYNCSSH_LOG_LEVEL: WARNING
+      SECRET_KEY: ci-secret-key-must-be-at-least-32-characters
+      JWT_SECRET_KEY: ci-jwt-secret-key-must-be-at-least-32
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+      SSH_AUTH_MODE: password
 
     services:
       postgres:
-        image: postgres:18.6-alpine
+        image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
         env:
           POSTGRES_DB: cs2_manager
           POSTGRES_USER: cs2_manager
@@ -31,7 +54,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
       redis:
-        image: redis:8.10.1-alpine
+        image: redis:8.10.1-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576
         ports:
           - 6379:6379
         options: >-
@@ -79,10 +102,33 @@ jobs:
   legacy-migration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: cs2_manager
+      POSTGRES_PASSWORD: your_postgres_password
+      POSTGRES_DATABASE: cs2_manager
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      REDIS_POOL_SIZE: "10"
+      REDIS_HEALTH_CHECK_INTERVAL: "30"
+      REDIS_SOCKET_CONNECT_TIMEOUT: "5"
+      REDIS_SOCKET_TIMEOUT: "5"
+      API_HOST: 127.0.0.1
+      API_PORT: "8000"
+      BACKEND_URL: http://127.0.0.1:8000
+      LOG_LEVEL: INFO
+      ASYNCSSH_LOG_LEVEL: WARNING
+      SECRET_KEY: ci-secret-key-must-be-at-least-32-characters
+      JWT_SECRET_KEY: ci-jwt-secret-key-must-be-at-least-32
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+      SSH_AUTH_MODE: password
 
     services:
       postgres:
-        image: postgres:18.6-alpine
+        image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
         env:
           POSTGRES_DB: cs2_manager
           POSTGRES_USER: cs2_manager
@@ -95,7 +141,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
       mysql:
-        image: mysql:8.4.11
+        image: mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
         env:
           MYSQL_DATABASE: legacy_cs2_manager
           MYSQL_USER: legacy

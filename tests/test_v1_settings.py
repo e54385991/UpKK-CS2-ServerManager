@@ -31,6 +31,7 @@ def _sample_settings(**overrides) -> SystemSettings:
         "id": 1,
         "default_proxy_mode": "panel",
         "github_proxy_url": "https://ghfast.top",
+        "captcha_enabled": True,
         "global_github_token": "github_pat_secret123456",
         "email_enabled": True,
         "email_provider": "smtp",
@@ -101,6 +102,7 @@ def test_v1_settings_get_exposes_presence_flags_not_secrets(monkeypatch):
     assert body["has_gmail_token"] is True
     assert body["gmail_ready"] is True
     assert body["default_proxy_mode"] == "panel"
+    assert body["captcha_enabled"] is True
     dumped = response.text
     assert "github_pat_secret123456" not in dumped
     assert "smtp-secret" not in dumped
@@ -144,6 +146,14 @@ def test_v1_settings_put_sets_and_clears_token(monkeypatch):
     assert clear_response.status_code == 200
     assert settings.global_github_token is None
     assert clear_response.json()["has_global_github_token"] is False
+
+
+def test_v1_settings_put_updates_captcha_policy(monkeypatch):
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    response = client.put("/api/v1/settings", json={"captcha_enabled": False})
+    assert response.status_code == 200
+    assert settings.captcha_enabled is False
+    assert response.json()["captcha_enabled"] is False
 
 
 def test_v1_settings_put_rejects_invalid_proxy_mode_and_token(monkeypatch):

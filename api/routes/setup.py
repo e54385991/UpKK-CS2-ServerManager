@@ -14,7 +14,10 @@ from modules import (
     authenticate_websocket,
     get_current_time,
 )
-from services.captcha_service import captcha_service
+from services.captcha_policy import require_captcha
+
+# Kept as a compatibility alias for integrations that patch the legacy service directly.
+from services.captcha_service import captcha_service  # noqa: F401
 from services.redis_manager import redis_manager
 
 from .setup_workflow import (
@@ -165,13 +168,7 @@ async def auto_setup_server(
     db: DatabaseSession,
 ):
     """Validate the request, run the setup workflow, and return safe credentials."""
-    is_valid = await captcha_service.validate_captcha(
-        setup_req.captcha_token, setup_req.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
+    await require_captcha(db, setup_req.captcha_token, setup_req.captcha_code)
 
     await db.commit()
     logs: list[str] = []

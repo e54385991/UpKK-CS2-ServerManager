@@ -16,8 +16,12 @@ export function registerAccount(input: {
       username: input.username,
       email: input.email,
       password: input.password,
-      captcha_token: input.captchaToken,
-      captcha_code: input.captchaCode,
+      ...(input.captchaToken && input.captchaCode
+        ? {
+            captcha_token: input.captchaToken,
+            captcha_code: input.captchaCode,
+          }
+        : {}),
     }),
   });
 }
@@ -32,8 +36,12 @@ export function requestPasswordReset(input: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       email: input.email,
-      captcha_token: input.captchaToken,
-      captcha_code: input.captchaCode,
+      ...(input.captchaToken && input.captchaCode
+        ? {
+            captcha_token: input.captchaToken,
+            captcha_code: input.captchaCode,
+          }
+        : {}),
     }),
   });
 }

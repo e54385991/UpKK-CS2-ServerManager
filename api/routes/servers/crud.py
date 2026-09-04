@@ -11,6 +11,7 @@ from api.dependencies import ActiveUser, AdminUser, DatabaseSession
 from modules import ServerAgentPolicy
 from services.apt_mirrors import normalize_apt_mirror
 from services.audit_log_service import record_audit_event
+from services.captcha_policy import require_captcha
 from services.discord_binding_template_service import inherit_global_discord_binding
 from services.host_initialization import (
     AsyncsshHostRunner,
@@ -112,14 +113,20 @@ async def create_server(
     request: Request,
 ):
     """Create a new CS2 server"""
+    return await create_server_record(server_data, db, current_user, request)
+
+
+async def create_server_record(
+    server_data: ServerCreate,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    request: Request,
+    *,
+    skip_host_initialization: bool = False,
+):
+    """Create a server record, optionally skipping remote host validation."""
     # Validate CAPTCHA first
-    is_valid = await captcha_service.validate_captcha(
-        server_data.captcha_token, server_data.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
+    await require_captcha(db, server_data.captcha_token, server_data.captcha_code)
 
     # Check if server name already exists for this user
     existing = await Server.get_by_name_and_user(db, server_data.name, current_user.id)
@@ -141,7 +148,7 @@ async def create_server(
         )
 
     await db.commit()
-    host_init = await _validate_server_connection(server_data)
+    host_init = None if skip_host_initialization else await _validate_server_connection(server_data)
 
     # Create server with user_id, auto-generated API key, and password auth
     # Exclude captcha fields from server creation

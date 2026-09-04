@@ -50,6 +50,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
   const [githubProxyUrl, setGithubProxyUrl] = useState(
     initial.githubProxyUrl ?? "",
   );
+  const [captchaEnabled, setCaptchaEnabled] = useState(initial.captchaEnabled);
   const [githubToken, setGithubToken] = useState("");
   const [clearGithubToken, setClearGithubToken] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(initial.emailEnabled);
@@ -80,6 +81,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
     const result = await saveSettingsAction({
       defaultProxyMode: proxyMode,
       githubProxyUrl: githubProxyUrl.trim() || null,
+      captchaEnabled,
       ...(clearGithubToken
         ? { clearGlobalGithubToken: true }
         : githubToken.trim()
@@ -101,6 +103,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
       return;
     }
     setSettings(result.data);
+    setCaptchaEnabled(result.data.captchaEnabled);
     setGithubToken("");
     setClearGithubToken(false);
     setSmtpPassword("");
@@ -538,6 +541,33 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 items-center justify-center rounded-md bg-warn-muted text-warn ring-1 ring-warn/30">
+                <ShieldCheck className="size-4" />
+              </span>
+              <div>
+                <CardTitle>{t("captcha.title")}</CardTitle>
+                <CardDescription>{t("captcha.description")}</CardDescription>
+              </div>
+            </div>
+            <Switch
+              id="captcha-enabled"
+              label={t("captcha.enabled")}
+              checked={captchaEnabled}
+              onCheckedChange={setCaptchaEnabled}
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-fg-muted">
+            {captchaEnabled ? t("captcha.enabledHelp") : t("captcha.disabledHelp")}
+          </p>
+        </CardContent>
+      </Card>
 
       <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
         <p className="text-xs text-fg-subtle">

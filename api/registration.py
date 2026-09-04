@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules import User, get_password_hash_async
 from services.audit_log_service import record_audit_event
-from services.captcha_service import captcha_service
+from services.captcha_policy import require_captcha
+
+# Kept as a compatibility alias for integrations that patch the legacy service directly.
+from services.captcha_service import captcha_service  # noqa: F401
 from services.rate_limit import enforce_rate_limit
 
 
@@ -16,8 +19,8 @@ async def register_user(
     username: str,
     email: str,
     password: str,
-    captcha_token: str,
-    captcha_code: str,
+    captcha_token: str | None,
+    captcha_code: str | None,
     request: Request,
     db: AsyncSession,
 ) -> User:
@@ -28,12 +31,7 @@ async def register_user(
     first-user wizard on this path.
     """
     await enforce_rate_limit(request, "register", limit=5, window=3600, identity=username)
-    is_valid = await captcha_service.validate_captcha(captcha_token, captcha_code)
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired CAPTCHA code",
-        )
+    await require_captcha(db, captcha_token, captcha_code)
 
     existing_user = await User.get_by_username(db, username)
     if existing_user:

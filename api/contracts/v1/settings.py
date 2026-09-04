@@ -20,6 +20,7 @@ class SystemSettingsView(V1Model):
 
     default_proxy_mode: ProxyMode
     github_proxy_url: str | None = None
+    captcha_enabled: bool = True
     has_global_github_token: bool
     global_github_token_prefix: str | None = None
     email_enabled: bool
@@ -42,6 +43,7 @@ class SystemSettingsPatch(ApiRequest):
 
     default_proxy_mode: ProxyMode | None = None
     github_proxy_url: str | None = None
+    captcha_enabled: bool | None = None
     global_github_token: str | None = Field(default=None, max_length=255)
     clear_global_github_token: bool = False
     email_enabled: bool | None = None

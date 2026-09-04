@@ -6,7 +6,7 @@
 
 ## 新部署
 
-Docker Compose 会启动 `postgres:18-alpine` 和 Redis：
+Docker Compose 会启动 `postgres:18.6-alpine` 和 Redis：
 
 ```bash
 cp .env.example .env

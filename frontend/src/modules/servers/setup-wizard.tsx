@@ -3,14 +3,17 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { Check, Copy, RefreshCw, TriangleAlert } from "lucide-react";
+import { createServerAction } from "@/modules/servers/actions";
 import {
   deleteInitializedHostAction,
   getManualSetupScriptAction,
@@ -32,6 +35,7 @@ import {
 } from "@/modules/servers/initialized-hosts";
 import { SetupLiveLog } from "@/modules/servers/setup-live-log";
 import { alertDialog } from "@/shared/feedback/alert-store";
+import { confirm as confirmDialog } from "@/shared/feedback/confirm-store";
 import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
 import { copyText } from "@/shared/lib/clipboard";
 import { randomId } from "@/shared/lib/random-id";
@@ -46,7 +50,7 @@ import {
 import { Input, Label } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
 
-type Captcha = { token: string; imageUrl: string };
+type Captcha = { token: string; imageUrl: string; enabled: boolean };
 type Mode = "auto" | "manual";
 
 export function SetupWizard({
@@ -63,6 +67,8 @@ export function SetupWizard({
   requireInit?: boolean;
 }) {
   const t = useTranslations("setupWizard");
+  const router = useRouter();
+  const setupFormRef = useRef<HTMLFormElement>(null);
   const [mode, setMode] = useState<Mode>("auto");
   const [hosts, setHosts] = useState<InitializedHost[]>([]);
   const [captcha, setCaptcha] = useState<Captcha | null>(null);
@@ -76,6 +82,7 @@ export function SetupWizard({
   const [cs2Username, setCs2Username] = useState("cs2server");
   const [copied, setCopied] = useState<string | null>(null);
   const [differentSudo, setDifferentSudo] = useState(false);
+  const [setupFailed, setSetupFailed] = useState(false);
 
   const refreshCaptcha = useCallback(() => {
     setCaptchaLoading(true);
@@ -139,6 +146,7 @@ export function SetupWizard({
     setPending(true);
     setError(null);
     setResult(null);
+    setSetupFailed(false);
     setLogs([]);
     appendLog(t("wsConnecting"));
 
@@ -169,6 +177,7 @@ export function SetupWizard({
         sessionId,
       });
       if (!submitted.ok) {
+        setSetupFailed(true);
         appendLog(`${t("errorTitle")}: ${submitted.error}`);
         refreshCaptcha();
         void alertDialog({
@@ -177,16 +186,24 @@ export function SetupWizard({
         });
         return;
       }
+      if (!submitted.data.success) {
+        setSetupFailed(true);
+        appendLog(`${t("errorTitle")}: ${submitted.data.message}`);
+        refreshCaptcha();
+        return;
+      }
       if (socket.readyState !== WebSocket.OPEN && submitted.data.logs.length > 0) {
         setLogs([...submitted.data.logs]);
       }
       rememberInitializedHost(host);
       setCompletedHost(host);
+      setSetupFailed(false);
       setResult(submitted.data);
       refreshCaptcha();
       const listed = await listInitializedHostsAction();
       if (listed.ok) setHosts(listed.data);
     } catch (cause) {
+      setSetupFailed(true);
       const message = cause instanceof Error ? cause.message : t("errorTitle");
       appendLog(`${t("errorTitle")}: ${message}`);
       refreshCaptcha();
@@ -196,6 +213,74 @@ export function SetupWizard({
       });
     } finally {
       if (socket?.readyState === WebSocket.OPEN) socket.close();
+      setPending(false);
+    }
+  }
+
+  async function onForceAdd() {
+    const formElement = setupFormRef.current;
+    if (!formElement) return;
+    if (!captcha) return;
+    const form = new FormData(formElement);
+    const captchaCode = String(form.get("captcha") ?? "").trim();
+    if (captcha.enabled && !captchaCode) {
+      await alertDialog({
+        title: t("forceAddTitle"),
+        description: t("forceAddCaptchaRequired"),
+      });
+      return;
+    }
+    if (!formElement.reportValidity()) return;
+    const confirmed = await confirmDialog({
+      title: t("forceAddConfirmTitle"),
+      description: t("forceAddConfirmHelp"),
+      confirmLabel: t("forceAddConfirm"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
+
+    const cs2Username = String(form.get("cs2Username") ?? "cs2server").trim();
+    setPending(true);
+    setError(null);
+    try {
+      const created = await createServerAction({
+        name: String(form.get("name") ?? "").trim(),
+        host: String(form.get("host") ?? "").trim(),
+        sshPort: Number(form.get("sshPort") ?? 22),
+        sshUser: String(form.get("sshUser") ?? "").trim(),
+        sshPassword: String(form.get("sshPassword") ?? ""),
+        sudoPassword: differentSudo
+          ? String(form.get("sudoPassword") ?? "") || undefined
+          : undefined,
+        gamePort: 27015,
+        gameDirectory: `/home/${cs2Username}/cs2`,
+        captchaToken: captcha.token,
+        captchaCode,
+        forceAdd: true,
+        serverName: "CS2 Server",
+        defaultMap: "de_dust2",
+        maxPlayers: 32,
+        gameMode: "competitive",
+        gameType: "0",
+        sessionManager: "tmux",
+      });
+      if (!created.ok) {
+        refreshCaptcha();
+        await alertDialog({
+          title: t("errorTitle"),
+          description: created.error,
+        });
+        return;
+      }
+      router.push(`/servers/${created.data.id}/operations` as Route);
+      router.refresh();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : t("errorTitle");
+      await alertDialog({
+        title: t("errorTitle"),
+        description: message,
+      });
+    } finally {
       setPending(false);
     }
   }
@@ -296,7 +381,11 @@ export function SetupWizard({
       </div>
 
       {mode === "auto" ? (
-        <form onSubmit={(event) => void onSubmit(event)} className="space-y-6">
+        <form
+          ref={setupFormRef}
+          onSubmit={(event) => void onSubmit(event)}
+          className="space-y-6"
+        >
           <Card>
             <CardHeader>
               <div>
@@ -399,46 +488,75 @@ export function SetupWizard({
               </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end">
-              <div className="min-w-0 flex-1">
-                <Label htmlFor="setup-captcha">{t("fields.captcha")}</Label>
-                <div className="flex items-center gap-3">
-                  <Input
-                    id="setup-captcha"
-                    name="captcha"
-                    required
-                    maxLength={4}
-                    autoComplete="off"
-                    className="uppercase tracking-[0.3em]"
-                  />
-                  <button
-                    type="button"
-                    onClick={refreshCaptcha}
-                    aria-label={t("refreshCaptcha")}
-                    className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
-                  >
-                    {captcha && !captchaLoading ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={captcha.imageUrl}
-                        alt={t("fields.captcha")}
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-xs text-fg-subtle">{t("loading")}</span>
-                    )}
-                    <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
-                      <RefreshCw
-                        className={cn("size-3", captchaLoading && "animate-spin")}
-                      />
-                    </span>
-                  </button>
+              {captcha?.enabled !== false ? (
+                <div className="min-w-0 flex-1">
+                  <Label htmlFor="setup-captcha">{t("fields.captcha")}</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      id="setup-captcha"
+                      name="captcha"
+                      required
+                      maxLength={4}
+                      autoComplete="off"
+                      className="uppercase tracking-[0.3em]"
+                    />
+                    <button
+                      type="button"
+                      onClick={refreshCaptcha}
+                      aria-label={t("refreshCaptcha")}
+                      className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
+                    >
+                      {captcha && !captchaLoading ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={captcha.imageUrl}
+                          alt={t("fields.captcha")}
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs text-fg-subtle">{t("loading")}</span>
+                      )}
+                      <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
+                        <RefreshCw
+                          className={cn("size-3", captchaLoading && "animate-spin")}
+                        />
+                      </span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : null}
               <Button type="submit" disabled={pending || !captcha}>
                 {pending ? t("submitting") : t("submit")}
               </Button>
             </CardContent>
           </Card>
+          {setupFailed ? (
+            <Card
+              className="border-warn/40 bg-warn-muted/40"
+              data-testid="setup-force-add"
+            >
+              <CardHeader>
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <TriangleAlert className="size-4 text-warn" />
+                    {t("forceAddTitle")}
+                  </CardTitle>
+                  <CardDescription>{t("forceAddHelp")}</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-warn">{t("forceAddWarning")}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending || captchaLoading || !captcha}
+                  onClick={() => void onForceAdd()}
+                >
+                  {pending ? t("forceAddSubmitting") : t("forceAddButton")}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
           <SetupLiveLog logs={logs} pending={pending} />
         </form>
       ) : (

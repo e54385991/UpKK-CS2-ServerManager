@@ -2955,7 +2955,7 @@ export interface paths {
         put?: never;
         /**
          * Create Server
-         * @description Create a server after CAPTCHA + SSH checks, then initialize host packages.
+         * @description Create a server after CAPTCHA; normal requests also initialize the host.
          */
         post: operations["create_server_api_v1_servers_post"];
         delete?: never;
@@ -7879,9 +7879,9 @@ export interface components {
          */
         AutoSetupRequest: {
             /** Captcha Code */
-            captcha_code: string;
+            captcha_code?: string | null;
             /** Captcha Token */
-            captcha_token: string;
+            captcha_token?: string | null;
             /** Cs2 Password */
             cs2_password?: string | null;
             /**
@@ -8024,6 +8024,11 @@ export interface components {
          * @description Token plus inline image so proxies do not have to forward custom headers.
          */
         CaptchaChallenge: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
             /** Image */
             image: string;
             /** Token */
@@ -9565,12 +9570,12 @@ export interface components {
              * Captcha Code
              * @description User-entered CAPTCHA code
              */
-            captcha_code: string;
+            captcha_code?: string | null;
             /**
              * Captcha Token
-             * @description CAPTCHA token from /api/captcha/generate
+             * @description CAPTCHA token from /api/captcha/generate (optional when disabled)
              */
-            captcha_token: string;
+            captcha_token?: string | null;
             /**
              * Email
              * Format: email
@@ -9824,14 +9829,14 @@ export interface components {
         GenerateServerTokenRequest: {
             /**
              * Captcha Code
-             * @description CAPTCHA code (required for security)
+             * @description CAPTCHA code (optional when disabled)
              */
-            captcha_code: string;
+            captcha_code?: string | null;
             /**
              * Captcha Token
-             * @description CAPTCHA token (required for security)
+             * @description CAPTCHA token (optional when CAPTCHA is disabled)
              */
-            captcha_token: string;
+            captcha_token?: string | null;
             /**
              * Server Name
              * @description Optional memo/description for the server
@@ -11506,12 +11511,12 @@ export interface components {
              * Captcha Code
              * @description User-entered CAPTCHA code
              */
-            captcha_code: string;
+            captcha_code?: string | null;
             /**
              * Captcha Token
-             * @description CAPTCHA token from /api/captcha/generate
+             * @description CAPTCHA token from /api/captcha/generate (optional when disabled)
              */
-            captcha_token: string;
+            captcha_token?: string | null;
             /** Confirm Password */
             confirm_password: string;
             /** Current Password */
@@ -11531,13 +11536,13 @@ export interface components {
         };
         /**
          * PasswordResetEmailRequest
-         * @description Public forgot-password body. CAPTCHA-gated; does not reveal whether the email exists.
+         * @description Public forgot-password body; does not reveal whether the email exists.
          */
         PasswordResetEmailRequest: {
             /** Captcha Code */
-            captcha_code: string;
+            captcha_code?: string | null;
             /** Captcha Token */
-            captcha_token: string;
+            captcha_token?: string | null;
             /**
              * Email
              * Format: email
@@ -12371,9 +12376,9 @@ export interface components {
          */
         ProfileGsltGenerate: {
             /** Captcha Code */
-            captcha_code: string;
+            captcha_code?: string | null;
             /** Captcha Token */
-            captcha_token: string;
+            captcha_token?: string | null;
             /** Server Name */
             server_name?: string | null;
         };
@@ -12389,13 +12394,13 @@ export interface components {
         };
         /**
          * ProfilePasswordChange
-         * @description Change the signed-in user's password. Requires the current password and captcha.
+         * @description Change the signed-in user's password. The CAPTCHA is policy-controlled.
          */
         ProfilePasswordChange: {
             /** Captcha Code */
-            captcha_code: string;
+            captcha_code?: string | null;
             /** Captcha Token */
-            captcha_token: string;
+            captcha_token?: string | null;
             /** Confirm Password */
             confirm_password: string;
             /** Current Password */
@@ -12433,7 +12438,7 @@ export interface components {
         };
         /**
          * ProfileS3Patch
-         * @description Partial S3 backup update. Secret is write-only; captcha is required.
+         * @description Partial S3 backup update. Secret is write-only; CAPTCHA is policy-controlled.
          */
         ProfileS3Patch: {
             /** Access Key Id */
@@ -12441,9 +12446,9 @@ export interface components {
             /** Bucket */
             bucket?: string | null;
             /** Captcha Code */
-            captcha_code: string;
+            captcha_code?: string | null;
             /** Captcha Token */
-            captcha_token: string;
+            captcha_token?: string | null;
             /**
              * Clear Secret
              * @default false
@@ -12625,13 +12630,13 @@ export interface components {
         };
         /**
          * RegisterRequest
-         * @description Public self-registration body. CAPTCHA-gated; creates a non-admin member.
+         * @description Public self-registration body; creates a non-admin member.
          */
         RegisterRequest: {
             /** Captcha Code */
-            captcha_code: string;
+            captcha_code?: string | null;
             /** Captcha Token */
-            captcha_token: string;
+            captcha_token?: string | null;
             /**
              * Email
              * Format: email
@@ -12771,12 +12776,12 @@ export interface components {
              * Captcha Code
              * @description User-entered CAPTCHA code
              */
-            captcha_code: string;
+            captcha_code?: string | null;
             /**
              * Captcha Token
-             * @description CAPTCHA token from /api/captcha/generate
+             * @description CAPTCHA token from /api/captcha/generate (optional when disabled)
              */
-            captcha_token: string;
+            captcha_token?: string | null;
             /**
              * Clear Secret
              * @default false
@@ -13366,12 +13371,12 @@ export interface components {
              * Captcha Code
              * @description User-entered CAPTCHA code
              */
-            captcha_code: string;
+            captcha_code?: string | null;
             /**
              * Captcha Token
-             * @description CAPTCHA token from /api/captcha/generate
+             * @description CAPTCHA token from /api/captcha/generate (optional when disabled)
              */
-            captcha_token: string;
+            captcha_token?: string | null;
             /** Client Port */
             client_port?: number | null;
             /**
@@ -13526,9 +13531,9 @@ export interface components {
             /** Apt Mirror */
             apt_mirror?: string | null;
             /** Captcha Code */
-            captcha_code: string;
+            captcha_code?: string | null;
             /** Captcha Token */
-            captcha_token: string;
+            captcha_token?: string | null;
             /**
              * Default Map
              * @default de_dust2
@@ -13536,6 +13541,12 @@ export interface components {
             default_map: string;
             /** Description */
             description?: string | null;
+            /**
+             * Force Add
+             * @description Save the panel record without validating or initializing the host. Use only after explicit operator confirmation.
+             * @default false
+             */
+            force_add: boolean;
             /**
              * Game Directory
              * @default /home/cs2server/cs2
@@ -14245,9 +14256,9 @@ export interface components {
              */
             auto_sudo: boolean;
             /** Captcha Code */
-            captcha_code: string;
+            captcha_code?: string | null;
             /** Captcha Token */
-            captcha_token: string;
+            captcha_token?: string | null;
             /** Cs2 Password */
             cs2_password?: string | null;
             /**
@@ -14890,6 +14901,8 @@ export interface components {
          * @description Partial admin update. Secret fields are write-only and never echoed.
          */
         SystemSettingsPatch: {
+            /** Captcha Enabled */
+            captcha_enabled?: boolean | null;
             /**
              * Clear Global Github Token
              * @default false
@@ -14925,6 +14938,11 @@ export interface components {
          * @description Schema for system settings response
          */
         SystemSettingsResponse: {
+            /**
+             * Captcha Enabled
+             * @default true
+             */
+            captcha_enabled: boolean;
             /** Created At */
             created_at: string | null;
             /** Default Proxy Mode */
@@ -14961,6 +14979,8 @@ export interface components {
          * @description Schema for updating system settings
          */
         SystemSettingsUpdate: {
+            /** Captcha Enabled */
+            captcha_enabled?: boolean | null;
             /**
              * Clear Global Github Token
              * @default false
@@ -14998,6 +15018,11 @@ export interface components {
          * @description Admin system settings with secrets replaced by presence flags.
          */
         SystemSettingsView: {
+            /**
+             * Captcha Enabled
+             * @default true
+             */
+            captcha_enabled: boolean;
             /**
              * Default Proxy Mode
              * @enum {string}
@@ -15151,12 +15176,12 @@ export interface components {
              * Captcha Code
              * @description User-entered CAPTCHA code
              */
-            captcha_code: string;
+            captcha_code?: string | null;
             /**
              * Captcha Token
-             * @description CAPTCHA token from /api/captcha/generate
+             * @description CAPTCHA token from /api/captcha/generate (optional when disabled)
              */
-            captcha_token: string;
+            captcha_token?: string | null;
             /**
              * Email
              * Format: email
@@ -15176,12 +15201,12 @@ export interface components {
              * Captcha Code
              * @description User-entered CAPTCHA code
              */
-            captcha_code: string;
+            captcha_code?: string | null;
             /**
              * Captcha Token
-             * @description CAPTCHA token from /api/captcha/generate
+             * @description CAPTCHA token from /api/captcha/generate (optional when disabled)
              */
-            captcha_token: string;
+            captcha_token?: string | null;
             /** Password */
             password: string;
             /** Username */
@@ -15196,12 +15221,12 @@ export interface components {
              * Captcha Code
              * @description User-entered CAPTCHA code
              */
-            captcha_code: string;
+            captcha_code?: string | null;
             /**
              * Captcha Token
-             * @description CAPTCHA token from /api/captcha/generate
+             * @description CAPTCHA token from /api/captcha/generate (optional when disabled)
              */
-            captcha_token: string;
+            captcha_token?: string | null;
             /** Email */
             email?: string | null;
             /**

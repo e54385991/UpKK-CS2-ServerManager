@@ -7,6 +7,7 @@ export type EmailProvider = (typeof EMAIL_PROVIDERS)[number];
 export type SystemSettings = {
   readonly defaultProxyMode: ProxyMode;
   readonly githubProxyUrl: string | null;
+  readonly captchaEnabled: boolean;
   readonly hasGlobalGithubToken: boolean;
   readonly globalGithubTokenPrefix: string | null;
   readonly emailEnabled: boolean;
@@ -27,6 +28,7 @@ export type SystemSettings = {
 export type SettingsPatch = {
   readonly defaultProxyMode?: ProxyMode;
   readonly githubProxyUrl?: string | null;
+  readonly captchaEnabled?: boolean;
   readonly globalGithubToken?: string;
   readonly clearGlobalGithubToken?: boolean;
   readonly emailEnabled?: boolean;

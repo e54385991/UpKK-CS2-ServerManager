@@ -4,7 +4,7 @@
 # Usage:
 #   docker run --rm -p 18080:80 --add-host=host.docker.internal:host-gateway \
 #     -v "$PWD/deploy/Caddyfile.host:/etc/caddy/Caddyfile:ro" \
-#     caddy:2.10-alpine
+#     caddy:2.11.4-alpine
 {
 	admin off
 }

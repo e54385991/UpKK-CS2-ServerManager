@@ -51,9 +51,11 @@ class ServerCreate(SQLModel):
     description: Optional[str] = None
 
     # CAPTCHA validation
-    captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
-    captcha_code: str = Field(
-        ..., min_length=4, max_length=4, description="User-entered CAPTCHA code"
+    captcha_token: Optional[str] = Field(
+        None, description="CAPTCHA token from /api/captcha/generate (optional when disabled)"
+    )
+    captcha_code: Optional[str] = Field(
+        None, min_length=4, max_length=4, description="User-entered CAPTCHA code"
     )
 
     # LGSM-style server configuration

@@ -56,7 +56,7 @@ import { alertDialog } from "@/shared/feedback/alert-store";
 import { fetchCaptchaChallenge } from "@/shared/lib/captcha";
 import { cn } from "@/shared/lib/cn";
 
-type Captcha = { token: string; imageUrl: string };
+type Captcha = { token: string; imageUrl: string; enabled: boolean };
 
 const GAME_MODES = [
   "competitive",
@@ -578,42 +578,44 @@ export function CreateServerForm({
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1">
-              <Label htmlFor="captcha">{t("fields.captcha")}</Label>
-              <div className="flex items-center gap-3">
-                <Input
-                  id="captcha"
-                  name="captcha"
-                  required
-                  maxLength={4}
-                  autoComplete="off"
-                  className="uppercase tracking-[0.3em]"
-                  placeholder={t("captchaPlaceholder")}
-                />
-                <button
-                  type="button"
-                  onClick={refreshCaptcha}
-                  aria-label={t("refreshCaptcha")}
-                  className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
-                >
-                  {captcha && !captchaLoading ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={captcha.imageUrl}
-                      alt={t("fields.captcha")}
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-xs text-fg-subtle">{t("loading")}</span>
-                  )}
-                  <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
-                    <RefreshCw
-                      className={cn("size-3", captchaLoading && "animate-spin")}
-                    />
-                  </span>
-                </button>
+            {captcha?.enabled !== false ? (
+              <div className="min-w-0 flex-1">
+                <Label htmlFor="captcha">{t("fields.captcha")}</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="captcha"
+                    name="captcha"
+                    required
+                    maxLength={4}
+                    autoComplete="off"
+                    className="uppercase tracking-[0.3em]"
+                    placeholder={t("captchaPlaceholder")}
+                  />
+                  <button
+                    type="button"
+                    onClick={refreshCaptcha}
+                    aria-label={t("refreshCaptcha")}
+                    className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
+                  >
+                    {captcha && !captchaLoading ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={captcha.imageUrl}
+                        alt={t("fields.captcha")}
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-xs text-fg-subtle">{t("loading")}</span>
+                    )}
+                    <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
+                      <RefreshCw
+                        className={cn("size-3", captchaLoading && "animate-spin")}
+                      />
+                    </span>
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : null}
             <Button type="submit" disabled={pending || !captcha || !canCreate}>
               <Plus />
               {pending ? t("submitting") : t("submit")}

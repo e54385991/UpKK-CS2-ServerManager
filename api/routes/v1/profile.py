@@ -16,7 +16,10 @@ from modules import (
 )
 from modules.schemas.ai import AIProviderTestRequest, UserAISettingsUpdate
 from services.audit_log_service import record_audit_event
-from services.captcha_service import captcha_service
+from services.captcha_policy import require_captcha
+
+# Kept as a compatibility alias for integrations that patch the legacy service directly.
+from services.captcha_service import captcha_service  # noqa: F401
 from services.s3_backup_service import s3_backup_service
 from services.steam_api_service import steam_api_service
 from services.steamcmd_retry import (
@@ -129,20 +132,6 @@ def _user_ai_view(payload) -> AssistantUserSettingsView:
     )
 
 
-async def _require_captcha(token: str | None, code: str | None) -> None:
-    if not token or not code:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="CAPTCHA is required",
-        )
-    is_valid = await captcha_service.validate_captcha(token, code)
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired CAPTCHA code",
-        )
-
-
 @router.get("", response_model=ProfileView)
 async def read_profile(current_user: ActiveUser) -> ProfileView:
     """Return account identity plus the SteamCMD auto-recovery budget."""
@@ -159,7 +148,7 @@ async def update_profile(
     """Persist personal-center fields. Secrets are write-only."""
     fields_set = set(patch.model_fields_set)
     if fields_set & _SENSITIVE_PROFILE_FIELDS:
-        await _require_captcha(patch.captcha_token, patch.captcha_code)
+        await require_captcha(db, patch.captcha_token, patch.captcha_code)
 
     changed: list[str] = []
     if patch.steamcmd_max_retries is not None:
@@ -217,7 +206,7 @@ async def change_password(
     request: Request,
 ) -> ActionResult:
     """Replace the signed-in user's password after captcha + current-password check."""
-    await _require_captcha(body.captcha_token, body.captcha_code)
+    await require_captcha(db, body.captcha_token, body.captcha_code)
     if not await verify_password_async(body.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -261,7 +250,7 @@ async def generate_user_api_key(
 ) -> ProfileApiKeyView:
     """Generate or rotate the personal API key."""
     if body.captcha_token or body.captcha_code:
-        await _require_captcha(body.captcha_token, body.captcha_code)
+        await require_captcha(db, body.captcha_token, body.captcha_code)
 
     new_api_key = generate_api_key()
     for _ in range(5):
@@ -315,10 +304,11 @@ async def revoke_api_key(
 async def generate_gslt(
     body: ProfileGsltGenerate,
     current_user: ActiveUser,
+    db: DatabaseSession,
     request: Request,
 ) -> ProfileGsltView:
     """Create a Steam game server login token using the user's Steam Web API key."""
-    await _require_captcha(body.captcha_token, body.captcha_code)
+    await require_captcha(db, body.captcha_token, body.captcha_code)
     steam_key = (getattr(current_user, "steam_api_key", None) or "").strip()
     if not steam_key:
         raise HTTPException(
@@ -370,7 +360,7 @@ async def update_s3_settings(
     request: Request,
 ) -> ProfileS3View:
     """Persist S3-compatible backup settings. The secret is write-only."""
-    await _require_captcha(body.captcha_token, body.captcha_code)
+    await require_captcha(db, body.captcha_token, body.captcha_code)
     if body.enabled is not None:
         current_user.s3_enabled = body.enabled
     if body.endpoint_url is not None:

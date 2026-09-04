@@ -160,8 +160,8 @@ class AutoSetupRequest(ApiRequest):
     sudo_password: str | None = None
     cs2_username: str = Field(default="cs2server", pattern=r"^[a-z_][a-z0-9_-]*$")
     cs2_password: str | None = None
-    captcha_token: str = Field(min_length=1)
-    captcha_code: str = Field(min_length=4, max_length=4)
+    captcha_token: str | None = Field(default=None, min_length=1)
+    captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
     save_config: bool = True
     open_game_ports: bool = True
     session_id: str | None = None

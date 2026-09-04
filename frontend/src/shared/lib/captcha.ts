@@ -1,6 +1,10 @@
-export type CaptchaChallenge = { token: string; imageUrl: string };
+export type CaptchaChallenge = {
+  token: string;
+  imageUrl: string;
+  enabled: boolean;
+};
 
-type ChallengeJson = { token?: unknown; image?: unknown };
+type ChallengeJson = { token?: unknown; image?: unknown; enabled?: unknown };
 
 /**
  * Load a CAPTCHA without relying on `X-Captcha-Token` (proxies and some
@@ -21,11 +25,14 @@ async function fetchJsonChallenge(): Promise<CaptchaChallenge | null> {
     });
     if (!response.ok) return null;
     const body = (await response.json()) as ChallengeJson;
+    if (body.enabled === false) {
+      return { token: "", imageUrl: "", enabled: false };
+    }
     if (typeof body.token !== "string" || !body.token) return null;
     if (typeof body.image !== "string" || !body.image.startsWith("data:image/")) {
       return null;
     }
-    return { token: body.token, imageUrl: body.image };
+    return { token: body.token, imageUrl: body.image, enabled: true };
   } catch {
     return null;
   }
@@ -42,7 +49,7 @@ async function fetchImageChallenge(): Promise<CaptchaChallenge | null> {
     if (!token) return null;
     const blob = await response.blob();
     if (!blob.size) return null;
-    return { token, imageUrl: URL.createObjectURL(blob) };
+    return { token, imageUrl: URL.createObjectURL(blob), enabled: true };
   } catch {
     return null;
   }

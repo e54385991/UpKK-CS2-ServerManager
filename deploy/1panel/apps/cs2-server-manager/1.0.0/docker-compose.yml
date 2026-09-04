@@ -88,7 +88,7 @@ services:
       start_period: 30s
 
   caddy:
-    image: caddy:2.11-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     container_name: ${CONTAINER_NAME}-edge
     restart: always
     ports:

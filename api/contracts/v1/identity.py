@@ -46,21 +46,21 @@ class SessionUser(V1Model):
 
 
 class RegisterRequest(ApiRequest):
-    """Public self-registration body. CAPTCHA-gated; creates a non-admin member."""
+    """Public self-registration body; creates a non-admin member."""
 
     username: str = Field(min_length=3, max_length=100)
     email: EmailStr
     password: str = Field(min_length=6, max_length=100)
-    captcha_token: str = Field(min_length=1)
-    captcha_code: str = Field(min_length=4, max_length=4)
+    captcha_token: str | None = Field(default=None, min_length=1)
+    captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
 
 
 class PasswordResetEmailRequest(ApiRequest):
-    """Public forgot-password body. CAPTCHA-gated; does not reveal whether the email exists."""
+    """Public forgot-password body; does not reveal whether the email exists."""
 
     email: EmailStr
-    captcha_token: str = Field(min_length=1)
-    captcha_code: str = Field(min_length=4, max_length=4)
+    captcha_token: str | None = Field(default=None, min_length=1)
+    captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
 
 
 class PasswordResetCompleteRequest(ApiRequest):
@@ -145,13 +145,13 @@ class ProfilePatch(ApiRequest):
 
 
 class ProfilePasswordChange(ApiRequest):
-    """Change the signed-in user's password. Requires the current password and captcha."""
+    """Change the signed-in user's password. The CAPTCHA is policy-controlled."""
 
     current_password: str = Field(min_length=6, max_length=100)
     new_password: str = Field(min_length=6, max_length=100)
     confirm_password: str = Field(min_length=6, max_length=100)
-    captcha_token: str
-    captcha_code: str = Field(min_length=4, max_length=4)
+    captcha_token: str | None = Field(default=None, min_length=1)
+    captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
 
 
 class ProfileApiKeyView(V1Model):
@@ -172,8 +172,8 @@ class ProfileGsltGenerate(ApiRequest):
     """Create a Steam GSLT with the signed-in user's Steam Web API key."""
 
     server_name: str | None = Field(default=None, max_length=255)
-    captcha_token: str
-    captcha_code: str = Field(min_length=4, max_length=4)
+    captcha_token: str | None = Field(default=None, min_length=1)
+    captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
 
 
 class ProfileGsltView(V1Model):
@@ -199,7 +199,7 @@ class ProfileS3View(V1Model):
 
 
 class ProfileS3Patch(ApiRequest):
-    """Partial S3 backup update. Secret is write-only; captcha is required."""
+    """Partial S3 backup update. Secret is write-only; CAPTCHA is policy-controlled."""
 
     enabled: bool | None = None
     endpoint_url: str | None = Field(default=None, max_length=500)
@@ -211,8 +211,8 @@ class ProfileS3Patch(ApiRequest):
     use_ssl: bool | None = None
     retention_count: int | None = Field(default=None, ge=1, le=10000)
     clear_secret: bool = False
-    captcha_token: str
-    captcha_code: str = Field(min_length=4, max_length=4)
+    captcha_token: str | None = Field(default=None, min_length=1)
+    captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
 
     @field_validator(
         "endpoint_url", "region", "bucket", "access_key_id", "secret_access_key", "prefix"

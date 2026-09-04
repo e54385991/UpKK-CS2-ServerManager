@@ -11,9 +11,11 @@ class UserCreate(SQLModel):
     username: str = Field(..., min_length=3, max_length=100)
     email: EmailStr
     password: str = Field(..., min_length=6, max_length=100)
-    captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
-    captcha_code: str = Field(
-        ..., min_length=4, max_length=4, description="User-entered CAPTCHA code"
+    captcha_token: Optional[str] = Field(
+        None, description="CAPTCHA token from /api/captcha/generate (optional when disabled)"
+    )
+    captcha_code: Optional[str] = Field(
+        None, min_length=4, max_length=4, description="User-entered CAPTCHA code"
     )
 
 
@@ -22,9 +24,11 @@ class UserLogin(SQLModel):
 
     username: str
     password: str
-    captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
-    captcha_code: str = Field(
-        ..., min_length=4, max_length=4, description="User-entered CAPTCHA code"
+    captcha_token: Optional[str] = Field(
+        None, description="CAPTCHA token from /api/captcha/generate (optional when disabled)"
+    )
+    captcha_code: Optional[str] = Field(
+        None, min_length=4, max_length=4, description="User-entered CAPTCHA code"
     )
 
 
@@ -59,9 +63,11 @@ class PasswordReset(SQLModel):
     current_password: str = Field(..., min_length=6, max_length=100)
     new_password: str = Field(..., min_length=6, max_length=100)
     confirm_password: str = Field(..., min_length=6, max_length=100)
-    captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
-    captcha_code: str = Field(
-        ..., min_length=4, max_length=4, description="User-entered CAPTCHA code"
+    captcha_token: Optional[str] = Field(
+        None, description="CAPTCHA token from /api/captcha/generate (optional when disabled)"
+    )
+    captcha_code: Optional[str] = Field(
+        None, min_length=4, max_length=4, description="User-entered CAPTCHA code"
     )
 
 
@@ -77,9 +83,11 @@ class UserProfileUpdate(SQLModel):
         max_length=255,
         description="GitHub Fine-grained personal access token for accessing private repositories and better rate limits",
     )
-    captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
-    captcha_code: str = Field(
-        ..., min_length=4, max_length=4, description="User-entered CAPTCHA code"
+    captcha_token: Optional[str] = Field(
+        None, description="CAPTCHA token from /api/captcha/generate (optional when disabled)"
+    )
+    captcha_code: Optional[str] = Field(
+        None, min_length=4, max_length=4, description="User-entered CAPTCHA code"
     )
 
     @field_validator("steam_api_key")
@@ -157,9 +165,11 @@ class S3SettingsUpdate(SQLModel):
     use_ssl: Optional[bool] = None
     retention_count: Optional[int] = Field(None, ge=1, le=10000)
     clear_secret: bool = False
-    captcha_token: str = Field(..., description="CAPTCHA token from /api/captcha/generate")
-    captcha_code: str = Field(
-        ..., min_length=4, max_length=4, description="User-entered CAPTCHA code"
+    captcha_token: Optional[str] = Field(
+        None, description="CAPTCHA token from /api/captcha/generate (optional when disabled)"
+    )
+    captcha_code: Optional[str] = Field(
+        None, min_length=4, max_length=4, description="User-entered CAPTCHA code"
     )
 
     @field_validator(
@@ -298,9 +308,11 @@ class GenerateServerTokenRequest(SQLModel):
     server_name: Optional[str] = Field(
         None, max_length=255, description="Optional memo/description for the server"
     )
-    captcha_token: str = Field(..., description="CAPTCHA token (required for security)")
-    captcha_code: str = Field(
-        ..., min_length=4, max_length=4, description="CAPTCHA code (required for security)"
+    captcha_token: Optional[str] = Field(
+        None, description="CAPTCHA token (optional when CAPTCHA is disabled)"
+    )
+    captcha_code: Optional[str] = Field(
+        None, min_length=4, max_length=4, description="CAPTCHA code (optional when disabled)"
     )
 
 

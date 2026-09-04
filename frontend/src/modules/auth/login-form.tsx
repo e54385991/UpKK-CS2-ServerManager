@@ -12,7 +12,7 @@ import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import { Input, Label } from "@/shared/ui/input";
 
-type Captcha = { token: string; imageUrl: string };
+type Captcha = { token: string; imageUrl: string; enabled: boolean };
 type Translate = ReturnType<typeof useTranslations>;
 
 /**
@@ -64,7 +64,7 @@ export function LoginForm() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!captcha) return;
+    if (!captcha || (captcha.enabled && !captcha.token)) return;
     setError(null);
     setPending(true);
 
@@ -76,8 +76,12 @@ export function LoginForm() {
         body: JSON.stringify({
           username: String(form.get("username") ?? ""),
           password: String(form.get("password") ?? ""),
-          captcha_token: captcha.token,
-          captcha_code: String(form.get("captcha") ?? ""),
+          ...(captcha.enabled
+            ? {
+                captcha_token: captcha.token,
+                captcha_code: String(form.get("captcha") ?? ""),
+              }
+            : {}),
         }),
       });
 
@@ -136,43 +140,45 @@ export function LoginForm() {
         </Link>
       </div>
 
-      <div>
-        <Label htmlFor="captcha">{t("captcha")}</Label>
-        <div className="flex items-center gap-3">
-          <Input
-            id="captcha"
-            name="captcha"
-            required
-            inputMode="text"
-            autoComplete="off"
-            maxLength={4}
-            className="uppercase tracking-[0.3em]"
-            placeholder={t("captchaPlaceholder")}
-          />
-          <button
-            type="button"
-            onClick={refreshCaptcha}
-            aria-label={t("refreshCaptcha")}
-            className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
-          >
-            {captcha && !captchaLoading ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={captcha.imageUrl}
-                alt={t("captcha")}
-                className="h-full w-full object-contain"
-              />
-            ) : (
-              <span className="text-xs text-fg-subtle">{t("loading")}</span>
-            )}
-            <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
-              <RefreshCw
-                className={cn("size-3", captchaLoading && "animate-spin")}
-              />
-            </span>
-          </button>
+      {captcha?.enabled !== false ? (
+        <div>
+          <Label htmlFor="captcha">{t("captcha")}</Label>
+          <div className="flex items-center gap-3">
+            <Input
+              id="captcha"
+              name="captcha"
+              required
+              inputMode="text"
+              autoComplete="off"
+              maxLength={4}
+              className="uppercase tracking-[0.3em]"
+              placeholder={t("captchaPlaceholder")}
+            />
+            <button
+              type="button"
+              onClick={refreshCaptcha}
+              aria-label={t("refreshCaptcha")}
+              className="relative flex h-10 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface"
+            >
+              {captcha && !captchaLoading ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={captcha.imageUrl}
+                  alt={t("captcha")}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <span className="text-xs text-fg-subtle">{t("loading")}</span>
+              )}
+              <span className="absolute right-1 top-1 rounded bg-canvas/70 p-0.5 text-fg-subtle">
+                <RefreshCw
+                  className={cn("size-3", captchaLoading && "animate-spin")}
+                />
+              </span>
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         <LogIn className="size-4" />

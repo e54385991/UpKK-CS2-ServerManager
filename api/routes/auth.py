@@ -41,7 +41,7 @@ from modules import (
     verify_password_async,
 )
 from services.audit_log_service import INVALID_CREDENTIALS_DETAILS, record_audit_event
-from services.captcha_service import captcha_service
+from services.captcha_policy import require_captcha
 from services.rate_limit import enforce_rate_limit
 from services.s3_backup_service import s3_backup_service
 from services.steam_api_service import steam_api_service
@@ -88,14 +88,7 @@ async def register(user_data: UserCreate, request: Request, db: DatabaseSession)
 async def login(user_data: UserLogin, request: Request, response: Response, db: DatabaseSession):
     """Login and get access token"""
     await enforce_rate_limit(request, "login", limit=10, window=60, identity=user_data.username)
-    # Validate CAPTCHA first
-    is_valid = await captcha_service.validate_captcha(
-        user_data.captcha_token, user_data.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
+    await require_captcha(db, user_data.captcha_token, user_data.captcha_code)
 
     # Find user by username
     user = await User.get_by_username(db, user_data.username)
@@ -189,14 +182,7 @@ async def reset_password(
     db: DatabaseSession,
 ):
     """Reset user password"""
-    # Validate CAPTCHA first
-    is_valid = await captcha_service.validate_captcha(
-        password_data.captcha_token, password_data.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
+    await require_captcha(db, password_data.captcha_token, password_data.captcha_code)
 
     await db.commit()
     # Verify current password
@@ -236,14 +222,7 @@ async def update_profile(
     db: DatabaseSession,
 ):
     """Update user profile"""
-    # Validate CAPTCHA first
-    is_valid = await captcha_service.validate_captcha(
-        profile_data.captcha_token, profile_data.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
+    await require_captcha(db, profile_data.captcha_token, profile_data.captcha_code)
 
     # Update email if provided
     if profile_data.email:
@@ -323,15 +302,9 @@ async def generate_user_api_key(
     db: DatabaseSession,
 ):
     """Generate a new API key for the current user (or regenerate if exists)"""
-    # Validate CAPTCHA if provided (optional for automation)
+    # CAPTCHA remains optional for automation and is policy-controlled when supplied.
     if api_key_data.captcha_token and api_key_data.captcha_code:
-        is_valid = await captcha_service.validate_captcha(
-            api_key_data.captcha_token, api_key_data.captcha_code
-        )
-        if not is_valid:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-            )
+        await require_captcha(db, api_key_data.captcha_token, api_key_data.captcha_code)
 
     # Generate new API key
     new_api_key = generate_api_key()
@@ -423,13 +396,7 @@ async def update_s3_settings(
     db: DatabaseSession,
 ):
     """Update current user's S3 backup settings"""
-    is_valid = await captcha_service.validate_captcha(
-        settings_data.captcha_token, settings_data.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
+    await require_captcha(db, settings_data.captcha_token, settings_data.captcha_code)
 
     if settings_data.enabled is not None:
         current_user.s3_enabled = settings_data.enabled
@@ -509,14 +476,7 @@ async def generate_server_token(
     db: DatabaseSession,
 ):
     """Generate a Steam game server login token (GSLT) using user's Steam API key"""
-    # Validate CAPTCHA (required for security)
-    is_valid = await captcha_service.validate_captcha(
-        request_data.captcha_token, request_data.captcha_code
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired CAPTCHA code"
-        )
+    await require_captcha(db, request_data.captcha_token, request_data.captcha_code)
 
     # Check if user has Steam API key set
     if not current_user.steam_api_key:

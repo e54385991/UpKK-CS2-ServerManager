@@ -192,8 +192,15 @@ class ServerCreateRequest(ApiRequest):
     game_port: int = Field(default=27015, ge=1, le=65535)
     game_directory: str = Field(default="/home/cs2server/cs2", min_length=1, max_length=500)
     description: str | None = None
-    captcha_token: str = Field(min_length=1)
-    captcha_code: str = Field(min_length=4, max_length=4)
+    captcha_token: str | None = Field(default=None, min_length=1)
+    captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
+    force_add: bool = Field(
+        default=False,
+        description=(
+            "Save the panel record without validating or initializing the host. "
+            "Use only after explicit operator confirmation."
+        ),
+    )
     server_name: str = Field(default="CS2 Server", max_length=255)
     default_map: str = Field(default="de_dust2", max_length=100)
     max_players: int = Field(default=32, ge=1, le=64)

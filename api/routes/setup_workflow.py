@@ -43,8 +43,8 @@ class ServerSetupRequest(BaseModel):
     )  # User to create for CS2 (alphanumeric + _ - only)
     cs2_password: Optional[str] = None  # If None, will auto-generate
     auto_sudo: bool = True  # Automatically use sudo for non-root users
-    captcha_token: str  # CAPTCHA token from /api/captcha/generate
-    captcha_code: str  # User-entered CAPTCHA code
+    captcha_token: Optional[str] = None  # CAPTCHA token from /api/captcha/generate
+    captcha_code: Optional[str] = None  # User-entered CAPTCHA code
     save_config: bool = True  # Whether to save the initialized server config
     open_game_ports: bool = True  # Whether to open UDP ports 20000-40000 if UFW is enabled
     session_id: Optional[str] = None  # Optional session ID for WebSocket progress updates

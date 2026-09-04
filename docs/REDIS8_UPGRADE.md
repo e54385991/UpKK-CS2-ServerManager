@@ -1,6 +1,6 @@
 # Redis 8 升级与回滚说明
 
-默认 Compose 镜像已更新为 `redis:8.10.1-alpine`。应用只使用 Redis 7/8 通用命令和数据
+默认 Compose 镜像已更新为固定摘要的 `redis:8.10.1-alpine`。应用只使用 Redis 7/8 通用命令和数据
 编码，因此外部 Redis 7 部署仍可继续工作。升级不修改 key 名称、TTL 或序列化格式。
 
 ## 升级前检查

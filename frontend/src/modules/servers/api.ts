@@ -340,6 +340,7 @@ export type ServerCreateInput = {
   readonly description?: string;
   readonly captchaToken: string;
   readonly captchaCode: string;
+  readonly forceAdd?: boolean;
   readonly serverName: string;
   readonly defaultMap: string;
   readonly maxPlayers: number;
@@ -369,8 +370,13 @@ export async function createServer(
       game_port: input.gamePort,
       game_directory: input.gameDirectory,
       description: input.description || null,
-      captcha_token: input.captchaToken,
-      captcha_code: input.captchaCode,
+      ...(input.captchaToken && input.captchaCode
+        ? {
+            captcha_token: input.captchaToken,
+            captcha_code: input.captchaCode,
+          }
+        : {}),
+      force_add: input.forceAdd ?? false,
       server_name: input.serverName,
       default_map: input.defaultMap,
       max_players: input.maxPlayers,

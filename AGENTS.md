@@ -4,7 +4,7 @@ This repository hosts two applications:
 
 - **Backend** (repo root): a FastAPI + PostgreSQL + Redis management panel
   (`main.py`, `api/`, `modules/`, `services/`, `alembic/`).
-- **Frontend** (`frontend/`): a dedicated **Next.js 16.3.3** console that
+- **Frontend** (`frontend/`): a dedicated **Next.js 16.3.4** console that
   replaces the legacy Jinja/Bootstrap UI and talks to the backend through a
   same-origin proxy. See `frontend/AGENTS.md` for its rules — read it before
   working under `frontend/`, and read `frontend/node_modules/next/dist/docs/`

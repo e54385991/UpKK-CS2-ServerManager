@@ -14,6 +14,7 @@ from api.routes.actions.status import reconnect_ssh as reconnect_ssh_legacy
 from api.routes.servers.configuration import get_startup_command as get_startup_command_legacy
 from api.routes.servers.crud import apply_system_defaults_to_server as apply_defaults_legacy
 from api.routes.servers.crud import create_server as create_legacy_server
+from api.routes.servers.crud import create_server_record
 from api.routes.servers.crud import delete_server as delete_legacy_server
 from api.routes.servers.crud import update_server as update_legacy_server
 from api.routes.servers.maintenance import (
@@ -81,14 +82,33 @@ async def create_server(
     current_user: ActiveUser,
     request: Request,
 ) -> ServerCreateResult:
-    """Create a server after CAPTCHA + SSH checks, then initialize host packages."""
-    server = await create_legacy_server(
-        ServerCreate(**body.model_dump()),
-        db,
-        current_user,
-        request,
-    )
+    """Create a server after CAPTCHA; normal requests also initialize the host."""
+    server_data = ServerCreate(**body.model_dump(exclude={"force_add"}))
+    if body.force_add:
+        server = await create_server_record(
+            server_data,
+            db,
+            current_user,
+            request,
+            skip_host_initialization=True,
+        )
+    else:
+        server = await create_legacy_server(
+            server_data,
+            db,
+            current_user,
+            request,
+        )
     detail = await _to_detail(server)
+    if body.force_add:
+        return ServerCreateResult(
+            **detail.model_dump(),
+            host_initialized=False,
+            initialization_message=(
+                "服务器已强制添加，未执行主机 SSH/SteamCMD 初始化；"
+                "SteamCMD 依赖、CS2 用户、游戏目录和权限可能尚未准备好。"
+            ),
+        )
     init = host_initialization_of(server)
     if init is None:
         return ServerCreateResult(

@@ -3712,15 +3712,29 @@
         "description": "Create the dedicated CS2 Linux user and install host packages over SSH.",
         "properties": {
           "captcha_code": {
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "minLength": 1,
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           },
           "cs2_password": {
             "anyOf": [
@@ -3807,9 +3821,7 @@
           "name",
           "host",
           "ssh_user",
-          "ssh_password",
-          "captcha_token",
-          "captcha_code"
+          "ssh_password"
         ],
         "title": "AutoSetupRequest",
         "type": "object"
@@ -4069,6 +4081,11 @@
       "CaptchaChallenge": {
         "description": "Token plus inline image so proxies do not have to forward custom headers.",
         "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
           "image": {
             "title": "Image",
             "type": "string"
@@ -7825,16 +7842,30 @@
         "description": "Schema for forgot password request",
         "properties": {
           "captcha_code": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "User-entered CAPTCHA code",
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "description": "CAPTCHA token from /api/captcha/generate",
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CAPTCHA token from /api/captcha/generate (optional when disabled)",
+            "title": "Captcha Token"
           },
           "email": {
             "format": "email",
@@ -7843,9 +7874,7 @@
           }
         },
         "required": [
-          "email",
-          "captcha_token",
-          "captcha_code"
+          "email"
         ],
         "title": "ForgotPasswordRequest",
         "type": "object"
@@ -8551,16 +8580,30 @@
         "description": "Schema for generating game server login token",
         "properties": {
           "captcha_code": {
-            "description": "CAPTCHA code (required for security)",
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CAPTCHA code (optional when disabled)",
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "description": "CAPTCHA token (required for security)",
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CAPTCHA token (optional when CAPTCHA is disabled)",
+            "title": "Captcha Token"
           },
           "server_name": {
             "anyOf": [
@@ -8576,10 +8619,6 @@
             "title": "Server Name"
           }
         },
-        "required": [
-          "captcha_token",
-          "captcha_code"
-        ],
         "title": "GenerateServerTokenRequest",
         "type": "object"
       },
@@ -13284,16 +13323,30 @@
         "description": "Schema for password reset",
         "properties": {
           "captcha_code": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "User-entered CAPTCHA code",
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "description": "CAPTCHA token from /api/captcha/generate",
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CAPTCHA token from /api/captcha/generate (optional when disabled)",
+            "title": "Captcha Token"
           },
           "confirm_password": {
             "maxLength": 100,
@@ -13317,9 +13370,7 @@
         "required": [
           "current_password",
           "new_password",
-          "confirm_password",
-          "captcha_token",
-          "captcha_code"
+          "confirm_password"
         ],
         "title": "PasswordReset",
         "type": "object"
@@ -13349,18 +13400,32 @@
       },
       "PasswordResetEmailRequest": {
         "additionalProperties": false,
-        "description": "Public forgot-password body. CAPTCHA-gated; does not reveal whether the email exists.",
+        "description": "Public forgot-password body; does not reveal whether the email exists.",
         "properties": {
           "captcha_code": {
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "minLength": 1,
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           },
           "email": {
             "format": "email",
@@ -13369,9 +13434,7 @@
           }
         },
         "required": [
-          "email",
-          "captcha_token",
-          "captcha_code"
+          "email"
         ],
         "title": "PasswordResetEmailRequest",
         "type": "object"
@@ -15415,14 +15478,29 @@
         "description": "Create a Steam GSLT with the signed-in user's Steam Web API key.",
         "properties": {
           "captcha_code": {
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           },
           "server_name": {
             "anyOf": [
@@ -15437,10 +15515,6 @@
             "title": "Server Name"
           }
         },
-        "required": [
-          "captcha_token",
-          "captcha_code"
-        ],
         "title": "ProfileGsltGenerate",
         "type": "object"
       },
@@ -15472,17 +15546,32 @@
       },
       "ProfilePasswordChange": {
         "additionalProperties": false,
-        "description": "Change the signed-in user's password. Requires the current password and captcha.",
+        "description": "Change the signed-in user's password. The CAPTCHA is policy-controlled.",
         "properties": {
           "captcha_code": {
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           },
           "confirm_password": {
             "maxLength": 100,
@@ -15506,9 +15595,7 @@
         "required": [
           "current_password",
           "new_password",
-          "confirm_password",
-          "captcha_token",
-          "captcha_code"
+          "confirm_password"
         ],
         "title": "ProfilePasswordChange",
         "type": "object"
@@ -15606,7 +15693,7 @@
       },
       "ProfileS3Patch": {
         "additionalProperties": false,
-        "description": "Partial S3 backup update. Secret is write-only; captcha is required.",
+        "description": "Partial S3 backup update. Secret is write-only; CAPTCHA is policy-controlled.",
         "properties": {
           "access_key_id": {
             "anyOf": [
@@ -15633,14 +15720,29 @@
             "title": "Bucket"
           },
           "captcha_code": {
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           },
           "clear_secret": {
             "default": false,
@@ -15731,10 +15833,6 @@
             "title": "Use Ssl"
           }
         },
-        "required": [
-          "captcha_token",
-          "captcha_code"
-        ],
         "title": "ProfileS3Patch",
         "type": "object"
       },
@@ -16083,18 +16181,32 @@
       },
       "RegisterRequest": {
         "additionalProperties": false,
-        "description": "Public self-registration body. CAPTCHA-gated; creates a non-admin member.",
+        "description": "Public self-registration body; creates a non-admin member.",
         "properties": {
           "captcha_code": {
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "minLength": 1,
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           },
           "email": {
             "format": "email",
@@ -16117,9 +16229,7 @@
         "required": [
           "username",
           "email",
-          "password",
-          "captcha_token",
-          "captcha_code"
+          "password"
         ],
         "title": "RegisterRequest",
         "type": "object"
@@ -16433,16 +16543,30 @@
             "title": "Bucket"
           },
           "captcha_code": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "User-entered CAPTCHA code",
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "description": "CAPTCHA token from /api/captcha/generate",
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CAPTCHA token from /api/captcha/generate (optional when disabled)",
+            "title": "Captcha Token"
           },
           "clear_secret": {
             "default": false,
@@ -16533,10 +16657,6 @@
             "title": "Use Ssl"
           }
         },
-        "required": [
-          "captcha_token",
-          "captcha_code"
-        ],
         "title": "S3SettingsUpdate",
         "type": "object"
       },
@@ -17818,16 +17938,30 @@
             "title": "Backend Url"
           },
           "captcha_code": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "User-entered CAPTCHA code",
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "description": "CAPTCHA token from /api/captcha/generate",
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CAPTCHA token from /api/captcha/generate (optional when disabled)",
+            "title": "Captcha Token"
           },
           "client_port": {
             "anyOf": [
@@ -18108,9 +18242,7 @@
           "name",
           "host",
           "ssh_user",
-          "ssh_password",
-          "captcha_token",
-          "captcha_code"
+          "ssh_password"
         ],
         "title": "ServerCreate",
         "type": "object"
@@ -18144,15 +18276,29 @@
             "title": "Apt Mirror"
           },
           "captcha_code": {
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "minLength": 1,
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           },
           "default_map": {
             "default": "de_dust2",
@@ -18170,6 +18316,12 @@
               }
             ],
             "title": "Description"
+          },
+          "force_add": {
+            "default": false,
+            "description": "Save the panel record without validating or initializing the host. Use only after explicit operator confirmation.",
+            "title": "Force Add",
+            "type": "boolean"
           },
           "game_directory": {
             "default": "/home/cs2server/cs2",
@@ -18291,9 +18443,7 @@
           "name",
           "host",
           "ssh_user",
-          "ssh_password",
-          "captcha_token",
-          "captcha_code"
+          "ssh_password"
         ],
         "title": "ServerCreateRequest",
         "type": "object"
@@ -19980,12 +20130,26 @@
             "type": "boolean"
           },
           "captcha_code": {
-            "title": "Captcha Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
           },
           "cs2_password": {
             "anyOf": [
@@ -20062,9 +20226,7 @@
           "name",
           "host",
           "ssh_user",
-          "ssh_password",
-          "captcha_token",
-          "captcha_code"
+          "ssh_password"
         ],
         "title": "ServerSetupRequest",
         "type": "object"
@@ -21806,6 +21968,17 @@
         "additionalProperties": false,
         "description": "Partial admin update. Secret fields are write-only and never echoed.",
         "properties": {
+          "captcha_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Enabled"
+          },
           "clear_global_github_token": {
             "default": false,
             "title": "Clear Global Github Token",
@@ -21963,6 +22136,11 @@
       "SystemSettingsResponse": {
         "description": "Schema for system settings response",
         "properties": {
+          "captcha_enabled": {
+            "default": true,
+            "title": "Captcha Enabled",
+            "type": "boolean"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -22112,6 +22290,17 @@
       "SystemSettingsUpdate": {
         "description": "Schema for updating system settings",
         "properties": {
+          "captcha_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Enabled"
+          },
           "clear_global_github_token": {
             "default": false,
             "title": "Clear Global Github Token",
@@ -22269,6 +22458,11 @@
         "additionalProperties": false,
         "description": "Admin system settings with secrets replaced by presence flags.",
         "properties": {
+          "captcha_enabled": {
+            "default": true,
+            "title": "Captcha Enabled",
+            "type": "boolean"
+          },
           "default_proxy_mode": {
             "enum": [
               "direct",
@@ -22831,16 +23025,30 @@
         "description": "Schema for user registration",
         "properties": {
           "captcha_code": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "User-entered CAPTCHA code",
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "description": "CAPTCHA token from /api/captcha/generate",
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CAPTCHA token from /api/captcha/generate (optional when disabled)",
+            "title": "Captcha Token"
           },
           "email": {
             "format": "email",
@@ -22863,9 +23071,7 @@
         "required": [
           "username",
           "email",
-          "password",
-          "captcha_token",
-          "captcha_code"
+          "password"
         ],
         "title": "UserCreate",
         "type": "object"
@@ -22874,16 +23080,30 @@
         "description": "Schema for user login",
         "properties": {
           "captcha_code": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "User-entered CAPTCHA code",
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "description": "CAPTCHA token from /api/captcha/generate",
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CAPTCHA token from /api/captcha/generate (optional when disabled)",
+            "title": "Captcha Token"
           },
           "password": {
             "title": "Password",
@@ -22896,9 +23116,7 @@
         },
         "required": [
           "username",
-          "password",
-          "captcha_token",
-          "captcha_code"
+          "password"
         ],
         "title": "UserLogin",
         "type": "object"
@@ -22907,16 +23125,30 @@
         "description": "Schema for updating user profile",
         "properties": {
           "captcha_code": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "User-entered CAPTCHA code",
-            "maxLength": 4,
-            "minLength": 4,
-            "title": "Captcha Code",
-            "type": "string"
+            "title": "Captcha Code"
           },
           "captcha_token": {
-            "description": "CAPTCHA token from /api/captcha/generate",
-            "title": "Captcha Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CAPTCHA token from /api/captcha/generate (optional when disabled)",
+            "title": "Captcha Token"
           },
           "email": {
             "anyOf": [
@@ -22957,10 +23189,6 @@
             "title": "Steam Api Key"
           }
         },
-        "required": [
-          "captcha_token",
-          "captcha_code"
-        ],
         "title": "UserProfileUpdate",
         "type": "object"
       },
@@ -31614,7 +31842,7 @@
         ]
       },
       "post": {
-        "description": "Create a server after CAPTCHA + SSH checks, then initialize host packages.",
+        "description": "Create a server after CAPTCHA; normal requests also initialize the host.",
         "operationId": "create_server_api_v1_servers_post",
         "requestBody": {
           "content": {

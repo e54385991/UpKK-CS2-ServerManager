@@ -10,7 +10,29 @@ permissions:
   contents: read
 
 jobs:
+  dockerhub_credentials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.detect.outputs.enabled }}
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - name: Detect Docker Hub publishing credentials
+        id: detect
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Docker Hub publishing enabled."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Docker Hub publishing skipped: configure DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets to enable it."
+          fi
+
   publish:
+    needs: dockerhub_credentials
+    if: ${{ needs.dockerhub_credentials.outputs.enabled == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -27,7 +49,7 @@ jobs:
           test -n "$DOCKERHUB_TOKEN" || (echo "Missing DOCKERHUB_TOKEN repository secret" >&2; exit 1)
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -73,6 +95,8 @@ jobs:
           cache-to: type=gha,mode=max
 
   publish-frontend:
+    needs: dockerhub_credentials
+    if: ${{ needs.dockerhub_credentials.outputs.enabled == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -89,7 +113,7 @@ jobs:
           test -n "$DOCKERHUB_TOKEN" || (echo "Missing DOCKERHUB_TOKEN repository secret" >&2; exit 1)
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
