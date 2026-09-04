@@ -7,6 +7,8 @@ import {
   clearDeploymentLock,
   confirmServerDeployment,
   createServer,
+  cloneServer,
+  getServerCloneTemplate,
   deleteServer,
   exportServerConfigs,
   getCurrentServerOperation,
@@ -40,6 +42,8 @@ import {
   type ConfirmDeployment,
   type ServerCreateInput,
   type ServerCreateResult,
+  type ServerCloneInput,
+  type ServerCloneTemplate,
   type ServerDetail,
   type ServerUpdateInput,
   type ServerWriteResult,
@@ -183,6 +187,25 @@ export async function createServerAction(
   input: ServerCreateInput,
 ): Promise<ApiResult<ServerCreateResult>> {
   const result = await createServer(input);
+  if (result.ok) {
+    revalidatePath("/servers");
+    revalidatePath("/overview");
+    revalidatePath(`/servers/${result.data.id}`);
+  }
+  return result;
+}
+
+export async function getServerCloneTemplateAction(
+  serverId: number,
+): Promise<ApiResult<ServerCloneTemplate>> {
+  return getServerCloneTemplate(serverId);
+}
+
+export async function cloneServerAction(
+  serverId: number,
+  input: ServerCloneInput,
+): Promise<ApiResult<ServerCreateResult>> {
+  const result = await cloneServer(serverId, input);
   if (result.ok) {
     revalidatePath("/servers");
     revalidatePath("/overview");

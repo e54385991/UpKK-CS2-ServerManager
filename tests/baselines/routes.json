@@ -1908,6 +1908,22 @@
     "methods": [
       "GET"
     ],
+    "name": "get_clone_template",
+    "path": "/api/v1/servers/{server_id}/clone-template"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "POST"
+    ],
+    "name": "clone_server",
+    "path": "/api/v1/servers/{server_id}/clone"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
+      "GET"
+    ],
     "name": "list_servers",
     "path": "/api/v1/servers"
   },

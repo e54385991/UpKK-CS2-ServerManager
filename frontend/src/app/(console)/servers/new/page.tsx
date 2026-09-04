@@ -4,9 +4,12 @@ import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/shared/ui/page-header";
 import { LinkButton } from "@/shared/ui/link-button";
 import { CreateServerForm } from "@/modules/servers/create-form";
+import { CloneServerForm } from "@/modules/servers/clone-form";
+import { getServerCloneTemplate } from "@/modules/servers/api";
 import { getInitializedHostCredentials } from "@/modules/servers/setup-api";
 import { SetupWizard } from "@/modules/servers/setup-wizard";
 import { cn } from "@/shared/lib/cn";
+import { Card } from "@/shared/ui/card";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("serverNew");
@@ -25,6 +28,7 @@ export default async function NewServerPage({
     requireInit?: string;
     from?: string;
     initialized?: string;
+    sourceServerId?: string;
   }>;
 }) {
   const [t, tServers, tSetup, sp] = await Promise.all([
@@ -35,6 +39,11 @@ export default async function NewServerPage({
   ]);
   const tab = sp.tab === "setup" ? "setup" : "create";
   const sshPort = Number(sp.sshPort);
+  const sourceServerId = Number(sp.sourceServerId);
+  const cloneTemplate =
+    tab === "create" && Number.isInteger(sourceServerId) && sourceServerId > 0
+      ? await getServerCloneTemplate(sourceServerId)
+      : null;
   const prefilled =
     tab === "create" && sp.from
       ? await getInitializedHostCredentials(sp.from)
@@ -76,12 +85,20 @@ export default async function NewServerPage({
           requireInit={sp.requireInit === "1"}
         />
       ) : (
-        <CreateServerForm
-          initialCredentials={initialCredentials}
-          markedInitializedHost={
-            sp.initialized === "1" ? sp.host : initialCredentials?.host
-          }
-        />
+        cloneTemplate?.ok ? (
+          <CloneServerForm template={cloneTemplate.data} />
+        ) : sp.sourceServerId ? (
+          <Card className="border-danger/30 bg-danger-muted/40 px-5 py-4 text-sm text-danger">
+            {cloneTemplate?.error ?? t("clone.loadError")}
+          </Card>
+        ) : (
+          <CreateServerForm
+            initialCredentials={initialCredentials}
+            markedInitializedHost={
+              sp.initialized === "1" ? sp.host : initialCredentials?.host
+            }
+          />
+        )
       )}
     </>
   );

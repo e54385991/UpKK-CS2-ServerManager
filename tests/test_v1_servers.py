@@ -233,6 +233,145 @@ def test_v1_create_server_can_force_add_without_host_initialization(monkeypatch)
     assert not hasattr(captured["server_data"], "force_add")
 
 
+def test_v1_clone_template_is_non_secret_and_uses_available_defaults(monkeypatch):
+    client, _user = _client(monkeypatch)
+    source = _sample_server(
+        server_name="Bravo in game",
+        game_port=27015,
+        game_directory="/home/steam/cs2",
+        ssh_password="source-secret",
+        sudo_password="source-sudo",
+    )
+
+    async def fake_access(_db, server_id, _user, **_kwargs):
+        assert server_id == 7
+        return source
+
+    async def fake_template(*_args, **_kwargs):
+        from services.server_clone_service import ServerCloneTemplateData
+
+        return ServerCloneTemplateData(
+            source_server_id=7,
+            source_name="bravo",
+            host="10.0.0.8",
+            ssh_port=22,
+            ssh_user="steam",
+            source_game_port=27015,
+            source_game_directory="/home/steam/cs2",
+            has_sudo_password=True,
+            apt_mirror="ustc",
+            use_panel_proxy=False,
+            github_proxy="https://ghfast.top",
+            name="bravo (2)",
+            game_port=27025,
+            game_directory="/home/steam/cs2-2",
+            server_name="Bravo in game (2)",
+            default_map="de_mirage",
+            max_players=16,
+            game_mode="competitive",
+            game_type="0",
+            session_manager="tmux",
+            additional_parameters="+sv_hibernate_when_empty 0",
+        )
+
+    monkeypatch.setattr("api.routes.v1.servers.require_server_access", fake_access)
+    monkeypatch.setattr("api.routes.v1.servers.build_clone_template", fake_template)
+    response = client.get("/api/v1/servers/7/clone-template")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source_game_port"] == 27015
+    assert body["game_port"] == 27025
+    assert body["game_directory"] == "/home/steam/cs2-2"
+    assert body["has_sudo_password"] is True
+    assert "source-secret" not in str(body)
+    assert "source-sudo" not in str(body)
+    assert "ssh_password" not in body
+    assert "sudo_password" not in body
+
+
+def test_v1_clone_forwards_only_editable_values_and_source_id(monkeypatch):
+    client, _user = _client(monkeypatch)
+    source = _sample_server(ssh_password="source-secret", sudo_password="source-sudo")
+    captured = {}
+
+    async def fake_access(_db, server_id, _user, **_kwargs):
+        assert server_id == 7
+        return source
+
+    async def fake_prepare(_db, _source, owner_id, values):
+        captured["owner_id"] = owner_id
+        captured["values"] = values
+        from modules import ServerCreate
+
+        return ServerCreate(
+            name=values.name,
+            host="10.0.0.8",
+            ssh_port=22,
+            ssh_user="steam",
+            ssh_password="source-secret",
+            game_port=values.game_port,
+            game_directory=values.game_directory,
+            server_name=values.server_name,
+            default_map=values.default_map,
+            max_players=values.max_players,
+            game_mode=values.game_mode,
+            game_type=values.game_type,
+        )
+
+    async def fake_create(server_data, _db, _user, _request, **kwargs):
+        captured["server_data"] = server_data
+        captured["kwargs"] = kwargs
+        return _sample_server(name=server_data.name, game_directory=server_data.game_directory)
+
+    monkeypatch.setattr("api.routes.v1.servers.require_server_access", fake_access)
+    monkeypatch.setattr("api.routes.v1.servers.prepare_clone_server", fake_prepare)
+    monkeypatch.setattr("api.routes.v1.servers.create_server_record", fake_create)
+    response = client.post(
+        "/api/v1/servers/7/clone",
+        json={
+            "name": "bravo (2)",
+            "game_port": 27025,
+            "game_directory": "/home/steam/cs2-2",
+            "server_name": "Bravo in game (2)",
+            "sudo_password": "new-sudo",
+            "rcon_password": "new-rcon",
+            "steam_account_token": "NewGSLT",
+            "additional_parameters": "",
+            "captcha_token": "tok-1",
+            "captcha_code": "AB12",
+        },
+    )
+    assert response.status_code == 201
+    assert captured["owner_id"] == 1
+    assert captured["values"].sudo_password == "new-sudo"
+    assert captured["values"].rcon_password == "new-rcon"
+    assert captured["values"].additional_parameters_override is True
+    assert captured["kwargs"] == {
+        "source_server_id": 7,
+        "apply_system_defaults": False,
+    }
+    assert captured["server_data"].ssh_password == "source-secret"
+    assert "source-secret" not in str(response.json())
+    assert "new-sudo" not in str(response.json())
+    assert "new-rcon" not in str(response.json())
+    assert "NewGSLT" not in str(response.json())
+
+
+def test_v1_clone_rejects_unknown_fields(monkeypatch):
+    client, _user = _client(monkeypatch)
+    response = client.post(
+        "/api/v1/servers/7/clone",
+        json={
+            "name": "bravo (2)",
+            "game_port": 27025,
+            "game_directory": "/home/steam/cs2-2",
+            "server_name": "Bravo (2)",
+            "ssh_password": "must-not-be-supplied",
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_v1_get_server_includes_workspace_fields_without_secrets(monkeypatch):
     client, _user = _client(monkeypatch)
 

@@ -17317,6 +17317,317 @@
         "title": "ServerAction",
         "type": "object"
       },
+      "ServerCloneRequest": {
+        "additionalProperties": false,
+        "description": "Editable fields for cloning a server; credentials stay server-side.",
+        "properties": {
+          "additional_parameters": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Parameters"
+          },
+          "apt_mirror": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apt Mirror"
+          },
+          "captcha_code": {
+            "anyOf": [
+              {
+                "maxLength": 4,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Code"
+          },
+          "captcha_token": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
+          "default_map": {
+            "default": "de_dust2",
+            "maxLength": 100,
+            "title": "Default Map",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "game_directory": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Game Directory",
+            "type": "string"
+          },
+          "game_mode": {
+            "default": "competitive",
+            "maxLength": 50,
+            "title": "Game Mode",
+            "type": "string"
+          },
+          "game_port": {
+            "maximum": 65534.0,
+            "minimum": 1.0,
+            "title": "Game Port",
+            "type": "integer"
+          },
+          "game_type": {
+            "default": "0",
+            "maxLength": 50,
+            "title": "Game Type",
+            "type": "string"
+          },
+          "max_players": {
+            "default": 32,
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Max Players",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "rcon_password": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rcon Password"
+          },
+          "server_name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Server Name",
+            "type": "string"
+          },
+          "session_manager": {
+            "anyOf": [
+              {
+                "enum": [
+                  "screen",
+                  "tmux"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Manager"
+          },
+          "steam_account_token": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steam Account Token"
+          },
+          "sudo_password": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sudo Password"
+          }
+        },
+        "required": [
+          "name",
+          "game_port",
+          "game_directory",
+          "server_name"
+        ],
+        "title": "ServerCloneRequest",
+        "type": "object"
+      },
+      "ServerCloneTemplate": {
+        "additionalProperties": false,
+        "description": "Safe defaults used by the clone-server form.",
+        "properties": {
+          "additional_parameters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Parameters"
+          },
+          "apt_mirror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apt Mirror"
+          },
+          "default_map": {
+            "title": "Default Map",
+            "type": "string"
+          },
+          "game_directory": {
+            "title": "Game Directory",
+            "type": "string"
+          },
+          "game_mode": {
+            "title": "Game Mode",
+            "type": "string"
+          },
+          "game_port": {
+            "title": "Game Port",
+            "type": "integer"
+          },
+          "game_type": {
+            "title": "Game Type",
+            "type": "string"
+          },
+          "github_proxy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Proxy"
+          },
+          "has_sudo_password": {
+            "default": false,
+            "title": "Has Sudo Password",
+            "type": "boolean"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "max_players": {
+            "title": "Max Players",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "server_name": {
+            "title": "Server Name",
+            "type": "string"
+          },
+          "session_manager": {
+            "enum": [
+              "screen",
+              "tmux"
+            ],
+            "title": "Session Manager",
+            "type": "string"
+          },
+          "source_game_directory": {
+            "title": "Source Game Directory",
+            "type": "string"
+          },
+          "source_game_port": {
+            "title": "Source Game Port",
+            "type": "integer"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_server_id": {
+            "title": "Source Server Id",
+            "type": "integer"
+          },
+          "ssh_port": {
+            "title": "Ssh Port",
+            "type": "integer"
+          },
+          "ssh_user": {
+            "title": "Ssh User",
+            "type": "string"
+          },
+          "use_panel_proxy": {
+            "default": false,
+            "title": "Use Panel Proxy",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source_server_id",
+          "source_name",
+          "host",
+          "ssh_port",
+          "ssh_user",
+          "source_game_port",
+          "source_game_directory",
+          "name",
+          "game_port",
+          "game_directory",
+          "server_name",
+          "default_map",
+          "max_players",
+          "game_mode",
+          "game_type",
+          "session_manager"
+        ],
+        "title": "ServerCloneTemplate",
+        "type": "object"
+      },
       "ServerConfigEntry": {
         "description": "Portable server configuration used by the export/import bundle.",
         "properties": {
@@ -33225,6 +33536,112 @@
         "summary": "Scan System Cleanup Events",
         "tags": [
           "v1-cleanup"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/clone": {
+      "post": {
+        "description": "Create a fresh server record using credentials stored on the source.",
+        "operationId": "clone_server_api_v1_servers__server_id__clone_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerCloneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerCreateResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Clone Server",
+        "tags": [
+          "v1-servers"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/clone-template": {
+      "get": {
+        "description": "Return safe, currently available defaults for a new server copy.",
+        "operationId": "get_clone_template_api_v1_servers__server_id__clone_template_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerCloneTemplate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Clone Template",
+        "tags": [
+          "v1-servers"
         ]
       }
     },

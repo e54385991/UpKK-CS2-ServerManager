@@ -1,5 +1,6 @@
 """Versioned server endpoints returning non-secret projections."""
 
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Literal
 
@@ -26,6 +27,13 @@ from services.disk_space_service import disk_space_service
 from services.host_initialization import host_initialization_of
 from services.maintenance_lock import maintenance_lock_service
 from services.redis_manager import redis_manager
+from services.server_clone_service import (
+    CloneConflictError,
+    CloneSourceError,
+    ServerCloneInput,
+    build_clone_template,
+    prepare_clone_server,
+)
 from services.server_operation_hub import ServerOperationConflict
 
 from .operation_runner import enqueue_apply_apt_mirror
@@ -42,6 +50,8 @@ from .schemas import (
     DiskSpaceView,
     MonitoringLogListView,
     MonitoringLogView,
+    ServerCloneRequest,
+    ServerCloneTemplate,
     ServerCreateRequest,
     ServerCreateResult,
     ServerDetail,
@@ -109,6 +119,91 @@ async def create_server(
                 "SteamCMD 依赖、CS2 用户、游戏目录和权限可能尚未准备好。"
             ),
         )
+    init = host_initialization_of(server)
+    if init is None:
+        return ServerCreateResult(
+            **detail.model_dump(),
+            host_initialized=True,
+            initialization_message="",
+        )
+    return ServerCreateResult(
+        **detail.model_dump(),
+        host_initialized=init.success,
+        missing_packages=list(init.missing_after or init.missing_before),
+        manual_install_command=init.manual_install_command,
+        initialization_message=init.message,
+    )
+
+
+@router.get("/{server_id}/clone-template", response_model=ServerCloneTemplate)
+async def get_clone_template(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ServerCloneTemplate:
+    """Return safe, currently available defaults for a new server copy."""
+
+    source = await require_server_access(db, server_id, current_user, commit=False)
+    try:
+        template = await build_clone_template(db, source, current_user.id)
+    except (CloneConflictError, CloneSourceError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return ServerCloneTemplate(**asdict(template))
+
+
+@router.post(
+    "/{server_id}/clone",
+    response_model=ServerCreateResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def clone_server(
+    server_id: int,
+    body: ServerCloneRequest,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+    request: Request,
+) -> ServerCreateResult:
+    """Create a fresh server record using credentials stored on the source."""
+
+    source = await require_server_access(db, server_id, current_user, commit=False)
+    values = ServerCloneInput(
+        name=body.name,
+        game_port=body.game_port,
+        game_directory=body.game_directory,
+        description=body.description,
+        server_name=body.server_name,
+        default_map=body.default_map,
+        max_players=body.max_players,
+        game_mode=body.game_mode,
+        game_type=body.game_type,
+        session_manager=body.session_manager,
+        apt_mirror=body.apt_mirror,
+        sudo_password=body.sudo_password,
+        rcon_password=body.rcon_password,
+        steam_account_token=body.steam_account_token,
+        additional_parameters=body.additional_parameters,
+        captcha_token=body.captcha_token,
+        captcha_code=body.captcha_code,
+        additional_parameters_override="additional_parameters" in body.model_fields_set,
+    )
+    try:
+        server_data = await prepare_clone_server(db, source, current_user.id, values)
+    except (CloneConflictError, CloneSourceError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+    server = await create_server_record(
+        server_data,
+        db,
+        current_user,
+        request,
+        source_server_id=server_id,
+        apply_system_defaults=False,
+    )
+    detail = await _to_detail(server)
     init = host_initialization_of(server)
     if init is None:
         return ServerCreateResult(

@@ -123,6 +123,8 @@ async def create_server_record(
     request: Request,
     *,
     skip_host_initialization: bool = False,
+    source_server_id: int | None = None,
+    apply_system_defaults: bool = True,
 ):
     """Create a server record, optionally skipping remote host validation."""
     # Validate CAPTCHA first
@@ -132,7 +134,11 @@ async def create_server_record(
     existing = await Server.get_by_name_and_user(db, server_data.name, current_user.id)
     if existing:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=(
+                status.HTTP_409_CONFLICT
+                if source_server_id is not None
+                else status.HTTP_400_BAD_REQUEST
+            ),
             detail=f"Server with name '{server_data.name}' already exists",
         )
 
@@ -142,7 +148,11 @@ async def create_server_record(
     )
     if duplicate_server:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=(
+                status.HTTP_409_CONFLICT
+                if source_server_id is not None
+                else status.HTTP_400_BAD_REQUEST
+            ),
             detail=f"A server with the same host ({server_data.host}) and game directory ({server_data.game_directory}) already exists. "
             f"If you want to add a new server on this host, please use a different game directory or manually delete the existing directory on the server first.",
         )
@@ -156,14 +166,22 @@ async def create_server_record(
     server_dict["auth_type"] = AuthType.PASSWORD  # Always use password authentication
 
     # Apply system default proxy settings if not explicitly set by user
-    system_settings = await SystemSettings.get_or_create_settings(db)
+    system_settings = (
+        await SystemSettings.get_or_create_settings(db) if apply_system_defaults else None
+    )
     # If user hasn't explicitly set proxy mode, apply system defaults.
-    if not server_dict.get("use_panel_proxy") and not server_dict.get("github_proxy"):
-        if system_settings.default_proxy_mode == "panel":
+    if (
+        apply_system_defaults
+        and not server_dict.get("use_panel_proxy")
+        and not server_dict.get("github_proxy")
+    ):
+        if system_settings and system_settings.default_proxy_mode == "panel":
             server_dict["use_panel_proxy"] = True
             server_dict["github_proxy"] = None
         elif (
-            system_settings.default_proxy_mode == "github_url" and system_settings.github_proxy_url
+            system_settings
+            and system_settings.default_proxy_mode == "github_url"
+            and system_settings.github_proxy_url
         ):
             server_dict["use_panel_proxy"] = False
             server_dict["github_proxy"] = system_settings.github_proxy_url
@@ -193,6 +211,9 @@ async def create_server_record(
     await db.refresh(server)
     if host_init is not None:
         attach_host_initialization(server, host_init)
+    audit_details: dict[str, object] = {"name": server.name, "host": server.host}
+    if source_server_id is not None:
+        audit_details["source_server_id"] = source_server_id
     await record_audit_event(
         category="server",
         action="server.create",
@@ -200,7 +221,7 @@ async def create_server_record(
         user=current_user,
         request=request,
         server_id=server.id,
-        details={"name": server.name, "host": server.host},
+        details=audit_details,
     )
 
     return server

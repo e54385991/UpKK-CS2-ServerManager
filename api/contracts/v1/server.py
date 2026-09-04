@@ -89,6 +89,102 @@ class ServerCreateResult(ServerDetail):
     initialization_message: str = ""
 
 
+class ServerCloneTemplate(V1Model):
+    """Safe defaults used by the clone-server form."""
+
+    source_server_id: int
+    source_name: str
+    host: str
+    ssh_port: int
+    ssh_user: str
+    source_game_port: int
+    source_game_directory: str
+    has_sudo_password: bool = False
+    apt_mirror: str | None = None
+    use_panel_proxy: bool = False
+    github_proxy: str | None = None
+    name: str
+    game_port: int
+    game_directory: str
+    server_name: str
+    default_map: str
+    max_players: int
+    game_mode: str
+    game_type: str
+    session_manager: Literal["screen", "tmux"]
+    additional_parameters: str | None = None
+
+
+class ServerCloneRequest(ApiRequest):
+    """Editable fields for cloning a server; credentials stay server-side."""
+
+    name: str = Field(min_length=1, max_length=255)
+    game_port: int = Field(ge=1, le=65534)
+    game_directory: str = Field(min_length=1, max_length=500)
+    description: str | None = None
+    server_name: str = Field(min_length=1, max_length=255)
+    default_map: str = Field(default="de_dust2", max_length=100)
+    max_players: int = Field(default=32, ge=1, le=64)
+    game_mode: str = Field(default="competitive", max_length=50)
+    game_type: str = Field(default="0", max_length=50)
+    session_manager: Literal["screen", "tmux"] | None = None
+    apt_mirror: str | None = Field(default=None, max_length=32)
+    sudo_password: str | None = Field(default=None, max_length=255)
+    rcon_password: str | None = Field(default=None, max_length=255)
+    steam_account_token: str | None = Field(default=None, max_length=255)
+    additional_parameters: str | None = Field(default=None, max_length=4096)
+    captcha_token: str | None = Field(default=None, min_length=1)
+    captcha_code: str | None = Field(default=None, min_length=4, max_length=4)
+
+    @field_validator("description", "sudo_password", "rcon_password")
+    @classmethod
+    def empty_optional_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator("steam_account_token")
+    @classmethod
+    def validate_steam_account_token(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        token = value.strip()
+        if not token:
+            return None
+        if not re.match(r"^[A-Za-z0-9]+$", token):
+            raise ValueError("Steam account token must only contain alphanumeric characters")
+        return token
+
+    @field_validator("additional_parameters")
+    @classmethod
+    def validate_additional_parameters(cls, value: str | None) -> str | None:
+        return normalize_additional_parameters(value)
+
+    @field_validator("apt_mirror")
+    @classmethod
+    def validate_apt_mirror(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            return None
+        normalized = normalize_apt_mirror(stripped)
+        if normalized is None:
+            raise ValueError("apt_mirror must be official, ustc, or tuna/tsinghua")
+        return normalized
+
+    @field_validator("default_map")
+    @classmethod
+    def validate_default_map(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("game_mode", "game_type")
+    @classmethod
+    def strip_game_values(cls, value: str) -> str:
+        return value.strip()
+
+
 class ServerUpdateRequest(ApiRequest):
     """Partial server update. Secrets are write-only; omit to leave unchanged."""
 
@@ -266,6 +362,8 @@ __all__ = [
     "ServerDetail",
     "ServerWriteResult",
     "ServerCreateResult",
+    "ServerCloneTemplate",
+    "ServerCloneRequest",
     "ServerUpdateRequest",
     "ServerCreateRequest",
     "ServerConfigImportRequest",

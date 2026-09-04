@@ -3314,6 +3314,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servers/{server_id}/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clone Server
+         * @description Create a fresh server record using credentials stored on the source.
+         */
+        post: operations["clone_server_api_v1_servers__server_id__clone_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servers/{server_id}/clone-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Clone Template
+         * @description Return safe, currently available defaults for a new server copy.
+         */
+        get: operations["get_clone_template_api_v1_servers__server_id__clone_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers/{server_id}/confirm-deployment": {
         parameters: {
             query?: never;
@@ -13056,6 +13096,115 @@ export interface components {
             action: string;
         };
         /**
+         * ServerCloneRequest
+         * @description Editable fields for cloning a server; credentials stay server-side.
+         */
+        ServerCloneRequest: {
+            /** Additional Parameters */
+            additional_parameters?: string | null;
+            /** Apt Mirror */
+            apt_mirror?: string | null;
+            /** Captcha Code */
+            captcha_code?: string | null;
+            /** Captcha Token */
+            captcha_token?: string | null;
+            /**
+             * Default Map
+             * @default de_dust2
+             */
+            default_map: string;
+            /** Description */
+            description?: string | null;
+            /** Game Directory */
+            game_directory: string;
+            /**
+             * Game Mode
+             * @default competitive
+             */
+            game_mode: string;
+            /** Game Port */
+            game_port: number;
+            /**
+             * Game Type
+             * @default 0
+             */
+            game_type: string;
+            /**
+             * Max Players
+             * @default 32
+             */
+            max_players: number;
+            /** Name */
+            name: string;
+            /** Rcon Password */
+            rcon_password?: string | null;
+            /** Server Name */
+            server_name: string;
+            /** Session Manager */
+            session_manager?: ("screen" | "tmux") | null;
+            /** Steam Account Token */
+            steam_account_token?: string | null;
+            /** Sudo Password */
+            sudo_password?: string | null;
+        };
+        /**
+         * ServerCloneTemplate
+         * @description Safe defaults used by the clone-server form.
+         */
+        ServerCloneTemplate: {
+            /** Additional Parameters */
+            additional_parameters?: string | null;
+            /** Apt Mirror */
+            apt_mirror?: string | null;
+            /** Default Map */
+            default_map: string;
+            /** Game Directory */
+            game_directory: string;
+            /** Game Mode */
+            game_mode: string;
+            /** Game Port */
+            game_port: number;
+            /** Game Type */
+            game_type: string;
+            /** Github Proxy */
+            github_proxy?: string | null;
+            /**
+             * Has Sudo Password
+             * @default false
+             */
+            has_sudo_password: boolean;
+            /** Host */
+            host: string;
+            /** Max Players */
+            max_players: number;
+            /** Name */
+            name: string;
+            /** Server Name */
+            server_name: string;
+            /**
+             * Session Manager
+             * @enum {string}
+             */
+            session_manager: "screen" | "tmux";
+            /** Source Game Directory */
+            source_game_directory: string;
+            /** Source Game Port */
+            source_game_port: number;
+            /** Source Name */
+            source_name: string;
+            /** Source Server Id */
+            source_server_id: number;
+            /** Ssh Port */
+            ssh_port: number;
+            /** Ssh User */
+            ssh_user: string;
+            /**
+             * Use Panel Proxy
+             * @default false
+             */
+            use_panel_proxy: boolean;
+        };
+        /**
          * ServerConfigEntry
          * @description Portable server configuration used by the export/import bundle.
          */
@@ -21442,6 +21591,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clone_server_api_v1_servers__server_id__clone_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServerCloneRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerCreateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_clone_template_api_v1_servers__server_id__clone_template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerCloneTemplate"];
                 };
             };
             /** @description Validation Error */

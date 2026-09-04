@@ -65,7 +65,12 @@ from .plugins import (
     PluginCatalogImportRequest,
     PluginInstallRequest,
 )
-from .server import ServerConfigImportRequest, ServerCreateRequest, ServerUpdateRequest
+from .server import (
+    ServerCloneRequest,
+    ServerConfigImportRequest,
+    ServerCreateRequest,
+    ServerUpdateRequest,
+)
 from .settings import EmailTestRequest, GmailCredentialsUpload, SystemSettingsPatch
 from .updates import (
     CustomCommandExecuteBody,
@@ -138,6 +143,7 @@ __all__ = [
     "BatchSendCommandRequest",
     "ServerUpdateRequest",
     "ServerCreateRequest",
+    "ServerCloneRequest",
     "ServerConfigImportRequest",
     "SystemSettingsPatch",
     "EmailTestRequest",

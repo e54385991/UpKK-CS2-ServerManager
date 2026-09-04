@@ -141,7 +141,13 @@ from .plugins import (
     PluginInstallStep,
     PluginRef,
 )
-from .server import ServerCreateResult, ServerDetail, ServerSummary, ServerWriteResult
+from .server import (
+    ServerCloneTemplate,
+    ServerCreateResult,
+    ServerDetail,
+    ServerSummary,
+    ServerWriteResult,
+)
 from .settings import ActionResult, EmailTestResult, GmailAuthorizeResult, SystemSettingsView
 from .updates import (
     ConfirmDeploymentView,
@@ -283,6 +289,7 @@ __all__ = [
     "ServerDetail",
     "ServerWriteResult",
     "ServerCreateResult",
+    "ServerCloneTemplate",
     "SystemSettingsView",
     "EmailTestResult",
     "GmailAuthorizeResult",

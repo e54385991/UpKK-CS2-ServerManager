@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
 import { OverviewPanel } from "@/modules/servers/overview-panel";
 import { parseServerId } from "@/modules/servers/workspace";
+import { LinkButton } from "@/shared/ui/link-button";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -19,11 +21,22 @@ export default async function ServerOverviewPage({
   const { id } = await params;
   const serverId = parseServerId(id);
   if (serverId == null) notFound();
+  const t = await getTranslations("serverDetail");
 
   return (
-    <Suspense fallback={<OverviewSkeleton />}>
-      <OverviewPanel serverId={serverId} />
-    </Suspense>
+    <>
+      <div className="mb-4 flex justify-end">
+        <LinkButton
+          href={`/servers/new?sourceServerId=${serverId}` as Route}
+          variant="outline"
+        >
+          {t("cloneServer")}
+        </LinkButton>
+      </div>
+      <Suspense fallback={<OverviewSkeleton />}>
+        <OverviewPanel serverId={serverId} />
+      </Suspense>
+    </>
   );
 }
 
