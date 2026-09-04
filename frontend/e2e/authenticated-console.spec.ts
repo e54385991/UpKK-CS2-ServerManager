@@ -204,13 +204,25 @@ test("server workspace two-row nav reaches named surfaces", async ({ page }) => 
       .getByText(/排除文件|Exclude files/)
       .or(page.getByText(/暂时无法加载自动更新|Unable to load auto-update/)),
   ).toBeVisible();
-  const itemSwitches = page.locator(
-    '[data-testid="plugin-exclude-fields"] button[role="switch"][title]',
-  );
+  const pluginSettings = page.getByTestId("plugin-update-settings").first();
+  const itemSwitches = pluginSettings.locator('button[role="switch"][title]');
   if ((await itemSwitches.count()) >= 3) {
     await expect(itemSwitches.first()).toHaveAttribute("title", /.+/);
     await expect(itemSwitches.nth(1)).toHaveAttribute("title", /.+/);
     await expect(itemSwitches.nth(2)).toHaveAttribute("title", /.+/);
+
+    await expect(pluginSettings.getByText(/自动更新|Auto-update/)).toBeVisible();
+    await expect(
+      pluginSettings.getByText(/仅对这一项启用自动更新|Enable automatic updates for this item/),
+    ).toBeVisible();
+    await expect(pluginSettings.getByText(/备份|Backup/)).toBeVisible();
+    await expect(
+      pluginSettings.getByText(/更新这一项前先创建本地插件备份|Create a local plugin backup before updating this item/),
+    ).toBeVisible();
+    await expect(pluginSettings.getByText(/重启|Restart/)).toBeVisible();
+    await expect(
+      pluginSettings.getByText(/这一项更新完成后重启服务器|Restart the server after this item updates/),
+    ).toBeVisible();
   }
   await expect(
     page

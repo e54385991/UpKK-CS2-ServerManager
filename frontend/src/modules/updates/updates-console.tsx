@@ -469,6 +469,47 @@ export function UpdatesConsole({
   );
 }
 
+function PluginUpdateSwitch({
+  id,
+  label,
+  description,
+  checked,
+  disabled,
+  onCheckedChange,
+}: {
+  id: string;
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onCheckedChange: (next: boolean) => void;
+}) {
+  const descriptionId = `${id}-description`;
+
+  return (
+    <div className="flex min-h-24 items-start justify-between gap-3 rounded-md border border-line bg-surface-overlay/40 px-3 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-fg">{label}</p>
+        <p
+          id={descriptionId}
+          className="mt-1 text-xs leading-5 text-fg-muted"
+        >
+          {description}
+        </p>
+      </div>
+      <Switch
+        id={id}
+        label={label}
+        description={description}
+        descriptionId={descriptionId}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+      />
+    </div>
+  );
+}
+
 function PluginExcludeEditor({
   serverId,
   plugin,
@@ -568,7 +609,7 @@ function PluginExcludeEditor({
 
   return (
     <li className="space-y-3 rounded-lg border border-line bg-surface px-4 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium">{plugin.displayName}</p>
           <p className="text-xs text-fg-muted">
@@ -595,30 +636,6 @@ function PluginExcludeEditor({
           >
             {pending === `test-${plugin.id}` ? t("testing") : t("test")}
           </Button>
-          <Switch
-            id={`plugin-${plugin.id}`}
-            label={t("auto")}
-            description={t("autoHint")}
-            checked={plugin.autoUpdateEnabled}
-            disabled={pending === `plugin-${plugin.id}`}
-            onCheckedChange={onToggle}
-          />
-          <Switch
-            id={`backup-${plugin.id}`}
-            label={t("backup")}
-            description={t("backupHint")}
-            checked={plugin.backupBeforeUpdate}
-            disabled={pending === `backup-${plugin.id}`}
-            onCheckedChange={(next) => void toggleBackup(next)}
-          />
-          <Switch
-            id={`restart-${plugin.id}`}
-            label={t("restart")}
-            description={t("restartHint")}
-            checked={plugin.restartAfterUpdate}
-            disabled={pending === `restart-${plugin.id}`}
-            onCheckedChange={(next) => void toggleRestart(next)}
-          />
           <Button
             type="button"
             size="sm"
@@ -630,6 +647,32 @@ function PluginExcludeEditor({
             {pending === `unregister-${plugin.id}` ? t("unregistering") : t("unregister")}
           </Button>
         </div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3" data-testid="plugin-update-settings">
+        <PluginUpdateSwitch
+          id={`plugin-${plugin.id}`}
+          label={t("auto")}
+          description={t("autoHint")}
+          checked={plugin.autoUpdateEnabled}
+          disabled={pending === `plugin-${plugin.id}`}
+          onCheckedChange={onToggle}
+        />
+        <PluginUpdateSwitch
+          id={`backup-${plugin.id}`}
+          label={t("backup")}
+          description={t("backupHint")}
+          checked={plugin.backupBeforeUpdate}
+          disabled={pending === `backup-${plugin.id}`}
+          onCheckedChange={(next) => void toggleBackup(next)}
+        />
+        <PluginUpdateSwitch
+          id={`restart-${plugin.id}`}
+          label={t("restart")}
+          description={t("restartHint")}
+          checked={plugin.restartAfterUpdate}
+          disabled={pending === `restart-${plugin.id}`}
+          onCheckedChange={(next) => void toggleRestart(next)}
+        />
       </div>
       <div className="grid gap-3 sm:grid-cols-2" data-testid="plugin-exclude-fields">
         <div className="space-y-1.5">
