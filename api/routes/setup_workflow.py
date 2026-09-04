@@ -142,7 +142,7 @@ async def run_admin_command(
 def _short_command_error(stdout: str, stderr: str, limit: int = 2000) -> str:
     combined = "\n".join(part.strip() for part in (stderr, stdout) if part and part.strip())
     if not combined:
-        return "命令未返回错误详情"
+        return "The command returned no error details"
     return combined[-limit:]
 
 
@@ -170,68 +170,68 @@ async def _detect_setup_host(context: _SetupContext) -> None:
     remote_architecture = normalize_debian_architecture(
         decode_remote_text(architecture_result.stdout)
     )
-    await context.add_log(f"检测到系统架构: {remote_architecture or '未知'}")
+    await context.add_log(f"Detected system architecture: {remote_architecture or 'unknown'}")
     if architecture_result.exit_status != 0 or not steamcmd_architecture_supported(
         remote_architecture
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"不支持的服务器架构: {remote_architecture or '未知'}。"
-                "SteamCMD/CS2 Linux 服务端需要 amd64 (x86_64)；"
-                "arm64/aarch64 服务器不能原生运行。"
+                f"Unsupported server architecture: {remote_architecture or 'unknown'}. "
+                "SteamCMD/CS2 Linux servers require amd64 (x86_64); "
+                "arm64/aarch64 servers cannot run natively."
             ),
         )
-    await context.add_log("✓ 架构兼容 SteamCMD/CS2")
+    await context.add_log("✓ Architecture is compatible with SteamCMD/CS2")
 
     package_manager_result = await context.conn.run("command -v apt-get", check=False)
     if package_manager_result.exit_status != 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="目标服务器未安装 apt-get；自动设置仅支持 Ubuntu/Debian。",
+            detail="The target server does not have apt-get installed; automatic setup supports Ubuntu/Debian only.",
         )
 
-    await context.add_log("检测系统版本...")
+    await context.add_log("Checking system version...")
     version_result = await context.conn.run(
         "lsb_release -rs 2>/dev/null || sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '\"'",
         check=False,
     )
     context.os_version = decode_remote_text(version_result.stdout).strip()
-    await context.add_log(f"系统版本: {context.os_version or '未知'}")
+    await context.add_log(f"System version: {context.os_version or 'unknown'}")
 
     user_result = await context.conn.run("whoami", check=False)
     ssh_current_user = decode_remote_text(user_result.stdout).strip()
     context.needs_sudo = ssh_current_user != "root"
     if not context.needs_sudo:
-        await context.add_log("检测到 root 用户，无需 sudo")
+        await context.add_log("Detected root user; sudo is not required")
         return
 
-    await context.add_log(f"检测到非 root 用户 ({ssh_current_user})，将使用 sudo")
+    await context.add_log(f"Detected non-root user ({ssh_current_user}); sudo will be used")
     context.sudo_password = context.request.sudo_password or context.request.ssh_password
     if not context.request.sudo_password and context.request.ssh_password:
-        await context.add_log("尝试使用 SSH 密码作为 sudo 密码...")
+        await context.add_log("Trying the SSH password as the sudo password...")
 
-    await context.add_log("测试 sudo 权限...")
+    await context.add_log("Testing sudo access...")
     _, stderr, exit_code = await run_sudo_command(
         context.conn, "echo 'sudo test successful'", context.sudo_password
     )
     if exit_code == 0:
-        await context.add_log("✓ sudo 权限验证成功")
+        await context.add_log("✓ Sudo access verified")
         return
     if context.sudo_password:
-        await context.add_log("带密码的 sudo 失败，尝试无密码 sudo...")
+        await context.add_log("Sudo with a password failed; trying passwordless sudo...")
         _, stderr, exit_code = await run_sudo_command(context.conn, "echo 'sudo test'", None)
         if exit_code == 0:
-            await context.add_log("✓ 无密码 sudo 可用")
+            await context.add_log("✓ Passwordless sudo is available")
             context.sudo_password = None
             return
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"sudo 权限不足。请确保用户有 sudo 权限，或提供正确的 sudo 密码。错误: {stderr}",
+            detail=f"Insufficient sudo privileges. Ensure the user has sudo privileges or provide the correct sudo password. Error: {stderr}",
         )
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="sudo 需要密码，请在 sudo_password 字段提供",
+        detail="sudo requires a password; provide it in the sudo_password field",
     )
 
 
@@ -246,11 +246,13 @@ async def _run_setup_command(context: _SetupContext, command: str) -> tuple[str,
 
 async def _install_setup_dependencies(context: _SetupContext) -> None:
     """Install and verify the required runtime packages."""
-    await context.add_log("更新系统包列表（自动等待 APT 锁并重试网络错误）...")
+    await context.add_log(
+        "Updating package lists (waiting for APT locks and retrying network errors automatically)..."
+    )
     stdout, stderr, exit_code = await run_apt_command_with_retry(
         context.conn,
         apt_get_command("update"),
-        description="更新系统包列表",
+        description="Updating package lists",
         needs_sudo=context.needs_sudo,
         sudo_password=context.sudo_password,
         add_log=context.add_log,
@@ -260,18 +262,18 @@ async def _install_setup_dependencies(context: _SetupContext) -> None:
     if exit_code != 0:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"更新系统包列表失败，已自动重试: {_short_command_error(stdout, stderr)}",
+            detail=f"Package list update failed after automatic retries: {_short_command_error(stdout, stderr)}",
         )
-    await context.add_log("✓ 包列表更新完成")
+    await context.add_log("✓ Package lists updated")
 
-    await context.add_log("检查 sudo 是否已安装...")
+    await context.add_log("Checking whether sudo is installed...")
     sudo_check = await context.conn.run("command -v sudo", check=False)
     if sudo_check.exit_status != 0:
-        await context.add_log("sudo 未安装，正在安装 sudo...")
+        await context.add_log("sudo is not installed; installing sudo...")
         stdout, stderr, exit_code = await run_apt_command_with_retry(
             context.conn,
             apt_get_command("install", ("sudo",)),
-            description="安装 sudo",
+            description="Installing sudo",
             needs_sudo=context.needs_sudo,
             sudo_password=context.sudo_password,
             add_log=context.add_log,
@@ -279,17 +281,19 @@ async def _install_setup_dependencies(context: _SetupContext) -> None:
         if exit_code != 0:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"安装 sudo 失败: {_short_command_error(stdout, stderr)}",
+                detail=f"Failed to install sudo: {_short_command_error(stdout, stderr)}",
             )
-        await context.add_log("✓ sudo 安装成功")
+        await context.add_log("✓ Sudo installed successfully")
     else:
-        await context.add_log("✓ sudo 已安装")
+        await context.add_log("✓ Sudo is already installed")
 
-    await context.add_log(f"安装 SteamCMD 必需依赖: {', '.join(STEAMCMD_REQUIRED_PACKAGES)}")
+    await context.add_log(
+        f"Installing required SteamCMD dependencies: {', '.join(STEAMCMD_REQUIRED_PACKAGES)}"
+    )
     stdout, stderr, exit_code = await run_apt_command_with_retry(
         context.conn,
         apt_get_command("install", STEAMCMD_REQUIRED_PACKAGES),
-        description="安装 SteamCMD 必需依赖",
+        description="Installing required SteamCMD dependencies",
         needs_sudo=context.needs_sudo,
         sudo_password=context.sudo_password,
         add_log=context.add_log,
@@ -299,7 +303,7 @@ async def _install_setup_dependencies(context: _SetupContext) -> None:
     if exit_code != 0:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"安装 SteamCMD 必需依赖失败: {_short_command_error(stdout, stderr)}",
+            detail=f"Failed to install required SteamCMD dependencies: {_short_command_error(stdout, stderr)}",
         )
     verification = await context.conn.run(
         installed_packages_verification_command(STEAMCMD_REQUIRED_PACKAGES), check=False
@@ -308,11 +312,11 @@ async def _install_setup_dependencies(context: _SetupContext) -> None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=(
-                "APT 返回成功，但依赖验证失败: "
+                "APT reported success, but dependency verification failed: "
                 f"{_short_command_error(decode_remote_text(verification.stdout), decode_remote_text(verification.stderr))}"
             ),
         )
-    await context.add_log("✓ SteamCMD 必需依赖已安装并验证")
+    await context.add_log("✓ Required SteamCMD dependencies installed and verified")
 
     archive_package = None
     for candidate in SEVEN_ZIP_PACKAGE_ALTERNATIVES:
@@ -327,32 +331,37 @@ async def _install_setup_dependencies(context: _SetupContext) -> None:
     if archive_package:
         optional_packages.append(archive_package)
     else:
-        await context.add_log("⚠ 软件源中没有 7zip/p7zip-full；跳过可选的 7z 支持")
+        await context.add_log(
+            "⚠ No 7zip/p7zip-full package is available; skipping optional 7z support"
+        )
     if not optional_packages:
         return
-    await context.add_log(f"安装可选增强依赖: {', '.join(optional_packages)}")
+    await context.add_log(
+        f"Installing optional enhancement dependencies: {', '.join(optional_packages)}"
+    )
     stdout, stderr, exit_code = await run_apt_command_with_retry(
         context.conn,
         apt_get_command("install", optional_packages),
-        description="安装可选增强依赖",
+        description="Installing optional enhancement dependencies",
         needs_sudo=context.needs_sudo,
         sudo_password=context.sudo_password,
         add_log=context.add_log,
     )
     if exit_code == 0:
-        await context.add_log("✓ 可选增强依赖安装完成")
+        await context.add_log("✓ Optional enhancement dependencies installed")
     else:
         await context.add_log(
-            "⚠ 可选增强依赖安装失败；SteamCMD 运行时已验证，将继续设置。"
-            f"详情: {_short_command_error(stdout, stderr)}"
+            "⚠ Optional enhancement dependencies failed to install; "
+            "the verified SteamCMD runtime will be used. "
+            f"Details: {_short_command_error(stdout, stderr)}"
         )
 
 
 async def _install_legacy_libssl(context: _SetupContext) -> None:
     if not context.os_version.startswith("24."):
-        await context.add_log("非 Ubuntu 24 系统，跳过 libssl1.1 安装")
+        await context.add_log("Not Ubuntu 24; skipping libssl1.1 installation")
         return
-    await context.add_log("检测到 Ubuntu 24，正在安装 libssl1.1...")
+    await context.add_log("Detected Ubuntu 24; installing libssl1.1...")
     try:
         import os
 
@@ -366,45 +375,45 @@ async def _install_legacy_libssl(context: _SetupContext) -> None:
         )
         remote_path = "/tmp/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb"
         if not os.path.exists(local_path):
-            await context.add_log(f"⚠ 本地文件不存在: {local_path}")
+            await context.add_log(f"⚠ Local file not found: {local_path}")
             return
-        await context.add_log("正在上传 libssl1.1 到远程服务器...")
+        await context.add_log("Uploading libssl1.1 to the remote server...")
         async with context.conn.start_sftp_client() as sftp:
             await sftp.put(local_path, remote_path)
-        await context.add_log(f"✓ 文件上传完成: {remote_path}")
-        await context.add_log("正在安装 libssl1.1...")
+        await context.add_log(f"✓ File uploaded: {remote_path}")
+        await context.add_log("Installing libssl1.1...")
         stdout, stderr, exit_code = await _run_setup_command(context, f"dpkg -i {remote_path}")
         if stdout.strip():
             await context.add_command_output(stdout)
         if exit_code == 0:
-            await context.add_log("✓ libssl1.1 安装成功")
+            await context.add_log("✓ libssl1.1 installed successfully")
         else:
-            await context.add_log(f"⚠ libssl1.1 安装可能失败: {stderr[:100]}")
+            await context.add_log(f"⚠ libssl1.1 installation may have failed: {stderr[:100]}")
         await _run_setup_command(context, f"rm -f {remote_path}")
-        await context.add_log("✓ 清理临时文件完成")
+        await context.add_log("✓ Temporary files cleaned up")
     except Exception as exc:
-        await context.add_log(f"⚠ libssl1.1 安装过程出错: {exc}")
+        await context.add_log(f"⚠ libssl1.1 installation error: {exc}")
 
 
 async def _ensure_setup_user(context: _SetupContext) -> None:
     username = context.request.cs2_username
-    await context.add_log(f"检查用户 {username}...")
+    await context.add_log(f"Checking user {username}...")
     result = await context.conn.run(f"id {username}", check=False)
     if result.exit_status == 0:
-        await context.add_log(f"用户 {username} 已存在，将更新密码")
+        await context.add_log(f"User {username} already exists; updating password")
     else:
-        await context.add_log(f"创建用户 {username}...")
+        await context.add_log(f"Creating user {username}...")
         stdout, stderr, exit_code = await _run_setup_command(
             context, f"useradd -m -s /bin/bash {username}"
         )
         if exit_code != 0:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"创建用户失败: {stderr}",
+                detail=f"Failed to create user: {stderr}",
             )
-        await context.add_log(f"✓ 用户 {username} 创建成功")
+        await context.add_log(f"✓ User {username} created successfully")
 
-    await context.add_log("设置用户密码...")
+    await context.add_log("Setting the user password...")
     credential = f"{username}:{context.cs2_password}"
     stdout, stderr, exit_code = await _run_setup_command(
         context, f"printf '%s\\n' {shlex.quote(credential)} | chpasswd"
@@ -412,60 +421,64 @@ async def _ensure_setup_user(context: _SetupContext) -> None:
     if exit_code != 0:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"设置 CS2 用户密码失败: {_short_command_error(stdout, stderr)}",
+            detail=f"Failed to set the CS2 user password: {_short_command_error(stdout, stderr)}",
         )
-    await context.add_log("✓ 密码设置成功")
+    await context.add_log("✓ Password set successfully")
 
 
 async def _configure_setup_directory(context: _SetupContext) -> None:
     username = context.request.cs2_username
     context.game_directory = f"/home/{username}/cs2"
-    await context.add_log(f"将用户 {username} 添加到 sudo 组...")
+    await context.add_log(f"Adding user {username} to the sudo group...")
     stdout, stderr, exit_code = await _run_setup_command(context, f"usermod -aG sudo {username}")
     if exit_code == 0:
-        await context.add_log(f"✓ 用户 {username} 已添加到 sudo 组")
+        await context.add_log(f"✓ User {username} added to the sudo group")
     else:
-        await context.add_log(f"⚠ 添加用户到 sudo 组可能失败: {stderr[:100]}")
+        await context.add_log(
+            f"⚠ Adding the user to the sudo group may have failed: {stderr[:100]}"
+        )
 
-    await context.add_log(f"创建游戏目录 {context.game_directory}...")
+    await context.add_log(f"Creating game directory {context.game_directory}...")
     stdout, stderr, exit_code = await _run_setup_command(
         context, f"mkdir -p {context.game_directory}"
     )
     if exit_code != 0:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"创建游戏目录失败: {_short_command_error(stdout, stderr)}",
+            detail=f"Failed to create the game directory: {_short_command_error(stdout, stderr)}",
         )
-    await context.add_log("设置目录权限...")
+    await context.add_log("Setting directory permissions...")
     stdout, stderr, exit_code = await _run_setup_command(
         context, f"chown -R {username}:{username} /home/{username}"
     )
     if exit_code != 0:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"设置目录权限失败: {_short_command_error(stdout, stderr)}",
+            detail=f"Failed to set directory permissions: {_short_command_error(stdout, stderr)}",
         )
-    await context.add_log("✓ 权限设置完成")
+    await context.add_log("✓ Directory permissions set")
 
 
 async def _configure_setup_firewall(context: _SetupContext) -> None:
     if not context.request.open_game_ports:
         return
-    await context.add_log("检查 UFW 防火墙状态...")
+    await context.add_log("Checking UFW firewall status...")
     stdout, stderr, exit_code = await _run_setup_command(context, "ufw status")
     if exit_code == 0 and "Status: active" in stdout:
-        await context.add_log("UFW 防火墙已启用，正在开放 UDP 20000~40000 端口...")
+        await context.add_log("UFW is enabled; opening UDP ports 20000-40000...")
         stdout, stderr, exit_code = await _run_setup_command(context, "ufw allow 20000:40000/udp")
         if stdout.strip():
             await context.add_command_output(stdout)
         if exit_code == 0:
-            await context.add_log("✓ UDP 端口 20000~40000 已开放")
+            await context.add_log("✓ UDP ports 20000-40000 opened")
         else:
-            await context.add_log(f"⚠ 开放端口失败: {stderr[:100]}")
+            await context.add_log(f"⚠ Failed to open ports: {stderr[:100]}")
     elif exit_code != 0:
-        await context.add_log("⚠ UFW 未安装或无法获取状态，跳过端口配置")
+        await context.add_log(
+            "⚠ UFW is not installed or its status is unavailable; skipping port configuration"
+        )
     else:
-        await context.add_log("ℹ UFW 未启用，跳过端口配置")
+        await context.add_log("ℹ UFW is not enabled; skipping port configuration")
 
 
 async def _configure_setup_user(context: _SetupContext) -> None:
@@ -483,16 +496,16 @@ async def _persist_setup_configuration(
     """Persist reusable credentials while keeping persistence failures non-fatal."""
     initialized_server_id: str | None = None
     try:
-        await context.add_log("正在保存 SSH 用户配置到数据库...")
+        await context.add_log("Saving SSH user configuration to the database...")
         sudo_password_to_save = (
             context.request.ssh_password if not context.needs_sudo else context.sudo_password or ""
         )
         user_type = (
-            "root 用户"
+            "root user"
             if not context.needs_sudo
-            else "带密码 sudo"
+            else "sudo with password"
             if context.sudo_password
-            else "无密码 sudo"
+            else "passwordless sudo"
         )
         await SSHServerSudo.upsert(
             session=db,
@@ -503,10 +516,10 @@ async def _persist_setup_configuration(
             sudo_password=sudo_password_to_save,
         )
         await context.add_log(
-            f"✓ SSH 用户配置已成功保存到数据库 (用户: {context.request.ssh_user}, 类型: {user_type})"
+            f"✓ SSH user configuration saved to the database (user: {context.request.ssh_user}, type: {user_type})"
         )
     except Exception as exc:
-        await context.add_log(f"✗ 保存 SSH 用户配置失败: {exc}")
+        await context.add_log(f"✗ Failed to save SSH user configuration: {exc}")
 
     if not context.request.save_config:
         return initialized_server_id
@@ -521,7 +534,7 @@ async def _persist_setup_configuration(
         "created_at": time.time(),
     }
     try:
-        await context.add_log("正在将服务器配置保存到数据库...")
+        await context.add_log("Saving server configuration to the database...")
         initialized_server_id = await save_initialized_server(
             db,
             user_id=current_user.id,
@@ -532,18 +545,20 @@ async def _persist_setup_configuration(
             ssh_password=context.cs2_password,
             game_directory=context.game_directory,
         )
-        await context.add_log(f"✓ 服务器配置已长期保存 (用户: {context.request.cs2_username})")
+        await context.add_log(
+            f"✓ Server configuration saved permanently (user: {context.request.cs2_username})"
+        )
     except Exception as exc:
-        await context.add_log(f"⚠ 保存到数据库失败，尝试 Redis 兼容存储: {exc}")
+        await context.add_log(f"⚠ Database save failed; trying Redis compatibility storage: {exc}")
         try:
             initialized_server_id = await redis_manager.set_initialized_server(
                 current_user.id, server_data
             )
             await context.add_log(
-                f"⚠ 已保存到 Redis 兼容存储 (用户: {context.request.cs2_username}, 旧数据最多保留 30 天)"
+                f"⚠ Saved to Redis compatibility storage (user: {context.request.cs2_username}; legacy data is retained for up to 30 days)"
             )
         except Exception as fallback_exc:
-            await context.add_log(f"⚠ 保存配置失败: {fallback_exc}")
+            await context.add_log(f"⚠ Failed to save configuration: {fallback_exc}")
     return initialized_server_id
 
 
@@ -558,10 +573,10 @@ async def run_apt_command_with_retry(
     attempts: int = APT_RETRY_ATTEMPTS,
 ) -> Tuple[str, str, int]:
     """Run apt with bounded retries for transient network and dpkg-lock failures."""
-    last_result = ("", "命令尚未执行", 1)
+    last_result = ("", "Command has not been executed", 1)
     for attempt in range(1, attempts + 1):
         if attempt > 1:
-            await add_log(f"重试 {description}（第 {attempt}/{attempts} 次）...")
+            await add_log(f"Retrying {description} (attempt {attempt}/{attempts})...")
         try:
             last_result = await run_admin_command(
                 conn,
@@ -571,19 +586,19 @@ async def run_apt_command_with_retry(
                 timeout=600,
             )
         except asyncio.TimeoutError:
-            last_result = ("", f"{description}在 600 秒后超时", 124)
+            last_result = ("", f"{description} timed out after 600 seconds", 124)
 
         stdout, stderr, exit_code = last_result
         if exit_code == 0:
             return last_result
 
         await add_log(
-            f"⚠ {description}失败（第 {attempt}/{attempts} 次）："
+            f"⚠ {description} failed (attempt {attempt}/{attempts}): "
             f"{_short_command_error(stdout, stderr)}"
         )
         if attempt < attempts:
             delay = APT_RETRY_DELAYS_SECONDS[min(attempt - 1, len(APT_RETRY_DELAYS_SECONDS) - 1)]
-            await add_log(f"将在 {delay} 秒后自动重试...")
+            await add_log(f"Retrying automatically in {delay} seconds...")
             await asyncio.sleep(delay)
 
     return last_result

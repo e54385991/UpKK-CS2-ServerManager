@@ -201,7 +201,7 @@ async def setup_progress_websocket(websocket: WebSocket, session_id: str):
         await websocket.send_json(
             {
                 "type": "info",
-                "message": "WebSocket 连接已建立，等待设置开始...",
+                "message": "WebSocket connection established; waiting for setup to start...",
                 "timestamp": get_current_time().isoformat(),
             }
         )
@@ -243,7 +243,7 @@ async def auto_setup_server(
     try:
         cs2_password = setup_req.cs2_password or generate_secure_password()
         await add_log(
-            f"正在连接到 {setup_req.host}:{setup_req.ssh_port} (用户: {setup_req.ssh_user})..."
+            f"Connecting to {setup_req.host}:{setup_req.ssh_port} (user: {setup_req.ssh_user})..."
         )
         conn = await asyncssh.connect(
             host=setup_req.host,
@@ -253,7 +253,7 @@ async def auto_setup_server(
             known_hosts=None,
             connect_timeout=15,
         )
-        await add_log("✓ SSH 连接成功")
+        await add_log("✓ SSH connection successful")
         context = _SetupContext(
             request=setup_req,
             conn=conn,
@@ -266,14 +266,14 @@ async def auto_setup_server(
         await _install_legacy_libssl(context)
         await _configure_setup_user(context)
         await add_log("=" * 50)
-        await add_log("✓ 服务器环境设置完成！")
+        await add_log("✓ Server environment setup complete!")
         await add_log("=" * 50)
         initialized_server_id = await _persist_setup_configuration(
             context, current_user=current_user, db=db
         )
         return ServerSetupResponse(
             success=True,
-            message="服务器环境设置成功",
+            message="Server environment setup succeeded",
             cs2_username=setup_req.cs2_username,
             cs2_password=cs2_password,
             game_directory=context.game_directory,
@@ -282,27 +282,28 @@ async def auto_setup_server(
             session_id=setup_req.session_id,
         )
     except asyncssh.PermissionDenied:
-        await add_log("✗ SSH 认证失败")
+        await add_log("✗ SSH authentication failed")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="SSH 认证失败，请检查用户名和密码/密钥"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SSH authentication failed. Check the username and password/key.",
         ) from None
     except asyncio.TimeoutError:
-        await add_log("✗ SSH 连接超时")
+        await add_log("✗ SSH connection timed out")
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="SSH 连接超时 - 服务器可能无法访问或响应过慢，请检查网络连接和服务器状态",
+            detail="SSH connection timed out - the server may be unreachable or too slow to respond. Check the network connection and server status.",
         ) from None
     except asyncssh.Error as exc:
-        await add_log(f"✗ SSH 错误: {exc}")
+        await add_log(f"✗ SSH error: {exc}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"SSH 连接错误: {exc}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"SSH connection error: {exc}"
         ) from exc
     except HTTPException:
         raise
     except Exception as exc:
-        await add_log(f"✗ 未知错误: {exc}")
+        await add_log(f"✗ Unknown error: {exc}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"设置失败: {exc}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Setup failed: {exc}"
         ) from exc
     finally:
         if conn is not None:

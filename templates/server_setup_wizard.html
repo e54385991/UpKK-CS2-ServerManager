@@ -483,7 +483,7 @@
                 this.setupScript = `#!/bin/bash
 set -Eeuo pipefail
 
-trap 'status=$?; echo "设置失败（第 $LINENO 行，退出码 $status）" >&2; exit $status' ERR
+trap 'status=$?; echo "Setup failed (line $LINENO, exit code $status)" >&2; exit $status' ERR
 
 CS2_USER='${this.autoSetupForm.cs2_username}'
 
@@ -497,29 +497,29 @@ apt_retry() {
             return 0
         fi
         if [ "$attempt" -lt 3 ]; then
-            echo "APT 操作失败，将自动重试（$attempt/3）..." >&2
+            echo "APT operation failed; retrying automatically (attempt $attempt/3)..." >&2
             sleep $((attempt * 2))
         fi
     done
     return 1
 }
 
-echo "开始设置 CS2 服务器环境..."
+echo "Starting CS2 server environment setup..."
 
-# SteamCMD/CS2 不支持 ARM 服务器
+# SteamCMD/CS2 does not support ARM servers
 ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m)
 case "$ARCH" in
     amd64|x86_64) ;;
     *)
-        echo "不支持的服务器架构: $ARCH；SteamCMD/CS2 需要 amd64 (x86_64)。" >&2
+        echo "Unsupported server architecture: $ARCH; SteamCMD/CS2 requires amd64 (x86_64)." >&2
         exit 1
         ;;
 esac
 
-# 更新包列表（自动等待锁并重试网络错误）
+# Update package lists (wait for locks and retry network errors automatically)
 apt_retry update
 
-# 安装并验证 SteamCMD 必需依赖
+# Install and verify required SteamCMD dependencies
 apt_retry install -y \
     ca-certificates curl wget tar unzip screen tmux bzip2 \
     libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1
@@ -527,39 +527,39 @@ apt_retry install -y \
 for package in ca-certificates curl wget tar unzip screen tmux bzip2 \
     libc6-i386 lib32gcc-s1 lib32stdc++6 lib32z1; do
     if [ "$(dpkg-query -W -f='\${Status}' "$package" 2>/dev/null || true)" != "install ok installed" ]; then
-        echo "必需依赖验证失败: $package" >&2
+        echo "Required dependency verification failed: $package" >&2
         exit 1
     fi
 done
 
-# 可选增强依赖失败不会破坏已经验证通过的 SteamCMD 运行时
+# Optional dependency failures do not invalidate the verified SteamCMD runtime
 if apt-cache show --no-all-versions 7zip >/dev/null 2>&1; then
-    apt_retry install -y libicu-dev 7zip || echo "警告：可选增强依赖安装失败" >&2
+    apt_retry install -y libicu-dev 7zip || echo "Warning: optional dependencies failed to install" >&2
 elif apt-cache show --no-all-versions p7zip-full >/dev/null 2>&1; then
-    apt_retry install -y libicu-dev p7zip-full || echo "警告：可选增强依赖安装失败" >&2
+    apt_retry install -y libicu-dev p7zip-full || echo "Warning: optional dependencies failed to install" >&2
 else
-    apt_retry install -y libicu-dev || echo "警告：libicu-dev 安装失败" >&2
+    apt_retry install -y libicu-dev || echo "Warning: libicu-dev installation failed" >&2
 fi
 
-# 创建用户
+# Create the user
 if id -u "$CS2_USER" >/dev/null 2>&1; then
-    echo "用户已存在: $CS2_USER"
+    echo "User already exists: $CS2_USER"
 else
     sudo useradd -m -s /bin/bash "$CS2_USER"
 fi
 
-# 使用禁止变量展开的 heredoc，安全写入包含特殊字符的密码
+# Use a non-expanding heredoc to safely write a password containing special characters
 sudo chpasswd <<'EOF_PASSWORD'
 ${this.autoSetupForm.cs2_username}:${this.password}
 EOF_PASSWORD
 
-# 创建目录
+# Create the game directory
 sudo mkdir -p "/home/$CS2_USER/cs2"
 sudo chown -R "$CS2_USER:$CS2_USER" "/home/$CS2_USER"
 
-echo "设置完成！"
-echo "用户名: $CS2_USER"
-echo "密码: ${this.password}"`;
+echo "Setup complete!"
+echo "Username: $CS2_USER"
+echo "Password: ${this.password}"`;
             },
 
             async autoSetup() {
@@ -590,7 +590,7 @@ echo "密码: ${this.password}"`;
                 let ws = null;
 
                 try {
-                    addLog('正在建立实时日志连接...');
+                    addLog('Establishing live log connection...');
                     
                     // Connect to WebSocket for real-time logs
                     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -599,7 +599,7 @@ echo "密码: ${this.password}"`;
                     ws = new WebSocket(wsUrl);
                     
                     ws.onopen = () => {
-                        addLog('✓ 实时日志连接已建立');
+                        addLog('✓ Live log connection established');
                     };
                     
                     ws.onmessage = (event) => {
@@ -613,13 +613,13 @@ echo "密码: ${this.password}"`;
                     
                     ws.onerror = (error) => {
                         console.error('WebSocket error:', error);
-                        addLog('⚠ 实时日志连接出错，将在完成后显示所有日志');
+                        addLog('⚠ Live log connection failed; all logs will be shown when setup completes');
                     };
 
                     // Wait a bit for WebSocket to connect
                     await new Promise(resolve => setTimeout(resolve, 500));
 
-                    addLog('正在执行服务器初始化...');
+                    addLog('Running server initialization...');
 
                     const payload = {
                         name: this.autoSetupForm.name,
@@ -663,14 +663,14 @@ echo "密码: ${this.password}"`;
                         }
                     } else {
                         this.setupLogs = result.logs ? result.logs.map((msg, i) => ({ id: i, message: msg })) : [];
-                        this.setupLogs.push({ id: this.setupLogs.length, message: `✗ 错误: ${result.detail}` });
-                        showError(`设置失败: ${result.detail}`);
+                        this.setupLogs.push({ id: this.setupLogs.length, message: `✗ Error: ${result.detail}` });
+                        showError(`Setup failed: ${result.detail}`);
                         // Refresh CAPTCHA on error
                         this.loadSetupCaptcha();
                     }
                 } catch (error) {
-                    this.setupLogs.push({ id: this.setupLogs.length, message: `✗ 请求失败: ${error.message}` });
-                    showError(`请求失败: ${error.message}`);
+                    this.setupLogs.push({ id: this.setupLogs.length, message: `✗ Request failed: ${error.message}` });
+                    showError(`Request failed: ${error.message}`);
                     // Refresh CAPTCHA on error
                     this.loadSetupCaptcha();
                 } finally {

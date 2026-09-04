@@ -36,7 +36,7 @@ def build_manual_setup_script(*, cs2_username: str, password: str) -> str:
     return f"""#!/bin/bash
 set -Eeuo pipefail
 
-trap 'status=$?; echo "设置失败（第 $LINENO 行，退出码 $status）" >&2; exit $status' ERR
+trap 'status=$?; echo "Setup failed (line $LINENO, exit code $status)" >&2; exit $status' ERR
 
 CS2_USER='{user}'
 
@@ -50,65 +50,65 @@ apt_retry() {{
             return 0
         fi
         if [ "$attempt" -lt 3 ]; then
-            echo "APT 操作失败，将自动重试（$attempt/3）..." >&2
+            echo "APT operation failed; retrying automatically (attempt $attempt/3)..." >&2
             sleep $((attempt * 2))
         fi
     done
     return 1
 }}
 
-echo "开始设置 CS2 服务器环境..."
+echo "Starting CS2 server environment setup..."
 
-# SteamCMD/CS2 不支持 ARM 服务器
+# SteamCMD/CS2 does not support ARM servers
 ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m)
 case "$ARCH" in
     amd64|x86_64) ;;
     *)
-        echo "不支持的服务器架构: $ARCH；SteamCMD/CS2 需要 amd64 (x86_64)。" >&2
+        echo "Unsupported server architecture: $ARCH; SteamCMD/CS2 requires amd64 (x86_64)." >&2
         exit 1
         ;;
 esac
 
-# 更新包列表（自动等待锁并重试网络错误）
+# Update package lists (wait for locks and retry network errors automatically)
 apt_retry update
 
-# 安装并验证 SteamCMD 必需依赖
+# Install and verify required SteamCMD dependencies
 apt_retry install -y \\
     {required}
 
 for package in {required}; do
     if [ "$(dpkg-query -W -f='\\${{Status}}' "$package" 2>/dev/null || true)" != "install ok installed" ]; then
-        echo "必需依赖验证失败: $package" >&2
+        echo "Required dependency verification failed: $package" >&2
         exit 1
     fi
 done
 
-# 可选增强依赖失败不会破坏已经验证通过的 SteamCMD 运行时
+# Optional dependency failures do not invalidate the verified SteamCMD runtime
 if apt-cache show --no-all-versions {seven_zip_primary} >/dev/null 2>&1; then
-    apt_retry install -y {optional} {seven_zip_primary} || echo "警告：可选增强依赖安装失败" >&2
+    apt_retry install -y {optional} {seven_zip_primary} || echo "Warning: optional dependencies failed to install" >&2
 elif apt-cache show --no-all-versions {seven_zip_fallback} >/dev/null 2>&1; then
-    apt_retry install -y {optional} {seven_zip_fallback} || echo "警告：可选增强依赖安装失败" >&2
+    apt_retry install -y {optional} {seven_zip_fallback} || echo "Warning: optional dependencies failed to install" >&2
 else
-    apt_retry install -y {optional} || echo "警告：{SETUP_OPTIONAL_PACKAGES[0]} 安装失败" >&2
+    apt_retry install -y {optional} || echo "Warning: {SETUP_OPTIONAL_PACKAGES[0]} installation failed" >&2
 fi
 
-# 创建用户
+# Create the user
 if id -u "$CS2_USER" >/dev/null 2>&1; then
-    echo "用户已存在: $CS2_USER"
+    echo "User already exists: $CS2_USER"
 else
     sudo useradd -m -s /bin/bash "$CS2_USER"
 fi
 
-# 使用禁止变量展开的 heredoc，安全写入包含特殊字符的密码
+# Use a non-expanding heredoc to safely write a password containing special characters
 sudo chpasswd <<'EOF_PASSWORD'
 {user}:{password}
 EOF_PASSWORD
 
-# 创建目录
+# Create the game directory
 sudo mkdir -p "/home/$CS2_USER/cs2"
 sudo chown -R "$CS2_USER:$CS2_USER" "/home/$CS2_USER"
 
-echo "设置完成！"
-echo "用户名: $CS2_USER"
-echo "密码: {password}"
+echo "Setup complete!"
+echo "Username: $CS2_USER"
+echo "Password: {password}"
 """

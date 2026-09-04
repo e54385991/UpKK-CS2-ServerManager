@@ -23,7 +23,7 @@ as_root() {
     elif command -v sudo >/dev/null 2>&1; then
         sudo "$@"
     else
-        fail "需要 root 或 sudo 权限来安装 Docker"
+        fail "Root or sudo access is required to install Docker"
     fi
 }
 
@@ -70,10 +70,10 @@ ensure_env_line() {
 print_ready() {
     local url="$1"
     printf '\n'
-    log "部署完成"
-    log "URL   ${url}"
-    log "用户  ${DEFAULT_USER}"
-    log "密码  ${DEFAULT_PASSWORD}"
+    log "Deployment complete"
+    log "URL       ${url}"
+    log "Username  ${DEFAULT_USER}"
+    log "Password  ${DEFAULT_PASSWORD}"
     printf '\n'
 }
 
@@ -117,13 +117,13 @@ sync_public_urls() {
 
 install_docker() {
     if ! command -v docker >/dev/null 2>&1; then
-        log "安装 Docker Engine"
+        log "Installing Docker Engine"
         command -v curl >/dev/null 2>&1 || as_root apt-get update
         command -v curl >/dev/null 2>&1 || as_root apt-get install -y ca-certificates curl
         curl -fsSL https://get.docker.com | as_root sh
     fi
     if ! docker compose version >/dev/null 2>&1 && ! as_root docker compose version >/dev/null 2>&1; then
-        log "安装 Docker Compose 插件"
+        log "Installing the Docker Compose plugin"
         as_root apt-get update
         as_root apt-get install -y docker-compose-plugin
     fi
@@ -144,7 +144,7 @@ prepare_env() {
     local web_image="docker.io/${FRONTEND_REPOSITORY}:${VERSION}"
 
     if [ -f "$env_file" ]; then
-        log "保留已有 .env（不会覆盖现有密钥）"
+        log "Keeping the existing .env file (existing secrets will not be overwritten)"
         ensure_env_line "$env_file" HTTP_PORT 3000
         ensure_env_line "$env_file" CS2_MANAGER_IMAGE "$api_image"
         ensure_env_line "$env_file" CS2_FRONTEND_IMAGE "$web_image"
@@ -173,14 +173,14 @@ RUN_MODE=production
 LOG_LEVEL=INFO
 EOF
     chmod 600 "$env_file"
-    log "已生成随机 .env（权限 600）"
+    log "Generated a random .env file (mode 600)"
 }
 
 wait_for_console() {
     local public_port="$1"
     local login_url="http://127.0.0.1:${public_port}/login"
     local health_url="http://127.0.0.1:${public_port}/health"
-    log "等待控制台就绪（Next :${public_port} → FastAPI）"
+    log "Waiting for the console (Next :${public_port} -> FastAPI)"
     for _ in $(seq 1 90); do
         if curl -fsS "$login_url" >/dev/null 2>&1 && curl -fsS "$health_url" >/dev/null 2>&1; then
             return 0
@@ -193,11 +193,11 @@ wait_for_console() {
 main() {
     case "$(uname -s)" in
         Linux) ;;
-        *) fail "此安装脚本支持 Ubuntu/Debian Linux；其他系统请手动安装 Docker Desktop" ;;
+        *) fail "This installer supports Ubuntu/Debian Linux. Install Docker Desktop manually on other systems" ;;
     esac
     mkdir -p "$INSTALL_DIR"
     install_docker
-    command -v curl >/dev/null 2>&1 || fail "缺少 curl，无法下载 Compose 配置"
+    command -v curl >/dev/null 2>&1 || fail "curl is required to download the Compose configuration"
     curl -fsSL "$RAW_BASE_URL/docker-compose.yml" -o "$INSTALL_DIR/docker-compose.yml"
     prepare_env
     sync_public_urls
@@ -217,7 +217,7 @@ main() {
     fi
     docker_cmd compose ps
     docker_cmd compose logs --tail=80 frontend app || true
-    fail "控制台健康检查超时，请运行：cd '$INSTALL_DIR' && docker compose logs -f"
+    fail "Console health check timed out. Run: cd '$INSTALL_DIR' && docker compose logs -f"
 }
 
 main "$@"

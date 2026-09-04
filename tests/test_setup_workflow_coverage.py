@@ -66,7 +66,7 @@ def test_password_generation_and_command_wrappers_are_safe():
     assert any(item.islower() for item in password)
     assert any(item.isupper() for item in password)
     assert any(item.isdigit() for item in password)
-    assert setup._short_command_error("", "") == "命令未返回错误详情"
+    assert setup._short_command_error("", "") == "The command returned no error details"
     assert setup._short_command_error("out", "err") == "err\nout"
 
 
@@ -76,7 +76,9 @@ async def test_setup_host_detection_covers_root_and_sudo_strategies(monkeypatch)
         {
             "dpkg --print-architecture 2>/dev/null || uname -m": _result("amd64\n"),
             "command -v apt-get": _result("/usr/bin/apt-get"),
-            'lsb_release -rs 2>/dev/null || sed -n \'s/^VERSION_ID=//p\' /etc/os-release | tr -d \'"\'': _result("24.04\n"),
+            "lsb_release -rs 2>/dev/null || sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '\"'": _result(
+                "24.04\n"
+            ),
             "whoami": _result("root\n"),
         }
     )
@@ -88,7 +90,9 @@ async def test_setup_host_detection_covers_root_and_sudo_strategies(monkeypatch)
         {
             "dpkg --print-architecture 2>/dev/null || uname -m": _result("x86_64\n"),
             "command -v apt-get": _result("apt"),
-            'lsb_release -rs 2>/dev/null || sed -n \'s/^VERSION_ID=//p\' /etc/os-release | tr -d \'"\'': _result("22.04"),
+            "lsb_release -rs 2>/dev/null || sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '\"'": _result(
+                "22.04"
+            ),
             "whoami": _result("steam"),
         }
     )
@@ -102,7 +106,7 @@ async def test_setup_host_detection_covers_root_and_sudo_strategies(monkeypatch)
     assert context.needs_sudo and context.sudo_password == "sudo-pass"
 
     conn = _Conn({"dpkg --print-architecture 2>/dev/null || uname -m": _result("arm64")})
-    with pytest.raises(HTTPException, match="不支持的服务器架构"):
+    with pytest.raises(HTTPException, match="Unsupported server architecture"):
         await setup._detect_setup_host(_context(conn))
     conn = _Conn(
         {
@@ -134,7 +138,7 @@ async def test_setup_user_directory_firewall_and_persistence(monkeypatch):
     conn.run = AsyncMock(return_value=_result("", "", 1))
     monkeypatch.setattr(setup, "run_admin_command", AsyncMock(return_value=("", "", 0)))
     await setup._ensure_setup_user(context)
-    assert any("创建用户" in line for line in context.logs)
+    assert any("Creating user" in line for line in context.logs)
     await setup._configure_setup_directory(context)
     assert context.game_directory == "/home/cs2server/cs2"
 
@@ -145,14 +149,21 @@ async def test_setup_user_directory_firewall_and_persistence(monkeypatch):
     await setup._configure_setup_firewall(context)
 
     monkeypatch.setattr(setup.SSHServerSudo, "upsert", AsyncMock())
-    monkeypatch.setattr(setup.redis_manager, "set_initialized_server", AsyncMock(return_value="init-1"))
+    monkeypatch.setattr(
+        setup.redis_manager, "set_initialized_server", AsyncMock(return_value="init-1")
+    )
     context.game_directory = "/home/cs2server/cs2"
     result = await setup._persist_setup_configuration(
         context, current_user=SimpleNamespace(id=1), db=object()
     )
     assert result == "init-1"
     context.request = _request(save_config=False)
-    assert await setup._persist_setup_configuration(context, current_user=SimpleNamespace(id=1), db=object()) is None
+    assert (
+        await setup._persist_setup_configuration(
+            context, current_user=SimpleNamespace(id=1), db=object()
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio

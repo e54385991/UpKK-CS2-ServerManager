@@ -3,9 +3,21 @@ import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
 import { ScrollText, ChevronLeft, ChevronRight } from "lucide-react";
 import { listAudit, type AuditQuery } from "@/modules/audit/api";
-import { statusTone } from "@/modules/audit/types";
+import {
+  type AuditAction,
+  type AuditCategory,
+  type AuditStatus,
+  isAuditAction,
+  isAuditCategory,
+  isAuditStatus,
+  statusTone,
+} from "@/modules/audit/types";
 import { Card } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
+
+type AuditCategoryMessageKey = `categories.${AuditCategory}`;
+type AuditStatusMessageKey = `statuses.${AuditStatus}`;
+type AuditActionMessageKey = `actions.${AuditAction}`;
 
 function formatTime(iso: string | null): string {
   if (!iso) return "—";
@@ -82,9 +94,17 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
           <tbody>
             {items.map((entry) => {
               const tone = statusTone(entry.status);
-              const categoryKey = `categories.${entry.category}`;
-              const statusKey = `statuses.${entry.status}`;
-              const actionKey = `actions.${entry.action}`;
+              const categoryKey: AuditCategoryMessageKey | null = isAuditCategory(
+                entry.category,
+              )
+                ? `categories.${entry.category}`
+                : null;
+              const statusKey: AuditStatusMessageKey | null = isAuditStatus(entry.status)
+                ? `statuses.${entry.status}`
+                : null;
+              const actionKey: AuditActionMessageKey | null = isAuditAction(entry.action)
+                ? `actions.${entry.action}`
+                : null;
               const details = detailsEntries(entry.details);
               const serverHref =
                 entry.serverId != null
@@ -100,15 +120,15 @@ export async function AuditTable({ query }: { query: AuditQuery }) {
                   </td>
                   <td className="px-4 py-2.5">
                     <Badge tone="neutral">
-                      {t.has(categoryKey) ? t(categoryKey) : entry.category}
+                      {categoryKey ? t(categoryKey) : entry.category}
                     </Badge>
                   </td>
                   <td className="px-4 py-2.5 text-fg">
-                    {t.has(actionKey) ? t(actionKey) : entry.action}
+                    {actionKey ? t(actionKey) : entry.action}
                   </td>
                   <td className="px-4 py-2.5">
                     <Badge tone={tone}>
-                      {t.has(statusKey) ? t(statusKey) : entry.status}
+                      {statusKey ? t(statusKey) : entry.status}
                     </Badge>
                   </td>
                   <td className="px-4 py-2.5 text-fg-muted">
