@@ -10,10 +10,11 @@ from pydantic import EmailStr, Field, field_validator
 
 from api.contracts.base import ApiRequest
 from api.contracts.v1.identity import V1Model
-from modules.utils import normalize_client_ip_header
+from modules.utils import normalize_client_ip_header, normalize_log_level
 
 ProxyMode = Literal["direct", "panel", "github_url"]
 EmailProvider = Literal["gmail", "smtp"]
+LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
 class SystemSettingsView(V1Model):
@@ -23,6 +24,9 @@ class SystemSettingsView(V1Model):
     github_proxy_url: str | None = None
     captcha_enabled: bool = True
     client_ip_header: str | None = None
+    # None means the console follows the LOG_LEVEL environment variable.
+    log_level: LogLevel | None = None
+    effective_log_level: LogLevel
     has_global_github_token: bool
     global_github_token_prefix: str | None = None
     email_enabled: bool
@@ -47,6 +51,7 @@ class SystemSettingsPatch(ApiRequest):
     github_proxy_url: str | None = None
     captcha_enabled: bool | None = None
     client_ip_header: str | None = Field(default=None, max_length=64)
+    log_level: str | None = Field(default=None, max_length=16)
     global_github_token: str | None = Field(default=None, max_length=255)
     clear_global_github_token: bool = False
     email_enabled: bool | None = None
@@ -64,6 +69,12 @@ class SystemSettingsPatch(ApiRequest):
     def validate_client_ip_header(cls, value: str | None) -> str | None:
         """Blank clears the policy, so the panel trusts only the socket peer."""
         return normalize_client_ip_header(value)
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, value: str | None) -> str | None:
+        """Blank clears the override, so the console follows the environment."""
+        return normalize_log_level(value)
 
     @field_validator("global_github_token")
     @classmethod
@@ -123,4 +134,5 @@ __all__ = [
     "ActionResult",
     "ProxyMode",
     "EmailProvider",
+    "LogLevel",
 ]

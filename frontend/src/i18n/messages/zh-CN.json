@@ -987,6 +987,23 @@
       "invalid": "请输入合法的请求头名称，例如 X-Forwarded-For。",
       "trustWarning": "任何客户端都能伪造该请求头。只有当反向代理会覆盖每个请求的该请求头时才可信任，否则审计日志和限流可能被伪造。"
     },
+    "logging": {
+      "title": "日志输出",
+      "description": "面板向控制台输出多少日志，默认仅 Error。",
+      "consoleLevel": "控制台日志级别",
+      "consoleLevelHelp": "保存后立即生效，并在此后每次重启时沿用。",
+      "followEnvironment": "跟随 LOG_LEVEL 环境变量",
+      "followEnvironmentHelp": "当前跟随环境变量，实际级别为 {level}。",
+      "active": "控制台只输出 {level} 及以上级别。",
+      "fileNote": "logs/ 目录下的滚动日志文件始终按环境变量级别记录，调高此设置不会丢失排查所需的日志。",
+      "levels": {
+        "CRITICAL": "仅 Critical",
+        "ERROR": "仅 Error（推荐）",
+        "WARNING": "Warning 及以上",
+        "INFO": "Info 及以上（较多）",
+        "DEBUG": "Debug（非常多）"
+      }
+    },
     "proxy": {
       "title": "下载代理",
       "description": "服务器从 GitHub 拉取资源时的默认通道。",

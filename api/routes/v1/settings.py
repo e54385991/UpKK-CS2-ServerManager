@@ -18,6 +18,7 @@ from modules.schemas.ai import AIProviderTestRequest, AISystemSettingsUpdate
 from services.audit_log_service import record_audit_event
 from services.client_ip import set_client_ip_header
 from services.email_service import email_service
+from services.log_output import apply_console_log_level, effective_console_log_level
 
 from .schemas import (
     ActionResult,
@@ -29,6 +30,7 @@ from .schemas import (
     EmailTestResult,
     GmailAuthorizeResult,
     GmailCredentialsUpload,
+    LogLevel,
     SystemSettingsPatch,
     SystemSettingsView,
 )
@@ -66,6 +68,20 @@ def _context_window_tokens(
     return 262144
 
 
+def _log_level(value: object) -> LogLevel | None:
+    """Narrow a stored level name to the contract's literal set."""
+    supported: dict[str, LogLevel] = {
+        "DEBUG": "DEBUG",
+        "INFO": "INFO",
+        "WARNING": "WARNING",
+        "ERROR": "ERROR",
+        "CRITICAL": "CRITICAL",
+    }
+    if isinstance(value, str):
+        return supported.get(value.strip().upper())
+    return None
+
+
 def to_view(settings: SystemSettings) -> SystemSettingsView:
     """Project the ORM row to the browser-facing, non-secret view."""
     has_gmail_credentials = bool((settings.gmail_credentials_json or "").strip())
@@ -82,6 +98,8 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
         github_proxy_url=settings.github_proxy_url,
         captcha_enabled=bool(settings.captcha_enabled),
         client_ip_header=settings.client_ip_header,
+        log_level=_log_level(settings.log_level),
+        effective_log_level=_log_level(effective_console_log_level(settings.log_level)) or "INFO",
         has_global_github_token=settings.has_global_github_token,
         global_github_token_prefix=settings.global_github_token_prefix,
         email_enabled=settings.email_enabled,
@@ -134,8 +152,9 @@ async def update_system_settings(
     db.add(settings)
     await db.commit()
     await db.refresh(settings)
-    # Audit and rate-limit attribution must use the policy saved just now.
+    # Attribution and console verbosity must follow the policy saved just now.
     set_client_ip_header(settings.client_ip_header)
+    apply_console_log_level(settings.log_level)
     await record_audit_event(
         category="settings",
         action="system.update",

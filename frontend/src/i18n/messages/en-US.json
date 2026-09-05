@@ -987,6 +987,23 @@
       "invalid": "Enter a valid header name, such as X-Forwarded-For.",
       "trustWarning": "Any client can send this header. Only trust one that your reverse proxy overwrites on every request; otherwise audit logs and rate limits can be spoofed."
     },
+    "logging": {
+      "title": "Logging",
+      "description": "How much the panel prints to its console. Errors only by default.",
+      "consoleLevel": "Console log level",
+      "consoleLevelHelp": "Applies immediately, and to every restart afterwards.",
+      "followEnvironment": "Follow the LOG_LEVEL environment variable",
+      "followEnvironmentHelp": "Following the environment, currently {level}.",
+      "active": "The console prints {level} and above.",
+      "fileNote": "The rotating log file under logs/ always keeps the environment level, so raising this setting never loses a support trace.",
+      "levels": {
+        "CRITICAL": "Critical only",
+        "ERROR": "Errors only (recommended)",
+        "WARNING": "Warnings and errors",
+        "INFO": "Info and above (verbose)",
+        "DEBUG": "Debug (very verbose)"
+      }
+    },
     "proxy": {
       "title": "Download proxy",
       "description": "Default path servers use when fetching GitHub resources.",

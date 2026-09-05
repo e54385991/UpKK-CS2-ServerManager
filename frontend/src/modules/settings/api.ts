@@ -11,10 +11,12 @@ import type {
 import { toAiSettings, toAiSettingsWire } from "@/modules/settings/ai-wire";
 import {
   isEmailProvider,
+  isLogLevel,
   isProxyMode,
   type AiSystemPatch,
   type AiSystemSettings,
   type EmailProvider,
+  type LogLevel,
   type ProxyMode,
   type SettingsPatch,
   type SystemSettings,
@@ -26,6 +28,8 @@ function toSettings(raw: SystemSettingsViewDto): SystemSettings {
     githubProxyUrl: raw.github_proxy_url ?? null,
     captchaEnabled: raw.captcha_enabled ?? true,
     clientIpHeader: raw.client_ip_header ?? null,
+    logLevel: toLogLevel(raw.log_level),
+    effectiveLogLevel: toLogLevel(raw.effective_log_level) ?? "INFO",
     hasGlobalGithubToken: raw.has_global_github_token,
     globalGithubTokenPrefix: raw.global_github_token_prefix ?? null,
     emailEnabled: raw.email_enabled,
@@ -42,6 +46,10 @@ function toSettings(raw: SystemSettingsViewDto): SystemSettings {
     gmailReady: raw.gmail_ready,
     updatedAt: raw.updated_at ?? null,
   };
+}
+
+function toLogLevel(value: string | null | undefined): LogLevel | null {
+  return value && isLogLevel(value) ? value : null;
 }
 
 function toProxyMode(value: string): ProxyMode {
@@ -65,6 +73,9 @@ export function toWirePatch(patch: SettingsPatch): Record<string, unknown> {
       : {}),
     ...(patch.clientIpHeader !== undefined
       ? { client_ip_header: patch.clientIpHeader ?? "" }
+      : {}),
+    ...(patch.logLevel !== undefined
+      ? { log_level: patch.logLevel ?? "" }
       : {}),
     ...(patch.globalGithubToken !== undefined
       ? { global_github_token: patch.globalGithubToken }

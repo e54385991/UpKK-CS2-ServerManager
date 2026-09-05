@@ -47,6 +47,35 @@ def normalize_client_ip_header(value: Optional[str]) -> Optional[str]:
     return name
 
 
+# Console log levels an administrator can choose in system settings. NULL/blank
+# means "follow the LOG_LEVEL environment variable".
+LOG_LEVEL_NAMES = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+DEFAULT_CONSOLE_LOG_LEVEL = "ERROR"
+
+
+def normalize_log_level(value: Optional[str]) -> Optional[str]:
+    """
+    Validate a configured log level.
+
+    Args:
+        value: Level name from an administrator, or None/blank
+
+    Returns:
+        The upper-cased level name, or None to follow the environment
+
+    Raises:
+        ValueError: If the value is not a known logging level
+    """
+    if value is None:
+        return None
+    name = value.strip().upper()
+    if not name:
+        return None
+    if name not in LOG_LEVEL_NAMES:
+        raise ValueError("log level must be DEBUG, INFO, WARNING, ERROR, or CRITICAL")
+    return name
+
+
 def generate_api_key(length: int = 64) -> str:
     """
     Generate a secure random API key for server-to-backend communication.

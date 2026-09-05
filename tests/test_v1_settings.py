@@ -188,6 +188,42 @@ def test_v1_settings_put_rejects_an_invalid_client_ip_header(monkeypatch):
     assert settings.client_ip_header == "X-Forwarded-For"
 
 
+def test_v1_settings_put_updates_console_log_level(monkeypatch):
+    applied: list[str | None] = []
+    monkeypatch.setattr(
+        "api.routes.v1.settings.apply_console_log_level",
+        lambda value: applied.append(value) or "WARNING",
+    )
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    assert settings.log_level == "ERROR"
+
+    response = client.put("/api/v1/settings", json={"log_level": "warning"})
+    assert response.status_code == 200
+    assert settings.log_level == "WARNING"
+    assert response.json()["log_level"] == "WARNING"
+    assert applied == ["WARNING"]
+
+    cleared = client.put("/api/v1/settings", json={"log_level": ""})
+    assert cleared.status_code == 200
+    assert settings.log_level is None
+    assert cleared.json()["log_level"] is None
+    # Following the environment still reports a concrete effective level.
+    assert cleared.json()["effective_log_level"] in {
+        "DEBUG",
+        "INFO",
+        "WARNING",
+        "ERROR",
+        "CRITICAL",
+    }
+
+
+def test_v1_settings_put_rejects_an_invalid_log_level(monkeypatch):
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    response = client.put("/api/v1/settings", json={"log_level": "TRACE"})
+    assert response.status_code == 422
+    assert settings.log_level == "ERROR"
+
+
 def test_v1_settings_put_rejects_invalid_proxy_mode_and_token(monkeypatch):
     client, settings, _user = _client(monkeypatch=monkeypatch)
     bad_mode = client.put("/api/v1/settings", json={"default_proxy_mode": "tor"})

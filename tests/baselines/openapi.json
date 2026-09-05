@@ -23512,6 +23512,18 @@
             ],
             "title": "Global Github Token"
           },
+          "log_level": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Level"
+          },
           "smtp_host": {
             "anyOf": [
               {
@@ -23668,6 +23680,17 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "log_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Level"
           },
           "smtp_host": {
             "anyOf": [
@@ -23859,6 +23882,18 @@
             ],
             "title": "Gmail Credentials Json"
           },
+          "log_level": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Level"
+          },
           "smtp_host": {
             "anyOf": [
               {
@@ -23947,6 +23982,17 @@
             "title": "Default Proxy Mode",
             "type": "string"
           },
+          "effective_log_level": {
+            "enum": [
+              "DEBUG",
+              "INFO",
+              "WARNING",
+              "ERROR",
+              "CRITICAL"
+            ],
+            "title": "Effective Log Level",
+            "type": "string"
+          },
           "email_enabled": {
             "title": "Email Enabled",
             "type": "boolean"
@@ -24023,6 +24069,24 @@
             "title": "Has Smtp Password",
             "type": "boolean"
           },
+          "log_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "DEBUG",
+                  "INFO",
+                  "WARNING",
+                  "ERROR",
+                  "CRITICAL"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Level"
+          },
           "smtp_host": {
             "anyOf": [
               {
@@ -24075,6 +24139,7 @@
         },
         "required": [
           "default_proxy_mode",
+          "effective_log_level",
           "has_global_github_token",
           "email_enabled",
           "email_provider",

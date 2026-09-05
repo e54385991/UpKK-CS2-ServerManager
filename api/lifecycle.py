@@ -107,12 +107,17 @@ class ApplicationLifecycle:
             await init_db()
 
             from services.client_ip import refresh_client_ip_header
+            from services.log_output import refresh_console_log_level
 
             header = await refresh_client_ip_header()
             logger.info(
                 "Client IP source: %s",
                 header or "direct connection address",
             )
+            # Applied last among the log lines above so the administrator's
+            # console level governs everything the rest of startup prints.
+            console_level = await refresh_console_log_level()
+            logger.info("Console log level: %s", console_level)
 
             from services.plugin_catalog import ensure_default_plugin_catalog
 

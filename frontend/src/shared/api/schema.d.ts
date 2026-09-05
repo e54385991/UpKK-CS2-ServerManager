@@ -15684,6 +15684,8 @@ export interface components {
             github_proxy_url?: string | null;
             /** Global Github Token */
             global_github_token?: string | null;
+            /** Log Level */
+            log_level?: string | null;
             /** Smtp Host */
             smtp_host?: string | null;
             /** Smtp Password */
@@ -15727,6 +15729,8 @@ export interface components {
             has_global_github_token: boolean;
             /** Id */
             id: number;
+            /** Log Level */
+            log_level?: string | null;
             /** Smtp Host */
             smtp_host: string | null;
             /** Smtp Port */
@@ -15768,6 +15772,8 @@ export interface components {
             global_github_token?: string | null;
             /** Gmail Credentials Json */
             gmail_credentials_json?: string | null;
+            /** Log Level */
+            log_level?: string | null;
             /** Smtp Host */
             smtp_host?: string | null;
             /** Smtp Password */
@@ -15796,6 +15802,11 @@ export interface components {
              * @enum {string}
              */
             default_proxy_mode: "direct" | "panel" | "github_url";
+            /**
+             * Effective Log Level
+             * @enum {string}
+             */
+            effective_log_level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
             /** Email Enabled */
             email_enabled: boolean;
             /** Email From Address */
@@ -15821,6 +15832,8 @@ export interface components {
             has_gmail_token: boolean;
             /** Has Smtp Password */
             has_smtp_password: boolean;
+            /** Log Level */
+            log_level?: ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL") | null;
             /** Smtp Host */
             smtp_host?: string | null;
             /** Smtp Port */

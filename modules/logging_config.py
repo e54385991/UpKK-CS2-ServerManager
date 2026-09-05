@@ -17,6 +17,16 @@ BACKUP_COUNT = 10  # Keep 10 backup files
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+# Names the console and file handlers so the administrator-controlled console
+# level can be changed later without disturbing what is written to disk.
+CONSOLE_HANDLER_NAME = "cs2-console"
+FILE_HANDLER_NAME = "cs2-file"
+
+# Uvicorn owns these loggers and keeps ``propagate`` off, so they never reach
+# the handlers above. Their per-request access lines are the bulk of console
+# noise, so the administrator's console level has to govern them by name.
+CONSOLE_ONLY_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
+
 
 class _ReconfigurableStream(Protocol):
     def reconfigure(self, *, line_buffering: bool) -> None: ...
@@ -45,6 +55,44 @@ def _get_log_level(level_str: str) -> int:
     return level_map.get(level_str.upper(), logging.INFO)
 
 
+def console_log_level() -> Optional[int]:
+    """The level stdout is currently filtered at, or None before setup."""
+    for handler in logging.getLogger().handlers:
+        if handler.get_name() == CONSOLE_HANDLER_NAME:
+            return handler.level
+    return None
+
+
+def set_console_log_level(level: int) -> bool:
+    """
+    Change how much reaches stdout without changing what the log file keeps.
+
+    The root logger is lowered to whichever handler wants the most detail, so
+    raising the console level cannot silence the file handler and vice versa.
+
+    Args:
+        level: Logging level constant for the console handler
+
+    Returns:
+        True when a console handler was found and updated
+    """
+    root_logger = logging.getLogger()
+    console_handlers = [
+        handler for handler in root_logger.handlers if handler.get_name() == CONSOLE_HANDLER_NAME
+    ]
+    if not console_handlers:
+        return False
+
+    for handler in console_handlers:
+        handler.setLevel(level)
+    # A handler left at NOTSET defers to the logger, so it cannot raise the floor.
+    handler_levels = [handler.level for handler in root_logger.handlers if handler.level]
+    root_logger.setLevel(min(handler_levels) if handler_levels else level)
+    for name in CONSOLE_ONLY_LOGGERS:
+        logging.getLogger(name).setLevel(level)
+    return True
+
+
 def setup_logging(level: int = logging.INFO, asyncssh_level: Optional[str] = None) -> None:
     """
     Configure logging with rotating file handler.
@@ -69,6 +117,7 @@ def setup_logging(level: int = logging.INFO, asyncssh_level: Optional[str] = Non
     )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(level)
+    file_handler.set_name(FILE_HANDLER_NAME)
 
     # Line-buffer Docker/1Panel pipes so startup lines are not lost on SIGKILL.
     if hasattr(sys.stdout, "reconfigure"):
@@ -80,6 +129,7 @@ def setup_logging(level: int = logging.INFO, asyncssh_level: Optional[str] = Non
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.setLevel(level)
+    console_handler.set_name(CONSOLE_HANDLER_NAME)
 
     # Get root logger and configure it
     root_logger = logging.getLogger()

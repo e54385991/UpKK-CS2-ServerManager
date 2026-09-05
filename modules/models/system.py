@@ -102,6 +102,14 @@ class SystemSettings(SQLModel, table=True):
         sa_column_kwargs={"server_default": text("'X-Forwarded-For'")},
     )
 
+    # How much the panel prints to stdout. NULL follows the LOG_LEVEL
+    # environment variable; the log file always keeps the environment level.
+    log_level: Optional[str] = Field(
+        default="ERROR",
+        max_length=16,
+        sa_column_kwargs={"server_default": text("'ERROR'")},
+    )
+
     # Shared GitHub API credential used only when a user has no personal token.
     global_github_token: Optional[str] = Field(default=None, max_length=255)
 

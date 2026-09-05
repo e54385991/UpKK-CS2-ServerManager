@@ -14,6 +14,22 @@ export function isClientIpHeader(value: string): boolean {
   return CLIENT_IP_HEADER_PATTERN.test(value);
 }
 
+// Console verbosity. "" (null over the wire) follows the backend's LOG_LEVEL
+// environment variable.
+export const LOG_LEVELS = [
+  "CRITICAL",
+  "ERROR",
+  "WARNING",
+  "INFO",
+  "DEBUG",
+] as const;
+
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
+export function isLogLevel(value: string): value is LogLevel {
+  return (LOG_LEVELS as readonly string[]).includes(value);
+}
+
 export const PROXY_MODES = ["direct", "panel", "github_url"] as const;
 export const EMAIL_PROVIDERS = ["smtp", "gmail"] as const;
 
@@ -25,6 +41,8 @@ export type SystemSettings = {
   readonly githubProxyUrl: string | null;
   readonly captchaEnabled: boolean;
   readonly clientIpHeader: string | null;
+  readonly logLevel: LogLevel | null;
+  readonly effectiveLogLevel: LogLevel;
   readonly hasGlobalGithubToken: boolean;
   readonly globalGithubTokenPrefix: string | null;
   readonly emailEnabled: boolean;
@@ -47,6 +65,7 @@ export type SettingsPatch = {
   readonly githubProxyUrl?: string | null;
   readonly captchaEnabled?: boolean;
   readonly clientIpHeader?: string | null;
+  readonly logLevel?: LogLevel | null;
   readonly globalGithubToken?: string;
   readonly clearGlobalGithubToken?: boolean;
   readonly emailEnabled?: boolean;
