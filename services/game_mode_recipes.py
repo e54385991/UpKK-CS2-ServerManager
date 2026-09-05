@@ -16,6 +16,9 @@ KZ_PLUGIN_CONFIG = {
 class GameModeMap:
     name: str
     workshop_id: str
+    # Whether the entry joins the rotation. KZ ships kz_variety in the pool but
+    # disabled, because the startup workshop map is set through host_workshop_map.
+    enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -42,12 +45,13 @@ KZ_RECIPE = GameModeRecipe(
         "cs2kz-metamod",
         "CS2-Upkk-PanelPLG-Mapchooser",
     ),
-    wait_files=(
-        "addons/counterstrikesharp/configs/plugins/MapChooser/config.json",
-        "addons/counterstrikesharp/configs/plugins/MapChooser/maps.txt",
-    ),
+    # MapChooser only generates config.json on first load. maps.txt is the
+    # operator's map pool, so the plugin never writes it; the panel seeds it.
+    wait_files=("addons/counterstrikesharp/configs/plugins/MapChooser/config.json",),
     plugin_config=dict(KZ_PLUGIN_CONFIG),
-    maps_append=(GameModeMap(name="kz_variety", workshop_id="3250132197"),),
+    maps_append=(
+        GameModeMap(name="kz_variety", workshop_id="3250132197", enabled=False),
+    ),
     startup_workshop_map="3082213334",
 )
 

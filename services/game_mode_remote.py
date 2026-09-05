@@ -11,6 +11,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from modules import Server
+from services.apt_mirrors import OS_RELEASE_COMMAND
+from services.server_compatibility import LinuxRelease, parse_linux_release
 from services.ssh_manager import SSHManager
 
 ProgressCallback = Callable[..., Awaitable[None]]
@@ -77,6 +79,18 @@ async def connect(server: Server) -> SSHManager:
     if not success:
         raise GameModeRemoteError(f"SSH connection failed: {message}")
     return manager
+
+
+async def read_linux_release(manager: SSHManager) -> LinuxRelease | None:
+    """Read the host's Debian/Ubuntu release, or ``None`` when it is unknown.
+
+    Quick install needs this to decide whether the newer-glibc patchelf fix
+    applies, and the server record may never have been probed before.
+    """
+    success, stdout, _stderr = await manager.execute_command(OS_RELEASE_COMMAND, timeout=20)
+    if not success:
+        return None
+    return parse_linux_release(stdout)
 
 
 async def inspect_game_mode_state(manager: SSHManager, server: Server) -> dict[str, bool]:

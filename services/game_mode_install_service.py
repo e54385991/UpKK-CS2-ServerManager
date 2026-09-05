@@ -32,6 +32,7 @@ from services.game_mode_recipes import (
 from services.game_mode_remote import (
     connect,
     inspect_game_mode_state,
+    read_linux_release,
     remote_paths,
     replace_remote_file,
     resolve_addons_directory,
@@ -58,6 +59,12 @@ from services.plugin_conflict_service import (
     validate_plugin_plan_acknowledgements,
 )
 from services.redis_manager import redis_manager
+from services.server_compatibility import (
+    build_clear_execstack_command,
+    effective_clear_execstack,
+    normalize_execstack_targets,
+    run_clear_execstack,
+)
 from services.ssh_manager import SSHManager
 
 ProgressCallback = Callable[..., Awaitable[None]]
@@ -73,6 +80,50 @@ __all__ = [
 async def catalog_for_server(db: AsyncSession, server: Server) -> dict[str, Any]:
     """Compatibility wrapper that keeps monkeypatchable module-level finder."""
     return await _catalog_for_server(db, server, plugin_finder=find_market_plugin_by_title)
+
+
+async def _persist_linux_release(db: AsyncSession, server: Server, release: Any) -> None:
+    """Record the detected release so the patchelf default matches the host."""
+    if release is None:
+        return
+    if server.os_id == release.os_id and server.os_version == release.version_id:
+        return
+    server.os_id = release.os_id
+    server.os_version = release.version_id
+    db.add(server)
+    await db.commit()
+    await redis_manager.clear_server_cache(int(server.id))
+
+
+def _append_execstack_step(
+    server: Server,
+    enabled: bool,
+    steps: list[dict[str, Any]],
+    mutations: list[dict[str, Any]],
+) -> None:
+    """Plan the newer-glibc patchelf fix for the plugin libraries we install."""
+    if not enabled:
+        return
+    targets = normalize_execstack_targets(getattr(server, "execstack_fix_targets", None))
+    steps.append(
+        {
+            "id": "clear_execstack",
+            "action": "clear_execstack",
+            "status": "pending",
+            "command": build_clear_execstack_command(server.game_directory, targets),
+            "targets": list(targets),
+        }
+    )
+    mutations.append(
+        {
+            "id": "clear_execstack",
+            "target": ", ".join(targets),
+            "before": "executable-stack flag set",
+            "after": "executable-stack flag cleared",
+            "destructive": False,
+            "status": "pending",
+        }
+    )
 
 
 async def build_game_mode_plan(
@@ -91,6 +142,7 @@ async def build_game_mode_plan(
     manager = await connect(server)
     try:
         state = await inspect_game_mode_state(manager, server)
+        release = await read_linux_release(manager)
         maps_content = await _read_text(
             manager,
             server,
@@ -111,6 +163,9 @@ async def build_game_mode_plan(
         )
     finally:
         await manager.disconnect()
+
+    await _persist_linux_release(db, server, release)
+    clear_execstack = effective_clear_execstack(server)
 
     launch_after = upsert_additional_parameters(server.additional_parameters, recipe.launch_upsert)
     launch_changed = (server.additional_parameters or None) != (launch_after or None)
@@ -221,15 +276,15 @@ async def build_game_mode_plan(
                 "status": "pending" if not present else "already_present",
             }
         )
+    # A missing maps.txt is not a reason to restart: the plugin never writes it,
+    # the panel seeds it from the recipe after the install.
     need_restart = _market_restart_required(
         recipe.market_plugin_titles,
         title_presence,
         treat_as_missing=treat_as_missing,
-        base_required=need_css
-        or not state.get("config")
-        or not state.get("maps")
-        or launch_changed,
+        base_required=need_css or not state.get("config") or launch_changed,
     )
+    _append_execstack_step(server, clear_execstack and need_restart, steps, mutations)
     steps.append(
         {
             "id": "restart_and_wait",
@@ -241,9 +296,9 @@ async def build_game_mode_plan(
     mutations.append(
         {
             "id": "restart_and_wait",
-            "target": "game process + MapChooser configs",
+            "target": "game process + MapChooser config.json",
             "before": "current process",
-            "after": "restarted; wait for generated config.json and maps.txt",
+            "after": "restarted; wait for the generated config.json",
             "destructive": False,
             "status": "pending" if need_restart else "unchanged",
         }
@@ -318,6 +373,7 @@ async def build_game_mode_plan(
             {"name": item.name, "workshop_id": item.workshop_id} for item in recipe.maps_append
         ],
         "wait_files": list(recipe.wait_files),
+        "clear_execstack": bool(clear_execstack and need_restart),
         "plugin_plans": plugin_plans,
         "hard_conflicts": hard_conflicts,
         "warnings": warnings,
