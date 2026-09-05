@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   CirclePlay,
@@ -12,10 +11,6 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { ForceStopButton } from "@/modules/servers/force-stop-button";
-import {
-  probeServerCompatibilityFromBrowser,
-  updateExecstackPreferenceFromBrowser,
-} from "@/modules/servers/operation-client";
 import { AptMirrorSwitcher } from "@/modules/servers/apt-mirror-switcher";
 import { OperationLiveLog, formatOperationClock } from "@/modules/servers/operation-live-log";
 import { useOperationRunner } from "@/modules/servers/use-operation-runner";
@@ -49,11 +44,6 @@ const MORE_ACTIONS: readonly ServerOperationAction[] = [
   "update",
   "validate",
 ];
-const DEFAULT_EXECSTACK_TARGET = "counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so";
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
 
 export function OperationsConsole({
   serverId,
@@ -62,13 +52,6 @@ export function OperationsConsole({
   initialLogs,
   initialLock,
   aptMirror,
-  gameDirectory,
-  clearExecstackEffective,
-  clearExecstackOverride,
-  execstackFixOnRestart,
-  execstackFixTargets,
-  osId,
-  osVersion,
 }: {
   serverId: number;
   serverStatus: ServerStatus;
@@ -76,13 +59,6 @@ export function OperationsConsole({
   initialLogs: DeploymentLogEntry[];
   initialLock: DeploymentLock;
   aptMirror: string | null;
-  gameDirectory: string;
-  clearExecstackEffective: boolean;
-  clearExecstackOverride: boolean | null;
-  execstackFixOnRestart: boolean;
-  execstackFixTargets: readonly string[];
-  osId: string | null;
-  osVersion: string | null;
 }) {
   const t = useTranslations("serverDetail");
   const tServers = useTranslations("servers");
@@ -114,46 +90,6 @@ export function OperationsConsole({
 
   const statusTone = SERVER_STATUS_TONE[status];
   const emptyHint = useMemo(() => t("streamEmpty"), [t]);
-  const displayedCommand = (execstackFixTargets.length > 0 ? execstackFixTargets : [DEFAULT_EXECSTACK_TARGET])
-    .map((target) => `patchelf --clear-execstack ${shellQuote(`${gameDirectory}/cs2/game/csgo/addons/${target}`)}`)
-    .join("\n");
-  const [execstack, setExecstack] = useState(clearExecstackEffective);
-  const [detectedOsId, setDetectedOsId] = useState(osId);
-  const [detectedOsVersion, setDetectedOsVersion] = useState(osVersion);
-  const [execstackSaving, setExecstackSaving] = useState(false);
-  const [execstackError, setExecstackError] = useState<string | null>(null);
-  const [execstackSource, setExecstackSource] = useState<"auto" | "manual">(
-    clearExecstackOverride === null ? "auto" : "manual",
-  );
-
-  useEffect(() => {
-    if (osId && osVersion) return;
-    let cancelled = false;
-    void probeServerCompatibilityFromBrowser(serverId).then((result) => {
-      if (cancelled || !result.ok) return;
-      const value = result.data.clear_execstack_effective;
-      if (typeof value === "boolean") setExecstack(value);
-      setDetectedOsId(result.data.os_id ?? null);
-      setDetectedOsVersion(result.data.os_version ?? null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [osId, osVersion, serverId]);
-
-  async function saveExecstack(next: boolean) {
-    setExecstack(next);
-    setExecstackSaving(true);
-    setExecstackError(null);
-    const result = await updateExecstackPreferenceFromBrowser(serverId, next);
-    setExecstackSaving(false);
-    if (!result.ok) {
-      setExecstack(clearExecstackEffective);
-      setExecstackError(result.error);
-      return;
-    }
-    setExecstackSource("manual");
-  }
 
   return (
     <div className="space-y-6">
@@ -189,67 +125,15 @@ export function OperationsConsole({
             prominent
             running={running}
             busyAction={busyAction}
-            onRun={(action) => {
-              void runAction(
-                action,
-                action === "restart"
-                  ? { clearExecstack: execstack && execstackFixOnRestart }
-                  : undefined,
-              );
-            }}
+            onRun={(action) => void runAction(action)}
             t={t}
           />
-          <div className="space-y-2 rounded-md border border-line bg-surface-raised/40 px-3 py-3">
-            <div className="flex items-start gap-3">
-              <input
-                id="clear-execstack"
-                type="checkbox"
-                className="mt-1 size-4 accent-primary"
-                checked={execstack && execstackFixOnRestart}
-                disabled={execstackSaving || running || !execstackFixOnRestart}
-                onChange={(event) => void saveExecstack(event.target.checked)}
-              />
-              <div>
-                <label htmlFor="clear-execstack" className="text-sm font-medium text-fg">
-                  {t("clearExecstack")}
-                </label>
-                <p className="text-xs text-fg-muted">{t("clearExecstackHelp")}</p>
-                <p className="text-xs text-fg-subtle">
-                  {t("clearExecstackSource", { source: execstackSource })}
-                </p>
-                <p className="mt-2 text-xs text-fg-subtle">
-                  {t("clearExecstackSystem", {
-                    system: detectedOsId && detectedOsVersion
-                      ? `${detectedOsId} ${detectedOsVersion}`
-                      : t("clearExecstackUnknown"),
-                  })}
-                </p>
-                <code className="mt-1 block break-all rounded bg-surface-raised px-2 py-1 text-[11px] text-fg">
-                  {displayedCommand}
-                </code>
-                <Link
-                  href={`/servers/${serverId}/additional-fixes`}
-                  className="mt-2 inline-flex text-xs font-medium text-primary hover:text-primary-strong"
-                >
-                  {t("openAdditionalFixes")}
-                </Link>
-                {execstackError ? <p className="mt-2 text-xs text-danger">{execstackError}</p> : null}
-              </div>
-            </div>
-          </div>
           <ActionGroup
             title={t("groups.more")}
             actions={MORE_ACTIONS}
             running={running}
             busyAction={busyAction}
-            onRun={(action) => {
-              void runAction(
-                action,
-                action === "restart"
-                  ? { clearExecstack: execstack && execstackFixOnRestart }
-                  : undefined,
-              );
-            }}
+            onRun={(action) => void runAction(action)}
             t={t}
           />
           <div className="space-y-2">

@@ -220,7 +220,7 @@ export function GameModesWizard({
           <ListChecks className="size-4" />
           {pending === "preview" ? t("previewing") : t("preview")}
         </Button>
-        {plan && !plan.blocked ? (
+        {plan ? (
           <Button
             data-testid="game-modes-install"
             type="button"
@@ -228,7 +228,9 @@ export function GameModesWizard({
             onClick={() => {
               void install();
             }}
-            disabled={pending != null || queued}
+            // Keep the button visible when the plan is blocked so the reasons
+            // in the plan card explain why it cannot run yet.
+            disabled={plan.blocked || pending != null || queued}
           >
             {pending === "install" ? t("starting") : t("start")}
           </Button>

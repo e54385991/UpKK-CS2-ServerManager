@@ -92,7 +92,7 @@ def execstack_cleanup_enabled_for_action(server: Any, action: str) -> bool:
     if action in EXECSTACK_FRAMEWORK_ACTIONS:
         return bool(getattr(server, "execstack_fix_on_framework", True))
     if action in {"deploy", "update", "validate"}:
-        return bool(getattr(server, "execstack_fix_on_game_update", True))
+        return bool(getattr(server, "execstack_fix_on_game_update", False))
     return False
 
 

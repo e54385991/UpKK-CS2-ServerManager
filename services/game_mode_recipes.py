@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-KZ_LIBSSL_DEB = "libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb"
-KZ_LIBSSL_URL = "https://security.ubuntu.com/ubuntu/pool/main/o/openssl/" + KZ_LIBSSL_DEB
-KZ_LIBSSL_SHA256 = "7cf39d70a639017d1dd7c8d36daa2258063608688e449fddf40ffdd46f992a78"
-
 # Keep in lockstep with api.routes.map_management.KZ_PLUGIN_CONFIG.
 KZ_PLUGIN_CONFIG = {
     "UseGameTimeLimit": False,
@@ -32,7 +28,6 @@ class GameModeRecipe:
     plugin_config: dict[str, object]
     maps_append: tuple[GameModeMap, ...]
     startup_workshop_map: str
-    system_dependencies: tuple[str, ...] = ()
 
 
 KZ_RECIPE = GameModeRecipe(
@@ -54,7 +49,6 @@ KZ_RECIPE = GameModeRecipe(
     plugin_config=dict(KZ_PLUGIN_CONFIG),
     maps_append=(GameModeMap(name="kz_variety", workshop_id="3250132197"),),
     startup_workshop_map="3082213334",
-    system_dependencies=("libssl1.1",),
 )
 
 GAME_MODE_RECIPES: dict[str, GameModeRecipe] = {KZ_RECIPE.id: KZ_RECIPE}

@@ -877,7 +877,7 @@
     "problemDescription": "Problem Description",
     "kzPluginIssue": "KZ plugin loading failures usually have two separate causes: missing libssl.so.1.1/libcrypto.so.1.1, or an older library requesting an executable stack that newer glibc rejects. Only plugins with these requirements are affected.",
     "solutionSteps": "Solution Steps",
-    "followSteps": "If quick install cannot complete, use these commands to add libssl1.1 manually:",
+    "followSteps": "Host initialization installs libssl1.1; if it did not, use these commands to add it manually:",
     "step1Title": "Download the libssl1.1 package:",
     "step2Title": "Install the package:",
     "step3Title": "Restart your CS2 server",

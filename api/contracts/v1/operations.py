@@ -120,7 +120,6 @@ class ServerOperationRequest(ApiRequest):
     """Start a long-running server action. The HTTP request returns immediately."""
 
     action: ServerLifecycleAction
-    clear_execstack: bool = False
 
 
 class ServerOperationView(V1Model):

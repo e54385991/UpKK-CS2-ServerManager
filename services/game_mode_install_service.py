@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
@@ -26,9 +25,6 @@ from services.game_mode_planning import (
     catalog_for_server as _catalog_for_server,
 )
 from services.game_mode_recipes import (
-    KZ_LIBSSL_DEB,
-    KZ_LIBSSL_SHA256,
-    KZ_LIBSSL_URL,
     GameModeRecipe,
     UnknownGameModeError,
     get_recipe,
@@ -77,51 +73,6 @@ __all__ = [
 async def catalog_for_server(db: AsyncSession, server: Server) -> dict[str, Any]:
     """Compatibility wrapper that keeps monkeypatchable module-level finder."""
     return await _catalog_for_server(db, server, plugin_finder=find_market_plugin_by_title)
-
-
-def _append_kz_dependency_step(
-    mode_id: str,
-    state: dict[str, bool],
-    steps: list[dict[str, Any]],
-    mutations: list[dict[str, Any]],
-) -> None:
-    if mode_id != "kz":
-        return
-    libssl_present = bool(state.get("libssl11"))
-    steps.append(
-        {
-            "id": "install_libssl11",
-            "action": "install_system_dependency",
-            "name": KZ_LIBSSL_DEB,
-            "status": "already_present" if libssl_present else "pending",
-            "title": KZ_LIBSSL_URL,
-            "architecture": "amd64",
-            "sha256": KZ_LIBSSL_SHA256,
-        }
-    )
-    mutations.append(
-        {
-            "id": "install_libssl11",
-            "target": "libssl.so.1.1 / libcrypto.so.1.1",
-            "before": "installed" if libssl_present else "missing",
-            "after": "installed",
-            "destructive": False,
-            "status": "already_present" if libssl_present else "pending",
-        }
-    )
-
-
-def _kz_blocking_reasons(mode_id: str, state: dict[str, bool], server: Server) -> list[str]:
-    if mode_id != "kz":
-        return []
-    reasons: list[str] = []
-    if state.get("supported_system") is False:
-        reasons.append("KZ quick install supports Ubuntu or Debian hosts only")
-    if state.get("amd64") is False:
-        reasons.append("KZ quick install requires an amd64 host")
-    if state.get("sudo") is False and not getattr(server, "sudo_password", None):
-        reasons.append("KZ libssl1.1 installation requires root or sudo access")
-    return reasons
 
 
 async def build_game_mode_plan(
@@ -206,7 +157,6 @@ async def build_game_mode_plan(
                 "status": "pending",
             }
         )
-    _append_kz_dependency_step(mode_id, state, steps, mutations)
 
     steps.append(
         {
@@ -342,7 +292,7 @@ async def build_game_mode_plan(
                 "status": "already_present" if already else "pending",
             }
         )
-    blocking_reasons = _kz_blocking_reasons(mode_id, state, server)
+    blocking_reasons: list[str] = []
     if missing_titles:
         blocking_reasons.append("Missing from the plugin market: " + ", ".join(missing_titles))
     if hard_conflicts:
@@ -455,44 +405,6 @@ async def execute_game_mode_plan(  # noqa: C901
             )
         recipe: GameModeRecipe = get_recipe(mode_id)
         try:
-            if mode_id == "kz" and not plan["current"].get("libssl11"):
-                await report(
-                    "install_libssl11",
-                    "running",
-                    f"Installing {KZ_LIBSSL_DEB} for KZ plugin compatibility",
-                )
-                await db.commit()
-                manager = await connect(current_server)
-                temporary_dir = f"/tmp/upkk-kz-libssl-{uuid.uuid4().hex}"
-                temporary = f"{temporary_dir}/{KZ_LIBSSL_DEB}"
-                try:
-                    command = (
-                        f"set -eu; mkdir -p {temporary_dir!r}; command -v dpkg >/dev/null; "
-                        f"command -v dpkg-deb >/dev/null; command -v sha256sum >/dev/null; "
-                        f"command -v curl >/dev/null; curl -fsSL --retry 3 {KZ_LIBSSL_URL!r} -o {temporary!r}; "
-                        f"echo '{KZ_LIBSSL_SHA256}  {temporary}' | sha256sum -c -; "
-                        f'test "$(dpkg-deb -f {temporary!r} Package)" = libssl1.1; '
-                        f'test "$(dpkg-deb -f {temporary!r} Architecture)" = amd64; '
-                        f"dpkg -i {temporary!r}"
-                    )
-                    ok, stdout, stderr = await manager.execute_sudo_command(
-                        command,
-                        getattr(current_server, "sudo_password", None),
-                        timeout=300,
-                    )
-                    if not ok:
-                        raise GameModePlanError(
-                            (stderr or stdout or "libssl1.1 installation failed")[-800:]
-                        )
-                finally:
-                    await manager.execute_sudo_command(
-                        f"rm -rf {temporary_dir!r}",
-                        getattr(current_server, "sudo_password", None),
-                        timeout=20,
-                    )
-                    await manager.disconnect()
-                completed.append({"action": "install_libssl11", "success": True})
-                await report("install_libssl11", "completed", "Installed and verified libssl1.1")
             if wipe_addons:
                 await report("wipe_addons", "running", f"Wiping {plan['addons_path']}")
                 restart_manager = SSHManager()

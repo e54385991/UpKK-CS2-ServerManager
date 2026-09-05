@@ -234,7 +234,7 @@ function toDetail(raw: ServerDetailDto): ServerDetail {
     sshIdleSeconds: raw.ssh_idle_seconds ?? null,
     execstackFixOnRestart: raw.execstack_fix_on_restart ?? true,
     execstackFixOnFramework: raw.execstack_fix_on_framework ?? true,
-    execstackFixOnGameUpdate: raw.execstack_fix_on_game_update ?? true,
+    execstackFixOnGameUpdate: raw.execstack_fix_on_game_update ?? false,
     execstackFixTargets: raw.execstack_fix_targets ?? ["counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so"],
     sshHealthStatus: raw.ssh_health_status ?? "unknown",
     consecutiveSshFailures: raw.consecutive_ssh_failures ?? 0,

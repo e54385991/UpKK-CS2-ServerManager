@@ -16,24 +16,10 @@ export async function OperationsPanel({
   serverId,
   serverStatus,
   aptMirror,
-  gameDirectory,
-  clearExecstackEffective,
-  clearExecstackOverride,
-  execstackFixOnRestart,
-  execstackFixTargets,
-  osId,
-  osVersion,
 }: {
   serverId: number;
   serverStatus: ServerStatus;
   aptMirror: string | null;
-  gameDirectory: string;
-  clearExecstackEffective: boolean;
-  clearExecstackOverride: boolean | null;
-  execstackFixOnRestart: boolean;
-  execstackFixTargets: readonly string[];
-  osId: string | null;
-  osVersion: string | null;
 }) {
   const t = await getTranslations("serverDetail");
   const tCommands = await getTranslations("quickCommands");
@@ -68,13 +54,6 @@ export async function OperationsPanel({
           lock.ok ? lock.data : { lockActive: false, serverStatus }
         }
         aptMirror={aptMirror}
-        gameDirectory={gameDirectory}
-        clearExecstackEffective={clearExecstackEffective}
-        clearExecstackOverride={clearExecstackOverride}
-        execstackFixOnRestart={execstackFixOnRestart}
-        execstackFixTargets={execstackFixTargets}
-        osId={osId}
-        osVersion={osVersion}
       />
       {commands.ok ? (
         <CommandsConsole serverId={serverId} initial={commands.data} />

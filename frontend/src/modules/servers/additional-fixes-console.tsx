@@ -3,7 +3,10 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Check, Clipboard, RefreshCw, Save, Wrench } from "lucide-react";
-import { updateExecstackPolicyFromBrowser, probeServerCompatibilityFromBrowser } from "@/modules/servers/operation-client";
+import {
+  probeServerCompatibilityAction,
+  saveExecstackPolicyAction,
+} from "@/modules/servers/additional-fixes-actions";
 import type { ServerDetail } from "@/modules/servers/api";
 import { copyText } from "@/shared/lib/clipboard";
 import { Badge } from "@/shared/ui/badge";
@@ -14,13 +17,6 @@ const DEFAULT_TARGET = "counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-function automaticExecstackDefault(osId: string | null, osVersion: string | null): boolean {
-  if (!osId || !osVersion) return false;
-  const major = Number.parseInt(osVersion.split(".", 1)[0] ?? "", 10);
-  if (!Number.isFinite(major)) return false;
-  return (osId.toLowerCase() === "debian" && major >= 13) || (osId.toLowerCase() === "ubuntu" && major >= 25);
 }
 
 export function AdditionalFixesConsole({ initial }: { initial: ServerDetail }) {
@@ -67,7 +63,7 @@ export function AdditionalFixesConsole({ initial }: { initial: ServerDetail }) {
     setSaving(true);
     setError(null);
     setMessage(null);
-    const result = await updateExecstackPolicyFromBrowser(initial.id, {
+    const result = await saveExecstackPolicyAction(initial.id, {
       clearExecstackOverride: values.override,
       execstackFixOnRestart: values.restart,
       execstackFixOnFramework: values.framework,
@@ -85,24 +81,22 @@ export function AdditionalFixesConsole({ initial }: { initial: ServerDetail }) {
       setError(result.error);
       return;
     }
-    setEffective(values.override ?? automaticExecstackDefault(detectedOsId, detectedOsVersion));
+    setEffective(result.data.clearExecstackEffective);
     setMessage(t("saved"));
   }
 
   async function probe() {
     setProbing(true);
     setError(null);
-    const result = await probeServerCompatibilityFromBrowser(initial.id);
+    const result = await probeServerCompatibilityAction(initial.id);
     setProbing(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
-    if (typeof result.data.clear_execstack_effective === "boolean") {
-      setEffective(result.data.clear_execstack_effective);
-    }
-    setDetectedOsId(result.data.os_id ?? null);
-    setDetectedOsVersion(result.data.os_version ?? null);
+    setEffective(result.data.clearExecstackEffective);
+    setDetectedOsId(result.data.osId);
+    setDetectedOsVersion(result.data.osVersion);
     setMessage(t("probed"));
   }
 

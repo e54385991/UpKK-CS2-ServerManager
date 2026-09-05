@@ -205,7 +205,8 @@ async def test_execute_plan_success_covers_startup_framework_restart_and_verify(
 
 
 @pytest.mark.asyncio
-async def test_execute_kz_plan_installs_legacy_libssl_before_plugins(monkeypatch):
+async def test_execute_kz_plan_never_installs_system_packages(monkeypatch):
+    """libssl1.1 is a host dependency installed during setup, not per install."""
     server = _server()
     user = _patch_lock_and_lookup(monkeypatch, server)
     recipe = _recipe()
@@ -216,7 +217,6 @@ async def test_execute_kz_plan_installs_legacy_libssl_before_plugins(monkeypatch
         "addons_path": "/srv/cs2/addons",
         "startup": {"changed": False, "after": None},
         "current": {
-            "libssl11": False,
             "css": True,
             "mapchooser": True,
             "maps": True,
@@ -245,10 +245,8 @@ async def test_execute_kz_plan_installs_legacy_libssl_before_plugins(monkeypatch
         _DB(), server, user, "kz", wipe_addons=False, expected_plan_hash="kz-libssl"
     )
     assert result["success"] is True
-    install_command = manager.execute_sudo_command.await_args_list[0].args[0]
-    assert "libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb" in install_command
-    assert "dpkg -i" in install_command
-    assert manager.disconnect.await_count == 2
+    manager.execute_sudo_command.assert_not_awaited()
+    assert manager.disconnect.await_count == 1
 
 
 @pytest.mark.asyncio

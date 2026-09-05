@@ -19,6 +19,7 @@ from services.maintenance_lock import maintenance_lock_service
 from services.redis_manager import redis_manager
 from services.server_compatibility import (
     EXECSTACK_FILE_ACTIONS,
+    execstack_cleanup_enabled_for_action,
     execstack_operation_metadata,
     execstack_targets_metadata,
 )
@@ -136,9 +137,11 @@ async def start_server_operation(
             await maintenance_lock_service.force_release_server_lock(server_id)
 
     try:
-        clear_execstack = body.clear_execstack if body.action == "restart" else False
         extra: dict[str, object] | None = None
         if body.action == "restart":
+            # The Additional fixes page is the single source of truth for the
+            # patchelf policy; the client no longer submits a per-run choice.
+            clear_execstack = execstack_cleanup_enabled_for_action(server, "restart")
             extra = {"clear_execstack": clear_execstack}
             if clear_execstack:
                 extra.update(execstack_targets_metadata(server))

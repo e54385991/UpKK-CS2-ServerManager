@@ -1,6 +1,8 @@
 """Reusable setup workflow and contracts for the setup route."""
 
 import asyncio
+import contextlib
+import os
 import secrets
 import shlex
 import string
@@ -20,11 +22,15 @@ from services.ssh.text import decode_remote_text
 from services.system_dependencies import (
     APT_RETRY_ATTEMPTS,
     APT_RETRY_DELAYS_SECONDS,
+    LEGACY_LIBSSL_DEB,
+    LEGACY_LIBSSL_SHA256,
+    LEGACY_LIBSSL_URL,
     SETUP_OPTIONAL_PACKAGES,
     SEVEN_ZIP_PACKAGE_ALTERNATIVES,
     STEAMCMD_REQUIRED_PACKAGES,
     apt_get_command,
     installed_packages_verification_command,
+    legacy_libssl_present_command,
     normalize_debian_architecture,
     steamcmd_architecture_supported,
 )
@@ -357,42 +363,73 @@ async def _install_setup_dependencies(context: _SetupContext) -> None:
         )
 
 
-async def _install_legacy_libssl(context: _SetupContext) -> None:
-    if not context.os_version.startswith("24."):
-        await context.add_log("Not Ubuntu 24; skipping libssl1.1 installation")
-        return
-    await context.add_log("Detected Ubuntu 24; installing libssl1.1...")
-    try:
-        import os
+def _bundled_legacy_libssl_path() -> str:
+    """Absolute path of the OpenSSL 1.1 package shipped with the panel."""
+    repository_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(repository_root, "static", "linux_lib", "ubuntu_24", LEGACY_LIBSSL_DEB)
 
-        current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        local_path = os.path.join(
-            current_dir,
-            "static",
-            "linux_lib",
-            "ubuntu_24",
-            "libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb",
-        )
-        remote_path = "/tmp/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb"
-        if not os.path.exists(local_path):
-            await context.add_log(f"⚠ Local file not found: {local_path}")
-            return
-        await context.add_log("Uploading libssl1.1 to the remote server...")
+
+async def _stage_legacy_libssl(context: _SetupContext, remote_path: str) -> bool:
+    """Place the .deb on the host, preferring the copy bundled with the panel."""
+    local_path = _bundled_legacy_libssl_path()
+    if os.path.exists(local_path):
+        await context.add_log("Uploading the bundled libssl1.1 package...")
         async with context.conn.start_sftp_client() as sftp:
             await sftp.put(local_path, remote_path)
-        await context.add_log(f"✓ File uploaded: {remote_path}")
-        await context.add_log("Installing libssl1.1...")
-        stdout, stderr, exit_code = await _run_setup_command(context, f"dpkg -i {remote_path}")
+        return True
+    await context.add_log(
+        f"Bundled package is missing ({local_path}); downloading {LEGACY_LIBSSL_URL}..."
+    )
+    _, stderr, exit_code = await _run_setup_command(
+        context,
+        f"curl -fsSL --retry 3 {shlex.quote(LEGACY_LIBSSL_URL)} -o {shlex.quote(remote_path)}",
+    )
+    if exit_code != 0:
+        await context.add_log(f"⚠ Unable to download libssl1.1: {stderr[:200]}")
+        return False
+    return True
+
+
+async def _install_legacy_libssl(context: _SetupContext) -> None:
+    """Install the OpenSSL 1.1 runtime that older CS2 plugins still link against.
+
+    Ubuntu 22.04+ and Debian 12+ dropped libssl1.1, and adding it needs root.
+    Setup already holds root/sudo, so installing it here keeps later per-server
+    plugin and game-mode flows free of privileged system changes. Only legacy
+    plugins need it, so a failure is logged instead of failing setup.
+    """
+    probe = await context.conn.run(legacy_libssl_present_command(), check=False)
+    if probe.exit_status == 0:
+        await context.add_log("✓ OpenSSL 1.1 runtime is already present; skipping libssl1.1")
+        return
+    await context.add_log("Installing the libssl1.1 runtime required by legacy plugins...")
+    remote_path = f"/tmp/{LEGACY_LIBSSL_DEB}"
+    quoted_remote = shlex.quote(remote_path)
+    try:
+        if not await _stage_legacy_libssl(context, remote_path):
+            return
+        _, checksum_error, checksum_status = await _run_setup_command(
+            context,
+            f"echo {shlex.quote(f'{LEGACY_LIBSSL_SHA256}  {remote_path}')} | sha256sum -c -",
+        )
+        if checksum_status != 0:
+            await context.add_log(
+                f"⚠ libssl1.1 checksum verification failed: {checksum_error[:200]}"
+            )
+            return
+        stdout, stderr, exit_code = await _run_setup_command(context, f"dpkg -i {quoted_remote}")
         if stdout.strip():
             await context.add_command_output(stdout)
         if exit_code == 0:
             await context.add_log("✓ libssl1.1 installed successfully")
         else:
             await context.add_log(f"⚠ libssl1.1 installation may have failed: {stderr[:100]}")
-        await _run_setup_command(context, f"rm -f {remote_path}")
-        await context.add_log("✓ Temporary files cleaned up")
     except Exception as exc:
         await context.add_log(f"⚠ libssl1.1 installation error: {exc}")
+    finally:
+        # Cleanup must never replace the outcome already reported above.
+        with contextlib.suppress(Exception):
+            await _run_setup_command(context, f"rm -f {quoted_remote}")
 
 
 async def _ensure_setup_user(context: _SetupContext) -> None:

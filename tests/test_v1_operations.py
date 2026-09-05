@@ -169,6 +169,7 @@ def test_v1_file_operation_captures_execstack_default_in_queue_metadata(monkeypa
     client, server, user = _client(monkeypatch=monkeypatch)
     server.os_id = "ubuntu"
     server.os_version = "25.04"
+    server.execstack_fix_on_game_update = True
     record = _queued_record(action="update", actor_user_id=user.id)
     enqueue = AsyncMock(return_value=record)
     monkeypatch.setattr("api.routes.v1.operations.enqueue_server_operation", enqueue)
@@ -188,8 +189,10 @@ def test_v1_file_operation_captures_execstack_default_in_queue_metadata(monkeypa
     ]
 
 
-def test_v1_restart_captures_targets_when_fix_is_explicitly_enabled(monkeypatch):
+def test_v1_restart_reads_the_saved_policy_and_ignores_client_supplied_flags(monkeypatch):
     client, server, user = _client(monkeypatch=monkeypatch)
+    server.clear_execstack_override = True
+    server.execstack_fix_on_restart = True
     server.execstack_fix_targets = ["custom/plugin.so"]
     record = _queued_record(action="restart", actor_user_id=user.id)
     enqueue = AsyncMock(return_value=record)
@@ -200,15 +203,40 @@ def test_v1_restart_captures_targets_when_fix_is_explicitly_enabled(monkeypatch)
         AsyncMock(return_value=False),
     )
 
-    response = client.post(
-        "/api/v1/servers/1/operations",
-        json={"action": "restart", "clear_execstack": True},
-    )
+    response = client.post("/api/v1/servers/1/operations", json={"action": "restart"})
     assert response.status_code == 202
     extra = enqueue.await_args.kwargs["extra"]
     assert extra["clear_execstack"] is True
     assert extra["clear_execstack_targets"] == ["custom/plugin.so"]
     assert "custom/plugin.so" in extra["clear_execstack_command"]
+
+    # The per-run switch was removed from the console; the request body cannot
+    # re-introduce it because ApiRequest forbids unknown fields.
+    assert (
+        client.post(
+            "/api/v1/servers/1/operations",
+            json={"action": "restart", "clear_execstack": False},
+        ).status_code
+        == 422
+    )
+
+
+def test_v1_restart_skips_the_fix_when_the_saved_policy_disables_it(monkeypatch):
+    client, server, user = _client(monkeypatch=monkeypatch)
+    server.clear_execstack_override = True
+    server.execstack_fix_on_restart = False
+    record = _queued_record(action="restart", actor_user_id=user.id)
+    enqueue = AsyncMock(return_value=record)
+    monkeypatch.setattr("api.routes.v1.operations.enqueue_server_operation", enqueue)
+    monkeypatch.setattr("api.routes.v1.operations.redis_manager.get", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        "api.routes.v1.operations.maintenance_lock_service.is_locked",
+        AsyncMock(return_value=False),
+    )
+
+    response = client.post("/api/v1/servers/1/operations", json={"action": "restart"})
+    assert response.status_code == 202
+    assert enqueue.await_args.kwargs["extra"] == {"clear_execstack": False}
 
 
 def test_v1_file_operation_rejects_an_invalid_game_directory(monkeypatch):
@@ -216,6 +244,7 @@ def test_v1_file_operation_rejects_an_invalid_game_directory(monkeypatch):
     server.game_directory = "/"
     server.os_id = "ubuntu"
     server.os_version = "25.04"
+    server.execstack_fix_on_game_update = True
     monkeypatch.setattr("api.routes.v1.operations.redis_manager.get", AsyncMock(return_value=None))
     monkeypatch.setattr(
         "api.routes.v1.operations.maintenance_lock_service.is_locked",

@@ -79,7 +79,7 @@ class ServerDetail(ServerSummary):
     ssh_idle_seconds: float | None = None
     execstack_fix_on_restart: bool = True
     execstack_fix_on_framework: bool = True
-    execstack_fix_on_game_update: bool = True
+    execstack_fix_on_game_update: bool = False
     execstack_fix_targets: list[str] = Field(
         default_factory=lambda: list(DEFAULT_EXECSTACK_TARGETS)
     )

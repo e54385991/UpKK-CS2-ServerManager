@@ -19659,7 +19659,7 @@
             "type": "boolean"
           },
           "execstack_fix_on_game_update": {
-            "default": true,
+            "default": false,
             "title": "Execstack Fix On Game Update",
             "type": "boolean"
           },
@@ -20078,7 +20078,7 @@
             "type": "boolean"
           },
           "execstack_fix_on_game_update": {
-            "default": true,
+            "default": false,
             "title": "Execstack Fix On Game Update",
             "type": "boolean"
           },
@@ -20369,11 +20369,6 @@
             ],
             "title": "Action",
             "type": "string"
-          },
-          "clear_execstack": {
-            "default": false,
-            "title": "Clear Execstack",
-            "type": "boolean"
           }
         },
         "required": [
@@ -22923,7 +22918,7 @@
             "type": "boolean"
           },
           "execstack_fix_on_game_update": {
-            "default": true,
+            "default": false,
             "title": "Execstack Fix On Game Update",
             "type": "boolean"
           },

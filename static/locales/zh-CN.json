@@ -877,7 +877,7 @@
     "problemDescription": "问题描述",
     "kzPluginIssue": "KZ 插件加载失败通常有两类原因：缺少 libssl.so.1.1/libcrypto.so.1.1，或旧版动态库请求可执行栈而被新版 glibc 拒绝。两者只影响带有相关要求的插件。",
     "solutionSteps": "解决步骤",
-    "followSteps": "若快速安装无法完成，请按照以下步骤手动补齐 libssl1.1：",
+    "followSteps": "初始化主机时会自动安装 libssl1.1；若当时没有装上，请按照以下步骤手动补齐：",
     "step1Title": "下载 libssl1.1 软件包：",
     "step2Title": "安装软件包：",
     "step3Title": "重启您的 CS2 服务器",

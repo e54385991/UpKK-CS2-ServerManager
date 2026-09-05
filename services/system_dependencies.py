@@ -47,6 +47,23 @@ STEAMCMD_REQUIRED_PACKAGES = (
 SETUP_OPTIONAL_PACKAGES = ("libicu-dev",)
 SEVEN_ZIP_PACKAGE_ALTERNATIVES = ("7zip", "p7zip-full")
 
+# CS2KZ and other older Metamod/CSS plugins link against the OpenSSL 1.1
+# runtime, which Ubuntu 22.04+ and Debian 12+ no longer ship. It is a host
+# dependency, so it is installed once while initializing the host (which
+# already holds root/sudo) instead of during a per-server plugin install.
+LEGACY_LIBSSL_DEB = "libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb"
+LEGACY_LIBSSL_URL = "https://security.ubuntu.com/ubuntu/pool/main/o/openssl/" + LEGACY_LIBSSL_DEB
+LEGACY_LIBSSL_SHA256 = "7cf39d70a639017d1dd7c8d36daa2258063608688e449fddf40ffdd46f992a78"
+LEGACY_LIBSSL_SONAMES = ("libssl.so.1.1", "libcrypto.so.1.1")
+
+
+def legacy_libssl_present_command() -> str:
+    """Shell probe that exits 0 when both OpenSSL 1.1 sonames are resolvable."""
+    return " && ".join(
+        f"ldconfig -p 2>/dev/null | grep -q {shlex.quote(soname)}"
+        for soname in LEGACY_LIBSSL_SONAMES
+    )
+
 
 def normalize_debian_architecture(value: str) -> str:
     """Normalize dpkg/uname architecture names used by the remote probes."""

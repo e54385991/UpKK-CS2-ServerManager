@@ -32,50 +32,11 @@ function opsUrl(serverId: number, query?: string): string {
 export async function startServerOperationFromBrowser(
   serverId: number,
   action: ServerOperationAction,
-  options?: { readonly clearExecstack?: boolean },
 ): Promise<ClientResult<ServerOperation>> {
   return requestJson(opsUrl(serverId), {
     method: "POST",
-    body: JSON.stringify({ action, ...(action === "restart" ? { clear_execstack: options?.clearExecstack ?? false } : {}) }),
+    body: JSON.stringify({ action }),
   });
-}
-
-export async function updateExecstackPreferenceFromBrowser(
-  serverId: number,
-  value: boolean | null,
-): Promise<ClientResult<unknown>> {
-  return requestJson(`/api/v1/servers/${serverId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ clear_execstack_override: value }),
-  });
-}
-
-export async function updateExecstackPolicyFromBrowser(
-  serverId: number,
-  policy: {
-    readonly clearExecstackOverride: boolean | null;
-    readonly execstackFixOnRestart: boolean;
-    readonly execstackFixOnFramework: boolean;
-    readonly execstackFixOnGameUpdate: boolean;
-    readonly execstackFixTargets: readonly string[];
-  },
-): Promise<ClientResult<unknown>> {
-  return requestJson(`/api/v1/servers/${serverId}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      clear_execstack_override: policy.clearExecstackOverride,
-      execstack_fix_on_restart: policy.execstackFixOnRestart,
-      execstack_fix_on_framework: policy.execstackFixOnFramework,
-      execstack_fix_on_game_update: policy.execstackFixOnGameUpdate,
-      execstack_fix_targets: policy.execstackFixTargets,
-    }),
-  });
-}
-
-export async function probeServerCompatibilityFromBrowser(
-  serverId: number,
-): Promise<ClientResult<{ clear_execstack_effective?: boolean; os_id?: string | null; os_version?: string | null }>> {
-  return requestJson(`/api/v1/servers/${serverId}/compatibility`, { method: "POST" });
 }
 
 export async function applyAptMirrorFromBrowser(

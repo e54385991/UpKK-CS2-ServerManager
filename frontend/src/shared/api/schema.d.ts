@@ -14320,7 +14320,7 @@ export interface components {
             execstack_fix_on_framework: boolean;
             /**
              * Execstack Fix On Game Update
-             * @default true
+             * @default false
              */
             execstack_fix_on_game_update: boolean;
             /**
@@ -14525,7 +14525,7 @@ export interface components {
             execstack_fix_on_framework: boolean;
             /**
              * Execstack Fix On Game Update
-             * @default true
+             * @default false
              */
             execstack_fix_on_game_update: boolean;
             /**
@@ -14655,11 +14655,6 @@ export interface components {
              * @enum {string}
              */
             action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins";
-            /**
-             * Clear Execstack
-             * @default false
-             */
-            clear_execstack: boolean;
         };
         /**
          * ServerOperationView
@@ -15425,7 +15420,7 @@ export interface components {
             execstack_fix_on_framework: boolean;
             /**
              * Execstack Fix On Game Update
-             * @default true
+             * @default false
              */
             execstack_fix_on_game_update: boolean;
             /**

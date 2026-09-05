@@ -150,7 +150,7 @@ async def to_detail(server: Server) -> ServerDetail:
         clear_execstack_effective=effective_clear_execstack(server),
         execstack_fix_on_restart=bool(getattr(server, "execstack_fix_on_restart", True)),
         execstack_fix_on_framework=bool(getattr(server, "execstack_fix_on_framework", True)),
-        execstack_fix_on_game_update=bool(getattr(server, "execstack_fix_on_game_update", True)),
+        execstack_fix_on_game_update=bool(getattr(server, "execstack_fix_on_game_update", False)),
         execstack_fix_targets=targets,
         **pool,
     )

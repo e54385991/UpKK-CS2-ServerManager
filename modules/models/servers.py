@@ -60,7 +60,9 @@ class Server(SQLModel, table=True):
     clear_execstack_override: Optional[bool] = Field(default=None)
     execstack_fix_on_restart: bool = Field(default=True, nullable=False)
     execstack_fix_on_framework: bool = Field(default=True, nullable=False)
-    execstack_fix_on_game_update: bool = Field(default=True, nullable=False)
+    # Deploy/update/validate rewrite the plugin tree, so this trigger is
+    # opt-in: operators enable it on the server's Additional fixes page.
+    execstack_fix_on_game_update: bool = Field(default=False, nullable=False)
     execstack_fix_targets: List[str] = Field(
         default_factory=lambda: ["counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so"],
         sa_column=Column(JSON, nullable=False),

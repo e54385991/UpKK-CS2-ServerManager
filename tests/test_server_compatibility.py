@@ -11,7 +11,6 @@ from pydantic import ValidationError
 from api.contracts.v1.server import ServerUpdateRequest
 from modules.schemas.server_update import ServerUpdate
 from modules.schemas.servers import ServerConfigEntry
-from services.game_mode_install_service import _append_kz_dependency_step, _kz_blocking_reasons
 from services.server_compatibility import (
     LinuxRelease,
     build_clear_execstack_command,
@@ -80,6 +79,18 @@ def test_trigger_policy_and_custom_targets():
     assert execstack_operation_metadata(server, "update") == {"clear_execstack": False}
 
 
+def test_game_update_trigger_is_opt_in_when_unset():
+    server = SimpleNamespace(
+        os_id="ubuntu",
+        os_version="25.04",
+        clear_execstack_override=None,
+        game_directory="/srv/cs2",
+    )
+    assert execstack_cleanup_enabled_for_action(server, "deploy") is False
+    assert execstack_cleanup_enabled_for_action(server, "restart") is True
+    assert execstack_operation_metadata(server, "deploy") == {"clear_execstack": False}
+
+
 def test_target_validation_rejects_unsafe_values_and_uses_default_for_none():
     assert normalize_execstack_targets(None)
     with pytest.raises(ValueError):
@@ -104,30 +115,6 @@ def test_http_and_legacy_update_schemas_validate_custom_targets():
     ).execstack_fix_targets == [target]
     with pytest.raises(ValidationError):
         ServerUpdateRequest(execstack_fix_targets=["/tmp/plugin.so"])
-
-
-def test_kz_dependency_plan_and_preflight_branches():
-    steps: list[dict[str, object]] = []
-    mutations: list[dict[str, object]] = []
-    _append_kz_dependency_step("kz", {"libssl11": False}, steps, mutations)
-    assert steps[0]["status"] == "pending"
-    assert mutations[0]["target"] == "libssl.so.1.1 / libcrypto.so.1.1"
-    _append_kz_dependency_step("other", {}, steps, mutations)
-    assert _kz_blocking_reasons("other", {}, SimpleNamespace()) == []
-    reasons = _kz_blocking_reasons(
-        "kz",
-        {"supported_system": False, "amd64": False, "sudo": False},
-        SimpleNamespace(sudo_password=None),
-    )
-    assert len(reasons) == 3
-    assert (
-        _kz_blocking_reasons(
-            "kz",
-            {"supported_system": True, "amd64": True, "sudo": True, "libssl11": False},
-            SimpleNamespace(sudo_password=None),
-        )
-        == []
-    )
 
 
 def test_execstack_command_quotes_paths_and_rejects_escape():

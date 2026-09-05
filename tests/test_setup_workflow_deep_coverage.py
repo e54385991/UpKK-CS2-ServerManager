@@ -154,16 +154,21 @@ async def test_install_dependencies_success_optional_and_failure_paths(monkeypat
 
 @pytest.mark.asyncio
 async def test_legacy_libssl_directory_user_and_firewall_failures(monkeypatch):
-    conn = _Conn({"id cs2server": _result(exit_status=0)})
+    missing_libssl = {setup.legacy_libssl_present_command(): _result(exit_status=1)}
+    conn = _Conn({"id cs2server": _result(exit_status=0), **missing_libssl})
     conn.start_sftp_client = lambda: _SftpContext()
-    context = _context(conn, os_version="24.04")
-    monkeypatch.setattr("os.path.exists", lambda path: path.endswith("amd64.deb"))
+    context = _context(conn)
+    monkeypatch.setattr(setup, "_bundled_legacy_libssl_path", lambda: __file__)
+    # checksum, dpkg, cleanup
     monkeypatch.setattr(
-        setup, "_run_setup_command", AsyncMock(side_effect=[("installed\n", "", 0), ("", "", 0)])
+        setup,
+        "_run_setup_command",
+        AsyncMock(side_effect=[("", "", 0), ("installed\n", "", 0), ("", "", 0)]),
     )
     await setup._install_legacy_libssl(context)
     assert any("installed successfully" in line for line in context.logs)
-    context = _context(conn, os_version="24.04")
+
+    context = _context(conn)
     monkeypatch.setattr(setup, "_run_setup_command", AsyncMock(side_effect=RuntimeError("sftp")))
     await setup._install_legacy_libssl(context)
     assert any("installation error" in line for line in context.logs)
