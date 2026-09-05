@@ -8,13 +8,13 @@ from typing import List, Literal, Optional
 from pydantic import Field, field_validator, model_validator
 from sqlmodel import SQLModel
 
+from modules.execstack import normalize_execstack_targets
 from modules.server_startup import (
     normalize_additional_parameters,
     normalize_default_map,
     normalize_game_mode,
     normalize_game_type,
 )
-from services.server_compatibility import normalize_execstack_targets
 
 _APT_MIRROR_ALIASES = {
     "official": "official",

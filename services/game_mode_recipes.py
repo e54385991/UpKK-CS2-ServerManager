@@ -49,9 +49,7 @@ KZ_RECIPE = GameModeRecipe(
     # operator's map pool, so the plugin never writes it; the panel seeds it.
     wait_files=("addons/counterstrikesharp/configs/plugins/MapChooser/config.json",),
     plugin_config=dict(KZ_PLUGIN_CONFIG),
-    maps_append=(
-        GameModeMap(name="kz_variety", workshop_id="3250132197", enabled=False),
-    ),
+    maps_append=(GameModeMap(name="kz_variety", workshop_id="3250132197", enabled=False),),
     startup_workshop_map="3082213334",
 )
 

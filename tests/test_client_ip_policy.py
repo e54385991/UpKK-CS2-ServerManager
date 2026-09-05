@@ -69,14 +69,16 @@ def test_configured_header_replaces_the_default():
         ('for="[2001:db8::1]:41237"', "2001:db8::1"),
         ("for=192.0.2.44;proto=https", "192.0.2.44"),
         ("unknown, 203.0.113.9", "203.0.113.9"),
+        (", ,203.0.113.9", "203.0.113.9"),
     ],
 )
 def test_forwarded_values_are_parsed_into_bare_addresses(raw: str, expected: str):
     assert resolve_client_ip(_request({"X-Forwarded-For": raw}), "X-Forwarded-For") == expected
 
 
-def test_unusable_header_falls_back_to_the_socket_peer():
-    request = _request({"X-Forwarded-For": "not-an-address"})
+@pytest.mark.parametrize("raw", ["not-an-address", "[2001:db8::1", "", " , "])
+def test_unusable_header_falls_back_to_the_socket_peer(raw: str):
+    request = _request({"X-Forwarded-For": raw})
     assert resolve_client_ip(request, "X-Forwarded-For") == PEER
 
 

@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from modules import ManagedPlugin, Server, ServerStatus, User
+from services.game_mode_execstack import (
+    append_execstack_step,
+    run_planned_execstack_step,
+)
 from services.game_mode_launch import upsert_additional_parameters
 from services.game_mode_planning import (
     GameModePlanError,
@@ -59,12 +63,7 @@ from services.plugin_conflict_service import (
     validate_plugin_plan_acknowledgements,
 )
 from services.redis_manager import redis_manager
-from services.server_compatibility import (
-    build_clear_execstack_command,
-    effective_clear_execstack,
-    normalize_execstack_targets,
-    run_clear_execstack,
-)
+from services.server_compatibility import effective_clear_execstack
 from services.ssh_manager import SSHManager
 
 ProgressCallback = Callable[..., Awaitable[None]]
@@ -93,37 +92,6 @@ async def _persist_linux_release(db: AsyncSession, server: Server, release: Any)
     db.add(server)
     await db.commit()
     await redis_manager.clear_server_cache(int(server.id))
-
-
-def _append_execstack_step(
-    server: Server,
-    enabled: bool,
-    steps: list[dict[str, Any]],
-    mutations: list[dict[str, Any]],
-) -> None:
-    """Plan the newer-glibc patchelf fix for the plugin libraries we install."""
-    if not enabled:
-        return
-    targets = normalize_execstack_targets(getattr(server, "execstack_fix_targets", None))
-    steps.append(
-        {
-            "id": "clear_execstack",
-            "action": "clear_execstack",
-            "status": "pending",
-            "command": build_clear_execstack_command(server.game_directory, targets),
-            "targets": list(targets),
-        }
-    )
-    mutations.append(
-        {
-            "id": "clear_execstack",
-            "target": ", ".join(targets),
-            "before": "executable-stack flag set",
-            "after": "executable-stack flag cleared",
-            "destructive": False,
-            "status": "pending",
-        }
-    )
 
 
 async def build_game_mode_plan(
@@ -284,7 +252,7 @@ async def build_game_mode_plan(
         treat_as_missing=treat_as_missing,
         base_required=need_css or not state.get("config") or launch_changed,
     )
-    _append_execstack_step(server, clear_execstack and need_restart, steps, mutations)
+    append_execstack_step(server, clear_execstack and need_restart, steps, mutations)
     steps.append(
         {
             "id": "restart_and_wait",
@@ -591,6 +559,10 @@ async def execute_game_mode_plan(  # noqa: C901
                     raise GameModePlanError(
                         f"Unable to stop server before plugin initialization: {stop_message}"
                     )
+                # The plan promises this between the stop and the start: the
+                # freshly installed libraries are not mapped by a running
+                # process, so patchelf can rewrite them in place.
+                await run_planned_execstack_step(plan, current_server, report)
                 started, start_message = await restart_manager.start_server(
                     current_server, restart_progress
                 )

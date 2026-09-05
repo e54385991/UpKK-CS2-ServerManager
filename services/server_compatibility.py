@@ -8,7 +8,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-DEFAULT_EXECSTACK_TARGETS = ("counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so",)
+from modules.execstack import DEFAULT_EXECSTACK_TARGETS, normalize_execstack_targets
+
 EXECSTACK_FILE_ACTIONS = frozenset(
     {
         "deploy",
@@ -58,29 +59,6 @@ def effective_clear_execstack(server: Any) -> bool:
     if not os_id or not os_version:
         return False
     return LinuxRelease(str(os_id).lower(), str(os_version)).needs_execstack_clear
-
-
-def normalize_execstack_targets(values: Any) -> tuple[str, ...]:
-    """Validate relative ELF paths stored below the addons directory."""
-    if values is None:
-        return DEFAULT_EXECSTACK_TARGETS
-    if isinstance(values, str) or not isinstance(values, (list, tuple)):
-        raise ValueError("execstack targets must be a list of relative .so paths")
-    cleaned: list[str] = []
-    for value in values:
-        target = str(value or "").strip()
-        if (
-            not target
-            or target.startswith("/")
-            or not target.endswith(".so")
-            or any(part in {"", ".", ".."} for part in target.split("/"))
-        ):
-            raise ValueError("execstack targets must be relative .so paths")
-        if target not in cleaned:
-            cleaned.append(target)
-    if not cleaned or len(cleaned) > 64:
-        raise ValueError("execstack targets must contain between 1 and 64 paths")
-    return tuple(cleaned)
 
 
 def execstack_cleanup_enabled_for_action(server: Any, action: str) -> bool:

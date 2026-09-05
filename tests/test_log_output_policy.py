@@ -11,6 +11,7 @@ import pytest
 from modules.logging_config import (
     CONSOLE_HANDLER_NAME,
     FILE_HANDLER_NAME,
+    _get_log_level,
     console_log_level,
     set_console_log_level,
     setup_logging,
@@ -43,6 +44,12 @@ def configured_logging():
 
 def _handler(root: logging.Logger, name: str) -> logging.Handler:
     return next(handler for handler in root.handlers if handler.get_name() == name)
+
+
+def test_unknown_level_names_resolve_to_info():
+    assert _get_log_level("ERROR") == logging.ERROR
+    assert _get_log_level("nonsense") == logging.INFO
+    assert _get_log_level("") == logging.INFO
 
 
 def test_normalize_log_level_accepts_known_levels_only():

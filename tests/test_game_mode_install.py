@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from modules.execstack import DEFAULT_EXECSTACK_TARGETS
+from services.game_mode_execstack import run_planned_execstack_step
 from services.game_mode_install_service import (
     _plan_hash,
     build_game_mode_plan,
@@ -20,6 +22,7 @@ from services.game_mode_remote import (
     wait_for_remote_files,
     wipe_addons_directory,
 )
+from services.server_compatibility import LinuxRelease
 
 
 def test_kz_recipe_is_the_only_catalog_entry():
@@ -167,6 +170,11 @@ async def test_build_plan_lists_wipe_as_first_destructive_mutation(monkeypatch):
         "services.game_mode_install_service.connect",
         AsyncMock(return_value=manager),
     )
+    # An unknown host release keeps the patchelf fix out of this plan.
+    monkeypatch.setattr(
+        "services.game_mode_install_service.read_linux_release",
+        AsyncMock(return_value=None),
+    )
     monkeypatch.setattr(
         "services.game_mode_install_service.inspect_game_mode_state",
         AsyncMock(
@@ -205,3 +213,111 @@ async def test_build_plan_lists_wipe_as_first_destructive_mutation(monkeypatch):
     assert any(item["id"] == "wipe_addons" for item in clean["mutations"]) is False
     assert wiped["plan_hash"] != clean["plan_hash"]
     assert "-insecure" in (wiped["startup"]["after"] or "")
+
+
+@pytest.mark.asyncio
+async def test_plan_adds_the_execstack_step_on_a_newer_glibc_host(monkeypatch):
+    from services.map_management_service import (
+        DEFAULT_MAPS_CONFIG,
+        DEFAULT_PLUGIN_CONFIG_CONTENT,
+    )
+
+    server = SimpleNamespace(
+        id=1,
+        game_directory="/home/cs2server/cs2kz",
+        additional_parameters="-insecure",
+        os_id="debian",
+        os_version="13",
+        execstack_fix_targets=None,
+        clear_execstack_override=None,
+    )
+    monkeypatch.setattr(
+        "services.game_mode_install_service.connect",
+        AsyncMock(return_value=SimpleNamespace(disconnect=AsyncMock())),
+    )
+    # The host record already matches, so no database write is attempted.
+    monkeypatch.setattr(
+        "services.game_mode_install_service.read_linux_release",
+        AsyncMock(return_value=LinuxRelease("debian", "13")),
+    )
+    monkeypatch.setattr(
+        "services.game_mode_install_service.inspect_game_mode_state",
+        AsyncMock(
+            return_value={
+                "addons": True,
+                "metamod": True,
+                "css": True,
+                "swiftly": False,
+                "cs2kz": True,
+                "mapchooser": True,
+                "maps": True,
+                "config": True,
+            }
+        ),
+    )
+
+    async def fake_read(*_args, **kwargs):
+        if "maps.txt" in str(kwargs.get("label") or ""):
+            return DEFAULT_MAPS_CONFIG
+        return DEFAULT_PLUGIN_CONFIG_CONTENT
+
+    monkeypatch.setattr("services.game_mode_install_service._read_text", fake_read)
+    monkeypatch.setattr(
+        "services.game_mode_install_service.find_market_plugin_by_title",
+        AsyncMock(return_value=None),
+    )
+
+    plan = await build_game_mode_plan(object(), server, "kz", wipe_addons=True)
+
+    assert plan["clear_execstack"] is True
+    step = next(item for item in plan["steps"] if item["id"] == "clear_execstack")
+    assert step["targets"] == list(DEFAULT_EXECSTACK_TARGETS)
+    assert "--clear-execstack" in step["command"]
+    # The fix is planned before the restart that loads the patched libraries.
+    ids = [item["id"] for item in plan["steps"]]
+    assert ids.index("clear_execstack") < ids.index("restart_and_wait")
+
+
+@pytest.mark.asyncio
+async def test_planned_execstack_step_runs_and_reports(monkeypatch):
+    calls: list[tuple] = []
+    reports: list[tuple[str, str]] = []
+
+    async def fake_run(_manager, server, targets):
+        calls.append((server, targets))
+        return True, "cleared"
+
+    async def report(step_id, step_status, message, metadata=None):
+        reports.append((step_id, step_status))
+
+    monkeypatch.setattr("services.game_mode_execstack.run_clear_execstack", fake_run)
+    server = SimpleNamespace(id=1, game_directory="/srv/cs2")
+    plan = {"steps": [{"id": "clear_execstack", "targets": ["a/b.so"]}]}
+
+    await run_planned_execstack_step(plan, server, report)
+
+    assert calls == [(server, ["a/b.so"])]
+    assert reports == [("clear_execstack", "running"), ("clear_execstack", "completed")]
+
+
+@pytest.mark.asyncio
+async def test_planned_execstack_step_is_skipped_and_never_fails_the_install(monkeypatch):
+    reports: list[tuple[str, str]] = []
+
+    async def report(step_id, step_status, message, metadata=None):
+        reports.append((step_id, step_status))
+
+    monkeypatch.setattr(
+        "services.game_mode_execstack.run_clear_execstack",
+        AsyncMock(return_value=(False, "patchelf --clear-execstack is unavailable")),
+    )
+    server = SimpleNamespace(id=1, game_directory="/srv/cs2")
+
+    # No planned step: nothing runs and nothing is reported.
+    await run_planned_execstack_step({"steps": []}, server, report)
+    assert reports == []
+
+    await run_planned_execstack_step(
+        {"steps": [{"id": "clear_execstack", "targets": None}]}, server, report
+    )
+    assert reports == [("clear_execstack", "running"), ("clear_execstack", "failed")]

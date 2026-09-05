@@ -2,6 +2,7 @@
 
 # ruff: noqa: F403,F405
 
+from modules.execstack import DEFAULT_EXECSTACK_TARGETS, normalize_execstack_targets
 from modules.models import AuthType
 from modules.server_startup import (
     normalize_additional_parameters,
@@ -9,7 +10,6 @@ from modules.server_startup import (
     normalize_game_mode,
     normalize_game_type,
 )
-from services.server_compatibility import DEFAULT_EXECSTACK_TARGETS, normalize_execstack_targets
 
 from .auth import UserResponse
 from .common import *
