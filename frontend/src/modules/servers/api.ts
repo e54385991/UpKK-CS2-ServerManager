@@ -865,6 +865,7 @@ function toOperationAction(value: string): ServerOperationAction {
 }
 
 function toOperationEvent(raw: OperationJournalEventDto): OperationStreamEvent {
+  const transfer = raw.transfer;
   return {
     sequence: String(raw.sequence ?? ""),
     operationId: String(raw.operation_id ?? ""),
@@ -874,6 +875,18 @@ function toOperationEvent(raw: OperationJournalEventDto): OperationStreamEvent {
     timestamp: String(raw.timestamp ?? ""),
     success: typeof raw.success === "boolean" ? raw.success : undefined,
     serverStatus: raw.server_status ?? null,
+    stepId: raw.step_id ?? null,
+    stepStatus: raw.step_status ?? null,
+    transfer: transfer
+      ? {
+          phase: transfer.phase,
+          bytesTransferred: transfer.bytes_transferred,
+          totalBytes: transfer.total_bytes ?? null,
+          percent: transfer.percent ?? null,
+          elapsedSeconds: transfer.elapsed_seconds,
+          retryCount: transfer.retry_count,
+        }
+      : null,
   };
 }
 

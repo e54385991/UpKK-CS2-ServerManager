@@ -115,7 +115,18 @@ async def test_transfer_sftp_and_generic_errors(tmp_path):
     source = tmp_path / "source"
     source.write_bytes(b"payload")
     progress = []
+    structured = []
+
+    async def structured_progress(payload):
+        structured.append(payload)
+
+    def progress_with_events(done, total):
+        progress.append((done, total))
+
+    progress_with_events.progress_event_callback = structured_progress
     assert await manager.upload_file_with_progress(
-        str(source), "/srv/a", server, lambda done, total: progress.append((done, total))
+        str(source), "/srv/a", server, progress_with_events
     ) == (True, "")
     assert progress[-1] == (7, 7)
+    assert structured[0]["phase"] == "upload"
+    assert structured[-1]["bytes_transferred"] == 7

@@ -154,7 +154,11 @@ class FileTransferMixin(SSHMixinBase):
                     yield chunk
 
     async def upload_file_with_progress(
-        self, local_path: str, remote_path: str, server: Server, progress_callback=None
+        self,
+        local_path: str,
+        remote_path: str,
+        server: Server,
+        progress_callback=None,
     ) -> Tuple[bool, str]:
         """
         Upload file from local to remote with progress tracking
@@ -175,9 +179,36 @@ class FileTransferMixin(SSHMixinBase):
                 return False, f"Connection failed: {msg}"
 
         try:
+            progress_event_callback = getattr(progress_callback, "progress_event_callback", None)
             # Get file size
             total_bytes = os.path.getsize(local_path)
             bytes_uploaded = 0
+            started_at = time.monotonic()
+            last_event_at = 0.0
+
+            async def emit_progress(force: bool = False) -> None:
+                nonlocal last_event_at
+                if progress_event_callback is None:
+                    return
+                now = time.monotonic()
+                if not force and now - last_event_at < 1.0:
+                    return
+                last_event_at = now
+                payload = {
+                    "phase": "upload",
+                    "bytes_transferred": bytes_uploaded,
+                    "total_bytes": total_bytes,
+                    "percent": round(bytes_uploaded * 100 / total_bytes, 1)
+                    if total_bytes > 0
+                    else None,
+                    "elapsed_seconds": round(now - started_at, 1),
+                    "retry_count": 0,
+                }
+                result = progress_event_callback(payload)
+                if inspect.isawaitable(result):
+                    await result
+
+            await emit_progress(force=True)
 
             async with self.conn.start_sftp_client() as sftp:
                 created, create_error = await self._ensure_remote_parent(remote_path, sftp)
@@ -200,10 +231,13 @@ class FileTransferMixin(SSHMixinBase):
 
                             # Send progress update
                             if progress_callback:
-                                if asyncio.iscoroutinefunction(progress_callback):
+                                if inspect.iscoroutinefunction(progress_callback):
                                     await progress_callback(bytes_uploaded, total_bytes)
                                 else:
                                     progress_callback(bytes_uploaded, total_bytes)
+                            await emit_progress()
+
+                await emit_progress(force=True)
 
                 return True, ""
         except asyncssh.SFTPError as e:

@@ -108,6 +108,22 @@ export function OperationLiveLog({
       ),
     [eventLatest, paneLatest, watchDeploy],
   );
+  const transfer = useMemo(
+    () => [...events].reverse().find((event) => event.transfer)?.transfer ?? null,
+    [events],
+  );
+  const transferPhase = transfer
+    ? transfer.phase === "download"
+      ? t("transferDownload")
+      : t("transferUpload")
+    : null;
+  const transferBytes = transfer
+    ? `${format.number(transfer.bytesTransferred / (1024 * 1024), { maximumFractionDigits: 1 })} MB`
+    : null;
+  const transferRetries =
+    transfer && transfer.retryCount > 0
+      ? t("transferRetries", { count: transfer.retryCount })
+      : null;
 
   const displayEvents =
     events.length > 0
@@ -184,6 +200,36 @@ export function OperationLiveLog({
             <span className="mr-2 text-fg-subtle">{t("latestProgress")}</span>
             <span className="break-all">{pinnedLatest}</span>
           </p>
+        ) : null}
+        {transfer ? (
+          <div className="space-y-1 border-b border-line bg-primary-muted/20 px-4 py-2" data-testid="operation-transfer-progress">
+            <div className="flex items-center justify-between gap-2 text-xs text-fg-muted">
+              <span>
+                {transfer.percent === null
+                  ? `${transferPhase} · ${transferBytes}`
+                  : `${transferPhase} · ${format.number(transfer.percent, { maximumFractionDigits: 1 })}% · ${transferBytes}`}
+                {transferRetries ? ` · ${transferRetries}` : ""}
+              </span>
+              <span>{t("transferElapsed", { seconds: transfer.elapsedSeconds.toFixed(1) })}</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-line">
+              <div
+                className={cn(
+                  "h-full rounded-full bg-primary transition-[width] duration-500",
+                  transfer.percent === null ? "w-1/3 animate-pulse" : "",
+                )}
+                style={
+                  transfer.percent === null
+                    ? undefined
+                    : { width: `${transfer.percent}%` }
+                }
+                role="progressbar"
+                aria-valuenow={transfer.percent ?? undefined}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              />
+            </div>
+          </div>
         ) : null}
         <div
           ref={logRef}

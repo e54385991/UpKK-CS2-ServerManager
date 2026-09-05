@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from api.application import create_app
 from api.dependencies import get_bearer_or_cookie_user
+from api.routes.v1.operations import _operation_event_source
 from api.routes.v1.schemas import ServerLifecycleAction, ServerOperationAction
 from modules import get_current_active_user, get_current_user, get_db
 from modules.models.servers import ServerStatus
@@ -268,6 +269,18 @@ def test_v1_sse_replays_history_and_closes_on_terminal(monkeypatch):
             "progress",
             kind="status",
             message="Checking server status...",
+            extra={
+                "step_id": "status",
+                "step_status": "running",
+                "transfer": {
+                    "phase": "download",
+                    "bytes_transferred": 10,
+                    "total_bytes": 100,
+                    "percent": 10.0,
+                    "elapsed_seconds": 1.0,
+                    "retry_count": 0,
+                },
+            },
         )
         await server_operation_hub.finish(
             record["operation_id"],
@@ -316,6 +329,18 @@ def test_v1_journal_replays_history(monkeypatch):
             "progress",
             kind="status",
             message="Checking server status...",
+            extra={
+                "step_id": "status",
+                "step_status": "running",
+                "transfer": {
+                    "phase": "download",
+                    "bytes_transferred": 10,
+                    "total_bytes": 100,
+                    "percent": 10.0,
+                    "elapsed_seconds": 1.0,
+                    "retry_count": 0,
+                },
+            },
         )
         await server_operation_hub.finish(
             record["operation_id"],
@@ -334,6 +359,43 @@ def test_v1_journal_replays_history(monkeypatch):
     assert any("accepted" in message.lower() for message in messages)
     assert "Checking server status..." in messages
     assert "Server is stopped" in messages
+    progress_event = next(
+        event for event in body["events"] if event["message"] == "Checking server status..."
+    )
+    assert progress_event["step_id"] == "status"
+    assert progress_event["transfer"]["percent"] == 10.0
+
+
+def test_v1_sse_connection_notices_are_comments(monkeypatch):
+    _client_instance, _server, user = _client(monkeypatch=monkeypatch)
+
+    async def seed():
+        record = await server_operation_hub.create(
+            server_id=1,
+            action="status",
+            actor_user_id=user.id,
+        )
+        events = await server_operation_hub.replay(record["operation_id"], 0)
+        return record["operation_id"], int(events[-1]["sequence"])
+
+    operation_id, after = asyncio.run(seed())
+
+    class _Request:
+        async def is_disconnected(self):
+            return False
+
+    async def collect():
+        stream = _operation_event_source(_Request(), operation_id, after)
+        connected = await stream.__anext__()
+        waiting = await stream.__anext__()
+        await stream.aclose()
+        return connected, waiting
+
+    connected, waiting = asyncio.run(collect())
+    assert connected == ": connected\n\n"
+    assert waiting == ": waiting for worker output\n\n"
+    events = asyncio.run(server_operation_hub.replay(operation_id, 0))
+    assert not any("waiting for worker output" in event["message"] for event in events)
 
 
 def test_v1_start_operation_releases_stale_maintenance_lock(monkeypatch):

@@ -300,6 +300,15 @@ export type OperationEventKind =
   | "complete"
   | "info";
 
+export type OperationTransferProgress = {
+  readonly phase: "download" | "upload";
+  readonly bytesTransferred: number;
+  readonly totalBytes: number | null;
+  readonly percent: number | null;
+  readonly elapsedSeconds: number;
+  readonly retryCount: number;
+};
+
 export type OperationStreamEvent = {
   readonly sequence: string;
   readonly operationId: string;
@@ -309,6 +318,9 @@ export type OperationStreamEvent = {
   readonly timestamp: string;
   readonly success?: boolean;
   readonly serverStatus?: string | null;
+  readonly stepId?: string | null;
+  readonly stepStatus?: "pending" | "running" | "completed" | "failed" | null;
+  readonly transfer?: OperationTransferProgress | null;
 };
 
 export type OperationJournal = {

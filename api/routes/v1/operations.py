@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -32,6 +32,7 @@ from .schemas import (
     DeploymentLogEntry,
     OperationJournal,
     OperationJournalEvent,
+    OperationTransferProgress,
     ServerOperationRequest,
     ServerOperationView,
 )
@@ -82,6 +83,20 @@ async def _authorize_stream_server(server_id: int, user) -> None:
 def _to_journal_event(event: dict[str, Any]) -> OperationJournalEvent:
     success = event.get("success")
     server_status = event.get("server_status")
+    transfer = event.get("transfer")
+    raw_step_status = event.get("step_status")
+    step_status = (
+        cast(Literal["pending", "running", "completed", "failed"], raw_step_status)
+        if raw_step_status in {"pending", "running", "completed", "failed"}
+        else None
+    )
+    parsed_transfer = None
+    if isinstance(transfer, dict):
+        try:
+            parsed_transfer = OperationTransferProgress.model_validate(transfer)
+        except ValueError:
+            # Keep old or partially written journal rows replayable.
+            parsed_transfer = None
     return OperationJournalEvent(
         sequence=str(event.get("sequence") or ""),
         operation_id=str(event.get("operation_id") or ""),
@@ -91,6 +106,9 @@ def _to_journal_event(event: dict[str, Any]) -> OperationJournalEvent:
         timestamp=str(event.get("timestamp") or ""),
         success=success if isinstance(success, bool) else None,
         server_status=str(server_status) if server_status else None,
+        step_id=str(event["step_id"]) if event.get("step_id") else None,
+        step_status=step_status,
+        transfer=parsed_transfer,
     )
 
 
@@ -266,13 +284,9 @@ async def _operation_event_source(request: Request, op_id: str, after: int):
         if not replayed:
             current = await server_operation_hub.get(op_id)
             if current and current.get("status") in ACTIVE_STATUSES:
-                await server_operation_hub.emit(
-                    op_id,
-                    "progress",
-                    kind="status",
-                    message="Live log connected; waiting for worker output…",
-                )
-                replayed = await server_operation_hub.replay(op_id, sequence)
+                # Keep connection diagnostics as SSE comments. Persisting them as
+                # operation events makes every reconnect look like new work.
+                yield ": waiting for worker output\n\n"
         for event in replayed:
             event_sequence = _event_sequence(event)
             if event_sequence <= sequence:
@@ -283,8 +297,9 @@ async def _operation_event_source(request: Request, op_id: str, after: int):
                 return
         idle_ticks = 0
         while not await request.is_disconnected():
+            pending: list[dict[str, Any]] = []
             try:
-                pending = [await asyncio.wait_for(queue.get(), timeout=1)]
+                pending.append(await asyncio.wait_for(queue.get(), timeout=1))
             except TimeoutError:
                 idle_ticks += 1
                 if idle_ticks >= 15:
@@ -292,17 +307,19 @@ async def _operation_event_source(request: Request, op_id: str, after: int):
                     yield ": keep-alive\n\n"
                 current = await server_operation_hub.get(op_id)
                 if current and current.get("status") in {"completed", "failed"}:
-                    for replay_event in await server_operation_hub.replay(op_id, sequence):
-                        yield _encode_sse_event(replay_event)
-                    return
+                    pending.extend(await server_operation_hub.replay(op_id, sequence))
+                    if not pending:
+                        return
             else:
                 idle_ticks = 0
             pending.extend(await server_operation_hub.replay(op_id, sequence))
-            pending.sort(key=lambda item: int(item.get("sequence") or 0))
+            pending.sort(key=lambda item: _event_sequence(item))
+            seen: set[int] = set()
             for event in pending:
                 event_sequence = _event_sequence(event)
-                if event_sequence <= sequence:
+                if event_sequence <= sequence or event_sequence in seen:
                     continue
+                seen.add(event_sequence)
                 sequence = event_sequence
                 yield _encode_sse_event(event)
                 if event.get("type") in TERMINAL_EVENT_TYPES:

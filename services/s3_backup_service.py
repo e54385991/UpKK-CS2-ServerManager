@@ -387,7 +387,7 @@ class S3BackupService:
             client = self._get_client(user)
             await asyncio.to_thread(client.download_file, user.s3_bucket, object_key, local_path)
             return True, ""
-        except (BotoCoreError, ClientError, RuntimeError) as exc:
+        except (AttributeError, OSError, BotoCoreError, ClientError, RuntimeError) as exc:
             return False, f"Failed to download S3 backup: {exc}"
 
 

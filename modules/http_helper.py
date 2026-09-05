@@ -4,8 +4,10 @@ Provides a centralized utility for making HTTP requests with error handling
 """
 
 import asyncio
+import inspect
 import logging
 import os
+import time
 from typing import Any, Dict, Optional, Tuple
 
 import anyio
@@ -26,6 +28,54 @@ DOWNLOAD_CHUNK_SIZE = 8192
 # Retry configuration
 MAX_RETRIES = 3
 RETRY_DELAY = 1.0  # Initial delay in seconds
+
+
+async def _emit_transfer_progress(
+    callback,
+    *,
+    started_at: float,
+    last_event_at: float,
+    bytes_transferred: int,
+    total_bytes: int,
+    retry_count: int,
+    force: bool = False,
+) -> float:
+    """Throttle structured transfer events while preserving terminal updates."""
+    if callback is None:
+        return last_event_at
+    now = time.monotonic()
+    if not force and now - last_event_at < 1.0:
+        return last_event_at
+    payload = {
+        "phase": "download",
+        "bytes_transferred": bytes_transferred,
+        "total_bytes": total_bytes or None,
+        "percent": (round(bytes_transferred * 100 / total_bytes, 1) if total_bytes > 0 else None),
+        "elapsed_seconds": round(now - started_at, 1),
+        "retry_count": retry_count,
+    }
+    result = callback(payload)
+    if inspect.isawaitable(result):
+        await result
+    return now
+
+
+async def _emit_retry_progress(
+    callback,
+    *,
+    started_at: float,
+    last_event_at: float,
+    retry_count: int,
+) -> float:
+    return await _emit_transfer_progress(
+        callback,
+        started_at=started_at,
+        last_event_at=last_event_at,
+        bytes_transferred=0,
+        total_bytes=0,
+        retry_count=retry_count,
+        force=True,
+    )
 
 
 class HTTPHelper:
@@ -266,6 +316,7 @@ class HTTPHelper:
         headers: Optional[Dict[str, str]] = None,
         timeout: int = 300,
         progress_callback=None,
+        progress_event_callback=None,
     ) -> Tuple[bool, Optional[str]]:
         """
         Download a file with progress tracking and retry logic
@@ -277,11 +328,19 @@ class HTTPHelper:
             timeout: Request timeout in seconds (default: 300 for large files)
             progress_callback: Optional async callback function for progress updates
                              Called with (bytes_downloaded, total_bytes)
+            progress_event_callback: Optional callback receiving structured
+                                     download progress metadata
 
         Returns:
             Tuple[bool, Optional[str]]: (success, error_message)
         """
         last_error = None
+        progress_event_callback = progress_event_callback or getattr(
+            progress_callback, "progress_event_callback", None
+        )
+        started_at = time.monotonic()
+        deadline = started_at + max(1, timeout)
+        last_event_at = 0.0
 
         for attempt in range(MAX_RETRIES):
             try:
@@ -292,59 +351,108 @@ class HTTPHelper:
                     )
                     await asyncio.sleep(delay)
 
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    last_error = "Download timeout: download deadline exceeded"
+                    last_event_at = await _emit_retry_progress(
+                        progress_event_callback,
+                        started_at=started_at,
+                        last_event_at=last_event_at,
+                        retry_count=attempt,
+                    )
+                    break
+
+                last_event_at = await _emit_transfer_progress(
+                    progress_event_callback,
+                    started_at=started_at,
+                    last_event_at=last_event_at,
+                    bytes_transferred=0,
+                    total_bytes=0,
+                    retry_count=attempt,
+                    force=True,
+                )
+
                 logger.debug(
                     f"Downloading file from {url} to {local_path} (attempt {attempt + 1}/{MAX_RETRIES})"
                 )
 
                 client = await self._get_client()
 
-                async with client.stream(
-                    "GET", url, headers=headers, timeout=timeout, follow_redirects=True
-                ) as response:
-                    if response.status_code >= 200 and response.status_code < 300:
-                        # Get total file size if available
-                        total_bytes = int(response.headers.get("Content-Length", 0))
-                        bytes_downloaded = 0
-
-                        # Ensure parent directory exists
-                        parent_directory = os.path.dirname(local_path)
-                        if parent_directory:
-                            await asyncio.to_thread(os.makedirs, parent_directory, exist_ok=True)
-
-                        # Download file in chunks
-                        async with await anyio.open_file(local_path, "wb") as f:
-                            async for chunk in response.aiter_bytes(chunk_size=DOWNLOAD_CHUNK_SIZE):
-                                await f.write(chunk)
-                                bytes_downloaded += len(chunk)
-
-                                # Send progress update
-                                if progress_callback:
-                                    if asyncio.iscoroutinefunction(progress_callback):
-                                        await progress_callback(bytes_downloaded, total_bytes)
-                                    else:
-                                        progress_callback(bytes_downloaded, total_bytes)
-
-                        logger.debug(f"Download successful: {bytes_downloaded} bytes")
-                        return True, None
-                    else:
-                        # Read error response body for streaming response
+                request_timeout = httpx.Timeout(
+                    min(30.0, remaining),
+                    connect=min(15.0, remaining),
+                    read=min(30.0, remaining),
+                )
+                async with asyncio.timeout(remaining):
+                    async with client.stream(
+                        "GET", url, headers=headers, timeout=request_timeout, follow_redirects=True
+                    ) as response:
+                        if response.status_code >= 200 and response.status_code < 300:
+                            try:
+                                total_bytes = int(response.headers.get("Content-Length", 0))
+                            except TypeError, ValueError:
+                                total_bytes = 0
+                            bytes_downloaded = 0
+                            parent_directory = os.path.dirname(local_path)
+                            if parent_directory:
+                                await asyncio.to_thread(
+                                    os.makedirs, parent_directory, exist_ok=True
+                                )
+                            async with await anyio.open_file(local_path, "wb") as f:
+                                async for chunk in response.aiter_bytes(
+                                    chunk_size=DOWNLOAD_CHUNK_SIZE
+                                ):
+                                    await f.write(chunk)
+                                    bytes_downloaded += len(chunk)
+                                    if progress_callback:
+                                        if inspect.iscoroutinefunction(progress_callback):
+                                            await progress_callback(bytes_downloaded, total_bytes)
+                                        else:
+                                            progress_callback(bytes_downloaded, total_bytes)
+                                    last_event_at = await _emit_transfer_progress(
+                                        progress_event_callback,
+                                        started_at=started_at,
+                                        last_event_at=last_event_at,
+                                        bytes_transferred=bytes_downloaded,
+                                        total_bytes=total_bytes,
+                                        retry_count=attempt,
+                                    )
+                            logger.debug(f"Download successful: {bytes_downloaded} bytes")
+                            last_event_at = await _emit_transfer_progress(
+                                progress_event_callback,
+                                started_at=started_at,
+                                last_event_at=last_event_at,
+                                bytes_transferred=bytes_downloaded,
+                                total_bytes=total_bytes,
+                                retry_count=attempt,
+                                force=True,
+                            )
+                            return True, None
                         error_body = await response.aread()
-                        error_text = error_body.decode("utf-8", errors="ignore")[
-                            :500
-                        ]  # Limit to 500 chars
+                        error_text = error_body.decode("utf-8", errors="ignore")[:500]
                         error_msg = f"HTTP {response.status_code}: {error_text}"
                         logger.error(f"Download failed: {error_msg}")
                         last_error = error_msg
-                        # Don't retry on 4xx errors (client errors)
                         if 400 <= response.status_code < 500:
                             return False, error_msg
-                        # Retry on 5xx errors (server errors)
+                        last_event_at = await _emit_retry_progress(
+                            progress_event_callback,
+                            started_at=started_at,
+                            last_event_at=last_event_at,
+                            retry_count=attempt + 1,
+                        )
                         continue
 
-            except httpx.TimeoutException as e:
+            except (httpx.TimeoutException, TimeoutError, asyncio.TimeoutError) as e:
                 error_msg = f"Download timeout: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
+                last_event_at = await _emit_retry_progress(
+                    progress_event_callback,
+                    started_at=started_at,
+                    last_event_at=last_event_at,
+                    retry_count=attempt + 1,
+                )
                 # Retry on timeout
                 continue
 
@@ -352,6 +460,12 @@ class HTTPHelper:
                 error_msg = f"Download error: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
+                last_event_at = await _emit_retry_progress(
+                    progress_event_callback,
+                    started_at=started_at,
+                    last_event_at=last_event_at,
+                    retry_count=attempt + 1,
+                )
                 # Retry on network errors
                 continue
 
@@ -359,6 +473,12 @@ class HTTPHelper:
                 error_msg = f"Unexpected download error: {str(e)}"
                 logger.error(error_msg)
                 last_error = error_msg
+                last_event_at = await _emit_retry_progress(
+                    progress_event_callback,
+                    started_at=started_at,
+                    last_event_at=last_event_at,
+                    retry_count=attempt + 1,
+                )
                 # Retry on unexpected errors
                 continue
 

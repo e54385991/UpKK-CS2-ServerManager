@@ -19,13 +19,13 @@ class CounterStrikeSharpMixin(SSHMixinBase):
         Returns: (success: bool, message: str)
         """
 
-        async def send_progress(message: str):
+        async def send_progress(
+            message: str,
+            kind: str = "status",
+            metadata: dict[str, Any] | None = None,
+        ):
             """Helper to send progress updates"""
-            if progress_callback:
-                if asyncio.iscoroutinefunction(progress_callback):
-                    await progress_callback(message)
-                else:
-                    progress_callback(message)
+            await emit_progress_callback(progress_callback, message, kind=kind, metadata=metadata)
 
         success, msg = await self.connect(server)
         if not success:
@@ -56,6 +56,12 @@ class CounterStrikeSharpMixin(SSHMixinBase):
                 mm_success, mm_msg = await self.install_metamod(server, progress_callback)
                 if not mm_success:
                     return False, f"Metamod installation failed: {mm_msg}"
+                reconnect_success, reconnect_message = await self.connect(server)
+                if not reconnect_success:
+                    return (
+                        False,
+                        f"CounterStrikeSharp reconnect failed after Metamod installation: {reconnect_message}",
+                    )
             else:
                 await send_progress("✓ Metamod already installed")
 
@@ -138,19 +144,27 @@ class CounterStrikeSharpMixin(SSHMixinBase):
                     # Download to panel server
                     from modules.http_helper import http_helper
 
-                    last_progress = 0
+                    async def download_event_callback(progress: dict[str, Any]):
+                        percent = progress.get("percent")
+                        transferred = float(progress.get("bytes_transferred") or 0)
+                        total = float(progress.get("total_bytes") or 0)
+                        message = (
+                            f"Downloading CounterStrikeSharp: {percent:.1f}% "
+                            f"({transferred / (1024 * 1024):.1f}/{total / (1024 * 1024):.1f} MB)"
+                            if percent is not None
+                            else f"Downloading CounterStrikeSharp ({transferred / (1024 * 1024):.1f} MB)"
+                        )
+                        retry_count = int(progress.get("retry_count") or 0)
+                        if retry_count:
+                            message = (
+                                f"Retrying CounterStrikeSharp download (attempt {retry_count + 1})"
+                            )
+                        await send_progress(message, metadata={"transfer": progress})
 
-                    async def download_progress_callback(bytes_downloaded, total_bytes):
-                        nonlocal last_progress
-                        if total_bytes > 0:
-                            percent = int((bytes_downloaded / total_bytes) * 100)
-                            if percent >= last_progress + 10 or percent == 100:
-                                last_progress = percent
-                                size_mb = bytes_downloaded / (1024 * 1024)
-                                total_mb = total_bytes / (1024 * 1024)
-                                await send_progress(
-                                    f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
-                                )
+                    async def download_progress_callback(_bytes_downloaded, _total_bytes):
+                        return None
+
+                    download_progress_callback.progress_event_callback = download_event_callback
 
                     success_download, error = await http_helper.download_file(
                         css_url,
@@ -174,19 +188,22 @@ class CounterStrikeSharpMixin(SSHMixinBase):
                     # Upload to remote server via SFTP
                     remote_archive_path = f"{temp_dir}/counterstrikesharp.zip"
 
-                    last_upload = 0
+                    async def upload_event_callback(progress: dict[str, Any]):
+                        percent = progress.get("percent")
+                        transferred = float(progress.get("bytes_transferred") or 0)
+                        total = float(progress.get("total_bytes") or 0)
+                        message = (
+                            f"Uploading CounterStrikeSharp: {percent:.1f}% "
+                            f"({transferred / (1024 * 1024):.1f}/{total / (1024 * 1024):.1f} MB)"
+                            if percent is not None
+                            else f"Uploading CounterStrikeSharp ({transferred / (1024 * 1024):.1f} MB)"
+                        )
+                        await send_progress(message, metadata={"transfer": progress})
 
-                    async def upload_progress_callback(bytes_uploaded, total_bytes):
-                        nonlocal last_upload
-                        if total_bytes > 0:
-                            percent = int((bytes_uploaded / total_bytes) * 100)
-                            if percent >= last_upload + 10 or percent == 100:
-                                last_upload = percent
-                                size_mb = bytes_uploaded / (1024 * 1024)
-                                total_mb = total_bytes / (1024 * 1024)
-                                await send_progress(
-                                    f"Upload progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
-                                )
+                    async def upload_progress_callback(_bytes_uploaded, _total_bytes):
+                        return None
+
+                    upload_progress_callback.progress_event_callback = upload_event_callback
 
                     success_upload, error = await self.upload_file_with_progress(
                         panel_archive_path,

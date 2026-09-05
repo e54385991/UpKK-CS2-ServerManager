@@ -11843,12 +11843,41 @@ export interface components {
             sequence: string;
             /** Server Status */
             server_status?: string | null;
+            /** Step Id */
+            step_id?: string | null;
+            /** Step Status */
+            step_status?: ("pending" | "running" | "completed" | "failed") | null;
             /** Success */
             success?: boolean | null;
             /** Timestamp */
             timestamp: string;
+            transfer?: components["schemas"]["OperationTransferProgress"] | null;
             /** Type */
             type: string;
+        };
+        /**
+         * OperationTransferProgress
+         * @description Bounded transport progress attached to a replayable operation event.
+         */
+        OperationTransferProgress: {
+            /** Bytes Transferred */
+            bytes_transferred: number;
+            /** Elapsed Seconds */
+            elapsed_seconds: number;
+            /** Percent */
+            percent?: number | null;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "download" | "upload";
+            /**
+             * Retry Count
+             * @default 0
+             */
+            retry_count: number;
+            /** Total Bytes */
+            total_bytes?: number | null;
         };
         /**
          * OverviewSummary

@@ -69,12 +69,17 @@ async def run_game_mode_install(
     server_id = int(record["server_id"])
     actor_user_id = int(record["actor_user_id"])
 
-    async def progress(message: str, _kind: str = "status") -> None:
+    async def progress(
+        message: str,
+        kind: str = "status",
+        metadata: dict | None = None,
+    ) -> None:
         await server_operation_hub.emit(
             operation_id,
             "progress",
-            kind="output",
+            kind=kind,
             message=message,
+            extra=metadata,
         )
 
     try:

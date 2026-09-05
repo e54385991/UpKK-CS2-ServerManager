@@ -263,6 +263,19 @@ async def test_http_helper_downloads_with_sync_and_async_progress(monkeypatch, t
     )
     assert async_progress == [(2, 2)]
 
+    transfer_events = []
+    helper._get_client = AsyncMock(
+        return_value=_StreamClient([_StreamResponse(body=b"xyz", headers={"Content-Length": "0"})])
+    )
+    assert await helper.download_file(
+        "https://example.test/unknown-size",
+        str(tmp_path / "unknown-size"),
+        progress_event_callback=transfer_events.append,
+    ) == (True, None)
+    assert transfer_events[0]["phase"] == "download"
+    assert transfer_events[-1]["bytes_transferred"] == 3
+    assert transfer_events[-1]["total_bytes"] is None
+
 
 @pytest.mark.asyncio
 async def test_http_helper_download_error_paths(monkeypatch, tmp_path):
@@ -279,6 +292,18 @@ async def test_http_helper_download_error_paths(monkeypatch, tmp_path):
     )
     ok, error = await helper.download_file("https://x", str(tmp_path / "y"))
     assert ok is False and "after 3 attempts" in error
+
+    retry_events = []
+    helper._get_client = AsyncMock(
+        return_value=_StreamClient([_StreamResponse(503, b"upstream"), _StreamResponse(200, b"ok")])
+    )
+    ok, error = await helper.download_file(
+        "https://x",
+        str(tmp_path / "retry-ok"),
+        progress_event_callback=retry_events.append,
+    )
+    assert (ok, error) == (True, None)
+    assert any(event["retry_count"] == 1 for event in retry_events)
 
     helper._get_client = AsyncMock(
         return_value=SimpleNamespace(

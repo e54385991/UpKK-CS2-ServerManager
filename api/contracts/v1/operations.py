@@ -179,6 +179,17 @@ class InitializedHostDeployView(V1Model):
     operation: ServerOperationView
 
 
+class OperationTransferProgress(V1Model):
+    """Bounded transport progress attached to a replayable operation event."""
+
+    phase: Literal["download", "upload"]
+    bytes_transferred: int = Field(ge=0)
+    total_bytes: int | None = Field(default=None, ge=0)
+    percent: float | None = Field(default=None, ge=0, le=100)
+    elapsed_seconds: float = Field(ge=0)
+    retry_count: int = Field(default=0, ge=0)
+
+
 class OperationJournalEvent(V1Model):
     """One persisted operation log line for JSON replay (SSE fallback)."""
 
@@ -190,6 +201,9 @@ class OperationJournalEvent(V1Model):
     timestamp: str
     success: bool | None = None
     server_status: str | None = None
+    step_id: str | None = None
+    step_status: Literal["pending", "running", "completed", "failed"] | None = None
+    transfer: OperationTransferProgress | None = None
 
 
 class OperationJournal(V1Model):
@@ -245,6 +259,7 @@ __all__ = [
     "InitializedHostOperationView",
     "InitializedHostDeployRequest",
     "InitializedHostDeployView",
+    "OperationTransferProgress",
     "OperationJournalEvent",
     "OperationJournal",
     "CurrentServerOperation",

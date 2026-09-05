@@ -13765,6 +13765,34 @@
             ],
             "title": "Server Status"
           },
+          "step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Id"
+          },
+          "step_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "running",
+                  "completed",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Status"
+          },
           "success": {
             "anyOf": [
               {
@@ -13780,6 +13808,16 @@
             "title": "Timestamp",
             "type": "string"
           },
+          "transfer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OperationTransferProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "type": {
             "title": "Type",
             "type": "string"
@@ -13794,6 +13832,68 @@
           "timestamp"
         ],
         "title": "OperationJournalEvent",
+        "type": "object"
+      },
+      "OperationTransferProgress": {
+        "additionalProperties": false,
+        "description": "Bounded transport progress attached to a replayable operation event.",
+        "properties": {
+          "bytes_transferred": {
+            "minimum": 0.0,
+            "title": "Bytes Transferred",
+            "type": "integer"
+          },
+          "elapsed_seconds": {
+            "minimum": 0.0,
+            "title": "Elapsed Seconds",
+            "type": "number"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent"
+          },
+          "phase": {
+            "enum": [
+              "download",
+              "upload"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "retry_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Retry Count",
+            "type": "integer"
+          },
+          "total_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Bytes"
+          }
+        },
+        "required": [
+          "phase",
+          "bytes_transferred",
+          "elapsed_seconds"
+        ],
+        "title": "OperationTransferProgress",
         "type": "object"
       },
       "OverviewSummary": {

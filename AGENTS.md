@@ -32,6 +32,14 @@ cd frontend && npm run lint && npm run typecheck && npm run build
 Do not report the task as complete until the applicable checks pass. If a check
 cannot be run, report the exact command, failure, and remaining risk.
 
+# Git 提交约定
+
+- 每次完成文件修改并通过适用检查后，自动创建本地 commit；没有文件改动时不创建空提交。
+- 默认不执行 `git push`。只有用户明确要求本次任务推送时才推送。
+- commit message 必须说明问题现象、根因、具体改动、验证结果和剩余限制；最终回复也要给出提交哈希及同等详细说明。
+- 只暂存本次任务的文件，暂存前检查差异。已有的用户改动（例如 `dump.rdb`）不得加入提交。
+- 发现并发提交时创建新 commit，不 amend、不重写历史、不强制推送。
+
 # Database Schema Changes
 
 Alembic revisions are the only schema authority. Application startup always

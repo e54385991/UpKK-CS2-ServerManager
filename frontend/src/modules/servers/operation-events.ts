@@ -30,6 +30,35 @@ export function parseOperationEvent(raw: string): OperationStreamEvent | null {
     if (typeof data.message !== "string") {
       return null;
     }
+    const transfer = data.transfer;
+    const parsedTransfer =
+      transfer && typeof transfer === "object"
+        ? transfer as Record<string, unknown>
+        : null;
+    const phase = parsedTransfer?.phase;
+    const transferProgress =
+      (phase === "download" || phase === "upload") &&
+      typeof parsedTransfer?.bytes_transferred === "number" &&
+      typeof parsedTransfer?.elapsed_seconds === "number"
+        ? {
+            phase: phase as "download" | "upload",
+            bytesTransferred: parsedTransfer.bytes_transferred,
+            totalBytes:
+              typeof parsedTransfer.total_bytes === "number"
+                ? parsedTransfer.total_bytes
+                : null,
+            percent:
+              typeof parsedTransfer.percent === "number"
+                ? parsedTransfer.percent
+                : null,
+            elapsedSeconds: parsedTransfer.elapsed_seconds,
+            retryCount:
+              typeof parsedTransfer.retry_count === "number"
+                ? parsedTransfer.retry_count
+                : 0,
+          }
+        : null;
+    const stepStatus = data.step_status;
     return {
       sequence: String(data.sequence ?? ""),
       operationId: String(data.operation_id ?? ""),
@@ -40,6 +69,15 @@ export function parseOperationEvent(raw: string): OperationStreamEvent | null {
       success: typeof data.success === "boolean" ? data.success : undefined,
       serverStatus:
         typeof data.server_status === "string" ? data.server_status : null,
+      stepId: typeof data.step_id === "string" ? data.step_id : null,
+      stepStatus:
+        stepStatus === "pending" ||
+        stepStatus === "running" ||
+        stepStatus === "completed" ||
+        stepStatus === "failed"
+          ? stepStatus
+          : null,
+      transfer: transferProgress,
     };
   } catch {
     return null;

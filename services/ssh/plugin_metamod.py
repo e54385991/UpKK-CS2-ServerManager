@@ -17,13 +17,18 @@ class MetamodMixin(SSHMixinBase):
         Returns: (success: bool, message: str)
         """
 
-        async def send_progress(message: str):
+        async def send_progress(
+            message: str,
+            kind: str = "status",
+            metadata: dict[str, Any] | None = None,
+        ):
             """Helper to send progress updates"""
-            if progress_callback:
-                if asyncio.iscoroutinefunction(progress_callback):
-                    await progress_callback(message)
-                else:
-                    progress_callback(message)
+            await emit_progress_callback(
+                progress_callback,
+                message,
+                kind=kind,
+                metadata=metadata,
+            )
 
         success, msg = await self.connect(server)
         if not success:
@@ -82,19 +87,26 @@ class MetamodMixin(SSHMixinBase):
                     # Download to panel server
                     from modules.http_helper import http_helper
 
-                    last_progress = 0
+                    async def download_event_callback(progress: dict[str, Any]):
+                        percent = progress.get("percent")
+                        transferred = float(progress.get("bytes_transferred") or 0)
+                        total = float(progress.get("total_bytes") or 0)
+                        if percent is None:
+                            message = f"Downloading Metamod ({transferred / (1024 * 1024):.1f} MB)"
+                        else:
+                            message = (
+                                f"Downloading Metamod: {percent:.1f}% "
+                                f"({transferred / (1024 * 1024):.1f}/{total / (1024 * 1024):.1f} MB)"
+                            )
+                        retry_count = int(progress.get("retry_count") or 0)
+                        if retry_count:
+                            message = f"Retrying Metamod download (attempt {retry_count + 1})"
+                        await send_progress(message, metadata={"transfer": progress})
 
-                    async def download_progress_callback(bytes_downloaded, total_bytes):
-                        nonlocal last_progress
-                        if total_bytes > 0:
-                            percent = int((bytes_downloaded / total_bytes) * 100)
-                            if percent >= last_progress + 10 or percent == 100:
-                                last_progress = percent
-                                size_mb = bytes_downloaded / (1024 * 1024)
-                                total_mb = total_bytes / (1024 * 1024)
-                                await send_progress(
-                                    f"Download progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
-                                )
+                    async def download_progress_callback(_bytes_downloaded, _total_bytes):
+                        return None
+
+                    download_progress_callback.progress_event_callback = download_event_callback
 
                     actual_download_url = self._apply_github_download_proxy(
                         metamod_url, server.github_proxy
@@ -124,19 +136,22 @@ class MetamodMixin(SSHMixinBase):
                     # Upload to remote server via SFTP
                     remote_archive_path = f"{temp_dir}/metamod.tar.gz"
 
-                    last_upload = 0
+                    async def upload_event_callback(progress: dict[str, Any]):
+                        percent = progress.get("percent")
+                        transferred = float(progress.get("bytes_transferred") or 0)
+                        total = float(progress.get("total_bytes") or 0)
+                        message = (
+                            f"Uploading Metamod: {percent:.1f}% "
+                            f"({transferred / (1024 * 1024):.1f}/{total / (1024 * 1024):.1f} MB)"
+                            if percent is not None
+                            else f"Uploading Metamod ({transferred / (1024 * 1024):.1f} MB)"
+                        )
+                        await send_progress(message, metadata={"transfer": progress})
 
-                    async def upload_progress_callback(bytes_uploaded, total_bytes):
-                        nonlocal last_upload
-                        if total_bytes > 0:
-                            percent = int((bytes_uploaded / total_bytes) * 100)
-                            if percent >= last_upload + 10 or percent == 100:
-                                last_upload = percent
-                                size_mb = bytes_uploaded / (1024 * 1024)
-                                total_mb = total_bytes / (1024 * 1024)
-                                await send_progress(
-                                    f"Upload progress: {percent}% ({size_mb:.1f}/{total_mb:.1f} MB)"
-                                )
+                    async def upload_progress_callback(_bytes_uploaded, _total_bytes):
+                        return None
+
+                    upload_progress_callback.progress_event_callback = upload_event_callback
 
                     success_upload, error = await self.upload_file_with_progress(
                         panel_archive_path,
@@ -227,7 +242,7 @@ class MetamodMixin(SSHMixinBase):
             )
             check_success, check_stdout, _ = await self.execute_command(check_mm_cmd)
 
-            if "found" in check_stdout:
+            if check_success and check_stdout.strip() == "found":
                 await send_progress("✓ Metamod already configured in gameinfo.gi")
             else:
                 # Backup gameinfo.gi
@@ -247,6 +262,13 @@ class MetamodMixin(SSHMixinBase):
                     )
                 else:
                     await send_progress("✓ gameinfo.gi updated successfully")
+
+                verify_config_success, _, _ = await self.execute_command(
+                    f"grep -qF 'csgo/addons/metamod' {gameinfo_path}"
+                )
+                if not verify_config_success:
+                    await self.execute_command(f"rm -rf {temp_dir}")
+                    return False, "Metamod gameinfo.gi configuration verification failed"
 
             # Clean up temp directory
             await self.execute_command(f"rm -rf {temp_dir}")
@@ -286,13 +308,13 @@ class MetamodMixin(SSHMixinBase):
         Returns: (success: bool, message: str)
         """
 
-        async def send_progress(message: str):
+        async def send_progress(
+            message: str,
+            kind: str = "status",
+            metadata: dict[str, Any] | None = None,
+        ):
             """Helper to send progress updates"""
-            if progress_callback:
-                if asyncio.iscoroutinefunction(progress_callback):
-                    await progress_callback(message)
-                else:
-                    progress_callback(message)
+            await emit_progress_callback(progress_callback, message, kind=kind, metadata=metadata)
 
         await send_progress("Updating Metamod:Source to latest version...")
         await send_progress("This will reinstall Metamod with the latest version.")

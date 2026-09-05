@@ -103,12 +103,17 @@ async def _install_panel_framework(
         step_status="running",
     )
 
-    async def framework_progress(message: str) -> None:
+    async def framework_progress(
+        message: str,
+        _kind: str = "status",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         await _emit_plan_progress(
             progress,
             message,
             step_id=f"plugin:{plugin.id}",
             step_status="running",
+            metadata=metadata,
         )
 
     manager = SSHManager()
@@ -161,10 +166,13 @@ async def _emit_plan_progress(
     *,
     step_id: str,
     step_status: str,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     if progress is None:
         return
-    metadata = {"step_id": step_id, "step_status": step_status}
+    event_metadata = {"step_id": step_id, "step_status": step_status}
+    if metadata:
+        event_metadata = {**event_metadata, **metadata}
     try:
         parameters = inspect.signature(progress).parameters.values()
         accepts_metadata = any(item.kind == inspect.Parameter.VAR_POSITIONAL for item in parameters)
@@ -180,7 +188,7 @@ async def _emit_plan_progress(
     except TypeError, ValueError:
         accepts_metadata = False
     if accepts_metadata:
-        await progress(message, "status", metadata)
+        await progress(message, "status", event_metadata)
     else:
         await progress(message, "status")
 

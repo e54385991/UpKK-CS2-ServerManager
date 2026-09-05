@@ -374,7 +374,12 @@ async def execute_game_mode_plan(
     completed: list[dict[str, Any]] = []
     current_step: str | None = None
 
-    async def report(step_id: str, step_status: str, message: str) -> None:
+    async def report(
+        step_id: str,
+        step_status: str,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         nonlocal current_step
         if step_status == "running":
             current_step = step_id
@@ -385,6 +390,7 @@ async def execute_game_mode_plan(
             message,
             step_id=step_id,
             step_status=step_status,
+            metadata=metadata,
         )
 
     async with maintenance_lock_service.get(
@@ -447,8 +453,17 @@ async def execute_game_mode_plan(
             need_css = wipe_addons or not plan["current"].get("css")
             if need_css and "counterstrikesharp" in recipe.frameworks:
 
-                async def css_progress(message: str) -> None:
-                    await report("install_counterstrikesharp", "running", message)
+                async def css_progress(
+                    message: str,
+                    _kind: str = "status",
+                    metadata: dict[str, Any] | None = None,
+                ) -> None:
+                    await report(
+                        "install_counterstrikesharp",
+                        "running",
+                        message,
+                        metadata,
+                    )
 
                 await report(
                     "install_counterstrikesharp",
@@ -491,7 +506,7 @@ async def execute_game_mode_plan(
                     *,
                     step_title: str = title,
                 ) -> None:
-                    await report(f"install:{step_title}", "running", message)
+                    await report(f"install:{step_title}", "running", message, _metadata)
 
                 await report(f"install:{title}", "running", f"Installing {title}")
                 try:

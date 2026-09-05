@@ -130,12 +130,13 @@ async def test_metamod_install_covers_gameinfo_and_verification_branches(monkeyp
     assert "verification failed" in (await manager.install_metamod(server))[1]
 
     base["grep -q"] = (True, "notfound", "")
+    base["grep -qF"] = (False, "", "missing")
     base["sed -i"] = (False, "", "read-only")
     base["test -d /srv/cs2/cs2/game/csgo/addons/metamod"] = (True, "installed", "")
     manager = _manager(monkeypatch, module, markers=base)
     manager._fetch_latest_metamod_url = AsyncMock(return_value=(True, "https://github.com/mm.tar.gz"))
     result = await manager.install_metamod(server)
-    assert result == (True, "Metamod:Source installed successfully")
+    assert result == (False, "Metamod gameinfo.gi configuration verification failed")
 
     manager = SSHManager(use_pool=False)
     manager.install_metamod = AsyncMock(return_value=(True, "updated"))

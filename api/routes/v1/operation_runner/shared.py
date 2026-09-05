@@ -19,12 +19,17 @@ async def _dispatch(record: dict, factory) -> dict:
 
 
 def _progress_emitter(operation_id: str):
-    async def progress(message: str, _kind: str = "status") -> None:
+    async def progress(
+        message: str,
+        kind: str = "status",
+        metadata: dict | None = None,
+    ) -> None:
         await server_operation_hub.emit(
             operation_id,
             "progress",
-            kind="output",
+            kind=kind,
             message=message,
+            extra=metadata,
         )
 
     return progress

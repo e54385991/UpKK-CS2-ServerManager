@@ -111,6 +111,33 @@ async def _cleanup_local_download_dir(download_dir: str, panel_temp_dir: str) ->
         logger.warning("Failed to clean up panel temp directory %s: %s", download_dir, exc)
 
 
+async def emit_progress_callback(
+    callback: Callable[..., Any] | None,
+    message: str,
+    *,
+    kind: str = "status",
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Call legacy one-argument callbacks and structured progress callbacks alike."""
+    if callback is None:
+        return
+    accepts_metadata = False
+    try:
+        parameters = inspect.signature(callback).parameters.values()
+        accepts_metadata = (
+            any(parameter.kind == inspect.Parameter.VAR_POSITIONAL for parameter in parameters)
+            or len(parameters) >= 3
+        )
+    except TypeError, ValueError:
+        accepts_metadata = False
+    if accepts_metadata:
+        result = callback(message, kind, metadata)
+    else:
+        result = callback(message)
+    if inspect.isawaitable(result):
+        await result
+
+
 async def update_ssh_connection_status(server_id: int, success: bool):
     """
     Update SSH connection status tracking in database
@@ -227,6 +254,7 @@ __all__ = [
     "server_monitor",
     "ssh_connection_pool",
     "logger",
+    "emit_progress_callback",
     "_status_update_tasks",
     "_schedule_status_update",
     "shutdown_background_tasks",

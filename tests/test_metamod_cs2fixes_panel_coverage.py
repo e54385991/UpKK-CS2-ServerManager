@@ -29,13 +29,40 @@ def _manager(responses):
     manager.connect = AsyncMock(return_value=(True, "ok"))
     manager.disconnect = AsyncMock()
     manager.execute_command = AsyncMock(side_effect=responses)
-    manager.upload_file_with_progress = AsyncMock(return_value=(True, ""))
+    async def upload(*_args, **kwargs):
+        callback = getattr(kwargs.get("progress_callback"), "progress_event_callback", None)
+        if callback:
+            await callback(
+                {
+                    "phase": "upload",
+                    "bytes_transferred": 20000,
+                    "total_bytes": 20000,
+                    "percent": 100.0,
+                    "elapsed_seconds": 1.0,
+                    "retry_count": 0,
+                }
+            )
+        return True, ""
+
+    manager.upload_file_with_progress = AsyncMock(side_effect=upload)
     return manager
 
 
 async def _download(_url, path, *, progress_callback, **_kwargs):
     Path(path).write_bytes(b"x" * 20000)
     await progress_callback(20000, 20000)
+    callback = getattr(progress_callback, "progress_event_callback", None)
+    if callback:
+        await callback(
+            {
+                "phase": "download",
+                "bytes_transferred": 20000,
+                "total_bytes": 20000,
+                "percent": 100.0,
+                "elapsed_seconds": 1.0,
+                "retry_count": 0,
+            }
+        )
     return True, ""
 
 
