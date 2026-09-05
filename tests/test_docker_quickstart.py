@@ -18,7 +18,7 @@ def test_release_compose_needs_no_repo_bind_mounts() -> None:
     assert "./deploy/" not in COMPOSE
     assert "INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL:-http://app:8000}" in COMPOSE
     assert "PUBLIC_APP_URL" not in COMPOSE
-    assert "${HTTP_PORT:-3000}:3000" in COMPOSE
+    assert "${HTTP_PORT:-31800}:3000" in COMPOSE
     assert "upkk-cs2-server-manager:latest" in COMPOSE
     assert "upkk-cs2-server-manager-web:latest" in COMPOSE
 
@@ -29,8 +29,8 @@ def test_debug_compose_is_the_only_host_publish_for_api_and_db() -> None:
     assert "${REDIS_PORT:-6379}:6379" in DEBUG_COMPOSE
 
 
-def test_quickstart_installs_console_on_port_3000() -> None:
-    assert "HTTP_PORT=3000" in QUICKSTART
+def test_quickstart_installs_console_on_port_31800() -> None:
+    assert "HTTP_PORT=31800" in QUICKSTART
     assert 'DEFAULT_IMAGE_VERSION="latest"' in QUICKSTART
     assert "sync_managed_image" in QUICKSTART
     assert "PUBLIC_APP_URL" not in QUICKSTART
@@ -61,8 +61,8 @@ def test_publish_scripts_build_both_hub_images() -> None:
         assert "frontend/Dockerfile" in script or "frontend\\Dockerfile" in script
 
 
-def test_readme_sends_operators_to_port_3000() -> None:
-    assert "http://YOUR_SERVER_IP:3000" in README
-    assert "http://你的服务器IP:3000" in README_ZH
-    assert "TCP port `3000`" in README
-    assert "TCP `3000`" in README_ZH
+def test_readme_sends_operators_to_port_31800() -> None:
+    assert "http://YOUR_SERVER_IP:31800" in README
+    assert "http://你的服务器IP:31800" in README_ZH
+    assert "TCP port `31800`" in README
+    assert "TCP `31800`" in README_ZH

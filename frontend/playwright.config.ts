@@ -11,12 +11,12 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:31800",
     trace: "on-first-retry",
   },
   webServer: {
     command: "npm run dev",
-    url: "http://localhost:3000/login",
+    url: "http://localhost:31800/login",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

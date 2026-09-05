@@ -36,6 +36,7 @@ DEFAULT_INTERNAL_API_URL = "http://app:8000"
 PRIVATE_NETWORK = "cs2"
 DEFAULT_APP_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager:latest"
 DEFAULT_WEB_IMAGE = "docker.io/e54385991/upkk-cs2-server-manager-web:latest"
+DEFAULT_PUBLIC_CONSOLE_PORT = 31800
 
 
 def form_field_default(fields: list[Any], env_key: str) -> str:
@@ -365,8 +366,11 @@ def _validate_form_and_init(
     )
     if not isinstance(backend_field, dict) or backend_field.get("rule") != "paramExtUrl":
         fail("BACKEND_URL must use the 1Panel URL validator")
-    if backend_field.get("default") != "http://localhost:3000":
-        fail("BACKEND_URL must default to the browser origin http://localhost:3000")
+    if backend_field.get("default") != f"http://localhost:{DEFAULT_PUBLIC_CONSOLE_PORT}":
+        fail(
+            "BACKEND_URL must default to the browser origin "
+            f"http://localhost:{DEFAULT_PUBLIC_CONSOLE_PORT}"
+        )
     if "0.0.0.0" in str(backend_field.get("default")):
         fail("BACKEND_URL must not default to a bind address")
     internal_api_field = next(
@@ -387,9 +391,12 @@ def _validate_form_and_init(
         or port_field.get("type") != "number"
         or port_field.get("rule") != "paramPort"
         or port_field.get("edit") is not True
-        or port_field.get("default") != 3000
+        or port_field.get("default") != DEFAULT_PUBLIC_CONSOLE_PORT
     ):
-        fail("PANEL_APP_PORT_HTTP must be an editable console port defaulting to 3000")
+        fail(
+            "PANEL_APP_PORT_HTTP must be an editable console port "
+            f"defaulting to {DEFAULT_PUBLIC_CONSOLE_PORT}"
+        )
     if "${PANEL_APP_PORT_HTTP}:80" not in compose_text:
         fail("compose must map PANEL_APP_PORT_HTTP to Caddy port 80")
     if "${PANEL_APP_PORT_HTTP}:8000" in compose_text:

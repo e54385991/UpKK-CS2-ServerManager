@@ -47,35 +47,35 @@ def test_web_session_cookie_defaults_to_shared_name(monkeypatch) -> None:
 
 
 def test_web_session_cookie_name_includes_public_port(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "SESSION_COOKIE_SUFFIX", "3001")
-    assert web_session_cookie_name() == "upkk_access_token_3001"
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SUFFIX", "31801")
+    assert web_session_cookie_name() == "upkk_access_token_31801"
 
 
 def test_two_console_ports_do_not_share_a_session_cookie(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "SESSION_COOKIE_SUFFIX", "3000")
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SUFFIX", "31800")
     first = web_session_cookie_name()
-    monkeypatch.setattr(settings, "SESSION_COOKIE_SUFFIX", "3001")
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SUFFIX", "31801")
     second = web_session_cookie_name()
-    assert first == "upkk_access_token_3000"
-    assert second == "upkk_access_token_3001"
+    assert first == "upkk_access_token_31800"
+    assert second == "upkk_access_token_31801"
     assert first != second
     assert "8000" not in first
     assert "8001" not in second
 
 
 def test_set_and_clear_web_session_cookie_use_port_suffix(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "SESSION_COOKIE_SUFFIX", "3001")
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SUFFIX", "31801")
     request = _http_request()
     response = Response()
     set_web_session_cookie(request, response, "token-value")
     header = response.headers.get("set-cookie")
     assert header is not None
-    assert header.startswith("upkk_access_token_3001=")
-    assert "upkk_access_token=" not in header.replace("upkk_access_token_3001", "COOKIE")
+    assert header.startswith("upkk_access_token_31801=")
+    assert "upkk_access_token=" not in header.replace("upkk_access_token_31801", "COOKIE")
 
     cleared = Response()
     clear_web_session_cookie(cleared)
-    assert "upkk_access_token_3001=" in (cleared.headers.get("set-cookie") or "")
+    assert "upkk_access_token_31801=" in (cleared.headers.get("set-cookie") or "")
 
 
 def test_prefixed_key_empty_prefix_is_unchanged(monkeypatch) -> None:

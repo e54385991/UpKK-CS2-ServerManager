@@ -40,7 +40,7 @@ export function publicAppUrlFromHeaders(headerSource: Headers): string {
     firstForwarded(headerSource.get("x-forwarded-proto")) ||
     (headerSource.get("x-forwarded-ssl") === "on" ? "https" : "http");
 
-  if (!host) return "http://localhost:3000";
+  if (!host) return "http://localhost:31800";
 
   try {
     const origin = new URL(`${proto}://${host}`);
@@ -49,7 +49,7 @@ export function publicAppUrlFromHeaders(headerSource: Headers): string {
     }
     return origin.origin;
   } catch {
-    return "http://localhost:3000";
+    return "http://localhost:31800";
   }
 }
 

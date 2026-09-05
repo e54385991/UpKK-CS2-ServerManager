@@ -19,6 +19,9 @@ curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/ma
 Docker 数据卷会保留。旧版本脚本生成的官方 `:main` 镜像配置会在升级时自动迁移
 到 `:latest`，手动配置的自定义镜像会保留。
 
+升级不会覆盖已有的 `HTTP_PORT`。旧实例如果仍使用 `3000`，可在安装目录的 `.env`
+中改为 `HTTP_PORT=31800`，再执行 `docker compose up -d`；新安装默认使用 `31800`。
+
 本仓库默认使用公开镜像：
 
 - `docker.io/e54385991/upkk-cs2-server-manager:latest`（FastAPI，linux/amd64 + linux/arm64）
@@ -26,7 +29,7 @@ Docker 数据卷会保留。旧版本脚本生成的官方 `:main` 镜像配置�
 
 也可用 `CS2_MANAGER_IMAGE` / `CS2_FRONTEND_IMAGE` 覆盖。Compose 会自动拉取镜像。源码目录下可用 `docker compose up -d --build` 现场构建。
 
-默认启动 Next、FastAPI、PostgreSQL 18 和 Redis 8。浏览器只访问 Next（默认 <http://localhost:3000>，`HTTP_PORT` 可改）。FastAPI、PostgreSQL、Redis **不映射到宿主机**，避免和 1Panel 自带的 80 / 8000 / 5432 / 6379 冲突。Next 在容器网内把 `/api`、`/health`、`/static` 代理到 `http://app:8000`，不要把 `INTERNAL_API_URL` 设成局域网 IP。
+默认启动 Next、FastAPI、PostgreSQL 18 和 Redis 8。浏览器只访问 Next（默认 <http://localhost:31800>，宿主机端口由 `HTTP_PORT` 配置；容器内 Next 仍监听私有 `:3000`）。FastAPI、PostgreSQL、Redis **不映射到宿主机**，避免和 1Panel 自带的 80 / 8000 / 5432 / 6379 冲突。Next 在容器网内把 `/api`、`/health`、`/static` 代理到 `http://app:8000`，不要把 `INTERNAL_API_URL` 设成局域网 IP。
 
 应用启动时自动执行 Alembic 数据库迁移。全新数据卷首次启动时会自动创建管理员账户：
 
@@ -39,7 +42,7 @@ Docker 数据卷会保留。旧版本脚本生成的官方 `:main` 镜像配置�
 
 ## 1Panel
 
-不要用两个「运行环境」分别部署前后端。在 1Panel **容器 → Compose** 新建项目，粘贴本仓库根目录 `docker-compose.yml`，端口保持 `3000`（或改 `HTTP_PORT`），启动即可。访问 `http://服务器IP:3000`。
+不要用两个「运行环境」分别部署前后端。在 1Panel **容器 → Compose** 新建项目，粘贴本仓库根目录 `docker-compose.yml`，端口保持 `31800`（或改 `HTTP_PORT`），启动即可。访问 `http://服务器IP:31800`。
 
 可选：`docker compose --profile edge up -d` 再挂一个 Caddy 在 `:80`（宿主机 80 已被 OpenResty 占用时不要开）。
 

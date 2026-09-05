@@ -120,7 +120,8 @@ curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/ma
 
 Run the same command again to upgrade: it pulls the current `latest` images and
 recreates services whose configuration or image changed, while preserving `.env`
-and Docker volumes.
+and Docker volumes. Existing `HTTP_PORT` values are preserved; new installs use
+the less commonly used host port `31800` by default.
 
 The script automatically:
 
@@ -134,7 +135,7 @@ The script automatically:
 When deployment is complete, open:
 
 ```text
-http://YOUR_SERVER_IP:3000
+http://YOUR_SERVER_IP:31800
 ```
 
 Default credentials for the first sign-in:
@@ -145,7 +146,7 @@ Password: admin123
 ```
 
 > ⚠️ **Change the default password immediately after your first sign-in.** If
-> the page is unreachable, make sure TCP port `3000` is allowed by both your
+> the page is unreachable, make sure TCP port `31800` is allowed by both your
 > cloud security group and system firewall. For a public production service,
 > configure a domain name and HTTPS.
 

@@ -226,7 +226,7 @@ function startServer(appRoot) {
       cwd: standaloneRoot,
       env: {
         ...process.env,
-        PORT: process.env.PORT || "3000",
+        PORT: process.env.PORT || "31800",
         HOSTNAME: process.env.HOSTNAME || "0.0.0.0",
       },
     });
@@ -238,7 +238,7 @@ function startServer(appRoot) {
     "[frontend] standalone server.js not found; falling back to next start",
   );
   const nextBin = resolve(appRoot, "node_modules/next/dist/bin/next");
-  const child = spawn(process.execPath, [nextBin, "start", "--port", process.env.PORT || "3000"], {
+  const child = spawn(process.execPath, [nextBin, "start", "--port", process.env.PORT || "31800"], {
     stdio: "inherit",
     env: process.env,
     cwd: appRoot,

@@ -16,8 +16,8 @@ test("publicAppUrlFromHeaders uses the request Host and port", () => {
   const previous = process.env.PUBLIC_APP_URL;
   delete process.env.PUBLIC_APP_URL;
   try {
-    const headers = new Headers({ host: "192.168.50.245:3000" });
-    assert.equal(publicAppUrlFromHeaders(headers), "http://192.168.50.245:3000");
+    const headers = new Headers({ host: "192.168.50.245:31800" });
+    assert.equal(publicAppUrlFromHeaders(headers), "http://192.168.50.245:31800");
   } finally {
     if (previous === undefined) delete process.env.PUBLIC_APP_URL;
     else process.env.PUBLIC_APP_URL = previous;
@@ -29,7 +29,7 @@ test("publicAppUrlFromHeaders prefers X-Forwarded-Host and proto", () => {
   delete process.env.PUBLIC_APP_URL;
   try {
     const headers = new Headers({
-      host: "127.0.0.1:3000",
+      host: "127.0.0.1:31800",
       "x-forwarded-host": "panel.example:443",
       "x-forwarded-proto": "https",
     });
@@ -45,8 +45,8 @@ test("configured PUBLIC_APP_URL=0.0.0.0 is ignored so Host wins", () => {
   process.env.PUBLIC_APP_URL = "http://0.0.0.0:3005";
   try {
     assert.equal(configuredPublicAppUrl(), null);
-    const headers = new Headers({ host: "192.168.50.245:3000" });
-    assert.equal(publicAppUrlFromHeaders(headers), "http://192.168.50.245:3000");
+    const headers = new Headers({ host: "192.168.50.245:31800" });
+    assert.equal(publicAppUrlFromHeaders(headers), "http://192.168.50.245:31800");
   } finally {
     if (previous === undefined) delete process.env.PUBLIC_APP_URL;
     else process.env.PUBLIC_APP_URL = previous;

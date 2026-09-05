@@ -167,7 +167,7 @@ additionalProperties:
       required: true
       rule: integerNumberWith0
       type: number
-    - default: 3000
+    - default: 31800
       edit: true
       envKey: PANEL_APP_PORT_HTTP
       labelEn: Console HTTP Port
@@ -186,7 +186,7 @@ additionalProperties:
       required: true
       rule: paramPort
       type: number
-    - default: http://localhost:3000
+    - default: http://localhost:31800
       edit: true
       envKey: BACKEND_URL
       labelEn: Browser origin URL

@@ -45,7 +45,7 @@ def _hostname_is_loopback(hostname: str | None) -> bool:
 
 
 def configured_console_origin() -> str:
-    return (settings.CONSOLE_PUBLIC_URL or "http://127.0.0.1:3000").rstrip("/")
+    return (settings.CONSOLE_PUBLIC_URL or "http://127.0.0.1:31800").rstrip("/")
 
 
 def console_origin_for_request(request: Request | None = None) -> str:
@@ -54,7 +54,7 @@ def console_origin_for_request(request: Request | None = None) -> str:
     An explicit non-loopback ``CONSOLE_PUBLIC_URL`` wins. When the configured
     origin is localhost / 127.0.0.1, use the Host the browser actually sent so
     LAN users are never bounced to 127.0.0.1. Hitting the API port rewrites to
-    the console port from ``CONSOLE_PUBLIC_URL`` (default 3000).
+    the console port from ``CONSOLE_PUBLIC_URL`` (default 31800).
     """
     configured = configured_console_origin()
     parsed = urlparse(configured)

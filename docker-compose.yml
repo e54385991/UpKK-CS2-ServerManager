@@ -1,7 +1,8 @@
 # Zero-config stack. Images come from Docker Hub; no other repo files needed:
 #   curl -fsSLO https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-compose.yml
 #   docker compose up -d
-# Open http://<host>:3000  (admin / admin123). Change the password immediately.
+# Open http://<host>:31800  (admin / admin123). Change the password immediately.
+# 31800 is the default host port; the frontend container still listens on private :3000.
 #
 # Next proxies /api to the `app` service on the private network. Do not set
 # INTERNAL_API_URL to a LAN IP. Secrets are created on first start in app_data.
@@ -45,8 +46,8 @@ services:
       API_PORT: 8000
       DEBUG: ${DEBUG:-False}
       RUN_MODE: ${RUN_MODE:-production}
-      BACKEND_URL: ${BACKEND_URL:-http://localhost:3000}
-      CONSOLE_PUBLIC_URL: ${CONSOLE_PUBLIC_URL:-http://localhost:3000}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:31800}
+      CONSOLE_PUBLIC_URL: ${CONSOLE_PUBLIC_URL:-http://localhost:31800}
       LEGACY_HTML_CONSOLE: ${LEGACY_HTML_CONSOLE:-redirect}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ASYNCSSH_LOG_LEVEL: ${ASYNCSSH_LOG_LEVEL:-WARNING}
@@ -153,7 +154,7 @@ services:
     environment:
       INTERNAL_API_URL: ${FRONTEND_INTERNAL_API_URL:-http://app:8000}
     ports:
-      - "${HTTP_PORT:-3000}:3000"
+      - "${HTTP_PORT:-31800}:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

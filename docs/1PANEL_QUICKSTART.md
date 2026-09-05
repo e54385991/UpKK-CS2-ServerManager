@@ -57,10 +57,10 @@ test -f /opt/1panel/resource/apps/local/cs2-server-manager/1.0.0/data.yml
 
 - PostgreSQL / Redis：选择 1Panel 已安装的服务实例。PostgreSQL 库名、用户、密码默认自动生成；
   Redis 密码必填，选中本地 Redis 时一般会自动填上，空密码不能安装；
-- **控制台 HTTP 端口**：默认 `3000`，映射到 Caddy `:80`，再反代 Next。FastAPI
+- **控制台 HTTP 端口**：默认 `31800`，映射到 Caddy `:80`，再反代 Next。FastAPI
   只在该实例容器内监听 `:8000`，不要改成 `:8001`，也不要映射到宿主机；
-- **浏览器访问地址**：默认 `http://localhost:3000`。装完后改成实际地址，例如
-  `http://192.168.50.245:3000`（改端口时一并改这里）。不要填 `0.0.0.0`；
+- **浏览器访问地址**：默认 `http://localhost:31800`。装完后改成实际地址，例如
+  `http://192.168.50.245:31800`（改端口时一并改这里）。不要填 `0.0.0.0`；
 - **后端内部地址**：保持 `http://app:8000`。每套应用有自己的内部网，
   `app` 只在这一套里解析。不要改成 `:8001`，也不要把 Next/Caddy 挂到
   共享的 `1panel-network`（两套会抢 `app` / `frontend`）；
@@ -105,7 +105,7 @@ docker exec <应用容器名> python -c \
 - 无法解析数据库主机：重新选择 1Panel 服务实例，确认它加入 `1panel-network`；
 - PostgreSQL 版本错误：应用要求主版本 18 或更高；
 - 认证失败：核对专用数据库用户名、密码、数据库名以及 Redis 密码；
-- 第二个实例登录后 401：先确认控制台端口和「浏览器访问地址」是 `3001` 而不是
+- 第二个实例登录后 401：先确认控制台端口和「浏览器访问地址」是 `31801` 而不是
   把 FastAPI 改成 `8001`；并重新复制本仓库 1Panel 包后重建容器（见下文「两个实例」）；
 - 迁移失败：先查看应用日志和 PostgreSQL 日志，不要手工删除表。
 
@@ -113,14 +113,14 @@ docker exec <应用容器名> python -c \
 
 可以共用 1Panel 的 PostgreSQL / Redis。第二套请：
 
-1. **控制台 HTTP 端口**用另一个端口（例如 `3001`），**浏览器访问地址**写成
-   `http://服务器IP:3001`。公网入口是 Caddy → Next，不是 FastAPI。
+1. **控制台 HTTP 端口**用另一个端口（例如 `31801`），**浏览器访问地址**写成
+   `http://服务器IP:31801`。公网入口是 Caddy → Next，不是 FastAPI。
 2. **不要**把 FastAPI 改成 `8001`，也**不要**把「后端内部地址」改成 `:8001`。
    FastAPI 始终在该实例容器内 `:8000`。
 3. 为第二套选**另一个 PostgreSQL 库**（表单会自动生成库名/用户）。Redis 可以
    继续用 DB `0`：应用会用容器名给 key 加前缀。也可以选不同的 Redis DB，但不是必须。
 4. 每个实例各自生成 `JWT_SECRET_KEY`。会话 cookie 会带上控制台端口
-   （`upkk_access_token_3000` / `upkk_access_token_3001`），避免同一浏览器串会话。
+   （`upkk_access_token_31800` / `upkk_access_token_31801`），避免同一浏览器串会话。
 
 旧包把 Next / Caddy / FastAPI 都挂在共享的 `1panel-network` 上，两套的服务名
 `app` 会抢 DNS，表现为登录成功后立刻 401。把本仓库
@@ -168,9 +168,9 @@ In the form, select the PostgreSQL and Redis service instances. Keep the generat
 PostgreSQL name/user/password unless you are reusing an existing 1Panel database.
 The Redis password is required: a local Redis instance usually auto-fills it; an
 empty password cannot be installed.
-Set **Console HTTP Port** to `3000` (or another free host port). That port maps to
+Set **Console HTTP Port** to `31800` (or another free host port). That port maps to
 Caddy `:80` → Next; FastAPI stays private on container port `8000`. Set **Browser origin URL**
-to the address people type, such as `http://192.168.50.245:3000` — never `0.0.0.0`.
+to the address people type, such as `http://192.168.50.245:31800` — never `0.0.0.0`.
 Leave **Internal API URL** at `http://app:8000`. Each install has a private
 compose network, so `app` is unique to that stack. Do not change it to `:8001`.
 Keep the default backend and
@@ -198,15 +198,15 @@ existing accounts are preserved and the administrator password is not reset.
 
 Both installs may share the 1Panel PostgreSQL and Redis services.
 
-1. Give the second console another HTTP port (`3001`) and set **Browser origin URL**
-   to `http://SERVER_IP:3001`. The public entry is Caddy → Next, not FastAPI.
+1. Give the second console another HTTP port (`31801`) and set **Browser origin URL**
+   to `http://SERVER_IP:31801`. The public entry is Caddy → Next, not FastAPI.
 2. Do **not** remap FastAPI to host `8001`, and do **not** set the internal API to
    `:8001`. FastAPI stays on container port `8000`.
 3. Use a **separate PostgreSQL database** (the form generates one). Redis may stay
    on DB `0`: keys are prefixed with the container name. A different Redis DB is
    optional, not required.
 4. Each install keeps its own `JWT_SECRET_KEY`. Session cookies include the console
-   port (`upkk_access_token_3000` vs `upkk_access_token_3001`).
+   port (`upkk_access_token_31800` vs `upkk_access_token_31801`).
 
 Older packages put Next, Caddy, and FastAPI on the shared `1panel-network`, so
 both installs answered the service name `app` and the second console got 401

@@ -38,7 +38,7 @@ const nextConfig: NextConfig = {
   // rewrite the header block on every start.
   agentRules: false,
   // `localhost` and `127.0.0.1` are different Origins. Without this, opening
-  // http://127.0.0.1:3000 or a LAN IP blocks `/_next/static` and the login
+  // http://127.0.0.1:31800 or a LAN IP blocks `/_next/static` and the login
   // CAPTCHA never hydrates. Also allows the INTERNAL_API_URL / PUBLIC_APP_URL
   // host so a LAN or Docker access name does not need ALLOWED_DEV_ORIGINS.
   // Extra hosts: ALLOWED_DEV_ORIGINS=host1,host2

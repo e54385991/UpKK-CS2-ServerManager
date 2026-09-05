@@ -8,7 +8,7 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "next dev --turbopack --hostname 0.0.0.0 --port 3000",
+    "dev": "next dev --turbopack --hostname 0.0.0.0 --port 31800",
     "build": "next build",
     "start": "node ./scripts/with-internal-api-url.mjs",
     "build:start": "npm run build && npm run start",

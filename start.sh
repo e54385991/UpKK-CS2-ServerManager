@@ -22,14 +22,14 @@ CS2 Server Manager — start.sh
 Usage:
   ./start.sh                 Interactive menu when a TTY is attached; otherwise api
   ./start.sh api             FastAPI / uvicorn on :8000
-  ./start.sh dev             Next.js Turbopack dev server on :3000
+  ./start.sh dev             Next.js Turbopack dev server on :31800
   ./start.sh build           Next.js production build
-  ./start.sh start           Serve the existing Next.js production build on :3000
+  ./start.sh start           Serve the existing Next.js production build on :31800
   ./start.sh build+start     Next.js production build, then start
   ./start.sh --help          Show this help
 
 Next.js reads INTERNAL_API_URL from frontend/.env (default http://127.0.0.1:8000).
-The console is http://localhost:3000; FastAPI :8000 is the internal API.
+The console is http://localhost:31800; FastAPI :8000 is the internal API.
 EOF
 }
 
@@ -136,7 +136,7 @@ start_next_dev() {
     echo "CS2 Server Manager — Next.js dev"
     echo "=========================================="
     echo ""
-    echo "Console: http://localhost:3000"
+    echo "Console: http://localhost:31800"
     echo "Proxies /api to INTERNAL_API_URL from frontend/.env"
     echo "Press Ctrl+C to stop"
     echo "=========================================="
@@ -157,7 +157,7 @@ start_next() {
     echo "CS2 Server Manager — Next.js start"
     echo "=========================================="
     echo ""
-    echo "Console: http://localhost:3000"
+    echo "Console: http://localhost:31800"
     echo "Requires a prior ./start.sh build (or npm run build)."
     echo "Press Ctrl+C to stop"
     echo "=========================================="
@@ -170,7 +170,7 @@ build_and_start_next() {
     echo "CS2 Server Manager — Next.js build + start"
     echo "=========================================="
     echo ""
-    echo "Console: http://localhost:3000"
+    echo "Console: http://localhost:31800"
     echo "Press Ctrl+C to stop after the build finishes"
     echo "=========================================="
     echo ""
@@ -184,9 +184,9 @@ prompt_mode() {
     echo "" >&2
     echo "Select start mode / 请选择启动方式:" >&2
     echo "  1) api          FastAPI on :8000" >&2
-    echo "  2) dev          Next.js dev on :3000" >&2
+    echo "  2) dev          Next.js dev on :31800" >&2
     echo "  3) build        Next.js production build" >&2
-    echo "  4) start        Next.js production server on :3000" >&2
+    echo "  4) start        Next.js production server on :31800" >&2
     echo "  5) build+start  Next.js build, then start" >&2
     echo "" >&2
     local choice=""

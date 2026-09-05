@@ -22,11 +22,11 @@ def test_root_caddyfile_proxies_next() -> None:
 
 
 def test_host_caddyfile_proxies_next_on_the_developer_machine() -> None:
-    assert "reverse_proxy host.docker.internal:3000" in CADDYFILE_HOST
+    assert "reverse_proxy host.docker.internal:31800" in CADDYFILE_HOST
 
 
 def test_root_compose_publishes_next_and_keeps_fastapi_private() -> None:
-    assert "${HTTP_PORT:-3000}:3000" in COMPOSE
+    assert "${HTTP_PORT:-31800}:3000" in COMPOSE
     assert "./deploy/Caddyfile" not in COMPOSE
     assert "upkk-cs2-server-manager-web" in COMPOSE
     assert "${API_PORT:-8000}:8000" not in COMPOSE

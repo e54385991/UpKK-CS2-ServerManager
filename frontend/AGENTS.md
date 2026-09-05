@@ -236,9 +236,9 @@ environment text.
 ## Commands
 
 ```bash
-npm run dev          # Turbopack dev server on :3000
+npm run dev          # Turbopack dev server on :31800
 npm run build        # production build (fails on type errors)
-npm run start        # serve the production build on :3000
+npm run start        # serve the production build on :31800
 npm run build:start  # production build, then start
 # Repo-root ./start.sh also accepts: api | dev | build | start | build+start
 npm run lint       # ESLint (flat config)

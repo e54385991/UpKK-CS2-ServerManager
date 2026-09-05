@@ -127,7 +127,7 @@ sync_public_urls() {
     local port ip public_url current key
     [ -f "$env_file" ] || return
     port="$(read_env_value HTTP_PORT "$env_file")"
-    port="${port:-3000}"
+    port="${port:-31800}"
     ip="$(detect_host_ip)"
     public_url="http://${ip}:${port}"
     for key in CONSOLE_PUBLIC_URL BACKEND_URL; do
@@ -168,7 +168,7 @@ prepare_env() {
 
     if [ -f "$env_file" ]; then
         log "Keeping the existing .env file (existing secrets will not be overwritten)"
-        ensure_env_line "$env_file" HTTP_PORT 3000
+        ensure_env_line "$env_file" HTTP_PORT 31800
         sync_managed_image "$env_file" CS2_MANAGER_IMAGE "$IMAGE_REPOSITORY" "$api_image"
         sync_managed_image "$env_file" CS2_FRONTEND_IMAGE "$FRONTEND_REPOSITORY" "$web_image"
         ensure_env_line "$env_file" DEBUG False
@@ -188,7 +188,7 @@ POSTGRES_DATABASE=cs2_manager
 POSTGRES_PASSWORD=$postgres_password
 REDIS_PASSWORD=$redis_password
 REDIS_DB=0
-HTTP_PORT=3000
+HTTP_PORT=31800
 CS2_MANAGER_IMAGE=$api_image
 CS2_FRONTEND_IMAGE=$web_image
 DEBUG=False
@@ -228,7 +228,7 @@ main() {
     docker_cmd compose pull
     docker_cmd compose up -d
 
-    public_port="${HTTP_PORT:-3000}"
+    public_port="${HTTP_PORT:-31800}"
     parsed_port="$(read_env_value HTTP_PORT .env)"
     if [ -n "${parsed_port:-}" ]; then
         public_port="$parsed_port"

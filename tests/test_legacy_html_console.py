@@ -99,7 +99,7 @@ def test_google_callback_stays_on_fastapi(monkeypatch):
 
 def test_loopback_console_url_follows_lan_host(monkeypatch):
     monkeypatch.setattr(settings, "LEGACY_HTML_CONSOLE", "redirect")
-    monkeypatch.setattr(settings, "CONSOLE_PUBLIC_URL", "http://localhost:3000")
+    monkeypatch.setattr(settings, "CONSOLE_PUBLIC_URL", "http://localhost:31800")
     monkeypatch.setattr(settings, "API_PORT", 8000)
     client = _client()
 
@@ -109,16 +109,16 @@ def test_loopback_console_url_follows_lan_host(monkeypatch):
         headers={"host": "192.168.50.143:8000"},
     )
     assert from_api.status_code == 307
-    assert from_api.headers["location"] == "http://192.168.50.143:3000/overview"
+    assert from_api.headers["location"] == "http://192.168.50.143:31800/overview"
     assert "127.0.0.1" not in from_api.headers["location"]
     assert "localhost" not in from_api.headers["location"]
 
     from_console = client.get(
         "/login",
         follow_redirects=False,
-        headers={"host": "192.168.50.143:3000"},
+        headers={"host": "192.168.50.143:31800"},
     )
-    assert from_console.headers["location"] == "http://192.168.50.143:3000/login"
+    assert from_console.headers["location"] == "http://192.168.50.143:31800/login"
 
 
 def test_explicit_console_url_still_wins(monkeypatch):

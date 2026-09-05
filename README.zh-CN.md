@@ -102,6 +102,7 @@ curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/ma
 
 升级时可以再次执行同一条命令：脚本会拉取最新的 `latest` 镜像，并按配置或镜像
 变化重建需要更新的服务，同时保留 `.env` 和 Docker 数据卷。
+已有的 `HTTP_PORT` 会保留不变；新安装默认使用较少冲突的宿主机端口 `31800`。
 
 脚本会自动：
 
@@ -113,7 +114,7 @@ curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/ma
 部署完成后访问：
 
 ```text
-http://你的服务器IP:3000
+http://你的服务器IP:31800
 ```
 
 首次登录凭据：
@@ -124,7 +125,7 @@ http://你的服务器IP:3000
 ```
 
 > ⚠️ **首次登录后请立即修改默认密码。** 如果无法打开页面，请确认云服务器安全组和
-> 系统防火墙已放行 TCP `3000` 端口。正式对公网提供服务时建议配置域名和 HTTPS。
+> 系统防火墙已放行 TCP `31800` 端口。正式对公网提供服务时建议配置域名和 HTTPS。
 
 1Panel 请用 **应用商店本地应用** 或 **容器 → Compose** 安装这一整套，
 不要把前后端拆成两个运行环境。

@@ -12,7 +12,7 @@
 :80 {
 	encode gzip
 
-	reverse_proxy host.docker.internal:3000 {
+	reverse_proxy host.docker.internal:31800 {
 		flush_interval -1
 	}
 }

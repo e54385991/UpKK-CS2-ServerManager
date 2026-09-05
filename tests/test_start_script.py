@@ -26,3 +26,5 @@ def test_start_sh_help_lists_build_and_start_options() -> None:
     assert "./start.sh start" in output
     assert "./start.sh api" in output
     assert "./start.sh dev" in output
+    assert "localhost:31800" in output
+    assert ":3000" not in output

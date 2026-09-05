@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # often leave REDIS_DB=0). Empty keeps the historical unprefixed keys.
     REDIS_KEY_PREFIX: str = ""
     # Browser cookies are not port-scoped. Suffix isolates
-    # upkk_access_token_<port> when two consoles share a host (3000 vs 3001).
+    # upkk_access_token_<port> when two consoles share a host (31800 vs 31801).
     SESSION_COOKIE_SUFFIX: str = ""
 
     # Redis Connection Pool Configuration
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     BACKEND_URL: str
     # Public Next.js origin. FastAPI leftover HTML pages 307 here by default.
     # In the Caddy three-service topology this is the public gateway origin.
-    CONSOLE_PUBLIC_URL: str = "http://127.0.0.1:3000"
+    CONSOLE_PUBLIC_URL: str = "http://127.0.0.1:31800"
     # redirect | serve | gone — default sends the old Jinja console to Next.
     LEGACY_HTML_CONSOLE: str = "redirect"
 
