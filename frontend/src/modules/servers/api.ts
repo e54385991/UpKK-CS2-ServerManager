@@ -967,17 +967,17 @@ export async function applyAptMirror(
   return { ok: true, data: toOperation(result.data) };
 }
 
+// Action only: the strict request contract rejects any extra field.
 export async function startServerOperation(
   serverId: number,
   action: ServerOperationAction,
-  options?: { readonly clearExecstack?: boolean },
 ): Promise<ApiResult<ServerOperation>> {
   const result = await apiFetch<ServerOperationViewDto>(
     `/api/v1/servers/${serverId}/operations`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action, ...(action === "restart" ? { clear_execstack: options?.clearExecstack ?? false } : {}) }),
+      body: JSON.stringify({ action }),
       timeoutMs: 20_000,
     },
   );

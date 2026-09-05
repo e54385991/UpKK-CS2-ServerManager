@@ -35,7 +35,12 @@ from modules import (
     UserDiscordBot,
 )
 from services.agent_policy_service import get_effective_agent_policy
-from services.ai_security import decrypt_credential, encrypt_credential, get_effective_provider
+from services.ai_security import (
+    AIConfigurationError,
+    decrypt_credential,
+    encrypt_credential,
+    get_effective_provider,
+)
 from services.audit_log_service import record_audit_event
 from services.discord_binding_template_service import (
     global_binding_counts,
@@ -694,12 +699,25 @@ async def get_server_discord_bot_options(
     return await _discord_options_response(server.user_id, token, guild_id)
 
 
+async def _usable_provider(db: DatabaseSession, owner) -> bool:
+    """Whether the agent has a provider it can actually call.
+
+    A stored API key becomes undecryptable whenever AI_CREDENTIAL_ENCRYPTION_KEY
+    changes after it was saved. That is an unusable provider, not a broken
+    request: reading the policy must keep working so the page can explain it.
+    """
+    try:
+        return await get_effective_provider(db, owner) is not None
+    except AIConfigurationError:
+        return False
+
+
 async def _agent_policy_response(db: DatabaseSession, server_id: int, owner) -> AgentPolicyResponse:
     policy = await get_effective_agent_policy(db, server_id)
     disabled_reason = None
     if not policy.enabled:
         disabled_reason = "policy_disabled"
-    elif await get_effective_provider(db, owner) is None:
+    elif not await _usable_provider(db, owner):
         disabled_reason = "provider_unavailable"
     return AgentPolicyResponse(
         server_id=server_id,

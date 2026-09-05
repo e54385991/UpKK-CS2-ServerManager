@@ -472,3 +472,30 @@ async def test_menu_push_and_binding_response_failure_paths(monkeypatch):
             DiscordMenuPushRequest(guild_id="20", channel_id="30"), db, user
         )
     assert rate_error.value.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_agent_policy_survives_an_undecryptable_ai_credential(monkeypatch):
+    """A rotated AI_CREDENTIAL_ENCRYPTION_KEY must not 500 the policy endpoint."""
+    from services.ai_security import AIConfigurationError
+
+    monkeypatch.setattr(
+        routes,
+        "get_effective_agent_policy",
+        AsyncMock(return_value=SimpleNamespace(enabled=True, capabilities=set())),
+    )
+    monkeypatch.setattr(
+        routes,
+        "get_effective_provider",
+        AsyncMock(
+            side_effect=AIConfigurationError(
+                "The saved AI credential cannot be decrypted; re-enter the API key"
+            )
+        ),
+    )
+
+    response = await routes._agent_policy_response(object(), 4, object())
+
+    assert response.enabled is True
+    assert response.effective_enabled is False
+    assert response.disabled_reason == "provider_unavailable"

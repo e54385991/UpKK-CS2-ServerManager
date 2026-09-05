@@ -289,17 +289,31 @@ async def _conversation_for_user(
     return conversation
 
 
+async def _require_enabled_provider(db: DatabaseSession, user) -> None:
+    """Fail with a conflict the caller can act on, never a 500.
+
+    A stored API key that no longer decrypts (AI_CREDENTIAL_ENCRYPTION_KEY was
+    rotated after it was saved) is a configuration problem, so surface its
+    remediation message instead of letting it escape as a server error.
+    """
+    try:
+        provider = await get_effective_provider(db, user)
+    except AIConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if provider is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No AI provider is enabled",
+        )
+
+
 @router.post("/api/ai/conversations", response_model=AIConversationResponse)
 async def create_ai_conversation(
     request: AIConversationCreate,
     db: DatabaseSession,
     current_user: ActiveUser,
 ) -> AIConversation:
-    if await get_effective_provider(db, current_user) is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="No AI provider is enabled",
-        )
+    await _require_enabled_provider(db, current_user)
     if request.server_id is not None:
         await _server_for_user(db, current_user, request.server_id)
         policy = await get_effective_agent_policy(db, request.server_id)
@@ -389,11 +403,7 @@ async def send_ai_message(
     current_user: ActiveUser,
 ) -> AIRun:
     conversation = await _conversation_for_user(db, current_user, conversation_id)
-    if await get_effective_provider(db, current_user) is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="No AI provider is enabled",
-        )
+    await _require_enabled_provider(db, current_user)
     if conversation.server_id is not None:
         await _server_for_user(db, current_user, conversation.server_id)
         policy = await get_effective_agent_policy(db, conversation.server_id)

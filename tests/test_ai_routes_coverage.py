@@ -461,3 +461,29 @@ async def test_tool_approval_rejects_mismatch_expired_and_capability_denial(monk
             user,
         )
     assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_provider_guard_reports_a_conflict_for_an_undecryptable_key(monkeypatch):
+    """An unreadable stored key is a configuration conflict, not a 500."""
+    from services.ai_security import AIConfigurationError
+
+    monkeypatch.setattr(
+        routes,
+        "get_effective_provider",
+        AsyncMock(
+            side_effect=AIConfigurationError(
+                "The saved AI credential cannot be decrypted; re-enter the API key"
+            )
+        ),
+    )
+    with pytest.raises(HTTPException) as caught:
+        await routes._require_enabled_provider(object(), object())
+    assert caught.value.status_code == 409
+    assert "re-enter the API key" in str(caught.value.detail)
+
+    monkeypatch.setattr(routes, "get_effective_provider", AsyncMock(return_value=None))
+    with pytest.raises(HTTPException) as missing:
+        await routes._require_enabled_provider(object(), object())
+    assert missing.value.status_code == 409
+    assert missing.value.detail == "No AI provider is enabled"
