@@ -7,6 +7,99 @@ from .common import _cleanup_local_download_dir
 
 
 class CounterStrikeSharpMixin(SSHMixinBase):
+    async def _fetch_counterstrikesharp_release_url(
+        self, server: Server, progress_callback=None
+    ) -> Tuple[bool, str]:
+        """Resolve the Linux runtime asset from the configured network boundary."""
+
+        async def send_progress(message: str) -> None:
+            await emit_progress_callback(progress_callback, message)
+
+        api_url = "https://api.github.com/repos/roflmuffin/CounterStrikeSharp/releases/latest"
+
+        if server.use_panel_proxy:
+            await send_progress("Resolving CounterStrikeSharp release through the panel...")
+            from modules.http_helper import http_helper
+
+            success, payload, error = await http_helper.get(
+                api_url,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                timeout=30,
+                retries=3,
+            )
+            if success and isinstance(payload, dict):
+                assets = payload.get("assets")
+                if isinstance(assets, list):
+                    for asset in assets:
+                        if not isinstance(asset, dict):
+                            continue
+                        name = str(asset.get("name") or "")
+                        url = str(asset.get("browser_download_url") or "")
+                        if (
+                            "counterstrikesharp-with-runtime-linux" in name.lower()
+                            and name.lower().endswith(".zip")
+                            and url.startswith(
+                                "https://github.com/roflmuffin/CounterStrikeSharp/releases/download/"
+                            )
+                        ):
+                            await send_progress(f"✓ Found latest version: {url}")
+                            return True, url
+
+            detail = error or "GitHub API response did not contain the Linux runtime asset"
+            return (
+                False,
+                "Could not determine CounterStrikeSharp version through the panel GitHub API: "
+                f"{detail}",
+            )
+
+        await send_progress("Resolving CounterStrikeSharp release from the game server...")
+
+        # Direct mode intentionally performs the lookup on the game server. Use
+        # fail-on-error and bounded curl timeouts so an unreachable GitHub API is
+        # reported as a network problem instead of an empty release URL.
+        api_cmd = (
+            f"curl -fsSL --connect-timeout 15 --max-time 30 {api_url} | "
+            'grep -oP \'"browser_download_url": "\\K[^"]*counterstrikesharp-with-runtime-linux[^"]*\\.zip\' | head -1'
+        )
+        success, css_url, _ = await self.execute_command(api_cmd, timeout=35)
+
+        if success and css_url.strip():
+            return True, css_url.strip()
+
+        await send_progress("⚠ Trying alternative API query...")
+        alt_cmd = (
+            f"curl -fsSL --connect-timeout 15 --max-time 30 {api_url} | "
+            "grep '\"browser_download_url\"' | grep 'with-runtime-linux' | "
+            "grep -oP 'https://[^\"]*\\.zip' | head -1"
+        )
+        success, css_url, _ = await self.execute_command(alt_cmd, timeout=35)
+        if success and css_url.strip():
+            return True, css_url.strip()
+
+        await send_progress("⚠ Could not fetch from GitHub API, constructing fallback URL...")
+        tag_cmd = (
+            f"curl -fsSL --connect-timeout 15 --max-time 30 {api_url} | "
+            "grep '\"tag_name\"' | grep -oP 'v[0-9.]+' | head -1"
+        )
+        tag_success, tag, _ = await self.execute_command(tag_cmd, timeout=35)
+        if tag_success and tag.strip():
+            version = tag.strip().lstrip("v")
+            css_url = (
+                "https://github.com/roflmuffin/CounterStrikeSharp/releases/download/"
+                f"{tag.strip()}/counterstrikesharp-with-runtime-linux-{version}.zip"
+            )
+            await send_progress(f"Using constructed URL for version {version}")
+            return True, css_url
+
+        mode_hint = (
+            "The game server could not reach api.github.com in direct mode. "
+            "Switch the default proxy mode to panel or configure a reachable GitHub route."
+        )
+        return False, f"Could not determine CounterStrikeSharp version from GitHub API. {mode_hint}"
+
     async def install_counterstrikesharp(
         self, server: Server, progress_callback=None
     ) -> Tuple[bool, str]:
@@ -68,49 +161,11 @@ class CounterStrikeSharpMixin(SSHMixinBase):
             # Get latest CounterStrikeSharp release from GitHub
             await send_progress("Fetching latest CounterStrikeSharp release from GitHub...")
 
-            # GitHub API URL - DO NOT use proxy for API requests
-            # Proxy services like ghfast.top only work for file downloads, not API
-            api_url = "https://api.github.com/repos/roflmuffin/CounterStrikeSharp/releases/latest"
-            # Note: server.github_proxy exists but is NOT used for API requests
-
-            # Use GitHub API to get the latest release - specifically look for with-runtime-linux
-            api_cmd = (
-                f"curl -s {api_url} | "
-                'grep -oP \'"browser_download_url": "\\K[^"]*counterstrikesharp-with-runtime-linux[^"]*\\.zip\' | head -1'
+            release_success, css_url = await self._fetch_counterstrikesharp_release_url(
+                server, progress_callback
             )
-            success, css_url, stderr = await self.execute_command(api_cmd, timeout=30)
-
-            if not success or not css_url.strip():
-                # Fallback: try to get any linux zip and filter
-                await send_progress("⚠ Trying alternative API query...")
-                alt_cmd = (
-                    f"curl -s {api_url} | "
-                    "grep '\"browser_download_url\"' | grep 'with-runtime-linux' | grep -oP 'https://[^\"]*\\.zip' | head -1"
-                )
-                success, css_url, _ = await self.execute_command(alt_cmd, timeout=30)
-
-                if not success or not css_url.strip():
-                    # Last fallback - construct URL from version tag
-                    await send_progress(
-                        "⚠ Could not fetch from GitHub API, constructing fallback URL..."
-                    )
-                    # Get the latest tag version
-                    tag_cmd = (
-                        f"curl -s {api_url} | grep '\"tag_name\"' | grep -oP 'v[0-9.]+' | head -1"
-                    )
-                    tag_success, tag, _ = await self.execute_command(tag_cmd, timeout=30)
-
-                    if tag_success and tag.strip():
-                        version = tag.strip().lstrip("v")
-                        css_url = f"https://github.com/roflmuffin/CounterStrikeSharp/releases/download/{tag.strip()}/counterstrikesharp-with-runtime-linux-{version}.zip"
-                        await send_progress(f"Using constructed URL for version {version}")
-                    else:
-                        return (
-                            False,
-                            "Could not determine CounterStrikeSharp version from GitHub API",
-                        )
-            else:
-                css_url = css_url.strip()
+            if not release_success:
+                return False, css_url
 
             await send_progress(f"Download URL: {css_url}")
 

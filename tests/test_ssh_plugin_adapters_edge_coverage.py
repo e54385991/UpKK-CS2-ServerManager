@@ -278,7 +278,6 @@ async def test_counterstrikesharp_install_success_proxy_and_unzip_paths(monkeypa
         side_effect=[
             (True, "exists", ""),
             (True, "exists", ""),
-            (True, "https://github.com/css.zip", ""),
             (True, "", ""),
             (True, "", ""),
             (True, "", ""),
@@ -294,6 +293,22 @@ async def test_counterstrikesharp_install_success_proxy_and_unzip_paths(monkeypa
 
     monkeypatch.setattr(module.tempfile, "gettempdir", lambda: str(tmp_path))
     from modules.http_helper import http_helper
+
+    async def release_api(*_args, **_kwargs):
+        return (
+            True,
+            {
+                "assets": [
+                    {
+                        "name": "counterstrikesharp-with-runtime-linux-1.2.3.zip",
+                        "browser_download_url": "https://github.com/roflmuffin/CounterStrikeSharp/releases/download/v1.2.3/counterstrikesharp-with-runtime-linux-1.2.3.zip",
+                    }
+                ]
+            },
+            None,
+        )
+
+    monkeypatch.setattr(http_helper, "get", release_api)
 
     monkeypatch.setattr(http_helper, "download_file", download)
     manager.upload_file_with_progress = AsyncMock(return_value=(True, ""))
