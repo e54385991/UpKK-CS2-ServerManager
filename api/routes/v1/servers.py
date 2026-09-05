@@ -34,7 +34,9 @@ from services.server_clone_service import (
     build_clone_template,
     prepare_clone_server,
 )
+from services.server_compatibility import parse_linux_release
 from services.server_operation_hub import ServerOperationConflict
+from services.ssh_manager import SSHManager
 
 from .operation_runner import enqueue_apply_apt_mirror
 from .operations import to_view
@@ -254,6 +256,43 @@ async def get_server(
     return await _to_detail(server)
 
 
+@router.post("/{server_id}/compatibility", response_model=ServerWriteResult)
+async def probe_server_compatibility(
+    server_id: int,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ServerWriteResult:
+    """Refresh Linux release metadata used by the plugin compatibility default."""
+    server = await require_server_access(db, server_id, current_user)
+    await db.commit()
+    manager = SSHManager()
+    connected, message = await manager.connect(server)
+    if not connected:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message)
+    try:
+        success, stdout, stderr = await manager.execute_command("cat /etc/os-release 2>/dev/null")
+    finally:
+        await manager.disconnect()
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=stderr or stdout or "Unable to read /etc/os-release",
+        )
+    release = parse_linux_release(stdout)
+    if release is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Unsupported or unknown Linux distribution",
+        )
+    await db.refresh(server)
+    server.os_id = release.os_id
+    server.os_version = release.version_id
+    await db.commit()
+    await db.refresh(server)
+    detail = await _to_detail(server)
+    return ServerWriteResult(**detail.model_dump())
+
+
 @router.patch("/{server_id}", response_model=ServerWriteResult)
 async def update_server(
     server_id: int,
@@ -270,7 +309,11 @@ async def update_server(
         current_user,
         request,
     )
-    detail = await _to_detail(_updated_server_model(updated))
+    get_server_record = getattr(db, "get", None)
+    refreshed = await get_server_record(Server, server_id) if get_server_record else updated
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+    detail = await _to_detail(_updated_server_model(refreshed))
     return ServerWriteResult(
         **detail.model_dump(),
         restart_required=bool(getattr(updated, "restart_required", False)),

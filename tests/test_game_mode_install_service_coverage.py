@@ -205,6 +205,53 @@ async def test_execute_plan_success_covers_startup_framework_restart_and_verify(
 
 
 @pytest.mark.asyncio
+async def test_execute_kz_plan_installs_legacy_libssl_before_plugins(monkeypatch):
+    server = _server()
+    user = _patch_lock_and_lookup(monkeypatch, server)
+    recipe = _recipe()
+    plan = {
+        "blocked": False,
+        "blocking_reasons": [],
+        "plan_hash": "kz-libssl",
+        "addons_path": "/srv/cs2/addons",
+        "startup": {"changed": False, "after": None},
+        "current": {
+            "libssl11": False,
+            "css": True,
+            "mapchooser": True,
+            "maps": True,
+            "config": True,
+        },
+        "plugin_plans": {},
+        "warnings": [],
+        "steps": [{"id": "restart_and_wait", "status": "unchanged"}],
+    }
+    monkeypatch.setattr(service, "build_game_mode_plan", AsyncMock(return_value=plan))
+    monkeypatch.setattr(service, "get_recipe", lambda _mode: recipe)
+    monkeypatch.setattr(service, "_emit_plan_progress", AsyncMock())
+    monkeypatch.setattr(
+        service,
+        "inspect_game_mode_state",
+        AsyncMock(return_value={"css": True, "mapchooser": True, "maps": True, "config": True}),
+    )
+    monkeypatch.setattr(service, "_read_text", AsyncMock(side_effect=["maps", "{}"]))
+    manager = SimpleNamespace(
+        execute_sudo_command=AsyncMock(return_value=(True, "installed", "")),
+        execute_command=AsyncMock(return_value=(True, "", "")),
+        disconnect=AsyncMock(),
+    )
+    monkeypatch.setattr(service, "connect", AsyncMock(return_value=manager))
+    result = await service.execute_game_mode_plan(
+        _DB(), server, user, "kz", wipe_addons=False, expected_plan_hash="kz-libssl"
+    )
+    assert result["success"] is True
+    install_command = manager.execute_sudo_command.await_args_list[0].args[0]
+    assert "libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb" in install_command
+    assert "dpkg -i" in install_command
+    assert manager.disconnect.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_execute_plan_wipe_and_failure_return_partial_result(monkeypatch):
     server = _server()
     user = _patch_lock_and_lookup(monkeypatch, server)

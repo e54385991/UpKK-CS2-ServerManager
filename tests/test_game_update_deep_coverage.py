@@ -15,6 +15,7 @@ class _Update(GameUpdateMixin):
         self.conn = None
         self.connect = AsyncMock(return_value=(True, "connected"))
         self.disconnect = AsyncMock()
+        self.execute_sudo_command = AsyncMock(return_value=(True, "fixed", ""))
         self._prepare_update_session = AsyncMock(return_value=(False, None))
         self._kill_stray_cs2_processes = AsyncMock()
         self._kill_steamcmd_processes = AsyncMock()
@@ -58,6 +59,23 @@ async def test_update_server_success_stopped_and_running_restore(monkeypatch):
         True,
         "Server updated and restored to running state successfully",
     )
+    manager.start_server.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_update_clears_execstack_before_restoring_running_server(monkeypatch):
+    manager = _Update()
+    manager._prepare_update_session.return_value = (True, None)
+    monkeypatch.setattr(
+        "services.steam_inf_service.steam_inf_service.refresh_version_cache",
+        AsyncMock(return_value=(False, None)),
+    )
+    monkeypatch.setattr(
+        "services.ssh.game_update.resolve_steamcmd_max_retries", AsyncMock(return_value=1)
+    )
+    result = await manager.update_server(_server(), clear_execstack=True)
+    assert result[0] is True
+    manager.execute_sudo_command.assert_awaited_once()
     manager.start_server.assert_awaited_once()
 
 

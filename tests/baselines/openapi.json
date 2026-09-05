@@ -18345,6 +18345,17 @@
             "title": "Cleanup Targets",
             "type": "array"
           },
+          "clear_execstack_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clear Execstack Override"
+          },
           "client_port": {
             "anyOf": [
               {
@@ -18489,6 +18500,28 @@
             "default": true,
             "title": "Enable Ssh Health Monitoring",
             "type": "boolean"
+          },
+          "execstack_fix_on_framework": {
+            "default": true,
+            "title": "Execstack Fix On Framework",
+            "type": "boolean"
+          },
+          "execstack_fix_on_game_update": {
+            "default": true,
+            "title": "Execstack Fix On Game Update",
+            "type": "boolean"
+          },
+          "execstack_fix_on_restart": {
+            "default": true,
+            "title": "Execstack Fix On Restart",
+            "type": "boolean"
+          },
+          "execstack_fix_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Execstack Fix Targets",
+            "type": "array"
           },
           "game_directory": {
             "default": "/home/cs2server/cs2",
@@ -19564,6 +19597,22 @@
             "title": "Auto Restart On Crash",
             "type": "boolean"
           },
+          "clear_execstack_effective": {
+            "default": false,
+            "title": "Clear Execstack Effective",
+            "type": "boolean"
+          },
+          "clear_execstack_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clear Execstack Override"
+          },
           "consecutive_ssh_failures": {
             "default": 0,
             "title": "Consecutive Ssh Failures",
@@ -19603,6 +19652,28 @@
             "default": false,
             "title": "Enable Panel Monitoring",
             "type": "boolean"
+          },
+          "execstack_fix_on_framework": {
+            "default": true,
+            "title": "Execstack Fix On Framework",
+            "type": "boolean"
+          },
+          "execstack_fix_on_game_update": {
+            "default": true,
+            "title": "Execstack Fix On Game Update",
+            "type": "boolean"
+          },
+          "execstack_fix_on_restart": {
+            "default": true,
+            "title": "Execstack Fix On Restart",
+            "type": "boolean"
+          },
+          "execstack_fix_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Execstack Fix Targets",
+            "type": "array"
           },
           "game_directory": {
             "title": "Game Directory",
@@ -19725,6 +19796,28 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "os_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Id"
+          },
+          "os_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Version"
           },
           "owner_id": {
             "anyOf": [
@@ -19923,6 +20016,22 @@
             "title": "Auto Restart On Crash",
             "type": "boolean"
           },
+          "clear_execstack_effective": {
+            "default": false,
+            "title": "Clear Execstack Effective",
+            "type": "boolean"
+          },
+          "clear_execstack_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clear Execstack Override"
+          },
           "consecutive_ssh_failures": {
             "default": 0,
             "title": "Consecutive Ssh Failures",
@@ -19962,6 +20071,28 @@
             "default": false,
             "title": "Enable Panel Monitoring",
             "type": "boolean"
+          },
+          "execstack_fix_on_framework": {
+            "default": true,
+            "title": "Execstack Fix On Framework",
+            "type": "boolean"
+          },
+          "execstack_fix_on_game_update": {
+            "default": true,
+            "title": "Execstack Fix On Game Update",
+            "type": "boolean"
+          },
+          "execstack_fix_on_restart": {
+            "default": true,
+            "title": "Execstack Fix On Restart",
+            "type": "boolean"
+          },
+          "execstack_fix_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Execstack Fix Targets",
+            "type": "array"
           },
           "game_directory": {
             "title": "Game Directory",
@@ -20056,6 +20187,28 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "os_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Id"
+          },
+          "os_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Version"
           },
           "owner_id": {
             "anyOf": [
@@ -20216,6 +20369,11 @@
             ],
             "title": "Action",
             "type": "string"
+          },
+          "clear_execstack": {
+            "default": false,
+            "title": "Clear Execstack",
+            "type": "boolean"
           }
         },
         "required": [
@@ -21425,6 +21583,22 @@
         "additionalProperties": false,
         "description": "Non-secret server projection for list and card views.",
         "properties": {
+          "clear_execstack_effective": {
+            "default": false,
+            "title": "Clear Execstack Effective",
+            "type": "boolean"
+          },
+          "clear_execstack_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clear Execstack Override"
+          },
           "consecutive_ssh_failures": {
             "default": 0,
             "title": "Consecutive Ssh Failures",
@@ -21492,6 +21666,28 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "os_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Id"
+          },
+          "os_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Version"
           },
           "owner_id": {
             "anyOf": [
@@ -21687,6 +21883,17 @@
             "description": "Backend URL for status reporting (optional)",
             "title": "Backend Url"
           },
+          "clear_execstack_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clear Execstack Override"
+          },
           "client_port": {
             "anyOf": [
               {
@@ -21795,6 +22002,53 @@
               }
             ],
             "title": "Enable Plugin Auto Update"
+          },
+          "execstack_fix_on_framework": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execstack Fix On Framework"
+          },
+          "execstack_fix_on_game_update": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execstack Fix On Game Update"
+          },
+          "execstack_fix_on_restart": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execstack Fix On Restart"
+          },
+          "execstack_fix_targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execstack Fix Targets"
           },
           "game_directory": {
             "anyOf": [
@@ -21969,13 +22223,20 @@
             "title": "Server Password"
           },
           "session_manager": {
-            "description": "Terminal multiplexer used to run and control the CS2 process",
-            "enum": [
-              "screen",
-              "tmux"
+            "anyOf": [
+              {
+                "enum": [
+                  "screen",
+                  "tmux"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Session Manager",
-            "type": "string"
+            "description": "Terminal multiplexer used to run and control the CS2 process",
+            "title": "Session Manager"
           },
           "ssh_password": {
             "anyOf": [
@@ -22182,6 +22443,17 @@
             ],
             "title": "Auto Restart On Crash"
           },
+          "clear_execstack_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clear Execstack Override"
+          },
           "default_map": {
             "anyOf": [
               {
@@ -22237,6 +22509,53 @@
               }
             ],
             "title": "Enable Panel Monitoring"
+          },
+          "execstack_fix_on_framework": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execstack Fix On Framework"
+          },
+          "execstack_fix_on_game_update": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execstack Fix On Game Update"
+          },
+          "execstack_fix_on_restart": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execstack Fix On Restart"
+          },
+          "execstack_fix_targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execstack Fix Targets"
           },
           "game_directory": {
             "anyOf": [
@@ -22542,6 +22861,22 @@
             "title": "Auto Restart On Crash",
             "type": "boolean"
           },
+          "clear_execstack_effective": {
+            "default": false,
+            "title": "Clear Execstack Effective",
+            "type": "boolean"
+          },
+          "clear_execstack_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clear Execstack Override"
+          },
           "consecutive_ssh_failures": {
             "default": 0,
             "title": "Consecutive Ssh Failures",
@@ -22581,6 +22916,28 @@
             "default": false,
             "title": "Enable Panel Monitoring",
             "type": "boolean"
+          },
+          "execstack_fix_on_framework": {
+            "default": true,
+            "title": "Execstack Fix On Framework",
+            "type": "boolean"
+          },
+          "execstack_fix_on_game_update": {
+            "default": true,
+            "title": "Execstack Fix On Game Update",
+            "type": "boolean"
+          },
+          "execstack_fix_on_restart": {
+            "default": true,
+            "title": "Execstack Fix On Restart",
+            "type": "boolean"
+          },
+          "execstack_fix_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Execstack Fix Targets",
+            "type": "array"
           },
           "game_directory": {
             "title": "Game Directory",
@@ -22675,6 +23032,28 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "os_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Id"
+          },
+          "os_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Version"
           },
           "owner_id": {
             "anyOf": [
@@ -34418,6 +34797,54 @@
           }
         ],
         "summary": "Get Clone Template",
+        "tags": [
+          "v1-servers"
+        ]
+      }
+    },
+    "/api/v1/servers/{server_id}/compatibility": {
+      "post": {
+        "description": "Refresh Linux release metadata used by the plugin compatibility default.",
+        "operationId": "probe_server_compatibility_api_v1_servers__server_id__compatibility_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerWriteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Probe Server Compatibility",
         "tags": [
           "v1-servers"
         ]

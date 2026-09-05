@@ -8,6 +8,10 @@ from api.dependencies import ActiveUser, DatabaseSession
 from api.routes.actions.common import _store_task
 from services.audit_log_service import record_audit_event
 from services.maintenance_lock import maintenance_lock_service
+from services.server_compatibility import (
+    maybe_clear_execstack_after_file_action,
+    run_clear_execstack,
+)
 from services.steamcmd_guard import (
     STEAMCMD_ACTIONS,
     STEAMCMD_FORCE_TERMINATED,
@@ -41,10 +45,8 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
         return
     await deployment_ws.connect(websocket, server_id)
     try:
-        # Send accumulated progress on connection (for recovery after disconnect/restart)
         accumulated_progress = await redis_manager.get_deployment_progress(server_id)
         if accumulated_progress:
-            # Send a header message
             await websocket.send_json(
                 {
                     "type": "info",
@@ -52,14 +54,11 @@ async def deployment_status_websocket(websocket: WebSocket, server_id: int):
                     "timestamp": get_current_time().isoformat(),
                 }
             )
-            # Send all accumulated progress
             for progress_entry in accumulated_progress:
                 await websocket.send_json(progress_entry)
 
         while True:
-            # Keep connection alive and receive any client messages
             await websocket.receive_text()
-            # Echo back or handle client messages if needed
             await websocket.send_json(
                 {
                     "type": "ack",
@@ -96,7 +95,6 @@ async def check_deployment_lock(
     Raises:
         HTTPException 404: Server not found or user doesn't own it
     """
-    # Verify user owns this server
     server = await get_server_and_verify_ownership(db, server_id, current_user)
 
     deployment_lock_key = f"deployment_lock:{server_id}"
@@ -179,7 +177,6 @@ async def cancel_deployment(
         message += ". You can start a new operation."
         return JSONResponse(content={"success": True, "message": message})
     except HTTPException:
-        # Re-raise HTTP exceptions (like 403, 404) to be handled by FastAPI
         raise
     except Exception as e:
         logger.error(f"Error clearing deployment lock for server {server_id}: {e}", exc_info=True)
@@ -196,6 +193,9 @@ async def execute_server_action(  # noqa: C901
     current_user: ActiveUser,
     locked_server: Server | None,
     request: Request | None = None,
+    *,
+    clear_execstack: bool = False,
+    clear_execstack_targets: object = None,
 ):
     """Execute a validated server action outside the HTTP request boundary."""
     server = (
@@ -204,13 +204,11 @@ async def execute_server_action(  # noqa: C901
         else await get_server_and_verify_ownership(db, server_id, current_user)
     )
 
-    # Check if server is already being deployed (prevent concurrent operations during deployment)
     action = action_data.action
     deployment_lock_key = f"deployment_lock:{server_id}"
     is_deploying = await redis_manager.get(deployment_lock_key)
 
     if is_deploying:
-        # If deployment is in progress, reject all operations
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Server is currently being deployed or has a stuck deployment lock. Please check the console for progress. If the deployment is stuck, you can cancel it from the Actions tab.",
@@ -219,13 +217,11 @@ async def execute_server_action(  # noqa: C901
     if action in STEAMCMD_ACTIONS:
         await prepare_steamcmd_operation(server_id)
 
-    # Set deployment lock only for deploy action (with 2 hour expiration in case of crashes)
     if action == "deploy":
         await redis_manager.set(deployment_lock_key, "1", expire=7200)
 
     ssh_manager = SSHManager()
 
-    # Create deployment log
     log = DeploymentLog(server_id=server_id, action=action, status="in_progress")
     db.add(log)
     await db.commit()
@@ -241,20 +237,13 @@ async def execute_server_action(  # noqa: C901
 
     if action in {"start", "stop", "restart"}:
         apply_user_lifecycle_intent(server, action)
-        # The intent must become visible before the remote lifecycle command.
-        # A failed Stop intentionally leaves the protection enabled.
         await db.commit()
 
-    # Clear previous websocket records before starting new operation
-    # This is a non-critical operation - if it fails, continue with the action
     try:
         await redis_manager.clear_deployment_progress(server_id)
     except Exception:
-        # Silently continue if cleanup fails - old messages are better than blocking the operation
-        # This catches Redis connection errors, timeouts, and other non-critical failures
         pass
 
-    # Send WebSocket notification
     await send_deployment_update(server_id, "status", f"Starting action: {action}")
 
     async def progress_callback(message: str) -> None:
@@ -292,7 +281,6 @@ async def execute_server_action(  # noqa: C901
             try:
                 await send_deployment_update(server_id, "status", "Connecting to server via SSH...")
                 success, message = await ssh_manager.deploy_cs2_server(server, progress_callback)
-
                 if success:
                     server.status = ServerStatus.STOPPED
                     server.last_deployed = get_current_time()
@@ -309,21 +297,15 @@ async def execute_server_action(  # noqa: C901
                         server_id, "error", f"Deployment failed: {message}"
                     )
             finally:
-                # ALWAYS remove deployment lock when deployment completes, regardless of success/failure/exception
                 await redis_manager.delete(deployment_lock_key)
-                # Clear deployment progress after a delay to allow clients to fetch final messages
-                # The progress cache will also auto-expire after 2 hours
                 _store_task(asyncio.create_task(clear_deployment_progress_after_delay(server_id)))
-
         elif action == "start":
             await send_deployment_update(server_id, "status", "Starting server...")
             success, message = await ssh_manager.start_server(server, progress_callback)
-
             if success:
                 server.status = ServerStatus.RUNNING
                 log.status = "success"
                 log.output = message
-                # Reset restart history and A2S failure counter after successful manual start
                 server_monitor.reset_restart_history(server_id)
                 await send_deployment_update(server_id, "complete", "Server started successfully")
             else:
@@ -350,10 +332,8 @@ async def execute_server_action(  # noqa: C901
         elif action == "restart":
             await send_deployment_update(server_id, "status", "Restarting server...")
 
-            # Auto-cleanup crash history based on offline duration
             should_clear_crash_history = False
 
-            # Check if auto-clear is configured and server was offline long enough
             if server.auto_clear_crash_hours and server.auto_clear_crash_hours > 0:
                 if server.last_status_check:
                     offline_duration = get_current_time() - server.last_status_check
@@ -367,13 +347,10 @@ async def execute_server_action(  # noqa: C901
                             f"⏰ Server offline for {offline_hours:.1f} hours (threshold: {server.auto_clear_crash_hours}h)",
                         )
                 else:
-                    # No last status check recorded, assume manual restart should clear
                     should_clear_crash_history = True
             else:
-                # Always clear on manual restart if auto-clear is not configured
                 should_clear_crash_history = True
 
-            # Clean up crash history log if needed
             if should_clear_crash_history:
                 try:
                     crash_log_path = f"{server.game_directory}/crash_history.log"
@@ -385,7 +362,6 @@ async def execute_server_action(  # noqa: C901
                         server_id, "output", "✓ Crash history cleared for fresh start"
                     )
                 except Exception as e:
-                    # Non-critical, continue with restart
                     await send_deployment_update(
                         server_id, "output", f"Note: Could not clear crash history: {str(e)}"
                     )
@@ -396,11 +372,8 @@ async def execute_server_action(  # noqa: C901
                     f"ℹ Crash history retained (offline duration below {server.auto_clear_crash_hours}h threshold)",
                 )
 
-            # Stop then start with additional verification
             success, message = await ssh_manager.stop_server(server)
 
-            # Always proceed to start, even if stop reports failure
-            # The start_server method has its own defensive checks to kill existing sessions
             if not success:
                 await send_deployment_update(server_id, "output", f"Stop returned: {message}")
                 await send_deployment_update(
@@ -413,7 +386,29 @@ async def execute_server_action(  # noqa: C901
                     server_id, "output", "Server stopped successfully, starting again..."
                 )
 
-            # Add small delay to ensure cleanup
+            if clear_execstack:
+                if not success:
+                    await send_deployment_update(
+                        server_id,
+                        "output",
+                        "⚠ Plugin execstack cleanup skipped because the server did not confirm it stopped; continuing restart.",
+                    )
+                else:
+                    await send_deployment_update(
+                        server_id,
+                        "output",
+                        "Clearing executable-stack flags from configured plugin targets...",
+                    )
+                    fixed, detail = await run_clear_execstack(
+                        ssh_manager, server, clear_execstack_targets
+                    )
+                    message = (
+                        "✓ Plugin execstack cleanup completed"
+                        if fixed
+                        else "⚠ Plugin execstack cleanup failed; continuing restart"
+                    )
+                    await send_deployment_update(server_id, "output", f"{message}: {detail}")
+
             await asyncio.sleep(0.5)
 
             success, message = await ssh_manager.start_server(server, progress_callback)
@@ -421,7 +416,6 @@ async def execute_server_action(  # noqa: C901
                 server.status = ServerStatus.RUNNING
                 log.status = "success"
                 log.output = message
-                # Reset restart history and A2S failure counter after successful manual restart
                 server_monitor.reset_restart_history(server_id)
                 await send_deployment_update(server_id, "complete", "Server restarted successfully")
             else:
@@ -434,7 +428,6 @@ async def execute_server_action(  # noqa: C901
             await send_deployment_update(server_id, "status", "Checking server status...")
             success, status_msg = await ssh_manager.get_server_status(server)
 
-            # Update last status check time
             server.last_status_check = get_current_time()
 
             if success:
@@ -459,10 +452,17 @@ async def execute_server_action(  # noqa: C901
 
         elif action == "update":
             await send_deployment_update(server_id, "status", "Updating server...")
-            success, message = await ssh_manager.update_server(server, progress_callback)
+            if clear_execstack:
+                success, message = await ssh_manager.update_server(
+                    server,
+                    progress_callback,
+                    clear_execstack=True,
+                    clear_execstack_targets=clear_execstack_targets,
+                )
+            else:
+                success, message = await ssh_manager.update_server(server, progress_callback)
 
             if success:
-                # Keep the same status as before update (or set to STOPPED if it was running)
                 server.last_update_time = get_current_time()
                 log.status = "success"
                 log.output = message
@@ -475,10 +475,17 @@ async def execute_server_action(  # noqa: C901
 
         elif action == "validate":
             await send_deployment_update(server_id, "status", "Updating and validating server...")
-            success, message = await ssh_manager.validate_server(server, progress_callback)
+            if clear_execstack:
+                success, message = await ssh_manager.validate_server(
+                    server,
+                    progress_callback,
+                    clear_execstack=True,
+                    clear_execstack_targets=clear_execstack_targets,
+                )
+            else:
+                success, message = await ssh_manager.validate_server(server, progress_callback)
 
             if success:
-                # Keep the same status as before validate
                 log.status = "success"
                 log.output = message
                 await send_deployment_update(server_id, "complete", "Server validated successfully")
@@ -658,7 +665,6 @@ async def execute_server_action(  # noqa: C901
                 await send_deployment_update(server_id, "error", f"Plugin backup failed: {message}")
 
         else:
-            # Handle unknown action
             error_msg = f"Unknown action: {action}"
             log.status = "failed"
             log.error_message = error_msg
@@ -666,6 +672,17 @@ async def execute_server_action(  # noqa: C901
             await send_deployment_update(server_id, "error", error_msg)
 
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+
+        if success:
+            await maybe_clear_execstack_after_file_action(
+                server_id=server_id,
+                action=action,
+                server=server,
+                manager=ssh_manager,
+                enabled=clear_execstack,
+                targets=clear_execstack_targets,
+                report=send_deployment_update,
+            )
 
         if success and action in {
             "install_metamod",
@@ -704,7 +721,6 @@ async def execute_server_action(  # noqa: C901
         await db.refresh(server)
         await db.refresh(log)
 
-        # Update cache
         await redis_manager.set_server_status(server_id, server.status.value)
 
         await send_discord_action_notification(server, action, success, message)
@@ -762,7 +778,6 @@ async def get_deployment_progress(
     """
     await get_server_and_verify_ownership(db, server_id, current_user)
 
-    # Get accumulated progress from Redis
     progress = await redis_manager.get_deployment_progress(server_id)
 
     return {"server_id": server_id, "progress_messages": progress, "total_messages": len(progress)}

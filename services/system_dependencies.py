@@ -41,6 +41,7 @@ STEAMCMD_REQUIRED_PACKAGES = (
     "screen",
     "tmux",
     "bzip2",
+    "patchelf",
 )
 
 SETUP_OPTIONAL_PACKAGES = ("libicu-dev",)

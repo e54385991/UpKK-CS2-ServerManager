@@ -58,6 +58,8 @@ class HostDependencyResult:
     logs: tuple[str, ...]
     apt_mirror: str | None = None
     failed_mirrors: tuple[str, ...] = ()
+    os_id: str | None = None
+    os_version: str | None = None
 
     @staticmethod
     def ready(

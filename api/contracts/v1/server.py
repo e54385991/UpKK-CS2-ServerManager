@@ -13,6 +13,7 @@ from api.contracts.v1.identity import V1Model
 from modules.models.servers import ServerStatus
 from modules.server_startup import normalize_additional_parameters
 from services.apt_mirrors import normalize_apt_mirror
+from services.server_compatibility import DEFAULT_EXECSTACK_TARGETS, normalize_execstack_targets
 
 
 class ServerSummary(V1Model):
@@ -38,6 +39,10 @@ class ServerSummary(V1Model):
     ssh_health_failure_threshold: int = 84
     ssh_health_check_interval_hours: int = 2
     last_ssh_health_check: datetime | None = None
+    os_id: str | None = None
+    os_version: str | None = None
+    clear_execstack_override: bool | None = None
+    clear_execstack_effective: bool = False
 
 
 class ServerDetail(ServerSummary):
@@ -72,6 +77,12 @@ class ServerDetail(ServerSummary):
     ssh_in_use: bool = False
     ssh_active_leases: int = 0
     ssh_idle_seconds: float | None = None
+    execstack_fix_on_restart: bool = True
+    execstack_fix_on_framework: bool = True
+    execstack_fix_on_game_update: bool = True
+    execstack_fix_targets: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_EXECSTACK_TARGETS)
+    )
 
 
 class ServerWriteResult(ServerDetail):
@@ -219,6 +230,16 @@ class ServerUpdateRequest(ApiRequest):
     use_panel_proxy: bool | None = None
     github_proxy: str | None = Field(default=None, max_length=500)
     additional_parameters: str | None = Field(default=None, max_length=4096)
+    clear_execstack_override: bool | None = Field(default=None)
+    execstack_fix_on_restart: bool | None = Field(default=None)
+    execstack_fix_on_framework: bool | None = Field(default=None)
+    execstack_fix_on_game_update: bool | None = Field(default=None)
+    execstack_fix_targets: list[str] | None = Field(default=None)
+
+    @field_validator("execstack_fix_targets")
+    @classmethod
+    def validate_execstack_targets(cls, value: list[str] | None) -> list[str] | None:
+        return list(normalize_execstack_targets(value)) if value is not None else None
 
     @field_validator("ssh_password", "rcon_password", "description", "sudo_password")
     @classmethod

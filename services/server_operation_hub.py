@@ -124,7 +124,14 @@ class ServerOperationHub:
                 "completed_at": None,
             }
             if extra:
-                for key in ("destination", "target_path", "archive_path"):
+                for key in (
+                    "destination",
+                    "target_path",
+                    "archive_path",
+                    "clear_execstack",
+                    "clear_execstack_command",
+                    "clear_execstack_targets",
+                ):
                     value = extra.get(key)
                     if value is not None:
                         record[key] = value

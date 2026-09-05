@@ -75,12 +75,6 @@ function toSessionManager(value: string): "screen" | "tmux" {
   return value === "screen" ? "screen" : "tmux";
 }
 
-/**
- * Map the wire DTO (snake_case, from the generated OpenAPI schema) to the
- * camelCase domain type the UI consumes. Keeping this adapter isolates the UI
- * from wire-format details; if the `/api/v1` contract changes, only this
- * mapper and the regenerated schema move.
- */
 function toSummary(raw: ServerSummaryDto): ServerSummary {
   return {
     id: raw.id,
@@ -103,6 +97,9 @@ function toSummary(raw: ServerSummaryDto): ServerSummary {
     sshHealthFailureThreshold: raw.ssh_health_failure_threshold ?? 84,
     sshHealthCheckIntervalHours: raw.ssh_health_check_interval_hours ?? 2,
     lastSshHealthCheck: raw.last_ssh_health_check ?? null,
+    osId: raw.os_id ?? null, osVersion: raw.os_version ?? null,
+    clearExecstackOverride: raw.clear_execstack_override ?? null,
+    clearExecstackEffective: raw.clear_execstack_effective ?? false,
   };
 }
 
@@ -184,6 +181,10 @@ export type ServerDetail = ServerSummary & {
   readonly sshInUse: boolean;
   readonly sshActiveLeases: number;
   readonly sshIdleSeconds: number | null;
+  readonly execstackFixOnRestart: boolean;
+  readonly execstackFixOnFramework: boolean;
+  readonly execstackFixOnGameUpdate: boolean;
+  readonly execstackFixTargets: readonly string[];
 };
 
 export type ServerWriteResult = ServerDetail & {
@@ -199,7 +200,6 @@ export type ServerCreateResult = ServerDetail & {
 
 export { getServerCloneTemplate };
 export type { ServerCloneInput, ServerCloneTemplate };
-
 function toDetail(raw: ServerDetailDto): ServerDetail {
   return {
     ...toSummary(raw),
@@ -232,6 +232,10 @@ function toDetail(raw: ServerDetailDto): ServerDetail {
     sshInUse: raw.ssh_in_use ?? false,
     sshActiveLeases: raw.ssh_active_leases ?? 0,
     sshIdleSeconds: raw.ssh_idle_seconds ?? null,
+    execstackFixOnRestart: raw.execstack_fix_on_restart ?? true,
+    execstackFixOnFramework: raw.execstack_fix_on_framework ?? true,
+    execstackFixOnGameUpdate: raw.execstack_fix_on_game_update ?? true,
+    execstackFixTargets: raw.execstack_fix_targets ?? ["counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so"],
     sshHealthStatus: raw.ssh_health_status ?? "unknown",
     consecutiveSshFailures: raw.consecutive_ssh_failures ?? 0,
     sshHealthFailureThreshold: raw.ssh_health_failure_threshold ?? 84,
@@ -239,7 +243,6 @@ function toDetail(raw: ServerDetailDto): ServerDetail {
     lastSshHealthCheck: raw.last_ssh_health_check ?? null,
   };
 }
-
 export async function getServer(
   id: number,
 ): Promise<ApiResult<ServerDetail>> {
@@ -247,7 +250,6 @@ export async function getServer(
   if (!result.ok) return result;
   return { ok: true, data: toDetail(result.data) };
 }
-
 export async function deleteServer(
   id: number,
 ): Promise<ApiResult<ActionResultDto>> {
@@ -255,7 +257,6 @@ export async function deleteServer(
     method: "DELETE",
   });
 }
-
 export type ServerUpdateInput = {
   readonly name?: string;
   readonly host?: string;
@@ -287,8 +288,12 @@ export type ServerUpdateInput = {
   readonly usePanelProxy?: boolean;
   readonly githubProxy?: string | null;
   readonly additionalParameters?: string | null;
+  readonly clearExecstackOverride?: boolean | null;
+  readonly execstackFixOnRestart?: boolean;
+  readonly execstackFixOnFramework?: boolean;
+  readonly execstackFixOnGameUpdate?: boolean;
+  readonly execstackFixTargets?: readonly string[];
 };
-
 export async function updateServer(
   id: number,
   input: ServerUpdateInput,
@@ -327,6 +332,11 @@ export async function updateServer(
       use_panel_proxy: input.usePanelProxy,
       github_proxy: input.githubProxy,
       additional_parameters: input.additionalParameters,
+      ...(input.clearExecstackOverride !== undefined ? { clear_execstack_override: input.clearExecstackOverride } : {}),
+      ...(input.execstackFixOnRestart !== undefined ? { execstack_fix_on_restart: input.execstackFixOnRestart } : {}),
+      ...(input.execstackFixOnFramework !== undefined ? { execstack_fix_on_framework: input.execstackFixOnFramework } : {}),
+      ...(input.execstackFixOnGameUpdate !== undefined ? { execstack_fix_on_game_update: input.execstackFixOnGameUpdate } : {}),
+      ...(input.execstackFixTargets !== undefined ? { execstack_fix_targets: input.execstackFixTargets } : {}),
     }),
   });
   if (!result.ok) return result;
@@ -338,7 +348,6 @@ export async function updateServer(
     },
   };
 }
-
 export type ServerCreateInput = {
   readonly name: string;
   readonly host: string;
@@ -363,7 +372,6 @@ export type ServerCreateInput = {
   readonly additionalParameters?: string;
   readonly sessionManager: "tmux" | "screen";
 };
-
 export async function cloneServer(
   serverId: number,
   input: ServerCloneInput,
@@ -381,7 +389,6 @@ export async function cloneServer(
     },
   };
 }
-
 export async function createServer(
   input: ServerCreateInput,
 ): Promise<ApiResult<ServerCreateResult>> {
@@ -430,7 +437,6 @@ export async function createServer(
     },
   };
 }
-
 export type OverviewSummary = {
   readonly total: number;
   readonly running: number;
@@ -441,7 +447,6 @@ export type OverviewSummary = {
   readonly sshIdle: number;
   readonly sshLeases: number;
 };
-
 export async function getSteamLatestVersion(): Promise<
   ApiResult<SteamLatestVersion>
 > {
@@ -462,7 +467,6 @@ export async function getSteamLatestVersion(): Promise<
     },
   };
 }
-
 export async function listDiskSpace(
   scope: ServerListScope = "mine",
   forceRefresh = false,
@@ -494,7 +498,6 @@ export async function listDiskSpace(
     })),
   };
 }
-
 function toHostSystemInfo(
   raw: NonNullable<HostSystemInfoListViewDto["servers"]>[number],
 ): HostSystemInfo {
@@ -515,7 +518,6 @@ function toHostSystemInfo(
     collectedAt: raw.collected_at ?? null,
   };
 }
-
 export async function listOverviewHostSystemInfo(
   scope: ServerListScope = "mine",
   forceRefresh = false,
@@ -533,7 +535,6 @@ export async function listOverviewHostSystemInfo(
     data: (result.data.servers ?? []).map(toHostSystemInfo),
   };
 }
-
 function toA2SCache(raw: {
   server_id: number;
   cached: boolean;
@@ -559,7 +560,6 @@ function toA2SCache(raw: {
     responseTimeMs: raw.response_time_ms ?? null,
   };
 }
-
 export async function listA2SCache(
   scope: ServerListScope = "mine",
   forceRefresh = false,
@@ -574,7 +574,6 @@ export async function listA2SCache(
   if (!result.ok) return result;
   return { ok: true, data: result.data.servers.map(toA2SCache) };
 }
-
 export async function getServerA2SCache(
   serverId: number,
   forceRefresh = false,
@@ -971,13 +970,14 @@ export async function applyAptMirror(
 export async function startServerOperation(
   serverId: number,
   action: ServerOperationAction,
+  options?: { readonly clearExecstack?: boolean },
 ): Promise<ApiResult<ServerOperation>> {
   const result = await apiFetch<ServerOperationViewDto>(
     `/api/v1/servers/${serverId}/operations`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ action, ...(action === "restart" ? { clear_execstack: options?.clearExecstack ?? false } : {}) }),
       timeoutMs: 20_000,
     },
   );

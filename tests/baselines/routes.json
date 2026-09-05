@@ -1938,6 +1938,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "POST"
+    ],
+    "name": "probe_server_compatibility",
+    "path": "/api/v1/servers/{server_id}/compatibility"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "PATCH"
     ],
     "name": "update_server",

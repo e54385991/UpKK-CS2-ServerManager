@@ -7,6 +7,7 @@ export const SERVER_WORKSPACE_NAV_ROWS = [
     categories: [
       "overview",
       "operations",
+      "additional-fixes",
       "config",
       "frameworks",
       "game-modes",

@@ -17,6 +17,11 @@ from modules.database import async_session_maker
 from services.ai_security import redact_sensitive_text
 from services.maintenance_lock import maintenance_lock_service
 from services.redis_manager import redis_manager
+from services.server_compatibility import (
+    EXECSTACK_FILE_ACTIONS,
+    execstack_operation_metadata,
+    execstack_targets_metadata,
+)
 from services.server_operation_hub import (
     ACTIVE_STATUSES,
     TERMINAL_EVENT_TYPES,
@@ -120,7 +125,7 @@ async def start_server_operation(
     current_user: ActiveUser,
 ) -> ServerOperationView:
     """Accept a lifecycle action and return immediately with an operation_id."""
-    await require_server_access(db, server_id, current_user)
+    server = await require_server_access(db, server_id, current_user)
 
     current = await server_operation_hub.get_current(server_id)
     current_active = bool(current and current.get("status") in ACTIVE_STATUSES)
@@ -131,14 +136,28 @@ async def start_server_operation(
             await maintenance_lock_service.force_release_server_lock(server_id)
 
     try:
+        clear_execstack = body.clear_execstack if body.action == "restart" else False
+        extra: dict[str, object] | None = None
+        if body.action == "restart":
+            extra = {"clear_execstack": clear_execstack}
+            if clear_execstack:
+                extra.update(execstack_targets_metadata(server))
+        elif body.action in EXECSTACK_FILE_ACTIONS:
+            extra = execstack_operation_metadata(server, body.action)
         record = await enqueue_server_operation(
             server_id=server_id,
             action=body.action,
             actor_user_id=current_user.id,
+            extra=extra,
         )
     except ServerOperationConflict as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     return to_view(record)

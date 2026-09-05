@@ -53,6 +53,19 @@ class Server(SQLModel, table=True):
     # Preferred Ubuntu/Debian apt mirror (official / ustc / tuna). Not SteamCMD.
     apt_mirror: Optional[str] = Field(default=None, max_length=32)
 
+    # Linux compatibility probe and explicit operator override for legacy
+    # plugin ELF metadata. ``None`` means follow the detected OS default.
+    os_id: Optional[str] = Field(default=None, max_length=32)
+    os_version: Optional[str] = Field(default=None, max_length=32)
+    clear_execstack_override: Optional[bool] = Field(default=None)
+    execstack_fix_on_restart: bool = Field(default=True, nullable=False)
+    execstack_fix_on_framework: bool = Field(default=True, nullable=False)
+    execstack_fix_on_game_update: bool = Field(default=True, nullable=False)
+    execstack_fix_targets: List[str] = Field(
+        default_factory=lambda: ["counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so"],
+        sa_column=Column(JSON, nullable=False),
+    )
+
     # Server configuration
     game_port: int = Field(default=27015)
     game_directory: str = Field(default="/home/cs2server/cs2", max_length=500)

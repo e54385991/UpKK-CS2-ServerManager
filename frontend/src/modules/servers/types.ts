@@ -36,6 +36,10 @@ export type ServerSummary = {
   readonly sshHealthFailureThreshold: number;
   readonly sshHealthCheckIntervalHours: number;
   readonly lastSshHealthCheck: string | null;
+  readonly osId: string | null;
+  readonly osVersion: string | null;
+  readonly clearExecstackOverride: boolean | null;
+  readonly clearExecstackEffective: boolean;
 };
 
 export type ServerProxyMode = "panel" | "github_url" | "direct";

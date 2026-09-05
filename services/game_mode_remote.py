@@ -97,6 +97,14 @@ async def inspect_game_mode_state(manager: SSHManager, server: Server) -> dict[s
         "-print -quit 2>/dev/null | grep -q .; then echo mapchooser=1; else echo mapchooser=0; fi; "
         f"if test -f {shlex.quote(paths['maps'])}; then echo maps=1; else echo maps=0; fi; "
         f"if test -f {shlex.quote(paths['config'])}; then echo config=1; else echo config=0; fi"
+        f"; if ldconfig -p 2>/dev/null | grep -q 'libssl.so.1.1' && "
+        "ldconfig -p 2>/dev/null | grep -q 'libcrypto.so.1.1'; "
+        "then echo libssl11=1; else echo libssl11=0; fi; "
+        'if [ "$(dpkg --print-architecture 2>/dev/null || true)" = amd64 ]; then echo amd64=1; else echo amd64=0; fi; '
+        'if . /etc/os-release 2>/dev/null && { [ "$ID" = ubuntu ] || [ "$ID" = debian ]; }; then '
+        "echo supported_system=1; else echo supported_system=0; fi; "
+        'if [ "$(id -u 2>/dev/null || true)" = 0 ] || sudo -n true >/dev/null 2>&1; '
+        "then echo sudo=1; else echo sudo=0; fi"
     )
     success, stdout, stderr = await manager.execute_command(command, timeout=20)
     if not success:

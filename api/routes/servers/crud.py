@@ -9,7 +9,7 @@ from sqlmodel import col
 
 from api.dependencies import ActiveUser, AdminUser, DatabaseSession
 from modules import ServerAgentPolicy
-from services.apt_mirrors import normalize_apt_mirror
+from services.apt_mirrors import OS_RELEASE_COMMAND, normalize_apt_mirror
 from services.audit_log_service import record_audit_event
 from services.captcha_policy import require_captcha
 from services.discord_binding_template_service import inherit_global_discord_binding
@@ -18,6 +18,7 @@ from services.host_initialization import (
     attach_host_initialization,
     ensure_steamcmd_packages,
 )
+from services.server_compatibility import parse_linux_release
 from services.system_dependencies import STEAMCMD_REQUIRED_PACKAGES
 
 from .common import *
@@ -92,6 +93,16 @@ async def _validate_server_connection(server_data: ServerCreate):
         )
         if not host_init.architecture_supported:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=host_init.message)
+        try:
+            release_result = await conn.run(OS_RELEASE_COMMAND, check=False)
+            release = parse_linux_release(getattr(release_result, "stdout", "") or "")
+            if release is not None:
+                object.__setattr__(host_init, "os_id", release.os_id)
+                object.__setattr__(host_init, "os_version", release.version_id)
+        except Exception:
+            # Package initialization remains valid when an old/mock host does
+            # not expose the optional release probe.
+            pass
         return host_init
     except HTTPException:
         raise
@@ -191,6 +202,9 @@ async def create_server_record(
         server_dict["apt_mirror"] = host_init.apt_mirror
     elif getattr(server_data, "apt_mirror", None):
         server_dict["apt_mirror"] = normalize_apt_mirror(server_data.apt_mirror)
+    if host_init is not None:
+        server_dict["os_id"] = getattr(host_init, "os_id", None)
+        server_dict["os_version"] = getattr(host_init, "os_version", None)
     server = Server(**server_dict, user_id=current_user.id, api_key=generate_api_key())
     db.add(server)
     await db.flush()

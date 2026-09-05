@@ -9,10 +9,12 @@ from modules.server_startup import (
     normalize_game_mode,
     normalize_game_type,
 )
+from services.server_compatibility import DEFAULT_EXECSTACK_TARGETS, normalize_execstack_targets
 
 from .auth import UserResponse
 from .common import *
 from .common import _unique_server_ids, _validate_custom_command_text
+from .server_update import ServerUpdate  # noqa: F401
 
 _APT_MIRROR_ALIASES = {
     "official": "official",
@@ -236,6 +238,18 @@ class ServerConfigEntry(ServerCreate):
 
     auth_type: AuthType = AuthType.PASSWORD
     ssh_key_path: Optional[str] = Field(None, max_length=500)
+    clear_execstack_override: Optional[bool] = None
+    execstack_fix_on_restart: bool = True
+    execstack_fix_on_framework: bool = True
+    execstack_fix_on_game_update: bool = True
+    execstack_fix_targets: List[str] = Field(
+        default_factory=lambda: list(DEFAULT_EXECSTACK_TARGETS)
+    )
+
+    @field_validator("execstack_fix_targets")
+    @classmethod
+    def validate_execstack_targets(cls, values):
+        return list(normalize_execstack_targets(values))
 
     map_pool_sync_url: Optional[str] = Field(None, max_length=4096)
     cleanup_auto_enabled: bool = False
@@ -252,12 +266,10 @@ class ServerConfigEntry(ServerCreate):
     discord_notify_s3_backups: bool = True
     discord_notify_crash_restarts: bool = True
     discord_crash_restart_min_interval_minutes: int = Field(default=10, ge=1, le=1440)
-
     # SSH health monitoring configuration
     enable_ssh_health_monitoring: bool = True
     ssh_health_check_interval_hours: int = Field(default=2, ge=1, le=168)
     ssh_health_failure_threshold: int = Field(default=84, ge=1, le=10000)
-
     redacted_fields: List[str] = Field(default_factory=list, max_length=20)
 
     @field_validator("redacted_fields")
@@ -312,187 +324,6 @@ class ServerConfigImportResponse(SQLModel):
     skipped: int
     failed: int
     results: List[ServerConfigImportResult]
-
-
-class ServerUpdate(SQLModel):
-    """Schema for updating a server (password authentication only)"""
-
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    host: Optional[str] = Field(None, min_length=1, max_length=255)
-    ssh_port: Optional[int] = Field(None, ge=1, le=65535)
-    ssh_user: Optional[str] = Field(None, min_length=1, max_length=100)
-    ssh_password: Optional[str] = None
-    sudo_password: Optional[str] = None
-    apt_mirror: Optional[str] = Field(
-        None,
-        max_length=32,
-        description="Preferred apt mirror: official, ustc, or tuna/tsinghua",
-    )
-    game_port: Optional[int] = Field(None, ge=1, le=65535)
-    game_directory: Optional[str] = None
-    description: Optional[str] = None
-
-    # LGSM-style server configuration
-    server_name: Optional[str] = Field(None, max_length=255)
-    server_password: Optional[str] = None
-    rcon_password: Optional[str] = None
-    steam_account_token: Optional[str] = Field(
-        None, max_length=255, description="Steam game server login token (GSLT)"
-    )
-    default_map: Optional[str] = Field(None, max_length=100)
-    max_players: Optional[int] = Field(None, ge=1, le=64)
-    game_mode: Optional[str] = Field(None, max_length=50)
-    game_type: Optional[str] = Field(None, max_length=50)
-
-    # Advanced parameters
-    additional_parameters: Optional[str] = None
-    ip_address: Optional[str] = None
-    client_port: Optional[int] = Field(None, ge=1, le=65535)
-    tv_port: Optional[int] = Field(None, ge=1, le=65535)
-    tv_enable: Optional[bool] = None
-
-    # Server-to-backend communication
-    backend_url: Optional[str] = Field(
-        None, max_length=500, description="Backend URL for status reporting (optional)"
-    )
-
-    # Auto-cleanup configuration
-    auto_clear_crash_hours: Optional[int] = Field(
-        None,
-        ge=0,
-        description="Hours offline before auto-clearing crash history (0 or None = disabled)",
-    )
-
-    # Web-based monitoring configuration
-    enable_panel_monitoring: Optional[bool] = Field(
-        None, description="Enable web panel monitoring and auto-restart"
-    )
-    monitor_interval_seconds: Optional[int] = Field(
-        None, ge=10, le=3600, description="How often to check server status in seconds"
-    )
-    auto_restart_on_crash: Optional[bool] = Field(
-        None, description="Auto-restart if process not found"
-    )
-
-    # A2S query configuration
-    a2s_query_host: Optional[str] = Field(
-        None, max_length=255, description="A2S query host (defaults to server host if not set)"
-    )
-    a2s_query_port: Optional[int] = Field(
-        None, ge=1, le=65535, description="A2S query port (defaults to game port if not set)"
-    )
-    enable_a2s_monitoring: Optional[bool] = Field(None, description="Enable A2S query monitoring")
-    a2s_failure_threshold: Optional[int] = Field(
-        None, ge=1, le=10, description="Number of consecutive A2S failures before restart"
-    )
-    a2s_check_interval_seconds: Optional[int] = Field(
-        None, ge=15, le=3600, description="A2S check interval in seconds (15-3600)"
-    )
-
-    # Auto-update configuration
-    current_game_version: Optional[str] = Field(
-        None, max_length=50, description="Current installed CS2 version"
-    )
-    enable_auto_update: Optional[bool] = Field(
-        None, description="Enable automatic updates based on Steam API version check"
-    )
-    update_check_interval_hours: Optional[float] = Field(
-        None,
-        ge=0.0167,
-        le=24.0,
-        description="Hours between version checks (0.0167-24, where 0.0167≈1 minute)",
-    )
-    enable_plugin_auto_update: Optional[bool] = None
-    plugin_update_check_interval_hours: Optional[float] = Field(None, ge=0.0167, le=24.0)
-
-    # CPU affinity configuration
-    cpu_affinity: Optional[str] = Field(
-        None,
-        max_length=500,
-        description="Comma-separated list of CPU cores (e.g., '0,1,2,3' or '0-3,8-11')",
-    )
-
-    # Detached console session manager
-    # A default of None makes the PATCH-style field omittable, while the
-    # non-optional annotation rejects an explicitly supplied JSON null.
-    session_manager: Literal["screen", "tmux"] = Field(
-        default=None,
-        description="Terminal multiplexer used to run and control the CS2 process",
-    )
-
-    # GitHub proxy configuration
-    github_proxy: Optional[str] = Field(
-        None,
-        max_length=500,
-        description="GitHub proxy URL (e.g., https://ghfast.top/https://github.com)",
-    )
-
-    # Panel proxy mode (mutually exclusive with github_proxy)
-    use_panel_proxy: Optional[bool] = Field(
-        None,
-        description="Use panel server as proxy for all downloads (SteamCMD, GitHub). Mutually exclusive with github_proxy.",
-    )
-
-    @field_validator("cpu_affinity")
-    @classmethod
-    def validate_cpu_affinity(cls, v):
-        """Validate CPU affinity format to prevent command injection"""
-        if v is None or v.strip() == "":
-            return v
-        # Only allow digits, commas, and hyphens
-        if not re.match(r"^[\d,\-\s]+$", v):
-            raise ValueError("CPU affinity must only contain digits, commas, and hyphens")
-        return v.strip()
-
-    @field_validator("default_map")
-    @classmethod
-    def validate_default_map(cls, v):
-        return normalize_default_map(v) if v is not None else None
-
-    @field_validator("game_mode")
-    @classmethod
-    def validate_game_mode(cls, v):
-        return normalize_game_mode(v) if v is not None else None
-
-    @field_validator("game_type")
-    @classmethod
-    def validate_game_type(cls, v):
-        return normalize_game_type(v) if v is not None else None
-
-    @field_validator("additional_parameters")
-    @classmethod
-    def validate_additional_parameters(cls, v):
-        return normalize_additional_parameters(v)
-
-    @field_validator("steam_account_token")
-    @classmethod
-    def validate_steam_account_token(cls, v):
-        """Validate Steam account token format to prevent command injection"""
-        if v is None:
-            return None
-        v = v.strip()
-        if not v:
-            return None
-        # Steam GSLT tokens are alphanumeric with no special characters that could cause shell injection
-        if not re.match(r"^[A-Za-z0-9]+$", v):
-            raise ValueError("Steam account token must only contain alphanumeric characters")
-        return v
-
-    @field_validator("apt_mirror")
-    @classmethod
-    def validate_apt_mirror(cls, v):
-        if v is None or (isinstance(v, str) and not v.strip()):
-            return None
-        return _normalize_apt_mirror_field(v)
-
-    @model_validator(mode="after")
-    def validate_proxy_mutual_exclusivity(self):
-        """Ensure github_proxy and use_panel_proxy are mutually exclusive"""
-        if self.github_proxy and self.use_panel_proxy:
-            raise ValueError(
-                "github_proxy and use_panel_proxy are mutually exclusive. Please choose only one."
-            )
-        return self
 
 
 class ServerResponse(SQLModel):

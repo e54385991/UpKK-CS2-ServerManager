@@ -22,6 +22,7 @@ import {
   CircleHelp,
   SquareTerminal,
   Zap,
+  Wrench,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -36,6 +37,7 @@ import { cn } from "@/shared/lib/cn";
 const CATEGORY_ICONS: Record<ServerWorkspaceCategory, LucideIcon> = {
   overview: Info,
   operations: Zap,
+  "additional-fixes": Wrench,
   frameworks: Layers,
   "game-modes": Gamepad2,
   backups: Cloud,

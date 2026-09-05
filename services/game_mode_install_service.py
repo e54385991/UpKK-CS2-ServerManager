@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
@@ -25,6 +26,9 @@ from services.game_mode_planning import (
     catalog_for_server as _catalog_for_server,
 )
 from services.game_mode_recipes import (
+    KZ_LIBSSL_DEB,
+    KZ_LIBSSL_SHA256,
+    KZ_LIBSSL_URL,
     GameModeRecipe,
     UnknownGameModeError,
     get_recipe,
@@ -73,6 +77,51 @@ __all__ = [
 async def catalog_for_server(db: AsyncSession, server: Server) -> dict[str, Any]:
     """Compatibility wrapper that keeps monkeypatchable module-level finder."""
     return await _catalog_for_server(db, server, plugin_finder=find_market_plugin_by_title)
+
+
+def _append_kz_dependency_step(
+    mode_id: str,
+    state: dict[str, bool],
+    steps: list[dict[str, Any]],
+    mutations: list[dict[str, Any]],
+) -> None:
+    if mode_id != "kz":
+        return
+    libssl_present = bool(state.get("libssl11"))
+    steps.append(
+        {
+            "id": "install_libssl11",
+            "action": "install_system_dependency",
+            "name": KZ_LIBSSL_DEB,
+            "status": "already_present" if libssl_present else "pending",
+            "title": KZ_LIBSSL_URL,
+            "architecture": "amd64",
+            "sha256": KZ_LIBSSL_SHA256,
+        }
+    )
+    mutations.append(
+        {
+            "id": "install_libssl11",
+            "target": "libssl.so.1.1 / libcrypto.so.1.1",
+            "before": "installed" if libssl_present else "missing",
+            "after": "installed",
+            "destructive": False,
+            "status": "already_present" if libssl_present else "pending",
+        }
+    )
+
+
+def _kz_blocking_reasons(mode_id: str, state: dict[str, bool], server: Server) -> list[str]:
+    if mode_id != "kz":
+        return []
+    reasons: list[str] = []
+    if state.get("supported_system") is False:
+        reasons.append("KZ quick install supports Ubuntu or Debian hosts only")
+    if state.get("amd64") is False:
+        reasons.append("KZ quick install requires an amd64 host")
+    if state.get("sudo") is False and not getattr(server, "sudo_password", None):
+        reasons.append("KZ libssl1.1 installation requires root or sudo access")
+    return reasons
 
 
 async def build_game_mode_plan(
@@ -134,7 +183,6 @@ async def build_game_mode_plan(
         plugin_plans[title] = plan
         hard_conflicts.extend(plan.get("hard_conflicts") or [])
         warnings.extend(plan.get("warnings") or [])
-
     steps: list[dict[str, Any]] = []
     mutations: list[dict[str, Any]] = []
 
@@ -158,6 +206,7 @@ async def build_game_mode_plan(
                 "status": "pending",
             }
         )
+    _append_kz_dependency_step(mode_id, state, steps, mutations)
 
     steps.append(
         {
@@ -176,7 +225,6 @@ async def build_game_mode_plan(
             "status": "pending" if launch_changed else "unchanged",
         }
     )
-
     need_css = treat_as_missing or not state.get("css")
     if "counterstrikesharp" in recipe.frameworks:
         steps.append(
@@ -197,7 +245,6 @@ async def build_game_mode_plan(
                 "status": "pending" if need_css else "already_present",
             }
         )
-
     title_presence = {
         "cs2kz-metamod": bool(state.get("cs2kz")),
         "CS2-Upkk-PanelPLG-Mapchooser": bool(state.get("mapchooser")),
@@ -224,7 +271,6 @@ async def build_game_mode_plan(
                 "status": "pending" if not present else "already_present",
             }
         )
-
     need_restart = _market_restart_required(
         recipe.market_plugin_titles,
         title_presence,
@@ -252,7 +298,6 @@ async def build_game_mode_plan(
             "status": "pending" if need_restart else "unchanged",
         }
     )
-
     config_patch = _config_needs_patch(config_content, recipe.plugin_config) or treat_as_missing
     steps.append(
         {
@@ -274,7 +319,6 @@ async def build_game_mode_plan(
             "status": "pending" if config_patch else "unchanged",
         }
     )
-
     for item in recipe.maps_append:
         already = (not treat_as_missing) and _map_already_present(
             maps_content, item.workshop_id, item.name
@@ -298,8 +342,7 @@ async def build_game_mode_plan(
                 "status": "already_present" if already else "pending",
             }
         )
-
-    blocking_reasons: list[str] = []
+    blocking_reasons = _kz_blocking_reasons(mode_id, state, server)
     if missing_titles:
         blocking_reasons.append("Missing from the plugin market: " + ", ".join(missing_titles))
     if hard_conflicts:
@@ -309,7 +352,6 @@ async def build_game_mode_plan(
             "SwiftlyS2 is installed and conflicts with CounterStrikeSharp. "
             "Enable a clean addons wipe or remove SwiftlyS2 first."
         )
-
     plan: dict[str, Any] = {
         "server_id": server.id,
         "mode_id": recipe.id,
@@ -386,11 +428,7 @@ async def execute_game_mode_plan(  # noqa: C901
         elif current_step == step_id:
             current_step = None
         await _emit_plan_progress(
-            progress,
-            message,
-            step_id=step_id,
-            step_status=step_status,
-            metadata=metadata,
+            progress, message, step_id=step_id, step_status=step_status, metadata=metadata
         )
 
     async with maintenance_lock_service.get(
@@ -415,9 +453,46 @@ async def execute_game_mode_plan(  # noqa: C901
                 "Missing warning acknowledgement(s): "
                 + ", ".join(map(str, sorted(required - acknowledged)))
             )
-
         recipe: GameModeRecipe = get_recipe(mode_id)
         try:
+            if mode_id == "kz" and not plan["current"].get("libssl11"):
+                await report(
+                    "install_libssl11",
+                    "running",
+                    f"Installing {KZ_LIBSSL_DEB} for KZ plugin compatibility",
+                )
+                await db.commit()
+                manager = await connect(current_server)
+                temporary_dir = f"/tmp/upkk-kz-libssl-{uuid.uuid4().hex}"
+                temporary = f"{temporary_dir}/{KZ_LIBSSL_DEB}"
+                try:
+                    command = (
+                        f"set -eu; mkdir -p {temporary_dir!r}; command -v dpkg >/dev/null; "
+                        f"command -v dpkg-deb >/dev/null; command -v sha256sum >/dev/null; "
+                        f"command -v curl >/dev/null; curl -fsSL --retry 3 {KZ_LIBSSL_URL!r} -o {temporary!r}; "
+                        f"echo '{KZ_LIBSSL_SHA256}  {temporary}' | sha256sum -c -; "
+                        f'test "$(dpkg-deb -f {temporary!r} Package)" = libssl1.1; '
+                        f'test "$(dpkg-deb -f {temporary!r} Architecture)" = amd64; '
+                        f"dpkg -i {temporary!r}"
+                    )
+                    ok, stdout, stderr = await manager.execute_sudo_command(
+                        command,
+                        getattr(current_server, "sudo_password", None),
+                        timeout=300,
+                    )
+                    if not ok:
+                        raise GameModePlanError(
+                            (stderr or stdout or "libssl1.1 installation failed")[-800:]
+                        )
+                finally:
+                    await manager.execute_sudo_command(
+                        f"rm -rf {temporary_dir!r}",
+                        getattr(current_server, "sudo_password", None),
+                        timeout=20,
+                    )
+                    await manager.disconnect()
+                completed.append({"action": "install_libssl11", "success": True})
+                await report("install_libssl11", "completed", "Installed and verified libssl1.1")
             if wipe_addons:
                 await report("wipe_addons", "running", f"Wiping {plan['addons_path']}")
                 restart_manager = SSHManager()
@@ -443,13 +518,11 @@ async def execute_game_mode_plan(  # noqa: C901
                 )
                 if current_server is None:
                     raise GameModePlanError("Server disappeared after addons wipe")
-
             if plan["startup"]["changed"]:
                 await report("startup", "running", "Updating launch parameters")
                 await _save_launch_args(db, current_server, plan["startup"]["after"])
                 completed.append({"action": "upsert_launch_args", "success": True})
                 await report("startup", "completed", "Launch parameters saved")
-
             need_css = wipe_addons or not plan["current"].get("css")
             if need_css and "counterstrikesharp" in recipe.frameworks:
 
@@ -482,7 +555,6 @@ async def execute_game_mode_plan(  # noqa: C901
                     "completed",
                     "Installed CounterStrikeSharp",
                 )
-
             for title in recipe.market_plugin_titles:
                 plugin_plan = plan["plugin_plans"].get(title)
                 if plugin_plan is None:
@@ -531,7 +603,6 @@ async def execute_game_mode_plan(  # noqa: C901
                         str(result.get("message") or f"Failed to install {title}")
                     )
                 await report(f"install:{title}", "completed", f"Installed {title}")
-
             restart_step = next(item for item in plan["steps"] if item["id"] == "restart_and_wait")
             if restart_step["status"] == "pending" or wipe_addons:
                 await report(

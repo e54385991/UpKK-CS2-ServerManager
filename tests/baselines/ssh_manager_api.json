@@ -33,11 +33,11 @@
   "update_counterstrikesharp": "(self, server: modules.models.Server, progress_callback=None) -> Tuple[bool, str]",
   "update_cs2fixes": "(self, server: modules.models.Server, progress_callback=None) -> Tuple[bool, str]",
   "update_metamod": "(self, server: modules.models.Server, progress_callback=None) -> Tuple[bool, str]",
-  "update_server": "(self, server: modules.models.Server, progress_callback=None) -> Tuple[bool, str]",
+  "update_server": "(self, server: modules.models.Server, progress_callback=None, *, clear_execstack: bool = False, clear_execstack_targets=None) -> Tuple[bool, str]",
   "update_swiftly": "(self, server: modules.models.Server, progress_callback=None) -> Tuple[bool, str]",
   "upload_file": "(self, local_path: str, remote_path: str, server: modules.models.Server) -> Tuple[bool, str]",
   "upload_file_with_progress": "(self, local_path: str, remote_path: str, server: modules.models.Server, progress_callback=None) -> Tuple[bool, str]",
   "validate_path_within_base": "(self, base_path: str, target_path: str, server: modules.models.Server, allow_missing: bool = False, require_regular: bool = False) -> Tuple[bool, str]",
-  "validate_server": "(self, server: modules.models.Server, progress_callback=None) -> Tuple[bool, str]",
+  "validate_server": "(self, server: modules.models.Server, progress_callback=None, *, clear_execstack: bool = False, clear_execstack_targets=None) -> Tuple[bool, str]",
   "write_file": "(self, file_path: str, content: str, server: modules.models.Server) -> Tuple[bool, str]"
 }

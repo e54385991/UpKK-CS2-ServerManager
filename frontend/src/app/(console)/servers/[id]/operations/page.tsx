@@ -43,6 +43,13 @@ export default async function ServerOperationsPage({
         serverId={result.data.id}
         serverStatus={result.data.status}
         aptMirror={result.data.aptMirror}
+        gameDirectory={result.data.gameDirectory}
+        clearExecstackEffective={result.data.clearExecstackEffective}
+        clearExecstackOverride={result.data.clearExecstackOverride}
+        execstackFixOnRestart={result.data.execstackFixOnRestart}
+        execstackFixTargets={result.data.execstackFixTargets}
+        osId={result.data.osId}
+        osVersion={result.data.osVersion}
       />
     </Suspense>
   );

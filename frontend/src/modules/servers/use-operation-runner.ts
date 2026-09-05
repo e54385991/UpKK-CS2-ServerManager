@@ -216,7 +216,10 @@ export function useOperationRunner({
     };
   }, [lock.lockActive, operationId, serverId, status]);
 
-  async function runAction(action: ServerOperationAction) {
+  async function runAction(
+    action: ServerOperationAction,
+    options?: { readonly clearExecstack?: boolean },
+  ) {
     if (running) return;
     if (
       requiresOperationConfirmation(action) &&
@@ -227,7 +230,7 @@ export function useOperationRunner({
     setError(null);
     setStreamFailed(false);
     setBusyAction(action);
-    const result = await startServerOperationFromBrowser(serverId, action);
+    const result = await startServerOperationFromBrowser(serverId, action, options);
     setBusyAction(null);
     if (!result.ok) {
       setError(result.error);

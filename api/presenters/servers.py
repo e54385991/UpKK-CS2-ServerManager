@@ -6,6 +6,7 @@ from typing import Literal, TypedDict
 
 from api.contracts.v1.server import ServerDetail, ServerSummary
 from modules import Server, User
+from services.server_compatibility import DEFAULT_EXECSTACK_TARGETS, effective_clear_execstack
 from services.ssh_connection_pool import ssh_connection_pool
 
 
@@ -27,6 +28,9 @@ def _server_id(server: Server) -> int:
 
 def to_summary(server: Server, owner: User | None = None) -> ServerSummary:
     """Map a server ORM object to a non-secret list projection."""
+    os_id = getattr(server, "os_id", None) or None
+    os_version = getattr(server, "os_version", None) or None
+    override = getattr(server, "clear_execstack_override", None)
     return ServerSummary(
         id=_server_id(server),
         name=server.name,
@@ -50,6 +54,10 @@ def to_summary(server: Server, owner: User | None = None) -> ServerSummary:
             getattr(server, "ssh_health_check_interval_hours", 2) or 2
         ),
         last_ssh_health_check=getattr(server, "last_ssh_health_check", None),
+        os_id=os_id,
+        os_version=os_version,
+        clear_execstack_override=override,
+        clear_execstack_effective=effective_clear_execstack(server),
     )
 
 
@@ -88,6 +96,11 @@ async def to_detail(server: Server) -> ServerDetail:
     if created_at is None or updated_at is None:
         raise ValueError("Cannot present a server without timestamps")
     pool = await _ssh_pool_fields(server)
+    os_id = getattr(server, "os_id", None) or None
+    os_version = getattr(server, "os_version", None) or None
+    override = getattr(server, "clear_execstack_override", None)
+    raw_targets = getattr(server, "execstack_fix_targets", None)
+    targets: list[str] = [str(value) for value in (raw_targets or DEFAULT_EXECSTACK_TARGETS)]
     return ServerDetail(
         id=_server_id(server),
         name=server.name,
@@ -131,6 +144,14 @@ async def to_detail(server: Server) -> ServerDetail:
         has_sudo_password=bool(getattr(server, "sudo_password", None)),
         use_panel_proxy=bool(getattr(server, "use_panel_proxy", False)),
         github_proxy=getattr(server, "github_proxy", None) or None,
+        os_id=os_id,
+        os_version=os_version,
+        clear_execstack_override=override,
+        clear_execstack_effective=effective_clear_execstack(server),
+        execstack_fix_on_restart=bool(getattr(server, "execstack_fix_on_restart", True)),
+        execstack_fix_on_framework=bool(getattr(server, "execstack_fix_on_framework", True)),
+        execstack_fix_on_game_update=bool(getattr(server, "execstack_fix_on_game_update", True)),
+        execstack_fix_targets=targets,
         **pool,
     )
 

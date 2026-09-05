@@ -3398,6 +3398,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servers/{server_id}/compatibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe Server Compatibility
+         * @description Refresh Linux release metadata used by the plugin compatibility default.
+         */
+        post: operations["probe_server_compatibility_api_v1_servers__server_id__compatibility_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/servers/{server_id}/confirm-deployment": {
         parameters: {
             query?: never;
@@ -13660,6 +13680,8 @@ export interface components {
             cleanup_retain_days: number;
             /** Cleanup Targets */
             cleanup_targets?: string[];
+            /** Clear Execstack Override */
+            clear_execstack_override?: boolean | null;
             /** Client Port */
             client_port?: number | null;
             /**
@@ -13746,6 +13768,23 @@ export interface components {
              * @default true
              */
             enable_ssh_health_monitoring: boolean;
+            /**
+             * Execstack Fix On Framework
+             * @default true
+             */
+            execstack_fix_on_framework: boolean;
+            /**
+             * Execstack Fix On Game Update
+             * @default true
+             */
+            execstack_fix_on_game_update: boolean;
+            /**
+             * Execstack Fix On Restart
+             * @default true
+             */
+            execstack_fix_on_restart: boolean;
+            /** Execstack Fix Targets */
+            execstack_fix_targets?: string[];
             /**
              * Game Directory
              * @default /home/cs2server/cs2
@@ -14239,6 +14278,13 @@ export interface components {
              */
             auto_restart_on_crash: boolean;
             /**
+             * Clear Execstack Effective
+             * @default false
+             */
+            clear_execstack_effective: boolean;
+            /** Clear Execstack Override */
+            clear_execstack_override?: boolean | null;
+            /**
              * Consecutive Ssh Failures
              * @default 0
              */
@@ -14267,6 +14313,23 @@ export interface components {
              * @default false
              */
             enable_panel_monitoring: boolean;
+            /**
+             * Execstack Fix On Framework
+             * @default true
+             */
+            execstack_fix_on_framework: boolean;
+            /**
+             * Execstack Fix On Game Update
+             * @default true
+             */
+            execstack_fix_on_game_update: boolean;
+            /**
+             * Execstack Fix On Restart
+             * @default true
+             */
+            execstack_fix_on_restart: boolean;
+            /** Execstack Fix Targets */
+            execstack_fix_targets?: string[];
             /** Game Directory */
             game_directory: string;
             /** Game Mode */
@@ -14320,6 +14383,10 @@ export interface components {
             monitor_interval_seconds: number;
             /** Name */
             name: string;
+            /** Os Id */
+            os_id?: string | null;
+            /** Os Version */
+            os_version?: string | null;
             /** Owner Id */
             owner_id?: number | null;
             /** Owner Is Admin */
@@ -14416,6 +14483,13 @@ export interface components {
              */
             auto_restart_on_crash: boolean;
             /**
+             * Clear Execstack Effective
+             * @default false
+             */
+            clear_execstack_effective: boolean;
+            /** Clear Execstack Override */
+            clear_execstack_override?: boolean | null;
+            /**
              * Consecutive Ssh Failures
              * @default 0
              */
@@ -14444,6 +14518,23 @@ export interface components {
              * @default false
              */
             enable_panel_monitoring: boolean;
+            /**
+             * Execstack Fix On Framework
+             * @default true
+             */
+            execstack_fix_on_framework: boolean;
+            /**
+             * Execstack Fix On Game Update
+             * @default true
+             */
+            execstack_fix_on_game_update: boolean;
+            /**
+             * Execstack Fix On Restart
+             * @default true
+             */
+            execstack_fix_on_restart: boolean;
+            /** Execstack Fix Targets */
+            execstack_fix_targets?: string[];
             /** Game Directory */
             game_directory: string;
             /** Game Mode */
@@ -14483,6 +14574,10 @@ export interface components {
             monitor_interval_seconds: number;
             /** Name */
             name: string;
+            /** Os Id */
+            os_id?: string | null;
+            /** Os Version */
+            os_version?: string | null;
             /** Owner Id */
             owner_id?: number | null;
             /** Owner Is Admin */
@@ -14560,6 +14655,11 @@ export interface components {
              * @enum {string}
              */
             action: "deploy" | "start" | "stop" | "restart" | "status" | "update" | "validate" | "install_metamod" | "install_counterstrikesharp" | "install_cs2fixes" | "install_swiftly" | "update_metamod" | "update_counterstrikesharp" | "update_cs2fixes" | "update_swiftly" | "backup_plugins";
+            /**
+             * Clear Execstack
+             * @default false
+             */
+            clear_execstack: boolean;
         };
         /**
          * ServerOperationView
@@ -14951,6 +15051,13 @@ export interface components {
          */
         ServerSummary: {
             /**
+             * Clear Execstack Effective
+             * @default false
+             */
+            clear_execstack_effective: boolean;
+            /** Clear Execstack Override */
+            clear_execstack_override?: boolean | null;
+            /**
              * Consecutive Ssh Failures
              * @default 0
              */
@@ -14978,6 +15085,10 @@ export interface components {
             max_players: number;
             /** Name */
             name: string;
+            /** Os Id */
+            os_id?: string | null;
+            /** Os Version */
+            os_version?: string | null;
             /** Owner Id */
             owner_id?: number | null;
             /** Owner Is Admin */
@@ -15055,6 +15166,8 @@ export interface components {
              * @description Backend URL for status reporting (optional)
              */
             backend_url?: string | null;
+            /** Clear Execstack Override */
+            clear_execstack_override?: boolean | null;
             /** Client Port */
             client_port?: number | null;
             /**
@@ -15088,6 +15201,14 @@ export interface components {
             enable_panel_monitoring?: boolean | null;
             /** Enable Plugin Auto Update */
             enable_plugin_auto_update?: boolean | null;
+            /** Execstack Fix On Framework */
+            execstack_fix_on_framework?: boolean | null;
+            /** Execstack Fix On Game Update */
+            execstack_fix_on_game_update?: boolean | null;
+            /** Execstack Fix On Restart */
+            execstack_fix_on_restart?: boolean | null;
+            /** Execstack Fix Targets */
+            execstack_fix_targets?: string[] | null;
             /** Game Directory */
             game_directory?: string | null;
             /** Game Mode */
@@ -15125,9 +15246,8 @@ export interface components {
             /**
              * Session Manager
              * @description Terminal multiplexer used to run and control the CS2 process
-             * @enum {string}
              */
-            session_manager?: "screen" | "tmux";
+            session_manager?: ("screen" | "tmux") | null;
             /** Ssh Password */
             ssh_password?: string | null;
             /** Ssh Port */
@@ -15175,6 +15295,8 @@ export interface components {
             apt_mirror?: string | null;
             /** Auto Restart On Crash */
             auto_restart_on_crash?: boolean | null;
+            /** Clear Execstack Override */
+            clear_execstack_override?: boolean | null;
             /** Default Map */
             default_map?: string | null;
             /** Description */
@@ -15185,6 +15307,14 @@ export interface components {
             enable_auto_update?: boolean | null;
             /** Enable Panel Monitoring */
             enable_panel_monitoring?: boolean | null;
+            /** Execstack Fix On Framework */
+            execstack_fix_on_framework?: boolean | null;
+            /** Execstack Fix On Game Update */
+            execstack_fix_on_game_update?: boolean | null;
+            /** Execstack Fix On Restart */
+            execstack_fix_on_restart?: boolean | null;
+            /** Execstack Fix Targets */
+            execstack_fix_targets?: string[] | null;
             /** Game Directory */
             game_directory?: string | null;
             /** Game Mode */
@@ -15253,6 +15383,13 @@ export interface components {
              */
             auto_restart_on_crash: boolean;
             /**
+             * Clear Execstack Effective
+             * @default false
+             */
+            clear_execstack_effective: boolean;
+            /** Clear Execstack Override */
+            clear_execstack_override?: boolean | null;
+            /**
              * Consecutive Ssh Failures
              * @default 0
              */
@@ -15281,6 +15418,23 @@ export interface components {
              * @default false
              */
             enable_panel_monitoring: boolean;
+            /**
+             * Execstack Fix On Framework
+             * @default true
+             */
+            execstack_fix_on_framework: boolean;
+            /**
+             * Execstack Fix On Game Update
+             * @default true
+             */
+            execstack_fix_on_game_update: boolean;
+            /**
+             * Execstack Fix On Restart
+             * @default true
+             */
+            execstack_fix_on_restart: boolean;
+            /** Execstack Fix Targets */
+            execstack_fix_targets?: string[];
             /** Game Directory */
             game_directory: string;
             /** Game Mode */
@@ -15320,6 +15474,10 @@ export interface components {
             monitor_interval_seconds: number;
             /** Name */
             name: string;
+            /** Os Id */
+            os_id?: string | null;
+            /** Os Version */
+            os_version?: string | null;
             /** Owner Id */
             owner_id?: number | null;
             /** Owner Is Admin */
@@ -22179,6 +22337,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerCloneTemplate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_server_compatibility_api_v1_servers__server_id__compatibility_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerWriteResult"];
                 };
             };
             /** @description Validation Error */

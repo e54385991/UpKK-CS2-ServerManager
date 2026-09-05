@@ -56,7 +56,31 @@ class GameUpdateMixin(SSHMixinBase):
         await send_progress("✓ Server restarted successfully after update")
         return True, "Server updated and restored to running state successfully"
 
-    async def update_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
+    async def _clear_execstack_before_update(
+        self, server: Server, send_progress, enabled: bool, targets=None
+    ) -> None:
+        """Clear legacy plugin ELF flags while the game is known to be stopped."""
+        if not enabled:
+            return
+        from services.server_compatibility import execute_clear_execstack_on_manager
+
+        await send_progress(
+            "Clearing executable-stack flags from configured plugin targets before update..."
+        )
+        fixed, detail = await execute_clear_execstack_on_manager(self, server, targets)
+        if fixed:
+            await send_progress(f"✓ Plugin execstack cleanup completed: {detail}")
+        else:
+            await send_progress(f"⚠ Plugin execstack cleanup failed; continuing update: {detail}")
+
+    async def update_server(
+        self,
+        server: Server,
+        progress_callback=None,
+        *,
+        clear_execstack: bool = False,
+        clear_execstack_targets=None,
+    ) -> Tuple[bool, str]:
         """Update CS2 server using SteamCMD (without validation)"""
         success, msg = await self.connect(server)
         if not success:
@@ -78,6 +102,10 @@ class GameUpdateMixin(SSHMixinBase):
             )
             if preparation_error:
                 return False, preparation_error
+
+            await self._clear_execstack_before_update(
+                server, send_progress, clear_execstack, clear_execstack_targets
+            )
 
             # Kill any stray CS2 processes left outside the managed session.
             await self._kill_stray_cs2_processes(server, progress_callback)
@@ -163,7 +191,14 @@ class GameUpdateMixin(SSHMixinBase):
         finally:
             await self.disconnect()
 
-    async def validate_server(self, server: Server, progress_callback=None) -> Tuple[bool, str]:
+    async def validate_server(
+        self,
+        server: Server,
+        progress_callback=None,
+        *,
+        clear_execstack: bool = False,
+        clear_execstack_targets=None,
+    ) -> Tuple[bool, str]:
         """Update and validate CS2 server files using SteamCMD"""
         success, msg = await self.connect(server)
         if not success:
@@ -211,6 +246,10 @@ class GameUpdateMixin(SSHMixinBase):
                         "screen/tmux session could not be stopped"
                     )
                 await send_progress("✓ Server stopped successfully")
+
+            await self._clear_execstack_before_update(
+                server, send_progress, clear_execstack, clear_execstack_targets
+            )
 
             # Kill any stray CS2 processes left outside the managed session.
             await self._kill_stray_cs2_processes(server, progress_callback)

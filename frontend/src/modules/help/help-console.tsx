@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Check, Clipboard, ExternalLink } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import { copyText } from "@/shared/lib/clipboard";
 import {
   Card,
   CardContent,
@@ -17,23 +18,41 @@ const DOCS_URL = "https://github.com/e54385991/UpKK-CS2-ServerManager";
 const LIBSSL_DEB = "libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb";
 const LIBSSL_URL = `https://security.ubuntu.com/ubuntu/pool/main/o/openssl/${LIBSSL_DEB}`;
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 function CopyCommand({ text }: { text: string }) {
   const t = useTranslations("serverHelp");
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const preRef = useRef<HTMLPreElement>(null);
 
   async function onCopy() {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
+      const ok = await copyText(text);
+      setCopied(ok);
+      setFailed(!ok);
+      if (!ok && preRef.current) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(preRef.current);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+      window.setTimeout(() => {
+        setCopied(false);
+        setFailed(false);
+      }, 2200);
     } catch {
       setCopied(false);
+      setFailed(true);
     }
   }
 
   return (
     <div className="relative rounded-md border border-line bg-surface-raised px-3 py-2.5">
-      <pre className="overflow-x-auto pr-20 font-mono text-xs text-fg whitespace-pre-wrap">
+      <pre ref={preRef} className="overflow-x-auto pr-20 font-mono text-xs text-fg whitespace-pre-wrap">
         {text}
       </pre>
       <Button
@@ -44,7 +63,7 @@ function CopyCommand({ text }: { text: string }) {
         onClick={() => void onCopy()}
       >
         {copied ? <Check /> : <Clipboard />}
-        {copied ? t("copied") : t("copy")}
+        {copied ? t("copied") : failed ? t("copyFailed") : t("copy")}
       </Button>
     </div>
   );
@@ -53,9 +72,11 @@ function CopyCommand({ text }: { text: string }) {
 export function HelpConsole({
   host,
   gamePort,
+  gameDirectory,
 }: {
   host: string;
   gamePort: number;
+  gameDirectory: string;
 }) {
   const t = useTranslations("serverHelp");
   const port = String(gamePort);
@@ -67,6 +88,24 @@ export function HelpConsole({
           <CardTitle>{t("title")}</CardTitle>
           <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("execstackTitle")}</CardTitle>
+          <CardDescription>{t("execstackIssue")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-fg-muted">{t("execstackWhy")}</p>
+          <CopyCommand
+            text={`sudo apt-get install -y patchelf\npatchelf --clear-execstack ${shellQuote(`${gameDirectory}/cs2/game/csgo/addons/counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so`)}`}
+          />
+          <p className="text-sm text-fg-muted">{t("execstackShortcut")}</p>
+          <CopyCommand
+            text={`patchelf --clear-execstack ${shellQuote(`${gameDirectory}/cs2/game/csgo/addons/counterstrikesharp/bin/linuxsteamrt64/counterstrikesharp.so`)}`}
+          />
+          <p className="text-xs text-fg-subtle">{t("execstackNote")}</p>
+        </CardContent>
       </Card>
 
       <Card className="border-warn/30">

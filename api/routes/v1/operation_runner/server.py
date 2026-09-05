@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from api.dependencies import require_server_access
 from api.routes.actions.deployment import execute_server_action
-from modules import User
+from modules import Server, User
 from modules.database import async_session_maker
 from modules.schemas.common import ALLOWED_SERVER_ACTIONS
 from modules.schemas.servers import ServerAction
@@ -14,6 +14,7 @@ from services.ai_security import redact_sensitive_text
 from services.custom_command_service import execute_custom_commands
 from services.maintenance_lock import OperationBusyError, maintenance_lock_service
 from services.operations.types import OperationCommand
+from services.server_compatibility import EXECSTACK_FILE_ACTIONS, execstack_operation_metadata
 from services.server_operation_hub import (
     ServerOperationConflict,
     server_operation_hub,
@@ -111,6 +112,7 @@ async def enqueue_server_operation(
     server_id: int,
     action: str,
     actor_user_id: int,
+    extra: dict | None = None,
 ) -> dict:
     """Create an operation record and run the action in the background."""
     command = OperationCommand(
@@ -121,11 +123,24 @@ async def enqueue_server_operation(
     if command.action not in ALLOWED_SERVER_ACTIONS:
         raise HTTPException(status_code=422, detail=f"Invalid action: {action}")
 
+    if extra is None and command.action in EXECSTACK_FILE_ACTIONS:
+        async with async_session_maker() as db:
+            server = await db.get(Server, command.server_id)
+        extra = (
+            execstack_operation_metadata(server, command.action)
+            if server and getattr(server, "game_directory", None)
+            else None
+        )
+
+    command_summary = f"server {command.action}"
+    if extra and extra.get("clear_execstack"):
+        command_summary += f" (clear plugin execstack: {extra.get('clear_execstack_command', 'patchelf --clear-execstack')})"
     record = await server_operation_hub.create(
         server_id=command.server_id,
         action=command.action,
         actor_user_id=command.actor_user_id,
-        command=f"server {command.action}",
+        command=command_summary,
+        extra=extra,
     )
     operation_id = str(record["operation_id"])
     return await _dispatch(
@@ -172,6 +187,10 @@ async def run_server_operation(
                     user,
                     None,
                     None,
+                    clear_execstack=bool(record.get("clear_execstack"))
+                    if action == "restart" or action in EXECSTACK_FILE_ACTIONS
+                    else False,
+                    clear_execstack_targets=record.get("clear_execstack_targets"),
                 )
             server_status = None
             if isinstance(result.data, dict):

@@ -14,7 +14,13 @@ export async function HelpPanel({ serverId }: { serverId: number }) {
       </Card>
     );
   }
-  return <HelpConsole host={result.data.host} gamePort={result.data.gamePort} />;
+  return (
+    <HelpConsole
+      host={result.data.host}
+      gamePort={result.data.gamePort}
+      gameDirectory={result.data.gameDirectory}
+    />
+  );
 }
 
 export function HelpPanelSkeleton() {

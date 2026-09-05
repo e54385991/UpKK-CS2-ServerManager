@@ -48,6 +48,7 @@ export async function POST(
     objectKey?: string;
     operationId?: string;
     initializedServerId?: number;
+    clearExecstack?: boolean;
   };
   if (body.intent === "force-stop") {
     return resultResponse(await clearDeploymentLock(serverId));
@@ -71,7 +72,11 @@ export async function POST(
     return resultResponse(await restoreS3Backup(serverId, body.objectKey));
   }
   if (body.action) {
-    return resultResponse(await startServerOperation(serverId, body.action));
+    return resultResponse(
+      await startServerOperation(serverId, body.action, {
+        clearExecstack: body.clearExecstack,
+      }),
+    );
   }
   return Response.json({ ok: false, status: 400, error: "Missing operation" }, { status: 400 });
 }
