@@ -118,6 +118,16 @@ export async function cancelOperationFromBrowser(
   serverId: number,
   operationId: string,
 ): Promise<ClientResult<ServerOperation>> {
+  if (serverId < 0) {
+    return requestJson(`/server-ops/servers/${-serverId}`, {
+      method: "POST",
+      body: JSON.stringify({
+        intent: "cancel-initialized-operation",
+        initializedServerId: -serverId,
+        operationId,
+      }),
+    });
+  }
   return requestJson(`/server-ops/servers/${serverId}`, {
     method: "POST",
     body: JSON.stringify({ intent: "cancel-operation", operationId }),

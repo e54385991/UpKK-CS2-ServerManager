@@ -510,7 +510,7 @@ export function ActivityTray() {
                           : ""}
                       </span>
                     </button>
-                    {activeTab === "queue" && item.serverId > 0 ? (
+                    {activeTab === "queue" ? (
                       <Button
                         type="button"
                         variant="ghost"

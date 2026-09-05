@@ -174,6 +174,16 @@ async def test_setup_operation_views_current_stream_and_not_found_paths(monkeypa
     hub.get.return_value = operation
     assert (await setup.get_initialized_host_operation(7, operation_id, _Db(), SimpleNamespace(id=9))).action == "test_ssh"
 
+    cancelled = {**operation, "status": "failed", "success": False, "message": "stopped"}
+    hub.cancel = AsyncMock(return_value=cancelled)
+    stopped = await setup.cancel_initialized_host_operation(
+        7, operation_id, _Db(), SimpleNamespace(id=9)
+    )
+    assert stopped.status == "failed"
+    hub.cancel.assert_awaited_once_with(
+        operation["operation_id"], message="Operation force-stopped by operator"
+    )
+
 
 @pytest.mark.asyncio
 async def test_setup_stream_delete_deploy_and_auto_setup_paths(monkeypatch):

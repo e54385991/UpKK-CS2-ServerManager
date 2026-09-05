@@ -3246,6 +3246,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "POST"
+    ],
+    "name": "cancel_initialized_host_operation",
+    "path": "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}/cancel"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "GET"
     ],
     "name": "stream_initialized_host_operation_events",

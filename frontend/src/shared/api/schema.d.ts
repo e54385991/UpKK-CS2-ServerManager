@@ -5072,6 +5072,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Initialized Host Operation
+         * @description Force-stop a queued or running initialized-host SSH test.
+         */
+        post: operations["cancel_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}/events": {
         parameters: {
             query?: never;
@@ -25760,6 +25780,38 @@ export interface operations {
         };
     };
     get_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                initialized_server_id: number;
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitializedHostOperationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__cancel_post: {
         parameters: {
             query?: never;
             header?: never;

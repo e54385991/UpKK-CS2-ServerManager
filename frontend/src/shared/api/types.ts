@@ -52,6 +52,7 @@ export type GoogleConfigViewDto = Schemas["GoogleConfigView"];
 export type GoogleSignInRequestDto = Schemas["GoogleSignInRequest"];
 export type AuthTokenViewDto = Schemas["AuthTokenView"];
 export type ServerOperationViewDto = Schemas["ServerOperationView"];
+export type InitializedHostOperationViewDto = Schemas["InitializedHostOperationView"];
 export type CurrentServerOperationDto = Schemas["CurrentServerOperation"];
 export type OperationJournalDto = Schemas["OperationJournal"];
 export type OperationJournalEventDto = Schemas["OperationJournalEvent"];

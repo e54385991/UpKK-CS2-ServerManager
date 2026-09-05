@@ -40483,6 +40483,64 @@
         ]
       }
     },
+    "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}/cancel": {
+      "post": {
+        "description": "Force-stop a queued or running initialized-host SSH test.",
+        "operationId": "cancel_initialized_host_operation_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initialized_server_id",
+            "required": true,
+            "schema": {
+              "title": "Initialized Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitializedHostOperationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Cancel Initialized Host Operation",
+        "tags": [
+          "v1-setup"
+        ]
+      }
+    },
     "/api/v1/setup/initialized-servers/{initialized_server_id}/operations/{operation_id}/events": {
       "get": {
         "operationId": "stream_initialized_host_operation_events_api_v1_setup_initialized_servers__initialized_server_id__operations__operation_id__events_get",

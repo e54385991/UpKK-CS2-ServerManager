@@ -14,6 +14,7 @@ import type {
   DeploymentLockViewDto,
   DeploymentLogEntryDto,
   ActionResultDto,
+  InitializedHostOperationViewDto,
   ServerConfigExportDto,
   ServerConfigImportResponseDto,
   S3BackupListViewDto,
@@ -939,6 +940,16 @@ export async function cancelOperation(
   );
   if (!result.ok) return result;
   return { ok: true, data: toOperation(result.data) };
+}
+
+export async function cancelInitializedHostOperation(
+  initializedServerId: number,
+  operationId: string,
+): Promise<ApiResult<InitializedHostOperationViewDto>> {
+  return apiFetch<InitializedHostOperationViewDto>(
+    `/api/v1/setup/initialized-servers/${initializedServerId}/operations/${operationId}/cancel`,
+    { method: "POST" },
+  );
 }
 
 export async function applyAptMirror(

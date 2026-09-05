@@ -27,7 +27,11 @@ from services.initialized_server_service import (
     list_initialized_servers as list_saved_initialized_servers,
 )
 from services.redis_manager import redis_manager
-from services.server_operation_hub import ServerOperationConflict, server_operation_hub
+from services.server_operation_hub import (
+    ACTIVE_STATUSES,
+    ServerOperationConflict,
+    server_operation_hub,
+)
 from services.server_setup_script import build_manual_setup_script, validate_cs2_username
 
 from .operation_runner import enqueue_initialized_host_ssh_test, enqueue_server_operation
@@ -187,6 +191,36 @@ async def get_initialized_host_operation(
     if record is None or int(record.get("server_id") or 0) != -initialized_server_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operation not found")
     return _host_operation_view(record, initialized_server_id)
+
+
+@router.post(
+    "/initialized-servers/{initialized_server_id}/operations/{operation_id}/cancel",
+    response_model=InitializedHostOperationView,
+)
+async def cancel_initialized_host_operation(
+    initialized_server_id: int,
+    operation_id: UUID,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> InitializedHostOperationView:
+    """Force-stop a queued or running initialized-host SSH test."""
+    await _resolve_owned(db, str(initialized_server_id), current_user.id)
+    op_id = str(operation_id)
+    record = await server_operation_hub.get(op_id)
+    if record is None or int(record.get("server_id") or 0) != -initialized_server_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operation not found")
+    if record.get("status") not in ACTIVE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Operation is no longer queued or running",
+        )
+    cancelled = await server_operation_hub.cancel(
+        op_id,
+        message="Operation force-stopped by operator",
+    )
+    if cancelled is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operation not found")
+    return _host_operation_view(cancelled, initialized_server_id)
 
 
 @router.get(

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import {
   applyAptMirror,
   cancelOperation,
+  cancelInitializedHostOperation,
   clearDeploymentLock,
   getCurrentServerOperation,
   getDeploymentLock,
@@ -46,12 +47,22 @@ export async function POST(
     mirror?: AptMirrorId;
     objectKey?: string;
     operationId?: string;
+    initializedServerId?: number;
   };
   if (body.intent === "force-stop") {
     return resultResponse(await clearDeploymentLock(serverId));
   }
   if (body.intent === "cancel-operation" && body.operationId) {
     return resultResponse(await cancelOperation(serverId, body.operationId));
+  }
+  if (
+    body.intent === "cancel-initialized-operation" &&
+    body.operationId &&
+    body.initializedServerId === serverId
+  ) {
+    return resultResponse(
+      await cancelInitializedHostOperation(serverId, body.operationId),
+    );
   }
   if (body.intent === "apt-mirror" && body.mirror) {
     return resultResponse(await applyAptMirror(serverId, body.mirror));
