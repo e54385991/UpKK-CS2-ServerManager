@@ -4,8 +4,12 @@
 
 This project uses **Next.js 16.3.4**, which has breaking changes versus older
 Next.js — APIs, conventions, and file structure may differ from your training
-data. **Before writing any Next.js code, read the version-matched guide under
-`node_modules/next/dist/docs/`** (e.g. `dist/docs/01-app/...`). Heed deprecation
+data. **Before changing Next.js behavior, read the relevant version-matched
+sections under `node_modules/next/dist/docs/`** (e.g. `dist/docs/01-app/...`).
+Reuse sections already read in this task unless the version or topic changes;
+text, styling, and instruction-only edits do not require a full manual read.
+If bundled docs are missing, check the installed/locked version and its official
+documentation; do not upgrade dependencies just to obtain documentation. Heed deprecation
 notices (for example, the request-interception file is `proxy.ts`, not
 `middleware.ts`). `next.config.ts` sets `agentRules: false` so `next dev`
 does not rewrite this file.
@@ -96,6 +100,12 @@ skeletons, `<Suspense>`-streamed server data, and `<Link>` prefetch. Verified
 with Lighthouse: Performance 100 and CLS 0 on `/login` and `/overview`. Revisit
 `cacheComponents` once it is stable for cookie-driven apps and the memory gate
 is cleared; adopt it per `node_modules/next/dist/docs/01-app/02-guides/adopting-partial-prefetching.md`.
+
+This gate applies to enabling those flags, not to ordinary frontend fixes or
+navigation improvements using the current architecture. A generic request to
+improve navigation does not waive the gate. Before proposing flag adoption,
+locate the agreed memory test and acceptance criteria; if they are unavailable,
+report that specific gap instead of inventing a passing threshold.
 
 ## Backend contract & auth
 
@@ -247,9 +257,13 @@ npm run test:unit  # TypeScript module tests (Node's built-in test runner)
 npm run gen:api    # regenerate OpenAPI types from ../openapi.json
 ```
 
-Before marking frontend work done, `npm run lint`, `npm run typecheck`, and
-`npm run build` must all pass. Also run `npm run check:bundle` after a
-production build; it checks the gzip size of every route's initial client
+Completion scope is defined in the root `AGENTS.md` under **Task Completion
+Checks**. Its full baseline already runs `npm run test:unit`, `npm run lint`,
+`npm run typecheck`, `npm run build`, and `npm run check:bundle`; a successful
+run satisfies these frontend gates without a second execution. When checking
+frontend changes separately during development, run the applicable commands
+and run `npm run check:bundle` after the production build. The bundle check
+checks the gzip size of every route's initial client
 chunks (250 KiB per route, 150 KiB per chunk). Heavy editors and terminal
 libraries must remain in lazy chunks.
 

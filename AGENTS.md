@@ -7,37 +7,46 @@ This repository hosts two applications:
 - **Frontend** (`frontend/`): a dedicated **Next.js 16.3.4** console that
   replaces the legacy Jinja/Bootstrap UI and talks to the backend through a
   same-origin proxy. See `frontend/AGENTS.md` for its rules — read it before
-  working under `frontend/`, and read `frontend/node_modules/next/dist/docs/`
-  before writing Next.js code (Next 16 has breaking changes).
+  working under `frontend/`. Before changing Next.js behavior, read the
+  relevant version-matched sections of `frontend/node_modules/next/dist/docs/`
+  (Next 16 has breaking changes); do not read the entire manual for every edit.
 
 # Task Completion Checks
 
-Before reporting any task that changes repository files complete, run the
-applicable baseline checks at least once and report the result.
-
-For every task that changes **Python** code or Python tooling, run the full
-quality baseline:
+This section is the single source of truth for completion checks. For any
+code, dependency, build, CI, or runtime configuration change, run the full
+repository quality baseline at least once before reporting completion:
 
 ```bash
 uv run python scripts/check_baseline.py
 ```
 
-For every task that changes **frontend** code (`frontend/`), the frontend gates
-must pass:
+The baseline already runs the frontend unit tests, lint, typecheck, production
+build, and bundle budget. A successful baseline satisfies those gates; do not
+run them again solely because `frontend/AGENTS.md` lists them. Reuse results
+only while the checked content, dependencies, and relevant environment remain
+unchanged. After further edits, rerun the affected checks.
 
-```bash
-cd frontend && npm run lint && npm run typecheck && npm run build
-```
+For documentation or instruction-only changes (including `AGENTS.md` and
+`SKILL.md`), run `git diff --check` and validate affected references, examples,
+and instruction consistency; validate Skill frontmatter when applicable. Run
+additional checks if executable examples or changed instructions alter an
+actual build/runtime contract. Read-only reviews do not require a build or
+test run. These exceptions do not waive checks for accompanying code changes.
 
-Do not report the task as complete until the applicable checks pass. If a check
-cannot be run, report the exact command, failure, and remaining risk.
+Fix failures caused by this task and continue other independent work while
+investigating blockers. If a required check cannot run or remains failing,
+report the exact command, observed failure, and remaining risk; distinguish
+implementation progress from verified completion. Do not claim completion,
+weaken a gate, or make unrelated repairs merely to turn the baseline green.
 
 # Git 提交约定
 
 - 每次完成文件修改并通过适用检查后，自动创建本地 commit；没有文件改动时不创建空提交。
+- 本地 commit 的授权不包含推送、发布、合并 PR 或重启线上服务；用户明确要求“先审阅后修改”时，先遵守该阶段边界。
 - 默认不执行 `git push`。只有用户明确要求本次任务推送时才推送。
 - commit message 必须说明问题现象、根因、具体改动、验证结果和剩余限制；最终回复也要给出提交哈希及同等详细说明。
-- 只暂存本次任务的文件，暂存前检查差异。已有的用户改动（例如 `dump.rdb`）不得加入提交。
+- 只暂存本次任务的文件或修改片段，暂存前检查差异。同一文件混有用户改动时按片段暂存；无法可靠分离时保留原状并说明阻塞。已有的用户改动（例如 `dump.rdb`）不得加入提交。
 - 发现并发提交时创建新 commit，不 amend、不重写历史、不强制推送。
 
 # Database Schema Changes
@@ -54,8 +63,10 @@ upgrades to the single checked-in head through `migrate_db()` /
 - `modules.db_admin status|check|upgrade` are diagnostics and optional
   controlled-deploy tools, not a required user step.
 - Never restore `SQLModel.metadata.create_all()` as a production startup path.
-- Never leave the user on an old schema, and never instruct a manual migrate
-  after a model or revision change.
+- Ensure the next application startup upgrades to the checked-in head; do not
+  introduce a path that silently leaves an old schema in use. Repository edits
+  alone do not authorize restarting a live panel or accessing its database.
+  Keep startup auto-migration and do not require a manual migration step.
 
 # Delivery queue (plugins and long-running tasks)
 
@@ -136,15 +147,11 @@ HTTP request.
 
 ## 必须通过的检查
 
-完成任何代码变更前，至少运行：
-
-```bash
-uv run python scripts/check_baseline.py
-cd frontend && npm run lint && npm run typecheck && npm run build
-```
+执行范围、去重和受阻时的报告规则统一见上方 **Task Completion Checks**；不要维护第二套完成条件。
 
 基线包含 uv lock、pre-commit、Ruff、basedpyright（零错误/警告）、import-linter、循环依赖、
 复杂度 ≤15、文件规模、API response_model/敏感字段、OpenAPI/路由/公开导出快照、全量 pytest、
 覆盖率、依赖审计，以及 Next.js lint/typecheck/build/bundle budget。数据库集成、Compose 健康检查和
-稳定的 Next.js Playwright 公共页面 smoke 按 CI job 执行。新增或重构的领域必须补充单元、集成、
-契约、安全和性能回归测试。
+稳定的 Next.js Playwright 公共页面 smoke 按 CI job 执行。新增或重构的领域必须覆盖单元、集成、
+契约、安全和性能回归风险；先复用已有测试，仅为尚未覆盖的行为补充测试。某类测试不适用时，
+说明依据，不为每次局部修改机械新增五套测试；已有质量门禁和覆盖率要求保持不变。
