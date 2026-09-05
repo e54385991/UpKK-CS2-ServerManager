@@ -100,6 +100,9 @@ sudo apt update && sudo apt install -y curl
 curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-quickstart.sh | bash
 ```
 
+升级时可以再次执行同一条命令：脚本会拉取最新的 `latest` 镜像，并按配置或镜像
+变化重建需要更新的服务，同时保留 `.env` 和 Docker 数据卷。
+
 脚本会自动：
 
 - 安装 Docker Engine 和 Docker Compose 插件

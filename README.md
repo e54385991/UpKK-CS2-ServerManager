@@ -118,6 +118,10 @@ Run the following command as a user with `sudo` privileges:
 curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-quickstart.sh | bash
 ```
 
+Run the same command again to upgrade: it pulls the current `latest` images and
+recreates services whose configuration or image changed, while preserving `.env`
+and Docker volumes.
+
 The script automatically:
 
 - Installs Docker Engine and the Docker Compose plugin

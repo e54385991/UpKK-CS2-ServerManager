@@ -31,6 +31,8 @@ def test_debug_compose_is_the_only_host_publish_for_api_and_db() -> None:
 
 def test_quickstart_installs_console_on_port_3000() -> None:
     assert "HTTP_PORT=3000" in QUICKSTART
+    assert 'DEFAULT_IMAGE_VERSION="latest"' in QUICKSTART
+    assert "sync_managed_image" in QUICKSTART
     assert "PUBLIC_APP_URL" not in QUICKSTART
     assert "/login" in QUICKSTART
     assert "/health" in QUICKSTART

@@ -14,6 +14,11 @@ docker compose up -d
 curl -fsSL https://raw.githubusercontent.com/e54385991/UpKK-CS2-ServerManager/main/docker-quickstart.sh | bash
 ```
 
+同一条命令可以重复执行以升级。脚本会重新下载 Compose 配置、拉取
+`latest` 镜像并让 Compose 按配置和镜像摘要重建需要更新的服务；已有 `.env`、密钥和
+Docker 数据卷会保留。旧版本脚本生成的官方 `:main` 镜像配置会在升级时自动迁移
+到 `:latest`，手动配置的自定义镜像会保留。
+
 本仓库默认使用公开镜像：
 
 - `docker.io/e54385991/upkk-cs2-server-manager:latest`（FastAPI，linux/amd64 + linux/arm64）
