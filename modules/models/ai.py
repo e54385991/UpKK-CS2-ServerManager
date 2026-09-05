@@ -38,7 +38,10 @@ class AISystemSettings(SQLModel, table=True):
     # Input context budget used by the provider request compactor.  Keep this
     # as a small, audited preset rather than accepting arbitrary values from
     # the admin UI (256K is the safe default for existing installations).
-    context_window_tokens: int = Field(default=262_144)
+    context_window_tokens: int = Field(
+        default=262_144,
+        sa_column_kwargs={"server_default": text("262144")},
+    )
     request_timeout_seconds: int = Field(default=60)
     history_retention_days: int = Field(default=7)
     max_provider_rounds: int = Field(default=200, ge=1, le=1000)

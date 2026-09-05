@@ -142,8 +142,14 @@ class Server(SQLModel, table=True):
     map_pool_sync_url: Optional[str] = Field(default=None, max_length=4096)
 
     # Automatic log / Linux junk cleanup (panel scheduled task + optional sudo)
-    cleanup_auto_enabled: bool = Field(default=False)
-    cleanup_retain_days: int = Field(default=7)
+    cleanup_auto_enabled: bool = Field(
+        default=False,
+        sa_column_kwargs={"server_default": text("false")},
+    )
+    cleanup_retain_days: int = Field(
+        default=7,
+        sa_column_kwargs={"server_default": text("7")},
+    )
     cleanup_targets: List[str] = Field(
         default_factory=lambda: ["game_logs"],
         sa_column=Column(JSON, nullable=True),

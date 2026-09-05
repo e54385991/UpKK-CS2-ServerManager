@@ -89,7 +89,10 @@ class SystemSettings(SQLModel, table=True):
     github_proxy_url: Optional[str] = Field(default=None, max_length=500)
 
     # Public and sensitive form protection. Keep enabled by default.
-    captcha_enabled: bool = Field(default=True)
+    captcha_enabled: bool = Field(
+        default=True,
+        sa_column_kwargs={"server_default": text("true")},
+    )
 
     # Shared GitHub API credential used only when a user has no personal token.
     global_github_token: Optional[str] = Field(default=None, max_length=255)
