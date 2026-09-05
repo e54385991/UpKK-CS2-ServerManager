@@ -75,6 +75,46 @@ async def test_finish_promotes_pending_worker(hub: ServerOperationHub):
 
 
 @pytest.mark.asyncio
+async def test_cancel_queued_operation_removes_it_without_disturbing_current(
+    hub: ServerOperationHub,
+):
+    first = await hub.create(server_id=1, action="start", actor_user_id=1)
+    second = await hub.create(server_id=1, action="install_plugin", actor_user_id=1)
+    third = await hub.create(server_id=1, action="update", actor_user_id=1)
+
+    cancelled = await hub.cancel(second["operation_id"], message="force stopped")
+
+    assert cancelled is not None
+    assert cancelled["status"] == "failed"
+    assert cancelled["message"] == "force stopped"
+    assert await hub.get_current(1) == first
+    assert hub._pending[1] == [third["operation_id"]]
+    assert [item["operation_id"] for item in await hub.list_failed_for_server(1)] == [
+        second["operation_id"]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_cancel_running_operation_cancels_task_and_promotes_next(hub: ServerOperationHub):
+    first = await hub.create(server_id=1, action="start", actor_user_id=1)
+    second = await hub.create(server_id=1, action="update", actor_user_id=1)
+    await hub.mark_running(first["operation_id"])
+    task = asyncio.create_task(asyncio.sleep(60))
+    hub._tasks[first["operation_id"]] = task
+    started: list[str] = []
+    hub._runners[second["operation_id"]] = lambda: None
+    hub._start = lambda operation_id, _factory=None: started.append(operation_id)  # type: ignore[method-assign]
+
+    cancelled = await hub.cancel(first["operation_id"], message="force stopped")
+    await asyncio.sleep(0)
+
+    assert cancelled is not None
+    assert cancelled["status"] == "failed"
+    assert task.cancelled() is True
+    assert started == [second["operation_id"]]
+
+
+@pytest.mark.asyncio
 async def test_failed_job_is_retained_and_can_be_cleared(hub: ServerOperationHub):
     first = await hub.create(server_id=1, action="install_plugin", actor_user_id=1)
     await hub.finish(first["operation_id"], success=False, message="extract failed")

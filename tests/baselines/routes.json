@@ -2290,6 +2290,14 @@
   {
     "kind": "APIRoute",
     "methods": [
+      "POST"
+    ],
+    "name": "cancel_server_operation",
+    "path": "/api/v1/servers/{server_id}/operations/{operation_id}/cancel"
+  },
+  {
+    "kind": "APIRoute",
+    "methods": [
       "GET"
     ],
     "name": "get_server_operation_journal",

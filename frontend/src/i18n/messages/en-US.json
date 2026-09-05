@@ -71,7 +71,10 @@
     "activityFailedCount": "{count} failed",
     "activityClearFailed": "Clear failed",
     "activityClearFailedConfirm": "Cleared failures cannot be restored from the task queue.",
-    "activityDismissFailed": "Remove this failed task"
+    "activityDismissFailed": "Remove this failed task",
+    "activityForceStop": "Force stop",
+    "activityForceStopConfirm": "Force stop this queued or running task? Running work will be interrupted and marked as failed.",
+    "activityForceStopFailed": "Could not force stop the task"
   },
   "login": {
     "username": "Username",

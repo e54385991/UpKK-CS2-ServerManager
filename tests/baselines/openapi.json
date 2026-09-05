@@ -37330,6 +37330,64 @@
         ]
       }
     },
+    "/api/v1/servers/{server_id}/operations/{operation_id}/cancel": {
+      "post": {
+        "description": "Force-stop a queued or running operation owned by the current user.",
+        "operationId": "cancel_server_operation_api_v1_servers__server_id__operations__operation_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerOperationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Cancel Server Operation",
+        "tags": [
+          "v1-operations"
+        ]
+      }
+    },
     "/api/v1/servers/{server_id}/operations/{operation_id}/events": {
       "get": {
         "operationId": "stream_server_operation_events_api_v1_servers__server_id__operations__operation_id__events_get",

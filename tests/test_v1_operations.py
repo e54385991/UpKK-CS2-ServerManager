@@ -255,6 +255,33 @@ def test_v1_get_current_and_get_by_id(monkeypatch):
     assert detail.json()["status"] == "queued"
 
 
+def test_v1_cancel_operation_requires_matching_server_and_returns_failed_view(monkeypatch):
+    client, _server, _user = _client(monkeypatch=monkeypatch)
+    record = _queued_record(action="install_game_mode")
+    cancelled = {
+        **record,
+        "status": "failed",
+        "success": False,
+        "message": "Operation force-stopped by operator",
+        "completed_at": "2026-08-29T00:01:00+00:00",
+    }
+    monkeypatch.setattr(
+        "api.routes.v1.operations.server_operation_hub.get",
+        AsyncMock(return_value=record),
+    )
+    cancel = AsyncMock(return_value=cancelled)
+    monkeypatch.setattr("api.routes.v1.operations.server_operation_hub.cancel", cancel)
+
+    response = client.post(f"/api/v1/servers/1/operations/{record['operation_id']}/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["message"] == "Operation force-stopped by operator"
+    cancel.assert_awaited_once_with(
+        record["operation_id"], message="Operation force-stopped by operator"
+    )
+
+
 def test_v1_sse_replays_history_and_closes_on_terminal(monkeypatch):
     client, _server, user = _client(monkeypatch=monkeypatch)
 

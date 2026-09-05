@@ -114,6 +114,16 @@ export async function dismissFailedOperationFromBrowser(
   );
 }
 
+export async function cancelOperationFromBrowser(
+  serverId: number,
+  operationId: string,
+): Promise<ClientResult<ServerOperation>> {
+  return requestJson(`/server-ops/servers/${serverId}`, {
+    method: "POST",
+    body: JSON.stringify({ intent: "cancel-operation", operationId }),
+  });
+}
+
 async function requestJson<T>(
   path: string,
   init?: RequestInit,

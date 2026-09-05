@@ -330,6 +330,42 @@ class ServerOperationHub:
             task.cancel()
         return await self.finish(operation_id, success=False, message=message)
 
+    async def cancel(self, operation_id: str, *, message: str) -> dict[str, Any] | None:
+        """Force-stop one queued or running operation and retain its failure record."""
+        record = await self.get(operation_id)
+        if record is None or record.get("status") not in ACTIVE_STATUSES:
+            return record
+
+        server_id = int(record["server_id"])
+        current = await self.get_current(server_id)
+        if current and str(current.get("operation_id")) == operation_id:
+            return await self.abort(server_id, message=message)
+
+        # A queued operation can be removed without disturbing the current job.
+        # Recheck the current pointer while holding the queue lock so a worker
+        # promoted at the same time is cancelled instead of left running.
+        task: asyncio.Task | None = None
+        became_current = False
+        async with self._lock:
+            if self._current.get(server_id) == operation_id:
+                became_current = True
+            else:
+                pending = await self._pending_ids_unlocked(server_id)
+                if operation_id not in pending:
+                    return await self.get(operation_id)
+                pending = [item for item in pending if item != operation_id]
+                self._pending[server_id] = pending
+                self._runners.pop(operation_id, None)
+                task = self._tasks.pop(operation_id, None)
+
+        if became_current:
+            task = self._tasks.pop(operation_id, None)
+        else:
+            await self._persist_pending(server_id)
+        if task is not None and not task.done():
+            task.cancel()
+        return await self.finish(operation_id, success=False, message=message)
+
     async def finish(
         self,
         operation_id: str,

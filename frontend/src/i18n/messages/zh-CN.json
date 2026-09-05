@@ -71,7 +71,10 @@
     "activityFailedCount": "{count} 项失败",
     "activityClearFailed": "清空失败",
     "activityClearFailedConfirm": "清空后无法从任务队列恢复这些失败记录。",
-    "activityDismissFailed": "移除这条失败记录"
+    "activityDismissFailed": "移除这条失败记录",
+    "activityForceStop": "强制终止",
+    "activityForceStopConfirm": "确定强制终止这个排队或运行中的任务吗？运行中的任务会被中断并标记为失败。",
+    "activityForceStopFailed": "任务强制终止失败"
   },
   "login": {
     "username": "用户名",

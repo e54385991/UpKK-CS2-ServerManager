@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import {
   applyAptMirror,
+  cancelOperation,
   clearDeploymentLock,
   getCurrentServerOperation,
   getDeploymentLock,
@@ -44,9 +45,13 @@ export async function POST(
     action?: ServerOperationAction;
     mirror?: AptMirrorId;
     objectKey?: string;
+    operationId?: string;
   };
   if (body.intent === "force-stop") {
     return resultResponse(await clearDeploymentLock(serverId));
+  }
+  if (body.intent === "cancel-operation" && body.operationId) {
+    return resultResponse(await cancelOperation(serverId, body.operationId));
   }
   if (body.intent === "apt-mirror" && body.mirror) {
     return resultResponse(await applyAptMirror(serverId, body.mirror));

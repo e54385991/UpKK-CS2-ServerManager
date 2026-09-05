@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useFormatter, useTranslations } from "next-intl";
-import { ListTodo, LoaderCircle, X } from "lucide-react";
+import { Ban, ListTodo, LoaderCircle, X } from "lucide-react";
 import { isDeployProgressVisible } from "@/modules/console/live-console";
 import { OpenLiveTerminalButton } from "@/modules/console/open-live-terminal";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/modules/servers/activity-store";
 import {
   clearFailedOperationsFromBrowser,
+  cancelOperationFromBrowser,
   dismissFailedOperationFromBrowser,
   loadOperationInboxFromBrowser,
   loadOperationJournalFromBrowser,
@@ -44,7 +45,7 @@ import {
   OPERATION_INBOX_LOCK,
   subscribeVisibleEventSource,
 } from "@/shared/lib/visible-event-source";
-import { confirm } from "@/shared/feedback";
+import { confirm, notify } from "@/shared/feedback";
 import { Badge, StatusDot } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
@@ -201,6 +202,7 @@ export function ActivityTray() {
   const { open, selectedId, overlay, dismissedIds } = useActivityTray();
   const [inbox, setInbox] = useState<OperationInbox | null>(null);
   const [tab, setTab] = useState<TrayTab>("queue");
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const dismissed = useMemo(() => new Set(dismissedIds), [dismissedIds]);
   const queue = useMemo(() => {
     return mergeById([overlay, inbox?.items ?? []])
@@ -299,6 +301,30 @@ export function ActivityTray() {
     const result = await dismissFailedOperationFromBrowser(operationId);
     if (!result.ok) return;
     dismissActivityOperations([operationId]);
+    const inboxResult = await loadOperationInboxFromBrowser();
+    if (inboxResult.ok) setInbox(inboxResult.data);
+  }
+
+  async function forceStopOne(item: OperationInboxItem) {
+    if (cancellingId) return;
+    if (
+      !(await confirm({
+        title: t("activityForceStop"),
+        description: t("activityForceStopConfirm"),
+        confirmLabel: t("activityForceStop"),
+        tone: "danger",
+      }))
+    ) {
+      return;
+    }
+    setCancellingId(item.operationId);
+    const result = await cancelOperationFromBrowser(item.serverId, item.operationId);
+    setCancellingId(null);
+    if (!result.ok) {
+      notify.error(result.error || t("activityForceStopFailed"));
+      return;
+    }
+    markActivityTerminal(item.operationId, "failed", result.data.message);
     const inboxResult = await loadOperationInboxFromBrowser();
     if (inboxResult.ok) setInbox(inboxResult.data);
   }
@@ -484,7 +510,26 @@ export function ActivityTray() {
                           : ""}
                       </span>
                     </button>
-                    {activeTab === "failed" ? (
+                    {activeTab === "queue" && item.serverId > 0 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="m-1 shrink-0 text-danger hover:bg-danger/10"
+                        aria-label={t("activityForceStop")}
+                        disabled={cancellingId === item.operationId}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void forceStopOne(item);
+                        }}
+                      >
+                        {cancellingId === item.operationId ? (
+                          <LoaderCircle className="animate-spin" />
+                        ) : (
+                          <Ban />
+                        )}
+                      </Button>
+                    ) : (
                       <Button
                         type="button"
                         variant="ghost"
@@ -495,7 +540,7 @@ export function ActivityTray() {
                       >
                         <X />
                       </Button>
-                    ) : null}
+                    )}
                   </li>
                 ))}
               </ul>

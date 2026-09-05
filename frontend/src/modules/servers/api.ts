@@ -929,6 +929,18 @@ export async function dismissFailedOperation(
   );
 }
 
+export async function cancelOperation(
+  serverId: number,
+  operationId: string,
+): Promise<ApiResult<ServerOperation>> {
+  const result = await apiFetch<ServerOperationViewDto>(
+    `/api/v1/servers/${serverId}/operations/${operationId}/cancel`,
+    { method: "POST" },
+  );
+  if (!result.ok) return result;
+  return { ok: true, data: toOperation(result.data) };
+}
+
 export async function applyAptMirror(
   serverId: number,
   mirror: string,

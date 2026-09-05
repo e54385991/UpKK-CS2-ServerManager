@@ -230,6 +230,33 @@ async def get_server_operation(
     return to_view(record)
 
 
+@router.post("/{operation_id}/cancel", response_model=ServerOperationView)
+async def cancel_server_operation(
+    server_id: int,
+    operation_id: UUID,
+    db: DatabaseSession,
+    current_user: ActiveUser,
+) -> ServerOperationView:
+    """Force-stop a queued or running operation owned by the current user."""
+    await require_server_access(db, server_id, current_user)
+    op_id = str(operation_id)
+    record = await server_operation_hub.get(op_id)
+    if record is None or int(record["server_id"]) != server_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operation not found")
+    if record.get("status") not in ACTIVE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Operation is no longer queued or running",
+        )
+    cancelled = await server_operation_hub.cancel(
+        op_id,
+        message="Operation force-stopped by operator",
+    )
+    if cancelled is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operation not found")
+    return to_view(cancelled)
+
+
 @router.get("/{operation_id}/journal", response_model=OperationJournal)
 async def get_server_operation_journal(
     server_id: int,
