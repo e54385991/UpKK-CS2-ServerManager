@@ -106,6 +106,14 @@ class ApplicationLifecycle:
             await migrate_db()
             await init_db()
 
+            from services.client_ip import refresh_client_ip_header
+
+            header = await refresh_client_ip_header()
+            logger.info(
+                "Client IP source: %s",
+                header or "direct connection address",
+            )
+
             from services.plugin_catalog import ensure_default_plugin_catalog
 
             try:

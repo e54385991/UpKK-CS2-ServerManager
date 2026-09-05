@@ -16,6 +16,7 @@ from api.routes.gmail_oauth import (
 from modules import GmailCredentialsUploadRequest, SystemSettings
 from modules.schemas.ai import AIProviderTestRequest, AISystemSettingsUpdate
 from services.audit_log_service import record_audit_event
+from services.client_ip import set_client_ip_header
 from services.email_service import email_service
 
 from .schemas import (
@@ -80,6 +81,7 @@ def to_view(settings: SystemSettings) -> SystemSettingsView:
         default_proxy_mode=proxy_mode,
         github_proxy_url=settings.github_proxy_url,
         captcha_enabled=bool(settings.captcha_enabled),
+        client_ip_header=settings.client_ip_header,
         has_global_github_token=settings.has_global_github_token,
         global_github_token_prefix=settings.global_github_token_prefix,
         email_enabled=settings.email_enabled,
@@ -132,6 +134,8 @@ async def update_system_settings(
     db.add(settings)
     await db.commit()
     await db.refresh(settings)
+    # Audit and rate-limit attribution must use the policy saved just now.
+    set_client_ip_header(settings.client_ip_header)
     await record_audit_event(
         category="settings",
         action="system.update",

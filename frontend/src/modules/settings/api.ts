@@ -25,6 +25,7 @@ function toSettings(raw: SystemSettingsViewDto): SystemSettings {
     defaultProxyMode: toProxyMode(raw.default_proxy_mode),
     githubProxyUrl: raw.github_proxy_url ?? null,
     captchaEnabled: raw.captcha_enabled ?? true,
+    clientIpHeader: raw.client_ip_header ?? null,
     hasGlobalGithubToken: raw.has_global_github_token,
     globalGithubTokenPrefix: raw.global_github_token_prefix ?? null,
     emailEnabled: raw.email_enabled,
@@ -61,6 +62,9 @@ export function toWirePatch(patch: SettingsPatch): Record<string, unknown> {
       : {}),
     ...(patch.captchaEnabled !== undefined
       ? { captcha_enabled: patch.captchaEnabled }
+      : {}),
+    ...(patch.clientIpHeader !== undefined
+      ? { client_ip_header: patch.clientIpHeader ?? "" }
       : {}),
     ...(patch.globalGithubToken !== undefined
       ? { global_github_token: patch.globalGithubToken }

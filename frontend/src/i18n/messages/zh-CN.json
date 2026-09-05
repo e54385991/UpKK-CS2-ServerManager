@@ -973,6 +973,20 @@
       "enabledHelp": "已启用。登录、注册、主机初始化及敏感凭据操作会要求验证码。",
       "disabledHelp": "已关闭。上述操作将不再要求验证码，但原有限流和登录权限仍然有效。"
     },
+    "clientIp": {
+      "title": "来源 IP",
+      "description": "面板识别访问者 IP 的来源，影响审计日志记录和限流分桶。",
+      "source": "来源 IP 请求头",
+      "sourceHelp": "面板位于反向代理之后时，选择代理设置的请求头。默认 X-Forwarded-For。",
+      "custom": "自定义请求头…",
+      "customLabel": "请求头名称",
+      "customHelp": "只能包含字母、数字、连字符和下划线，例如 Fastly-Client-IP。",
+      "direct": "不使用请求头（直连地址）",
+      "directHelp": "面板只使用建立连接的地址。位于代理之后时，所有访问者都会显示为代理的 IP。",
+      "active": "按 {header} 识别；该请求头缺失或无法解析时回退到直连地址。",
+      "invalid": "请输入合法的请求头名称，例如 X-Forwarded-For。",
+      "trustWarning": "任何客户端都能伪造该请求头。只有当反向代理会覆盖每个请求的该请求头时才可信任，否则审计日志和限流可能被伪造。"
+    },
     "proxy": {
       "title": "下载代理",
       "description": "服务器从 GitHub 拉取资源时的默认通道。",

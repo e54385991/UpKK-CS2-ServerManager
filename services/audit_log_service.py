@@ -15,6 +15,11 @@ from modules.models import AuditLog, DiscordOperationRun, User
 from modules.schemas import AuditLogListResponse, AuditLogResponse
 from modules.utils import get_current_time
 from services.ai_security import redact_sensitive_text, sanitize_tool_result
+from services.client_ip import (
+    cached_client_ip_header,
+    request_client_ip,
+    resolve_client_ip,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +32,8 @@ AUDIT_STATUSES = frozenset({"success", "failure", "cancelled", "expired", "reque
 
 
 def client_ip_address(request: Request | None) -> str | None:
-    if request is None or request.client is None:
-        return None
-    return request.client.host or "unknown"
+    """Attribute a request without a database round-trip (last known policy)."""
+    return resolve_client_ip(request, cached_client_ip_header())
 
 
 def client_user_agent(request: Request | None) -> str | None:
@@ -112,6 +116,8 @@ async def record_audit_event(
             actor_user_id = user.id if actor_user_id is None else actor_user_id
             actor_username = actor_username or user.username
         async with async_session_maker() as db:
+            if not ip_address:
+                ip_address = await request_client_ip(request, db)
             db.add(
                 AuditLog(
                     category=category,
@@ -120,7 +126,7 @@ async def record_audit_event(
                     actor_user_id=actor_user_id,
                     actor_username=actor_username,
                     actor_external_id=actor_external_id,
-                    ip_address=ip_address or client_ip_address(request),
+                    ip_address=ip_address,
                     user_agent=user_agent or client_user_agent(request),
                     source=source,
                     server_id=server_id,

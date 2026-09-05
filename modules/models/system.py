@@ -94,6 +94,14 @@ class SystemSettings(SQLModel, table=True):
         sa_column_kwargs={"server_default": text("true")},
     )
 
+    # Request header carrying the real client address behind a reverse proxy.
+    # NULL means the panel trusts only the direct connection address.
+    client_ip_header: Optional[str] = Field(
+        default="X-Forwarded-For",
+        max_length=64,
+        sa_column_kwargs={"server_default": text("'X-Forwarded-For'")},
+    )
+
     # Shared GitHub API credential used only when a user has no personal token.
     global_github_token: Optional[str] = Field(default=None, max_length=255)
 

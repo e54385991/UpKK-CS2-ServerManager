@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.application import create_app
@@ -16,6 +17,13 @@ from modules import (
     get_db,
 )
 from modules.schemas import GmailCredentialsUploadRequest
+from services.client_ip import cached_client_ip_header, reset_client_ip_header_cache
+
+
+@pytest.fixture(autouse=True)
+def _restore_client_ip_policy():
+    yield
+    reset_client_ip_header_cache()
 
 
 def _database_session():
@@ -154,6 +162,30 @@ def test_v1_settings_put_updates_captcha_policy(monkeypatch):
     assert response.status_code == 200
     assert settings.captcha_enabled is False
     assert response.json()["captcha_enabled"] is False
+
+
+def test_v1_settings_put_updates_client_ip_header(monkeypatch):
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    assert settings.client_ip_header == "X-Forwarded-For"
+
+    response = client.put("/api/v1/settings", json={"client_ip_header": " CF-Connecting-IP "})
+    assert response.status_code == 200
+    assert settings.client_ip_header == "CF-Connecting-IP"
+    assert response.json()["client_ip_header"] == "CF-Connecting-IP"
+    assert cached_client_ip_header() == "CF-Connecting-IP"
+
+    cleared = client.put("/api/v1/settings", json={"client_ip_header": ""})
+    assert cleared.status_code == 200
+    assert settings.client_ip_header is None
+    assert cleared.json()["client_ip_header"] is None
+    assert cached_client_ip_header() is None
+
+
+def test_v1_settings_put_rejects_an_invalid_client_ip_header(monkeypatch):
+    client, settings, _user = _client(monkeypatch=monkeypatch)
+    response = client.put("/api/v1/settings", json={"client_ip_header": "X Forwarded For"})
+    assert response.status_code == 422
+    assert settings.client_ip_header == "X-Forwarded-For"
 
 
 def test_v1_settings_put_rejects_invalid_proxy_mode_and_token(monkeypatch):

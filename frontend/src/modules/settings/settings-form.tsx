@@ -6,6 +6,7 @@ import {
   CloudDownload,
   KeyRound,
   Mail,
+  Network,
   Save,
   Send,
   ShieldCheck,
@@ -20,10 +21,12 @@ import {
   sendTestEmailAction,
   uploadGmailCredentialsAction,
 } from "@/modules/settings/actions";
-import type {
-  EmailProvider,
-  ProxyMode,
-  SystemSettings,
+import {
+  CLIENT_IP_HEADER_PRESETS,
+  isClientIpHeader,
+  type EmailProvider,
+  type ProxyMode,
+  type SystemSettings,
 } from "@/modules/settings/types";
 import { confirm } from "@/shared/feedback";
 import { Badge } from "@/shared/ui/badge";
@@ -43,6 +46,26 @@ import { cn } from "@/shared/lib/cn";
 
 type Banner = { readonly tone: "ok" | "warn" | "danger"; readonly text: string };
 
+const DIRECT_CLIENT_IP = "__direct__";
+const CUSTOM_CLIENT_IP = "__custom__";
+
+function clientIpChoiceOf(header: string | null): string {
+  if (!header) return DIRECT_CLIENT_IP;
+  return (CLIENT_IP_HEADER_PRESETS as readonly string[]).includes(header)
+    ? header
+    : CUSTOM_CLIENT_IP;
+}
+
+function customClientIpOf(header: string | null): string {
+  return clientIpChoiceOf(header) === CUSTOM_CLIENT_IP ? (header ?? "") : "";
+}
+
+function clientIpHeaderOf(choice: string, custom: string): string | null {
+  if (choice === DIRECT_CLIENT_IP) return null;
+  if (choice === CUSTOM_CLIENT_IP) return custom.trim() || null;
+  return choice;
+}
+
 export function SettingsForm({ initial }: { initial: SystemSettings }) {
   const t = useTranslations("settings");
   const [settings, setSettings] = useState(initial);
@@ -51,6 +74,12 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
     initial.githubProxyUrl ?? "",
   );
   const [captchaEnabled, setCaptchaEnabled] = useState(initial.captchaEnabled);
+  const [clientIpChoice, setClientIpChoice] = useState(
+    clientIpChoiceOf(initial.clientIpHeader),
+  );
+  const [clientIpCustom, setClientIpCustom] = useState(
+    customClientIpOf(initial.clientIpHeader),
+  );
   const [githubToken, setGithubToken] = useState("");
   const [clearGithubToken, setClearGithubToken] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(initial.emailEnabled);
@@ -75,6 +104,11 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
 
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const clientIpHeader = clientIpHeaderOf(clientIpChoice, clientIpCustom);
+    if (clientIpHeader !== null && !isClientIpHeader(clientIpHeader)) {
+      setBanner({ tone: "warn", text: t("clientIp.invalid") });
+      return;
+    }
     setSaving(true);
     setBanner(null);
     const parsedPort = Number(smtpPort);
@@ -82,6 +116,7 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
       defaultProxyMode: proxyMode,
       githubProxyUrl: githubProxyUrl.trim() || null,
       captchaEnabled,
+      clientIpHeader,
       ...(clearGithubToken
         ? { clearGlobalGithubToken: true }
         : githubToken.trim()
@@ -104,6 +139,8 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
     }
     setSettings(result.data);
     setCaptchaEnabled(result.data.captchaEnabled);
+    setClientIpChoice(clientIpChoiceOf(result.data.clientIpHeader));
+    setClientIpCustom(customClientIpOf(result.data.clientIpHeader));
     setGithubToken("");
     setClearGithubToken(false);
     setSmtpPassword("");
@@ -541,6 +578,66 @@ export function SettingsForm({ initial }: { initial: SystemSettings }) {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-md bg-info-muted text-info ring-1 ring-info/30">
+              <Network className="size-4" />
+            </span>
+            <div>
+              <CardTitle>{t("clientIp.title")}</CardTitle>
+              <CardDescription>{t("clientIp.description")}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={t("clientIp.source")}
+              htmlFor="client-ip-source"
+              hint={t("clientIp.sourceHelp")}
+            >
+              <Select
+                id="client-ip-source"
+                value={clientIpChoice}
+                onChange={(event) => setClientIpChoice(event.target.value)}
+              >
+                {CLIENT_IP_HEADER_PRESETS.map((header) => (
+                  <option key={header} value={header}>
+                    {header}
+                  </option>
+                ))}
+                <option value={CUSTOM_CLIENT_IP}>{t("clientIp.custom")}</option>
+                <option value={DIRECT_CLIENT_IP}>{t("clientIp.direct")}</option>
+              </Select>
+            </Field>
+            {clientIpChoice === CUSTOM_CLIENT_IP ? (
+              <Field
+                label={t("clientIp.customLabel")}
+                htmlFor="client-ip-header"
+                hint={t("clientIp.customHelp")}
+              >
+                <Input
+                  id="client-ip-header"
+                  value={clientIpCustom}
+                  onChange={(event) => setClientIpCustom(event.target.value)}
+                  placeholder="X-Forwarded-For"
+                />
+              </Field>
+            ) : null}
+          </div>
+          <p className="text-sm text-fg-muted">
+            {settings.clientIpHeader
+              ? t("clientIp.active", { header: settings.clientIpHeader })
+              : t("clientIp.directHelp")}
+          </p>
+          <p className="flex items-start gap-2 rounded-md border border-warn/30 bg-warn-muted/30 px-3 py-2 text-xs text-fg-muted">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn" />
+            <span>{t("clientIp.trustWarning")}</span>
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

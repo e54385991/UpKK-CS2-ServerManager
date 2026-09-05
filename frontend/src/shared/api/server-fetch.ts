@@ -1,5 +1,5 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { sessionTokenFrom } from "@/modules/auth/session";
 import { internalApiUrl } from "@/shared/config/internal-api";
 
@@ -12,10 +12,35 @@ export type ApiFetchInit = Omit<RequestInit, "signal"> & {
   timeoutMs?: number;
 };
 
+// Headers a reverse proxy (or Next itself) puts the visitor address in. This
+// call is a new connection from the Next server, so without forwarding them
+// the backend would attribute every console action to the Next container.
+// Which one the backend trusts is an admin setting, so pass through whichever
+// the incoming request actually carries.
+const CLIENT_ADDRESS_HEADERS = [
+  "x-forwarded-for",
+  "x-real-ip",
+  "cf-connecting-ip",
+  "true-client-ip",
+  "fastly-client-ip",
+  "forwarded",
+] as const;
+
+async function clientAddressHeaders(): Promise<Record<string, string>> {
+  const incoming = await headers();
+  const forwarded: Record<string, string> = {};
+  for (const name of CLIENT_ADDRESS_HEADERS) {
+    const value = incoming.get(name);
+    if (value) forwarded[name] = value;
+  }
+  return forwarded;
+}
+
 /**
  * Server-side call to the internal FastAPI. Attaches the session cookie's JWT
- * as a bearer token and never caches. Auth and transport failures are returned
- * as structured results instead of thrown so pages can render a degraded state.
+ * as a bearer token, forwards the visitor address, and never caches. Auth and
+ * transport failures are returned as structured results instead of thrown so
+ * pages can render a degraded state.
  *
  * Default timeout is 8s for ordinary reads. Long SSH/setup calls must pass
  * `timeoutMs` (or their own `signal`) so they are not aborted mid-flight.
@@ -25,7 +50,8 @@ export async function apiFetch<T>(
   init?: ApiFetchInit,
 ): Promise<ApiResult<T>> {
   const token = sessionTokenFrom(await cookies());
-  const { timeoutMs, signal, headers, ...rest } = init ?? {};
+  const clientAddress = await clientAddressHeaders();
+  const { timeoutMs, signal, headers: extraHeaders, ...rest } = init ?? {};
   try {
     const response = await fetch(`${internalApiUrl()}${path}`, {
       ...rest,
@@ -33,8 +59,9 @@ export async function apiFetch<T>(
       signal: signal ?? AbortSignal.timeout(timeoutMs ?? 8000),
       headers: {
         accept: "application/json",
+        ...clientAddress,
         ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...headers,
+        ...extraHeaders,
       },
     });
     if (!response.ok) {

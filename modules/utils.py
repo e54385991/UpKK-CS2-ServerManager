@@ -3,10 +3,48 @@ Utility functions for the CS2 Server Manager
 """
 
 import os
+import re
 import secrets
 import string
 from datetime import datetime
+from typing import Optional
 from zoneinfo import ZoneInfo
+
+# Request header carrying the real client address when the panel runs behind a
+# reverse proxy. Administrators can change it in system settings; resolution
+# lives in ``services.client_ip``.
+DEFAULT_CLIENT_IP_HEADER = "X-Forwarded-For"
+CLIENT_IP_HEADER_MAX_LENGTH = 64
+
+# Header field names are HTTP tokens; keep the accepted set to what proxies
+# actually emit so a typo cannot become a surprising lookup key.
+_CLIENT_IP_HEADER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
+def normalize_client_ip_header(value: Optional[str]) -> Optional[str]:
+    """
+    Validate a configured source IP header name.
+
+    Args:
+        value: Header name from an administrator, or None/blank
+
+    Returns:
+        The trimmed header name, or None to use the direct connection address
+
+    Raises:
+        ValueError: If the value is not a usable HTTP header name
+    """
+    if value is None:
+        return None
+    name = value.strip()
+    if not name:
+        return None
+    if not _CLIENT_IP_HEADER_PATTERN.match(name):
+        raise ValueError(
+            "client_ip_header must be a header name such as X-Forwarded-For, "
+            "or empty to use the direct connection address"
+        )
+    return name
 
 
 def generate_api_key(length: int = 64) -> str:

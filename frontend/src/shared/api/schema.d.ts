@@ -15668,6 +15668,8 @@ export interface components {
              * @default false
              */
             clear_global_github_token: boolean;
+            /** Client Ip Header */
+            client_ip_header?: string | null;
             /** Default Proxy Mode */
             default_proxy_mode?: ("direct" | "panel" | "github_url") | null;
             /** Email Enabled */
@@ -15703,6 +15705,8 @@ export interface components {
              * @default true
              */
             captcha_enabled: boolean;
+            /** Client Ip Header */
+            client_ip_header?: string | null;
             /** Created At */
             created_at: string | null;
             /** Default Proxy Mode */
@@ -15746,6 +15750,8 @@ export interface components {
              * @default false
              */
             clear_global_github_token: boolean;
+            /** Client Ip Header */
+            client_ip_header?: string | null;
             /** Default Proxy Mode */
             default_proxy_mode?: string | null;
             /** Email Enabled */
@@ -15783,6 +15789,8 @@ export interface components {
              * @default true
              */
             captcha_enabled: boolean;
+            /** Client Ip Header */
+            client_ip_header?: string | null;
             /**
              * Default Proxy Mode
              * @enum {string}

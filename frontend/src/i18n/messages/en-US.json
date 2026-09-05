@@ -973,6 +973,20 @@
       "enabledHelp": "Enabled. Sign-in, registration, host setup, and sensitive credential actions require CAPTCHA.",
       "disabledHelp": "Disabled. Those actions no longer require CAPTCHA, while rate limits and access controls remain active."
     },
+    "clientIp": {
+      "title": "Source IP",
+      "description": "Where the panel reads the visitor address it records and rate-limits by.",
+      "source": "Source IP header",
+      "sourceHelp": "Behind a reverse proxy, pick the header it sets. Default: X-Forwarded-For.",
+      "custom": "Custom header…",
+      "customLabel": "Header name",
+      "customHelp": "Letters, digits, dashes, and underscores, for example Fastly-Client-IP.",
+      "direct": "No header (direct connection)",
+      "directHelp": "The panel uses the connecting socket address. Behind a proxy every visitor looks like the proxy.",
+      "active": "Reading {header}, falling back to the connection address when it is missing or unusable.",
+      "invalid": "Enter a valid header name, such as X-Forwarded-For.",
+      "trustWarning": "Any client can send this header. Only trust one that your reverse proxy overwrites on every request; otherwise audit logs and rate limits can be spoofed."
+    },
     "proxy": {
       "title": "Download proxy",
       "description": "Default path servers use when fetching GitHub resources.",

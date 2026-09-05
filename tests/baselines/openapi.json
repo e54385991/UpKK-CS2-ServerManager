@@ -23413,6 +23413,18 @@
             "title": "Clear Global Github Token",
             "type": "boolean"
           },
+          "client_ip_header": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip Header"
+          },
           "default_proxy_mode": {
             "anyOf": [
               {
@@ -23569,6 +23581,17 @@
             "default": true,
             "title": "Captcha Enabled",
             "type": "boolean"
+          },
+          "client_ip_header": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip Header"
           },
           "created_at": {
             "anyOf": [
@@ -23735,6 +23758,18 @@
             "title": "Clear Global Github Token",
             "type": "boolean"
           },
+          "client_ip_header": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip Header"
+          },
           "default_proxy_mode": {
             "anyOf": [
               {
@@ -23891,6 +23926,17 @@
             "default": true,
             "title": "Captcha Enabled",
             "type": "boolean"
+          },
+          "client_ip_header": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip Header"
           },
           "default_proxy_mode": {
             "enum": [

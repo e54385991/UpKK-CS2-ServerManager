@@ -4,12 +4,15 @@ import hashlib
 
 from fastapi import HTTPException, Request, status
 
+from services.client_ip import UNKNOWN_CLIENT_ADDRESS, request_client_ip
 from services.redis_manager import redis_manager
 
 
-def _client_address(request: Request) -> str:
-    # Do not trust X-Forwarded-For unless the ASGI server is configured to trust its proxy.
-    return request.client.host if request.client else "unknown"
+async def _client_address(request: Request) -> str:
+    # Which header (if any) may be trusted is an administrator policy: behind a
+    # reverse proxy the socket peer is the proxy, so every visitor would
+    # otherwise share one bucket.
+    return await request_client_ip(request) or UNKNOWN_CLIENT_ADDRESS
 
 
 async def enforce_rate_limit(
@@ -20,7 +23,7 @@ async def enforce_rate_limit(
     window: int,
     identity: str | None = None,
 ) -> None:
-    raw_identity = f"{_client_address(request)}:{identity or ''}"
+    raw_identity = f"{await _client_address(request)}:{identity or ''}"
     digest = hashlib.sha256(raw_identity.encode("utf-8")).hexdigest()
     allowed, retry_after = await redis_manager.hit_rate_limit(
         f"rate_limit:{scope}:{digest}",

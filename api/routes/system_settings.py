@@ -18,6 +18,7 @@ from services.audit_log_service import (
     list_audit_logs,
     record_audit_event,
 )
+from services.client_ip import set_client_ip_header
 from services.email_service import email_service
 
 router = APIRouter(prefix="/api/system", tags=["system"])
@@ -85,6 +86,8 @@ async def update_system_settings(
     db.add(settings)
     await db.commit()
     await db.refresh(settings)
+    # Audit and rate-limit attribution must use the policy saved just now.
+    set_client_ip_header(settings.client_ip_header)
     await record_audit_event(
         category="settings",
         action="system.update",

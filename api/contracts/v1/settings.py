@@ -10,6 +10,7 @@ from pydantic import EmailStr, Field, field_validator
 
 from api.contracts.base import ApiRequest
 from api.contracts.v1.identity import V1Model
+from modules.utils import normalize_client_ip_header
 
 ProxyMode = Literal["direct", "panel", "github_url"]
 EmailProvider = Literal["gmail", "smtp"]
@@ -21,6 +22,7 @@ class SystemSettingsView(V1Model):
     default_proxy_mode: ProxyMode
     github_proxy_url: str | None = None
     captcha_enabled: bool = True
+    client_ip_header: str | None = None
     has_global_github_token: bool
     global_github_token_prefix: str | None = None
     email_enabled: bool
@@ -44,6 +46,7 @@ class SystemSettingsPatch(ApiRequest):
     default_proxy_mode: ProxyMode | None = None
     github_proxy_url: str | None = None
     captcha_enabled: bool | None = None
+    client_ip_header: str | None = Field(default=None, max_length=64)
     global_github_token: str | None = Field(default=None, max_length=255)
     clear_global_github_token: bool = False
     email_enabled: bool | None = None
@@ -55,6 +58,12 @@ class SystemSettingsPatch(ApiRequest):
     smtp_username: str | None = None
     smtp_password: str | None = Field(default=None, max_length=255)
     smtp_use_tls: bool | None = None
+
+    @field_validator("client_ip_header")
+    @classmethod
+    def validate_client_ip_header(cls, value: str | None) -> str | None:
+        """Blank clears the policy, so the panel trusts only the socket peer."""
+        return normalize_client_ip_header(value)
 
     @field_validator("global_github_token")
     @classmethod

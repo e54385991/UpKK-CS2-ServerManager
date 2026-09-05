@@ -1,3 +1,19 @@
+// Headers the common reverse proxies put the real client address in. The
+// backend accepts any header name; these are only shortcuts in the UI.
+export const CLIENT_IP_HEADER_PRESETS = [
+  "X-Forwarded-For",
+  "X-Real-IP",
+  "CF-Connecting-IP",
+  "True-Client-IP",
+] as const;
+
+// Mirrors the backend validator in modules/utils.py.
+const CLIENT_IP_HEADER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+export function isClientIpHeader(value: string): boolean {
+  return CLIENT_IP_HEADER_PATTERN.test(value);
+}
+
 export const PROXY_MODES = ["direct", "panel", "github_url"] as const;
 export const EMAIL_PROVIDERS = ["smtp", "gmail"] as const;
 
@@ -8,6 +24,7 @@ export type SystemSettings = {
   readonly defaultProxyMode: ProxyMode;
   readonly githubProxyUrl: string | null;
   readonly captchaEnabled: boolean;
+  readonly clientIpHeader: string | null;
   readonly hasGlobalGithubToken: boolean;
   readonly globalGithubTokenPrefix: string | null;
   readonly emailEnabled: boolean;
@@ -29,6 +46,7 @@ export type SettingsPatch = {
   readonly defaultProxyMode?: ProxyMode;
   readonly githubProxyUrl?: string | null;
   readonly captchaEnabled?: boolean;
+  readonly clientIpHeader?: string | null;
   readonly globalGithubToken?: string;
   readonly clearGlobalGithubToken?: boolean;
   readonly emailEnabled?: boolean;

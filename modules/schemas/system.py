@@ -2,6 +2,8 @@
 
 # ruff: noqa: F403,F405
 
+from modules.utils import normalize_client_ip_header
+
 from .common import *
 
 
@@ -40,6 +42,7 @@ class SystemSettingsResponse(SQLModel):
     default_proxy_mode: str
     github_proxy_url: Optional[str]
     captcha_enabled: bool = True
+    client_ip_header: Optional[str] = None
     has_global_github_token: bool
     global_github_token_prefix: Optional[str]
     email_enabled: bool
@@ -60,6 +63,7 @@ class SystemSettingsUpdate(SQLModel):
     default_proxy_mode: Optional[str] = None
     github_proxy_url: Optional[str] = None
     captcha_enabled: Optional[bool] = None
+    client_ip_header: Optional[str] = Field(default=None, max_length=64)
     global_github_token: Optional[str] = Field(default=None, max_length=255)
     clear_global_github_token: bool = False
     email_enabled: Optional[bool] = None
@@ -79,6 +83,11 @@ class SystemSettingsUpdate(SQLModel):
         if v is not None and v not in ("direct", "panel", "github_url"):
             raise ValueError("default_proxy_mode must be one of: direct, panel, github_url")
         return v
+
+    @field_validator("client_ip_header")
+    @classmethod
+    def validate_client_ip_header(cls, v: Optional[str]) -> Optional[str]:
+        return normalize_client_ip_header(v)
 
     @field_validator("global_github_token")
     @classmethod
